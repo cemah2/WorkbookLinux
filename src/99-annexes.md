@@ -33,6 +33,7 @@ trois semaines est un signal, pas un détail.
 | 20 OpenTofu / cloud-init | VM Proxmox déclarées, état, modules | ☐ ☐ ☐ | |
 | 21 CI/CD Gitea Actions | pipeline build/test/deploy, runner, secrets | ☐ ☐ ☐ | |
 | 22 k3s et observabilité | déploiement, ingress, Prometheus, Loki | ☐ ☐ ☐ | |
+| 23 Python pour l'ops | outils d'exploitation, API, tests, packaging | ☐ ☐ ☐ | |
 | P1 Factura à la main | déployer et documenter une app 3 tiers | ☐ — ☐ | |
 | P2 Factura industrialisée | la même en code : Ansible, CI, conteneurs | ☐ — ☐ | |
 | P3 Semaine d'astreinte | 5 incidents, 5 post-mortem, 1 runbook | ☐ — ☐ | |

@@ -29,9 +29,9 @@ PARTS = [
      ["P1-factura"]),
     ("Partie IV", "Socle DevOps",
      "Versionner, conteneuriser, automatiser, provisionner, livrer en continu, "
-     "orchestrer et observer.",
+     "orchestrer, observer, outiller en Python.",
      ["17-git", "18-docker", "19-ansible", "20-iac-terraform", "21-cicd",
-      "22-kubernetes-observabilite"]),
+      "22-kubernetes-observabilite", "23-python-ops"]),
     ("Projet B", "Factura v2 : industrialisation DevOps",
      "La même plateforme, reconstruite par le code : OpenTofu, Ansible, "
      "Compose, CI/CD, observabilité, k3s.",
@@ -79,12 +79,12 @@ def assemble(kind):
     if kind == "labs":
         parts.append(cover(
             "Énoncés", "Quiz, exercices, labs, Break & Fix, projets",
-            "22 modules et 3 projets fil rouge pour devenir opérationnel sur Linux "
+            "23 modules et 3 projets fil rouge pour devenir opérationnel sur Linux "
             "puis sur le socle DevOps : Git, Docker, Ansible, OpenTofu, CI/CD, Kubernetes, "
             "observabilité. Chaque module se joue sur ton laboratoire Proxmox et se corrige "
             "avec le volume \\emph{Corrigés \\& explications}.",
             [("Volume", "1 / 3 — Énoncés"), ("Niveau", "Intermédiaire → confirmé"),
-             ("Durée conseillée", "12 à 16 semaines"),
+             ("Durée conseillée", "12 à 17 semaines"),
              ("Compagnons", "Corrigés & explications · Mémo · scripts.zip")]))
         parts.append(raw("\\tableofcontents\\clearpage"))
         parts.append(clean_md((SRC / "00-mise-en-place.md").read_text(encoding="utf-8")))
@@ -125,17 +125,25 @@ def assemble(kind):
     return md, title, foot
 
 
-def build(kind, name):
+def build(kind, name, a5=False):
     md, title, foot = assemble(kind)
+    if a5:
+        md2 = BUILD / f"{kind}-a5.md"; md2.write_text(md.read_text(encoding="utf-8"), encoding="utf-8")
+        md, kind = md2, f"{kind}-a5"
     tex = BUILD / f"{kind}.tex"
+    import os
+    env = dict(os.environ, WB_INDEX="1" if kind == "labs" else "0",
+               WB_INDEX_FILE=str(TEX / "index-commands.txt"))
     subprocess.run(
-        ["pandoc", str(md), "-f", "markdown+fenced_divs+pipe_tables+smart+raw_attribute-yaml_metadata_block",
+        ["pandoc", str(md), "-f", "markdown+fenced_divs+pipe_tables+smart+raw_attribute-yaml_metadata_block-tex_math_dollars",
          "--lua-filter", str(TEX / "divs.lua"), "--template", str(TEX / "template.tex"),
          "--top-level-division=chapter", "--highlight-style=pygments",
-         "-V", f"footer-title={foot}", "-V", f"title={title}", "-o", str(tex)],
-        check=True)
+         "-V", f"footer-title={foot}", "-V", f"title={title}", "-o", str(tex)]
+        + (["-V", "index=true"] if kind == "labs" else [])
+        + (["-V", "a5=true"] if a5 else []),
+        check=True, env=env)
     log = None
-    for i in range(3):
+    for i in range(4):
         r = subprocess.run(["xelatex", "-interaction=nonstopmode", "-halt-on-error",
                             f"-output-directory={BUILD}", str(tex)],
                            capture_output=True, text=True)
@@ -144,6 +152,8 @@ def build(kind, name):
             errs = [l for l in log.splitlines() if l.startswith("!") or l.startswith("l.")]
             print("\n".join(errs[:20]), file=sys.stderr)
             raise SystemExit(f"xelatex a échoué pour {kind} (passe {i+1})")
+        if kind == "labs" and (BUILD / f"{kind}.idx").exists():
+            subprocess.run(["makeindex", "-q", f"{kind}.idx"], capture_output=True, cwd=BUILD)
         if "Rerun to get" not in log and i >= 1:
             break
     pdf = BUILD / f"{kind}.pdf"
@@ -155,9 +165,44 @@ def build(kind, name):
     return out
 
 
+def booklet(src, dst):
+    """Impose des pages A5 en livret sur des feuilles A4 paysage (recto/verso, bord court)."""
+    from pypdf import PdfReader, PdfWriter, Transformation, PageObject
+    r = PdfReader(str(src)); n = len(r.pages)
+    total = (n + 3) // 4 * 4
+    A4W, A4H = 841.89, 595.28   # paysage
+    A5W = A4W / 2
+    def page(i):
+        return r.pages[i] if i < n else None
+    order = []
+    lo, hi = 0, total - 1
+    while lo < hi:
+        order.append((hi, lo)); order.append((lo + 1, hi - 1))
+        lo += 2; hi -= 2
+    w = PdfWriter()
+    for left, right in order:
+        sheet = PageObject.create_blank_page(width=A4W, height=A4H)
+        for src_i, x in ((left, 0), (right, A5W)):
+            p = page(src_i)
+            if p is None: continue
+            pw = float(p.mediabox.width); ph = float(p.mediabox.height)
+            sc = min(A5W / pw, A4H / ph)
+            t = Transformation().scale(sc, sc).translate(x + (A5W - pw * sc) / 2, (A4H - ph * sc) / 2)
+            sheet.merge_transformed_page(p, t)
+        w.add_page(sheet)
+    w.add_metadata({"/Title": "Mémo Linux & DevOps — livret A5 (imprimer recto/verso, retourner sur le bord court)"})
+    with open(dst, "wb") as f: w.write(f)
+    print(f"{dst.name}: {len(order)} faces A4 ({total} pages A5)")
+
+
 if __name__ == "__main__":
     names = {"labs": "Workbook-Linux-DevOps-1-Enonces.pdf",
              "solutions": "Workbook-Linux-DevOps-2-Corriges.pdf",
-             "memo": "Workbook-Linux-DevOps-3-Memo.pdf"}
-    for k in (sys.argv[1:] or ["memo", "labs", "solutions"]):
-        build(k, names[k])
+             "memo": "Workbook-Linux-DevOps-3-Memo.pdf",
+             "memo-a5": "Workbook-Linux-DevOps-3-Memo-livret-A5.pdf"}
+    for k in (sys.argv[1:] or ["memo", "memo-a5", "labs", "solutions"]):
+        if k == "memo-a5":
+            pdf = build("memo", "memo-a5-pages.pdf", a5=True)
+            booklet(pdf, BUILD / names[k])
+        else:
+            build(k, names[k])

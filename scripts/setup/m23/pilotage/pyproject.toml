@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pilotage"
 version = "1.0.0"
-description = "État de santé d'un serveur applicatif (réécriture de sante.sh)"
+description = "État de santé d'un serveur (réécriture de sante.sh)"
 requires-python = ">=3.12"
 dependencies = []
 

@@ -99,4 +99,24 @@ function Code(el)
   return pandoc.RawInline("latex", "\\wbcode{" .. table.concat(out) .. "}")
 end
 
+
+-- Index des commandes (activé par la variable d'environnement WB_INDEX=1)
+local index_on = os.getenv("WB_INDEX") == "1"
+local wl = {}
+if index_on then
+  local f = io.open(os.getenv("WB_INDEX_FILE") or "tex/index-commands.txt")
+  if f then for l in f:lines() do wl[l] = true end f:close() end
+end
+local old_code = Code
+function Code(el)
+  local r = old_code(el)
+  if not index_on then return r end
+  local tok = el.text:match("^%s*([^%s]+)")
+  if tok and wl[tok] then
+    local disp = tok:gsub("_", "\\_")
+    return { r, pandoc.RawInline("latex", "\\index{" .. tok .. "@\\texttt{" .. disp .. "}}") }
+  end
+  return r
+end
+
 return { {Table = fixpipes}, {Table = Table, Div = Div, Str = Str, Code = Code} }

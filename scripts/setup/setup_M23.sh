@@ -167,7 +167,7 @@ with open(sys.argv[1], "w", newline="", encoding="utf-8") as f:
     w.writerow(["id", "client", "montant", "statut", "date"])
     for i in range(1, 401):
         w.writerow([i, random.choice(clients), f"{random.uniform(40, 2500):.2f}",
-                    random.choice(statuts), f"2026-{random.randint(1, 9):02d}-{random.randint(1, 28):02d}"])
+                    random.choice(statuts), f"2026-{random.randint(1, 8):02d}-{random.randint(1, 28):02d}"])
 EOF
 echo "  -> data/factures.csv (400 factures)"
 

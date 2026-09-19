@@ -115,9 +115,11 @@ def systemes_fichiers(
         except OSError as exc:
             log.warning("statvfs %s : %s", point, exc)
             continue
-        if st.f_blocks == 0:
+        utilise = st.f_blocks - st.f_bfree
+        if utilise + st.f_bavail == 0:
             continue
-        pct_e = 100 * (1 - st.f_bavail / st.f_blocks)
+        # comme df : utilisé / (utilisé + disponible pour un non-root)
+        pct_e = 100 * utilise / (utilise + st.f_bavail)
         pct_i = 100 * (1 - st.f_favail / st.f_files) if st.f_files else 0.0
         resultats.append(
             SystemeFichiers(point, round(pct_e, 1), round(pct_i, 1))

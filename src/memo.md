@@ -2777,6 +2777,263 @@ d'erreur : 99,9 % sur 30 j = 43,2 min. Node Exporter Full = dashboard 1860.
 
 ---
 
+## 23 · Python pour l'ops
+
+### Installation, venv, outils
+
+| Commande | Effet |
+|---|---|
+| `python3 --version` / `python3 -m sysconfig` | version, chemins |
+| `python3 -m venv ~/lab23/venv` | crée un venv (paquet `python3-venv`) |
+| `source venv/bin/activate` / `deactivate` | active (modifie `PATH`) / quitte |
+| `venv/bin/python script.py` | **sans activer** : chemin absolu (timers) |
+| `venv/bin/pip install -r requirements.txt` | dépendances du projet |
+| `pip freeze > requirements.txt` | fige les versions exactes |
+| `pip install "requests>=2.32,<3"` | borne large (requirements.in) |
+| `pip list --outdated` / `pip show requests` | état / version installée |
+| `python3 -m pip ...` / `python3 -m pytest` | le module du **bon** interpréteur |
+| `pipx install ruff` / `pipx install .` | outil CLI isolé dans son venv |
+| `pipx run ruff check .` | exécute sans installer |
+| `pip install .` / `pip install -e .` | installe le projet / en mode éditable |
+| `python3 -m json.tool f.json` | pretty-print JSON |
+| `python3 -m http.server 8000` | serveur de fichiers jetable |
+| `python3 -c 'import yaml; print(yaml.__file__)'` | d'où vient un module |
+| `python3 -X importtime script.py` | temps d'import |
+
+Jamais `sudo pip install` sur un serveur : conflit avec les paquets `apt`
+(`externally-managed-environment`). Système = apt, projet = venv, outil =
+pipx.
+
+```text
+projet/                    # structure minimale
+  pyproject.toml           # name, deps, [project.scripts]
+  src/monoutil/{__init__,cli}.py
+  tests/test_cli.py
+  requirements.txt         # pip freeze, versions exactes
+```
+
+### Le langage, le strict nécessaire
+
+```python
+nom: str = "lab-web"; n = 3; ok = True; x = None
+hotes = ["a", "b"]; conf = {"port": 22}; vus = set()
+print(f"{nom}:{n:>4} {conf['port']!r} {n/7:.2f}")
+hotes[-1], hotes[1:], hotes[::-1]          # slicing
+[h.upper() for h in hotes if h != "a"]     # compréhension
+{h: len(h) for h in hotes}                 # dict compréhension
+for i, h in enumerate(hotes, 1): ...
+for a, b in zip(hotes, [1, 2]): ...
+```
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass(frozen=True)
+class Machine:
+    nom: str
+    vmid: int
+    tags: tuple[str, ...] = field(default_factory=tuple)
+
+def ajouter(x: str, liste: list[str] | None = None) -> list[str]:
+    liste = [] if liste is None else liste   # jamais liste=[]
+    liste.append(x); return liste
+```
+
+```python
+try:
+    r = faire()
+except FileNotFoundError:
+    log.warning("absent")
+except (OSError, ValueError) as exc:  # jamais « except: »
+    log.error("échec : %s", exc); return 1
+else:
+    ...                          # si aucune exception
+finally:
+    nettoyer()                   # toujours
+raise RuntimeError("msg") from exc   # chaîne la cause
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+### Bibliothèque standard côté ops
+
+| Appel | Effet |
+|---|---|
+| `Path("/etc")/"hosts"` `.read_text()` `.exists()` | `pathlib` |
+| `p.glob("*.log")` / `p.rglob("*.py")` / `p.stat().st_size` | listing |
+| `p.parent` / `p.name` / `p.suffix` / `p.stem` | dirname, basename… |
+| `shutil.copy2` / `move` / `rmtree` / `which` / `disk_usage` | fichiers |
+| `subprocess.run(argv, capture_output=True, text=True, check=True, timeout=30)` | commande |
+| `os.environ.get("X", "def")` / `os.getpid()` / `os.replace(a, b)` | env, rename atomique |
+| `json.load(f)` / `json.dumps(d, indent=2, ensure_ascii=False)` | JSON |
+| `csv.DictReader(f, delimiter=";")` / `csv.writer(f)` | CSV |
+| `re.compile(r"^(?P<ip>\S+) ")` `.match(s)["ip"]` | regex nommée |
+| `datetime.now(UTC)` / `.astimezone(ZoneInfo("Europe/Paris"))` | dates **aware** |
+| `datetime.strptime(s, "%d/%b/%Y:%H:%M:%S %z")` / `.isoformat()` | parse / ISO |
+| `time.monotonic()` | durées (jamais `time.time()`) |
+| `socket.create_connection((h, p), timeout=3)` | test TCP |
+| `ipaddress.ip_interface("10.10.10.11/24").ip` / `.network` | adresses |
+| `hashlib.sha256(b).hexdigest()` / `hashlib.file_digest(f, "sha256")` | empreintes |
+| `tempfile.mkstemp(dir=cible.parent)` / `TemporaryDirectory()` | temporaires |
+| `tomllib.load(open(p, "rb"))` / `configparser.ConfigParser().read(p)` | TOML, INI |
+| `signal.signal(signal.SIGTERM, handler)` | arrêt propre |
+| `sys.argv` / `sys.stdin` / `sys.exit(2)` / `sys.stderr` | flux, codes |
+
+```python
+p = subprocess.run(["tar", "-czf", dest, "--", *fichiers],
+                   capture_output=True, text=True, check=True,
+                   timeout=300)           # liste, JAMAIS shell=True
+print(p.stdout); p.returncode
+# échec -> subprocess.CalledProcessError (.returncode, .stderr)
+# absent -> FileNotFoundError ; lent -> subprocess.TimeoutExpired
+```
+
+```python
+import logging, sys
+from logging.handlers import SysLogHandler
+log = logging.getLogger("outil")
+logging.basicConfig(level=logging.INFO, stream=sys.stderr,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log.addHandler(SysLogHandler(address="/dev/log"))   # -> journald
+log.info("hôte %s ok", h)      # %s, pas f-string : formaté si émis
+log.exception("échec")         # dans un except : ajoute la trace
+```
+
+```python
+p = argparse.ArgumentParser(description="...")
+p.add_argument("fichier")
+p.add_argument("--top", type=int, default=10)
+p.add_argument("-n", "--dry-run", action="store_true")
+sub = p.add_subparsers(dest="cmd", required=True)
+sub.add_parser("list")
+sub.add_parser("add").add_argument("nom")
+args = p.parse_args()       # -h généré ; mauvais usage -> code 2
+```
+
+### Fichiers et flux
+
+```python
+with open(p, encoding="utf-8") as f:     # encodage TOUJOURS explicite
+    for ligne in f:                       # flux : RAM constante
+        ...
+open(p, encoding="utf-8", errors="replace")   # tolérant
+open(p, encoding="utf-8-sig")             # mange le BOM d'Excel
+open(p, encoding="latin-1")               # vieux exports
+gzip.open(p, "rt", encoding="utf-8")      # .gz en texte
+for ligne in sys.stdin: ...               # s'insère dans un pipe
+```
+
+```python
+fd, tmp = tempfile.mkstemp(dir=cible.parent)   # même FS que la cible
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    f.write(texte); f.flush(); os.fsync(f.fileno())
+os.replace(tmp, cible)   # rename atomique : jamais à moitié écrit
+```
+
+### Réseau et API
+
+```python
+import requests
+s = requests.Session(); s.headers["Authorization"] = f"token {tok}"
+r = s.get(url, params={"q": "x"}, timeout=(3.05, 10))
+r.raise_for_status()           # 4xx/5xx -> HTTPError, sinon faux OK
+data = r.json()
+s.post(url, json={"title": "t"}, timeout=10)
+# retries : HTTPAdapter(max_retries=Retry(total=3, backoff_factor=0.5,
+#   status_forcelist=[502, 503, 504])) monté sur "https://"
+# except requests.RequestException (hérite d'OSError)
+```
+
+| API | Appel |
+|---|---|
+| Proxmox | `PVEAPIToken=user@pve!id=uuid` ; `GET /api2/json/cluster/resources?type=vm` |
+| Proxmox | `GET /api2/json/nodes/pve/qemu/9002/config` (`ipconfig0`, `tags`) |
+| `pvesh` | `pvesh get /cluster/resources --type vm --output-format json` |
+| Gitea | `Authorization: token X` ; `GET /api/v1/repos/search?q=factura` |
+| Gitea | `POST /api/v1/repos/{owner}/{repo}/issues` `json={"title": ...}` |
+| Prometheus | `GET /api/v1/query?query=up` → `data.result[].value[1]` |
+| Docker | socket `/var/run/docker.sock`, HTTP `GET /containers/json` |
+| YAML | `yaml.safe_load(f)` / `yaml.safe_dump(d, sort_keys=False)` |
+| PostgreSQL | `psycopg.connect(dsn).execute("SELECT ...").fetchall()` |
+
+### Qualité, tests, packaging
+
+| Commande | Effet |
+|---|---|
+| `ruff check --fix .` / `ruff format .` | lint + format (remplace flake8, black, isort) |
+| `mypy src/` | vérifie les annotations |
+| `pytest -q` / `-x` / `-k nom` / `-v` / `--lf` | tests |
+| `pytest --cov=src` (`pytest-cov`) | couverture |
+| `pre-commit install` / `pre-commit run -a` | hooks git |
+| `python3 -m build` | sdist + wheel dans `dist/` |
+| `pip install .` puis `venv/bin/monoutil` | via `[project.scripts]` |
+
+```python
+def test_selection(tmp_path, monkeypatch, caplog):
+    (tmp_path / "a.log").write_text("ERROR x\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, "ok", ""))
+    with pytest.raises(ValueError):
+        parser("bidon")
+    assert "absent" in caplog.text     # logging -> caplog, pas capsys
+@pytest.mark.parametrize("v,att", [(0, "a"), (1, "b")])
+```
+
+```ini
+# /etc/systemd/system/outil.service
+[Service]
+Type=oneshot
+ExecStart=/opt/factura/venv/bin/outil --config /etc/factura/outil.yaml
+WorkingDirectory=/opt/factura
+Environment=PYTHONUNBUFFERED=1 LANG=C.UTF-8
+StandardError=journal
+SyslogIdentifier=outil
+SuccessExitStatus=1 2    # un code verdict n'est pas une panne
+```
+
+### Quand quoi
+
+| Situation | Outil |
+|---|---|
+| Enchaîner des commandes, < 100 lignes, sans état | bash |
+| JSON/YAML/API, structures de données, tests unitaires | Python |
+| Décrire un état sur N machines, idempotence, `--check` | Ansible |
+| Plus d'un `jq`, ou > 2 tableaux associatifs corrélés | Python |
+| Long-running, réseau, retries, parallélisme | Python |
+| Un `tar \| ssh` ou un `for` sur `ls` | bash, sans hésiter |
+
+::: piege
+* `subprocess.run("cmd " + fichier, shell=True)` : espace, `;`, `$` dans
+  le nom = commande cassée ou injection. Liste d'arguments, point.
+* Oublier `check=True` : la commande échoue, le script continue et dit OK.
+* `except:` ou `except Exception: pass` : masque l'erreur réseau, attrape
+  aussi `SystemExit` et `KeyboardInterrupt`.
+* `def f(x, acc=[])` : la liste est partagée entre tous les appels.
+* `open(p)` sans `encoding=` : dépend de la locale, donc du timer.
+* `print` pour journaliser : stdout bufferisé, mélangé au résultat.
+* Chemin relatif dans un timer : `WorkingDirectory` ou `Path(__file__)`.
+* `pip install` sans version : le déploiement de mars ≠ celui d'avril.
+* `#!/usr/bin/env python3` sous systemd = le python **système**, sans les
+  paquets du venv : `ExecStart=/chemin/venv/bin/python`.
+* `liste[-0:]` = toute la liste ; `time.time()` pour une durée ; `datetime`
+  naïf comparé à un aware ; YAML lit `true`/`no`/`1.0` comme non-chaînes.
+* Descripteurs jamais fermés (`open()` sans `with`) : `Too many open files`.
+:::
+
+::: astuce
+* `python3 -m venv v && v/bin/pip install -r requirements.txt` : deux
+  lignes, reproductibles, sans activer.
+* `python3 -m json.tool`, `python3 -m http.server`, `python3 -m calendar` :
+  des outils gratuits.
+* `python3 -X dev script.py` : avertit sur les fichiers non fermés.
+* `ruff check --select ALL --statistics .` pour voir ce que tu ignores.
+* `ls -l /proc/PID/fd | wc -l` : combien de fichiers ouverts, en direct.
+:::
+
+---
+
 ## Proxmox (qm / pvesh)
 
 | Commande | Effet |

@@ -1,7 +1,7 @@
 # Chapitre 0 — Mise en place du laboratoire
 
 Ce chapitre ne t'apprend pas Linux. Il te donne un laboratoire reproductible,
-une méthode de travail et les réflexes qui te serviront pendant les 22 modules
+une méthode de travail et les réflexes qui te serviront pendant les 23 modules
 et les 3 projets. Compte une demi-journée pour tout monter, et fais-le
 sérieusement : chaque module suppose que ces six VM existent, avec ces noms,
 ces IP et ce snapshot `snap-clean`.
@@ -95,8 +95,9 @@ fusionne les semaines 9-10 et 15-16.
 | 12 | 17 Git, 18 Docker et Compose | 12 | image publiée sur registre |
 | 13 | 19 Ansible, 20 OpenTofu / cloud-init | 14 | VM créée par le code |
 | 14 | 21 CI/CD Gitea Actions, 22 k3s + observabilité | 14 | pipeline vert |
-| 15 | P2 « Factura » industrialisée | 12 | `git push` → prod |
-| 16 | P3 une semaine d'astreinte | 10 | 5 incidents résolus |
+| 15 | 23 Python pour l'ops | 8 | outil packagé sous timer |
+| 16 | P2 « Factura » industrialisée | 12 | `git push` → prod |
+| 17 | P3 une semaine d'astreinte | 10 | 5 incidents résolus |
 
 Les heures sont celles des `Temps estimé` des modules. Si tu débordes de
 30 %, c'est normal. Si tu débordes de 100 %, tu ne respectes pas la règle
@@ -901,7 +902,7 @@ wiki, *releases*, *Actions*) qui tient dans un binaire Go et une base
 SQLite. Trois usages :
 
 1. **Sauvegarde continue de ton travail** : tout ce que tu écris pendant
-   les 22 modules est poussé à chaque séance ; les VM de lab sont
+   les 23 modules est poussé à chaque séance ; les VM de lab sont
    jetables, `lab-git` ne l'est pas.
 2. **Portfolio** : le dépôt `workbook/linux-devops-workbook` devient, au
    fil des modules, la preuve de ce que tu sais faire (annexe C). Tu le

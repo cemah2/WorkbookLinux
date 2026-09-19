@@ -18,7 +18,7 @@ MOUNTS = (
     "/dev/sdb1 /srv xfs rw 0 0\n"
     "/dev/sr0 /media iso9660 ro 0 0\n"
 )
-Vfs = namedtuple("Vfs", "f_blocks f_bavail f_files f_favail")
+Vfs = namedtuple("Vfs", "f_blocks f_bfree f_bavail f_files f_favail")
 
 
 def test_cpu_delta():
@@ -40,9 +40,11 @@ def test_memoire_et_pourcentage():
 
 def test_systemes_fichiers_filtre_et_inodes():
     def faux_statvfs(point):
-        return {"/": Vfs(100, 4, 1000, 950), "/srv": Vfs(100, 50, 1000, 50)}[
-            point
-        ]
+        # f_blocks, f_bfree, f_bavail, f_files, f_favail
+        return {
+            "/": Vfs(100, 4, 4, 1000, 950),
+            "/srv": Vfs(100, 50, 50, 1000, 50),
+        }[point]
 
     fs = collecte.systemes_fichiers(MOUNTS, statvfs=faux_statvfs)
     assert [f.point for f in fs] == ["/", "/srv"]  # ni tmpfs ni ro

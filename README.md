@@ -2,7 +2,7 @@
 
 Auteur : Mathieu — démarré le AAAA-MM-JJ
 
-Un parcours de 22 modules et 3 projets fil rouge, joué sur un laboratoire
+Un parcours de 23 modules et 3 projets fil rouge, joué sur un laboratoire
 Proxmox de six VM, pour passer d'administrateur Linux intermédiaire à
 DevOps opérationnel : shell, système de fichiers, permissions, systemd,
 stockage, réseau, SSH, logs, sécurité, dépannage, puis Git, Docker,

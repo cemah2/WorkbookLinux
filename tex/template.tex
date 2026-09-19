@@ -1,4 +1,8 @@
+$if(a5)$
+\documentclass[9pt,a5paper,oneside]{extreport}
+$else$
 \documentclass[10pt,a4paper,oneside]{report}
+$endif$
 % ---------- polices ----------
 \usepackage{fontspec}
 \setmainfont{DejaVu Sans}[Scale=0.92]
@@ -6,7 +10,11 @@
 \setmonofont{DejaVu Sans Mono}[Scale=0.84]
 \usepackage{polyglossia}
 \setdefaultlanguage{french}
+$if(a5)$
+\usepackage[a5paper,top=13mm,bottom=13mm,left=12mm,right=12mm,headheight=12pt]{geometry}
+$else$
 \usepackage[a4paper,top=20mm,bottom=20mm,left=18mm,right=18mm,headheight=14pt]{geometry}
+$endif$
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{longtable,booktabs,array,calc}
@@ -22,6 +30,12 @@
 \usepackage{etoolbox}
 \usepackage{hyperref}
 \usepackage{bookmark}
+$if(index)$
+\usepackage{imakeidx}
+\makeindex[intoc=true,columns=3,columnsep=14pt,title=Index des commandes]
+\renewcommand{\indexname}{Index des commandes}
+\gappto\captionsfrench{\renewcommand{\indexname}{Index des commandes}}
+$endif$
 \hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,citecolor=accent,
   pdftitle={$title$},pdfauthor={Workbook Linux \& DevOps},bookmarksnumbered=false,
   bookmarksopen=true,bookmarksopenlevel=1,pdfborder={0 0 0}}
@@ -135,7 +149,7 @@ $endif$
   \vspace{6pt}{\color{accent}\rule{60mm}{5pt}}\par\vspace{16pt}
   {\Huge\bfseries\color{accent}#1}\par\vspace{8pt}
   {\LARGE\color{ink}#2}\par\vspace{18pt}
-  \begin{minipage}{140mm}\normalsize\color{muted}#3\end{minipage}\par
+  \begin{minipage}{0.86\linewidth}\normalsize\color{muted}#3\end{minipage}\par
   \vspace{18pt}{\color{accent}\rule{60mm}{5pt}}\par\vspace{14pt}
   {\small #4}\par
   \vfill
@@ -146,9 +160,12 @@ $endif$
   \vspace*{60mm}
   {\normalsize\color{muted}\bfseries\MakeUppercase{#1}}\par\vspace{4pt}
   {\Huge\bfseries\color{accent}#2}\par\vspace{12pt}
-  \begin{minipage}{150mm}\large #3\end{minipage}\par
+  \begin{minipage}{0.9\linewidth}\large #3\end{minipage}\par
   \clearpage}
 
 \begin{document}
 $body$
+$if(index)$
+\printindex
+$endif$
 \end{document}
