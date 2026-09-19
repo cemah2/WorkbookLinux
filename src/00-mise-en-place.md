@@ -126,6 +126,26 @@ SUSE se déduisent de ces deux-là en quelques minutes.
 
 ## 0.3 Le laboratoire Proxmox
 
+::: astuce
+**Déploiement automatique.** Tout ce chapitre tient en une commande.
+Depuis ton poste, copie les scripts et le zip sur le nœud, puis lance
+l'orchestrateur en root :
+
+```bash
+scp -r scripts/lab workbook-scripts.zip root@192.168.1.50:/root/
+ssh root@192.168.1.50 'bash /root/lab/lab-deploy.sh'   # 20 à 30 min
+```
+
+Il crée `vmbr1` + NAT + `dnsmasq`, les deux templates cloud-init (images
+vérifiées par SHA256), clone et démarre les 7 VM, passe `bootstrap-lab.sh`
+partout, dépose les scripts dans `~/workbook/` sur `lab-adm`, installe
+Gitea sur `lab-git`, pose `snap-clean` et termine par `lab-doctor.sh`.
+Chaque phase détecte ce qui est déjà fait : en cas de coupure, relance
+avec `--from <phase>` (`--help` liste les phases, `--dry-run` montre ce
+qui serait fait). Journal dans `/var/log/lab-deploy.log`. La suite de ce
+chapitre décrit pas à pas ce que le script fait, pour comprendre.
+:::
+
 ### Topologie
 
 | VM | VMID / IP | Ressources | Rôle |
@@ -610,6 +630,18 @@ ssh lab-db 'lsblk -d -o NAME,SIZE'
 # sdc    5G
 ```
 
+Le script `lab-doctor.sh` fait toutes ces vérifications, et davantage,
+d'un coup — depuis le nœud (root) ou depuis `lab-adm` :
+
+```bash
+bash /root/lab/lab-doctor.sh          # sur le nœud : VM, snapshots, NAT...
+bash ~/workbook/scripts/lab/lab-doctor.sh   # sur lab-adm : ping, SSH, sudo,
+# /etc/hosts, DNS, NTP, fuseau, internet, disque, sdb/sdc, /dev/kvm, Gitea
+```
+
+Chaque ligne `[FAIL]` vient avec un conseil ; le code retour est 0 quand
+tout est vert. C'est aussi la dernière phase de `lab-deploy.sh` (§0.3).
+
 Si `ssh lab-adm` échoue : `qm terminal 9001` sur le nœud (`Ctrl+O` pour
 sortir) te donne la console série. Là, `cloud-init status --long` et
 `journalctl -u cloud-init` disent ce qui a coincé — le plus souvent une clé
@@ -679,9 +711,9 @@ avec une erreur bash au lieu d'un `[FAIL]`, c'est que le bootstrap a raté
 quelque chose (souvent `jq` ou `shellcheck` absent) : relance-le.
 
 ::: check
-Le lab est prêt quand : `lab-status.sh` ne signale aucun problème, chaque
-VM résout `lab-ops` par `/etc/hosts`, sort sur internet, a l'heure de
-Paris, et porte un snapshot `snap-clean`. Note la date dans ton carnet :
+Le lab est prêt quand : `lab-status.sh` et `lab-doctor.sh` ne signalent
+aucun problème, chaque VM résout `lab-ops` par `/etc/hosts`, sort sur
+internet, a l'heure de Paris, et porte un snapshot `snap-clean`. Note la date dans ton carnet :
 c'est le jour 0. Reste le serveur Git (§0.8) : installe-le **avant** de
 poser `snap-clean` sur `lab-git`, pour que le rollback ne le supprime pas.
 :::

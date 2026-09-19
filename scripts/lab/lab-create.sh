@@ -85,7 +85,7 @@ create_vm() {
              /sys/module/kvm_amd/parameters/nested 2>/dev/null | head -1)
     case "$nested" in
       Y|1) ;;
-      *) ko "nested=${nested:-?} sur le nœud : pas de /dev/kvm dans $name (§0.3)" ;;
+      *) ko "nested=${nested:-?} sur le nœud : pas de /dev/kvm dans $name" ;;
     esac
   fi
 
@@ -99,6 +99,12 @@ create_vm() {
     done
   fi
 
+  # LAB_NO_START=1 (lab-deploy.sh) : la VM est créée mais pas démarrée,
+  # l'appelant se charge du démarrage par vagues.
+  if [ "${LAB_NO_START:-0}" = 1 ]; then
+    ok "$name ($vmid) créé (démarrage différé)"
+    return 0
+  fi
   info "  démarrage"
   qm start "$vmid"
   ok "$name ($vmid) créé et démarré"
@@ -106,18 +112,18 @@ create_vm() {
 
 # ---------------------------------------------------------------------
 snapshot_all() {
-  local line vmid name
+  local line vmid name fails=0
   for line in "${LAB_VMS[@]}"; do
     read -r vmid name _ <<< "$line"
     qm status "$vmid" >/dev/null 2>&1 \
-      || { ko "$name ($vmid) absent"; continue; }
+      || { ko "$name ($vmid) absent"; fails=$((fails+1)); continue; }
     if qm listsnapshot "$vmid" | grep -qw "$LAB_SNAP"; then
       ok "$name : $LAB_SNAP déjà présent (qm delsnapshot pour refaire)"
       continue
     fi
     if ! wait_agent "$vmid"; then
       ko "$name : agent QEMU muet, la VM est-elle démarrée et bootstrapée ?"
-      continue
+      fails=$((fails+1)); continue
     fi
     # VM en marche + agent actif : Proxmox gèle le FS pendant l'instantané.
     info "snapshot $LAB_SNAP sur $name ($vmid)"
@@ -125,14 +131,19 @@ snapshot_all() {
       --description "état propre après bootstrap-lab.sh"
     ok "$name : $LAB_SNAP posé"
   done
+  # Code retour exploitable par lab-deploy.sh : 0 si les 7 snapshots existent.
+  [ "$fails" -eq 0 ] || return 1
 }
 
 # ---------------------------------------------------------------------
 destroy_all() {
   local line vmid name
   echo "Cette action SUPPRIME les 7 VM du lab (pas les templates)."
-  read -r -p "Taper OUI pour confirmer : " rep
-  [ "$rep" = "OUI" ] || die "abandon"
+  # LAB_YES=1 : pas de question (lab-deploy.sh a déjà fait confirmer).
+  if [ "${LAB_YES:-0}" != 1 ]; then
+    read -r -p "Taper OUI pour confirmer : " rep
+    [ "$rep" = "OUI" ] || die "abandon"
+  fi
   for line in "${LAB_VMS[@]}"; do
     read -r vmid name _ <<< "$line"
     qm status "$vmid" >/dev/null 2>&1 || continue
@@ -152,10 +163,12 @@ case "$ACTION" in
       # shellcheck disable=SC2086
       create_vm $line
     done
-    echo
-    echo "Les VM démarrent (compte 60 à 90 s pour cloud-init)."
-    echo "Suite : ssh $LAB_USER@10.10.10.10, bootstrap-lab.sh sur chaque VM,"
-    echo "puis : bash lab-create.sh snapshot"
+    if [ "${LAB_NO_START:-0}" != 1 ]; then
+      echo
+      echo "Les VM démarrent (compte 60 à 90 s pour cloud-init)."
+      echo "Suite : ssh $LAB_USER@10.10.10.10, bootstrap-lab.sh sur chaque VM,"
+      echo "puis : bash lab-create.sh snapshot"
+    fi
     ;;
   snapshot) snapshot_all ;;
   destroy)  destroy_all ;;

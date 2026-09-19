@@ -7,6 +7,8 @@
 
 | Dossier | Contenu | Où l'exécuter |
 |---|---|---|
+| `lab/lab-deploy.sh` | déploiement automatique complet du lab (réseau, templates, 7 VM, bootstrap, Gitea, snapshots) ; `--help`, `--from`, `--dry-run` | nœud Proxmox, en root (chapitre 0.3) |
+| `lab/lab-doctor.sh` | diagnostic de bout en bout : VM, snapshots, SSH, sudo, DNS, NTP, internet, disques, Gitea, scripts ; code retour 0/1 | nœud Proxmox ou `lab-adm` (chapitre 0.5) |
 | `lab/` | création / reset / statut des VM, templates cloud-init, bootstrap | nœud Proxmox (`lab-*.sh`, `make-templates.sh`) puis chaque VM (`bootstrap-lab.sh`) |
 | `lab/install-gitea.sh`, `backup-gitea.sh` | forge Gitea de `lab-git` : installation binaire + systemd, sauvegarde `gitea dump` (+ `gitea-backup.timer`) | `lab-git` (chapitre 0.8) |
 | `setup/setup_MXX.sh` | prépare l'environnement du module XX (idempotent) | la VM indiquée en section X.1 du module |

@@ -25,12 +25,14 @@ TPL_UBUNTU_NAME="${TPL_UBUNTU_NAME:-tpl-ubuntu-2404}"
 UBUNTU_BASE="https://cloud-images.ubuntu.com/noble/current"
 UBUNTU_IMG="noble-server-cloudimg-amd64.img"
 TPL_UBUNTU_URL="${TPL_UBUNTU_URL:-$UBUNTU_BASE/$UBUNTU_IMG}"
+TPL_UBUNTU_SUMS="${TPL_UBUNTU_SUMS:-$UBUNTU_BASE/SHA256SUMS}"
 
 TPL_ROCKY_ID="${TPL_ROCKY_ID:-9010}"
 TPL_ROCKY_NAME="${TPL_ROCKY_NAME:-tpl-rocky-9}"
 ROCKY_BASE="https://dl.rockylinux.org/pub/rocky/9/images/x86_64"
 ROCKY_IMG="Rocky-9-GenericCloud-Base.latest.x86_64.qcow2"
 TPL_ROCKY_URL="${TPL_ROCKY_URL:-$ROCKY_BASE/$ROCKY_IMG}"
+TPL_ROCKY_SUMS="${TPL_ROCKY_SUMS:-$ROCKY_BASE/CHECKSUM}"
 
 # Répertoire de travail sur le nœud (images téléchargées, clés).
 LAB_DIR="${LAB_DIR:-/root/lab}"

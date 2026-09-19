@@ -30,10 +30,29 @@ mkdir -p "$LAB_DIR"
   || die "fichier de clés publiques absent : $LAB_SSHKEYS (voir chapitre 0.4)"
 
 # ---------------------------------------------------------------------
-# build_template VMID NOM URL
+# verify_sha256 IMAGE URL_DES_SOMMES
+# Ubuntu publie SHA256SUMS (format sha256sum), Rocky un CHECKSUM au format
+# BSD dont le nom de fichier est versionné (pas « latest ») : on compare
+# donc simplement l'empreinte locale à la liste. LAB_SKIP_CHECKSUM=1 saute.
+# ---------------------------------------------------------------------
+verify_sha256() {
+  local img="$1" sums_url="$2" sums local_sum
+  [ "${LAB_SKIP_CHECKSUM:-0}" = 1 ] && return 0
+  sums="$LAB_DIR/$(basename "$img").sums"
+  info "vérification SHA256 de $(basename "$img")"
+  wget -q -O "$sums" "$sums_url" \
+    || die "téléchargement impossible : $sums_url (LAB_SKIP_CHECKSUM=1 saute)"
+  local_sum="$(sha256sum "$img" | awk '{print $1}')"
+  grep -qi "$local_sum" "$sums" \
+    || die "SHA256 inconnu pour $(basename "$img") : image corrompue ?"
+  ok "SHA256 conforme ($local_sum)"
+}
+
+# ---------------------------------------------------------------------
+# build_template VMID NOM URL URL_DES_SOMMES
 # ---------------------------------------------------------------------
 build_template() {
-  local vmid="$1" name="$2" url="$3"
+  local vmid="$1" name="$2" url="$3" sums="$4"
   local img
   img="$LAB_DIR/$(basename "$url")"
 
@@ -50,6 +69,7 @@ build_template() {
   info "téléchargement de l'image ($name)"
   # -N : ne retélécharge que si l'image distante est plus récente
   wget -q -N -P "$LAB_DIR" "$url"
+  verify_sha256 "$img" "$sums"
 
   # Le paquet qemu-guest-agent n'est pas dans les images cloud. Si
   # libguestfs-tools est installé sur le nœud, on l'injecte tout de suite ;
@@ -106,15 +126,18 @@ build_template() {
   ok "template $vmid ($name) prêt"
 }
 
+ubuntu() {
+  build_template "$TPL_UBUNTU_ID" "$TPL_UBUNTU_NAME" "$TPL_UBUNTU_URL" \
+    "$TPL_UBUNTU_SUMS"
+}
+rocky() {
+  build_template "$TPL_ROCKY_ID" "$TPL_ROCKY_NAME" "$TPL_ROCKY_URL" \
+    "$TPL_ROCKY_SUMS"
+}
 case "$WHAT" in
-  ubuntu)
-    build_template "$TPL_UBUNTU_ID" "$TPL_UBUNTU_NAME" "$TPL_UBUNTU_URL" ;;
-  rocky)
-    build_template "$TPL_ROCKY_ID" "$TPL_ROCKY_NAME" "$TPL_ROCKY_URL" ;;
-  all)
-    build_template "$TPL_UBUNTU_ID" "$TPL_UBUNTU_NAME" "$TPL_UBUNTU_URL"
-    build_template "$TPL_ROCKY_ID"  "$TPL_ROCKY_NAME"  "$TPL_ROCKY_URL"
-    ;;
+  ubuntu) ubuntu ;;
+  rocky)  rocky ;;
+  all)    ubuntu; rocky ;;
 esac
 
 echo
