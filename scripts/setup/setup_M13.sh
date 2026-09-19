@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
-# setup_M13.sh — prépare le terrain du module 13
-#                (journalisation, rsyslog, logrotate, supervision)
-# À lancer avec sudo. Idempotent : relançable sans effet de bord.
-#
-# Ce script N'ÉCRIT AUCUNE configuration logrotate ni rsyslog : les écrire
-# est le travail du module. Il installe l'application de démonstration
-# « factura », ses unités systemd, une semaine d'historique de journaux,
-# des échantillons de journaux système, et rejoue l'incident INC-4102.
+# setup_M13.sh — prépare le terrain du module 13 (réseau Linux avancé)
+# À lancer avec sudo sur CHAQUE VM concernée (lab-adm, lab-web, lab-db,
+# lab-ops). Le script détecte l'hôte. Idempotent.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
@@ -14,615 +9,339 @@ set -euo pipefail
 LAB_USER="${SUDO_USER:-mathieu}"
 LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-
 BASE="$LAB_HOME/lab13"
-BIN=/opt/factura/bin
-ETC=/etc/factura
-LOGD=/var/log/factura
-NGXD=/var/log/nginx
-ECH="$BASE/echantillons"
-MARQ=/var/lib/factura/.setup-m13
-
-command -v python3 >/dev/null 2>&1 || {
-  echo "python3 est requis (voir §13.1)" >&2; exit 1; }
+HOSTN="$(hostname -s)"
+SAUV=/root/.m13-backup
+mkdir -p "$SAUV"
 
 echo "== Préparation du module 13 =="
+echo "   hôte        : $HOSTN"
 echo "   utilisateur : $LAB_USER"
-echo "   base        : $BASE"
-
-SYSTEMD=0
-[ -d /run/systemd/system ] && SYSTEMD=1
-[ "$SYSTEMD" -eq 1 ] || echo "   (systemd absent : les unités ne seront pas démarrées)"
 
 # ---------------------------------------------------------------------
-# 1. Compte de service, répertoires
+# 1. Paquets
 # ---------------------------------------------------------------------
-groupadd -f factura
-if ! getent passwd factura >/dev/null; then
-  useradd -r -g factura -d /srv/factura -s /usr/sbin/nologin factura
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  PKGS="iproute2 nftables conntrack tcpdump ethtool iperf3 wireguard-tools \
+        bind9-dnsutils python3 mtr-tiny curl netcat-openbsd"
+  case "$HOSTN" in
+    lab-ops) PKGS="$PKGS unbound bind9 bind9-utils" ;;
+    lab-adm) PKGS="$PKGS bind9 bind9-utils" ;;
+  esac
+  # shellcheck disable=SC2086
+  apt-get install -y -qq $PKGS >/dev/null
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y -q iproute nftables conntrack-tools tcpdump ethtool iperf3 \
+    wireguard-tools bind-utils python3 mtr curl nmap-ncat >/dev/null
 fi
-# groupe « adm » : présent sur Ubuntu, pas toujours sur Rocky.
-getent group adm >/dev/null || groupadd -r adm
 
-mkdir -p "$BIN" "$ETC" "$LOGD" "$NGXD" /srv/factura /var/lib/factura \
-         "$BASE" "$ECH" "$BASE/inc-4102" "$BASE/rapports"
-chown root:root /opt/factura "$BIN" "$ETC"
-chmod 0755 /opt/factura "$BIN" "$ETC"
-chown factura:adm "$LOGD"
-chmod 0750 "$LOGD"
-chown -R "$LAB_USER":"$LAB_USER" "$BASE"
-
-# ---------------------------------------------------------------------
-# 2. factura-api.py — le service dont on lit les journaux
-#    Deux modes : rejeu de l'incident (FACTURA_REJEU=1) et régime normal.
-# ---------------------------------------------------------------------
-cat > "$BIN/factura-api.py" <<'PYEOF'
-#!/usr/bin/env python3
-"""factura-api — service de démonstration (workbook, module 13).
-
-Écrit sur stdout/stderr. Sous systemd, journald interprète le préfixe
-« <N> » en tête de ligne comme la sévérité syslog du message : c'est le
-mécanisme le plus simple pour qu'une application donne son niveau de log
-sans dépendre de libsystemd.
-
-Variables d'environnement :
-  FACTURA_REJEU=1    rejoue l'incident INC-4102 puis sort en 1
-  FACTURA_FORMAT     texte (défaut) | json
-  FACTURA_PERIODE    secondes entre deux lignes en régime normal (défaut 20)
-"""
-import json
-import os
-import random
-import sys
-import time
-import uuid
-
-FORMAT = os.environ.get("FACTURA_FORMAT", "texte")
-PERIODE = float(os.environ.get("FACTURA_PERIODE", "20"))
-
-SEV = {"debug": 7, "info": 6, "notice": 5, "warning": 4,
-       "err": 3, "crit": 2}
-
-
-def emet(niveau, message, **champs):
-    """Une ligne de log, préfixée de sa sévérité syslog."""
-    if FORMAT == "json":
-        corps = {"niveau": niveau, "message": message}
-        corps.update(champs)
-        texte = json.dumps(corps, ensure_ascii=False)
-    else:
-        extra = " ".join("%s=%s" % (k, v) for k, v in champs.items())
-        texte = "%s %s" % (message, extra) if extra else message
-    flux = sys.stderr if SEV[niveau] <= 4 else sys.stdout
-    flux.write("<%d>%s\n" % (SEV[niveau], texte))
-    flux.flush()
-
-
-def rid():
-    return uuid.uuid4().hex[:12]
-
-
-def rejeu():
-    """Incident INC-4102 : le batch d'export monopolise le pool."""
-    emet("info", "demarrage factura-api", version="2.4.1", workers=4,
-         pool_max=20)
-    emet("notice", "pool PostgreSQL initialise", taille=20,
-         hote="10.10.10.12")
-    emet("info", "batch factura-exports demarre", req_id=rid(),
-         connexions_demandees=20)
-    for i in range(6):
-        emet("info", "requete traitee", req_id=rid(), route="/api/factures",
-             duree_ms=random.randint(40, 90), statut=200)
-    emet("warning", "pool de connexions sature", en_service=20, taille=20,
-         attente_ms=3200)
-    for i in range(10):
-        emet("warning", "attente d'une connexion libre", req_id=rid(),
-             attente_ms=random.randint(4000, 9500))
-    for i in range(14):
-        emet("err", "echec d'obtention d'une connexion apres 30s",
-             req_id=rid(), route="/api/factures", statut=502)
-    emet("err", "psycopg2.OperationalError: connection pool exhausted",
-         req_id=rid())
-    emet("warning", "consommation memoire du worker 3", rss_mo=1480,
-         seuil_mo=1024)
-    emet("crit", "worker 3 termine par le noyau (signal 9)", pid=os.getpid())
-    emet("err", "arret de factura-api : 3 workers sur 4 indisponibles")
-    return 1
-
-
-def normal():
-    emet("info", "demarrage factura-api", version="2.4.1", workers=4,
-         pool_max=20)
-    routes = ["/api/factures", "/api/clients", "/sante", "/api/exports"]
-    while True:
-        r = random.random()
-        if r < 0.03:
-            emet("err", "requete en echec", req_id=rid(),
-                 route=random.choice(routes), statut=500)
-        elif r < 0.10:
-            emet("warning", "requete lente", req_id=rid(),
-                 route=random.choice(routes),
-                 duree_ms=random.randint(1200, 4000))
-        else:
-            emet("info", "requete traitee", req_id=rid(),
-                 route=random.choice(routes),
-                 duree_ms=random.randint(12, 180), statut=200)
-        time.sleep(PERIODE)
-
-
-if __name__ == "__main__":
-    if os.environ.get("FACTURA_REJEU") == "1" or "--rejeu" in sys.argv:
-        sys.exit(rejeu())
-    try:
-        normal()
-    except KeyboardInterrupt:
-        emet("notice", "arret demande")
-PYEOF
+# BIND ne doit pas démarrer tant que la configuration n'est pas écrite :
+# sur lab-ops et lab-adm, on l'arrête (il écoute sur "any" par défaut).
+if [ "$HOSTN" = lab-ops ] || [ "$HOSTN" = lab-adm ]; then
+  systemctl stop named 2>/dev/null || true
+  # le résolveur du module 12 occupe 10.10.10.10:53 : le secondaire BIND
+  # doit pouvoir le prendre
+  if [ "$HOSTN" = lab-adm ] && systemctl is-active -q dnsmasq 2>/dev/null; then
+    echo "dnsmasq était actif (module 12)" > "$SAUV/dnsmasq.was-active"
+    systemctl disable --now dnsmasq
+    echo "   dnsmasq (module 12) arrêté : le port 53 est libre pour BIND"
+  fi
+fi
+if [ "$HOSTN" = lab-ops ]; then
+  systemctl stop unbound 2>/dev/null || true
+  mkdir -p /etc/bind/zones /var/log/named
+  chown bind:bind /var/log/named 2>/dev/null || true
+  # adresse de service du résolveur, volatile (L13.4 la rend persistante)
+  ip addr show dev ens18 2>/dev/null | grep -q '10\.10\.10\.53/24' \
+    || ip addr add 10.10.10.53/24 dev ens18 2>/dev/null || true
+  echo "   10.10.10.53/24 posée sur ens18 (volatile)"
+fi
 
 # ---------------------------------------------------------------------
-# 3. factura-bruyant.sh — le service qui inonde le journal
+# 2. Bac à sable de l'apprenant
 # ---------------------------------------------------------------------
-cat > "$BIN/factura-bruyant.sh" <<'BREOF'
+mkdir -p "$BASE"/{bin,nft,dns,www/t1,www/t2,rapports,docs,wg}
+
+# --- pages servies par les "conteneurs" -------------------------------
+cat > "$BASE/www/index.html" <<'EOF'
+<html><body><h1>c1 : servi depuis le netns c1 (172.20.0.11:8000)</h1>
+<p>Si tu lis ceci depuis lab-web via 10.10.10.10:8080, le DNAT fonctionne.</p>
+</body></html>
+EOF
+printf '<h1>t1-web (locataire 1)</h1>\n' > "$BASE/www/t1/index.html"
+printf '<h1>t2-web (locataire 2)</h1>\n' > "$BASE/www/t2/index.html"
+
+# --- squelette minidocker.sh -----------------------------------------
+[ -f "$BASE/bin/minidocker.sh" ] || cat > "$BASE/bin/minidocker.sh" <<'EOF'
 #!/usr/bin/env bash
-# factura-bruyant — simule un service mal configuré en niveau debug.
-# FACTURA_DEBIT : messages par seconde (défaut 200)
-# FACTURA_RAFALE : nombre de messages par rafale (défaut 400), puis pause
-set -uo pipefail
-DEBIT="${FACTURA_DEBIT:-200}"
-RAFALE="${FACTURA_RAFALE:-0}"
-n=0
-if [ "$RAFALE" -gt 0 ]; then
-  while :; do
-    for _ in $(seq 1 "$RAFALE"); do
-      n=$((n+1))
-      printf '<7>trace debug interne seq=%d etat=ok\n' "$n"
-    done
-    sleep 20
-  done
-fi
-pause=$(awk -v d="$DEBIT" 'BEGIN {printf "%.4f", 1/d}')
-while :; do
-  n=$((n+1))
-  printf '<7>trace debug interne seq=%d etat=ok\n' "$n"
-  sleep "$pause"
-done
-BREOF
+# minidocker.sh — up | down | status
+# L13.1 : trois netns (c1, c2, c3) sur un bridge br-lab (172.20.0.1/24),
+# NAT de sortie via ens18, publication 10.10.10.10:8080 -> c1:8000.
+# Doit être IDEMPOTENT : relancer "up" ne doit rien casser ni dupliquer.
+set -euo pipefail
+BR=br-lab; NET=172.20.0; WAN=ens18
+NFT=/home/mathieu/lab13/nft/minidocker.nft
+WWW=/home/mathieu/lab13/www
+STATE=/run/minidocker.ipfwd     # valeur d'origine de ip_forward
 
-# ---------------------------------------------------------------------
-# 4. factura-ecrivain.py — écrit dans un FICHIER, descripteur conservé.
-#    Sert aux labs logrotate : mode append (propre) ou mode position
-#    absolue (reproduit le trou de copytruncate).
-# ---------------------------------------------------------------------
-cat > "$BIN/factura-ecrivain.py" <<'ECEOF'
-#!/usr/bin/env python3
-"""factura-ecrivain — écrit des lignes numérotées dans un fichier et
-garde son descripteur ouvert, comme une application qui ne sait pas
-rouvrir son log.
-
-  --fichier CHEMIN   fichier cible (défaut /var/log/factura/acces.log)
-  --periode N        secondes entre deux lignes (défaut 1)
-  --sans-append      ouvre SANS O_APPEND : après une troncature, le
-                     noyau remplit de zéros jusqu'à la position courante
-  --hup              rouvre le fichier sur réception de SIGHUP
-"""
-import argparse
-import os
-import signal
-import sys
-import time
-
-p = argparse.ArgumentParser()
-p.add_argument("--fichier", default="/var/log/factura/acces.log")
-p.add_argument("--periode", type=float, default=1.0)
-p.add_argument("--sans-append", action="store_true")
-p.add_argument("--hup", action="store_true")
-a = p.parse_args()
-
-etat = {"fd": None, "rouvrir": False}
-
-
-def ouvrir():
-    drapeaux = os.O_WRONLY | os.O_CREAT
-    if not a.sans_append:
-        drapeaux |= os.O_APPEND
-    fd = os.open(a.fichier, drapeaux, 0o640)
-    if a.sans_append:
-        os.lseek(fd, 0, os.SEEK_END)
-    return fd
-
-
-def sur_hup(signum, frame):
-    etat["rouvrir"] = True
-
-
-if a.hup:
-    signal.signal(signal.SIGHUP, sur_hup)
-
-etat["fd"] = ouvrir()
-n = 0
-try:
-    while True:
-        n += 1
-        ligne = "%s seq=%d service=factura-acces etat=ok\n" % (
-            time.strftime("%Y-%m-%dT%H:%M:%S%z"), n)
-        os.write(etat["fd"], ligne.encode())
-        if etat["rouvrir"]:
-            os.close(etat["fd"])
-            etat["fd"] = ouvrir()
-            etat["rouvrir"] = False
-            sys.stderr.write("<5>fichier de log rouvert\n")
-            sys.stderr.flush()
-        time.sleep(a.periode)
-except KeyboardInterrupt:
-    pass
-ECEOF
-
-chmod 0755 "$BIN"/factura-api.py "$BIN"/factura-bruyant.sh \
-           "$BIN"/factura-ecrivain.py
-
-# ---------------------------------------------------------------------
-# 5. Fichier d'environnement (pas de valeur en dur dans les unités)
-# ---------------------------------------------------------------------
-if [ ! -f "$ETC/api.env" ]; then
-  cat > "$ETC/api.env" <<'EOF'
-FACTURA_FORMAT=texte
-FACTURA_PERIODE=20
-FACTURA_REJEU=0
+up() {
+  # TODO 1 : bridge $BR, adresse $NET.1/24, up
+  # TODO 2 : pour i in 1 2 3 : netns c$i, veth (bout "eth0" dans le netns),
+  #          bout hôte "veth-c$i" esclave du bridge, lo up, adresse
+  #          $NET.1$i/24, route par défaut via $NET.1
+  # TODO 3 : sauvegarder ip_forward dans $STATE, le mettre à 1
+  # TODO 4 : nft -f "$NFT"
+  # TODO 5 : lancer python3 -m http.server 8000 dans c1 (répertoire $WWW)
+  :
+}
+down() {
+  # TODO : tout défaire (netns, bridge, tables nftables, ip_forward)
+  :
+}
+status() {
+  # TODO : netns, ports du bridge, fdb, ip_forward, règles nat + compteurs
+  :
+}
+case "${1:-}" in
+  up) up ;; down) down ;; status) status ;;
+  *) echo "usage: $0 up|down|status" >&2; exit 2 ;;
+esac
 EOF
-fi
-chmod 0644 "$ETC/api.env"
+chmod 755 "$BASE/bin/minidocker.sh"
 
-# ---------------------------------------------------------------------
-# 6. Unités systemd
-# ---------------------------------------------------------------------
-cat > /etc/systemd/system/factura-api.service <<'EOF'
-[Unit]
-Description=Factura — API de facturation (demonstration workbook)
-After=network-online.target
-Wants=network-online.target
+# --- squelette nftables ----------------------------------------------
+[ -f "$BASE/nft/minidocker.nft" ] || cat > "$BASE/nft/minidocker.nft" <<'EOF'
+#!/usr/sbin/nft -f
+# minidocker.nft — L13.1
+# Idiome rechargeable : déclarer la table vide (créée si absente), la vider,
+# puis la définir. Le fichier est appliqué en une seule transaction.
+table ip nat {}
+table inet filter {}
+flush table ip nat
+flush table inet filter
 
-[Service]
-Type=simple
-User=factura
-Group=factura
-EnvironmentFile=/etc/factura/api.env
-ExecStart=/opt/factura/bin/factura-api.py
-Restart=no
-SyslogIdentifier=factura-api
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /etc/systemd/system/factura-bruyant.service <<'EOF'
-[Unit]
-Description=Factura — collecteur de traces (service volontairement bruyant)
-
-[Service]
-Type=simple
-User=factura
-Group=factura
-Environment=FACTURA_DEBIT=200
-ExecStart=/opt/factura/bin/factura-bruyant.sh
-Restart=always
-RestartSec=2
-SyslogIdentifier=factura-bruyant
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /etc/systemd/system/factura-ecrivain.service <<'EOF'
-[Unit]
-Description=Factura — ecriture du journal d'acces dans un fichier
-
-[Service]
-Type=simple
-User=factura
-Group=factura
-ExecStart=/opt/factura/bin/factura-ecrivain.py \
-          --fichier /var/log/factura/acces.log --periode 1 --hup
-Restart=always
-RestartSec=2
-SyslogIdentifier=factura-ecrivain
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-chmod 0644 /etc/systemd/system/factura-*.service
-
-# ---------------------------------------------------------------------
-# 7. Génération des journaux historiques
-#    Idempotent : on ne régénère pas si le marqueur existe.
-# ---------------------------------------------------------------------
-if [ ! -f "$MARQ" ]; then
-  echo "   génération des journaux (une dizaine de secondes)..."
-  python3 - "$LOGD" "$NGXD" "$ECH" <<'GENEOF'
-import datetime as dt
-import gzip
-import os
-import random
-import sys
-
-LOGD, NGXD, ECH = sys.argv[1], sys.argv[2], sys.argv[3]
-random.seed(4102)
-maintenant = dt.datetime.now().replace(microsecond=0)
-# Fenêtre de l'incident dans les journaux fichiers : les 40 minutes qui
-# précèdent le lancement du setup.
-debut = maintenant - dt.timedelta(minutes=40)
-
-ROUTES = ["/api/factures", "/api/clients", "/api/exports", "/sante",
-          "/static/app.js", "/static/logo.png"]
-IPS = ["10.10.10.10", "10.10.10.14", "192.168.1.42", "192.168.1.77",
-       "203.0.113.19"]
-UA = ('"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/128.0 Safari/537.36"')
-
-
-def rid():
-    return "%012x" % random.getrandbits(48)
-
-
-# --- 7.1 nginx access.log : 40 min de trafic, 502 sur les 20 dernières --
-lignes = []
-err = []
-t = debut
-while t < maintenant:
-    n = random.randint(28, 55)
-    for _ in range(n):
-        h = t + dt.timedelta(seconds=random.randint(0, 59))
-        route = random.choice(ROUTES)
-        degrade = (maintenant - h).total_seconds() < 20 * 60
-        if degrade and route.startswith("/api/") and random.random() < 0.55:
-            statut, taille, duree = 502, 552, round(random.uniform(30, 31), 3)
-            err.append(
-                '%s [error] 918#918: *%d upstream timed out (110: '
-                'Connection timed out) while reading response header from '
-                'upstream, client: %s, server: factura.lab.local, '
-                'request: "GET %s HTTP/1.1", upstream: '
-                '"http://127.0.0.1:8080%s", host: "factura.lab.local"'
-                % (h.strftime("%Y/%m/%d %H:%M:%S"),
-                   random.randint(1000, 9999), random.choice(IPS), route,
-                   route))
-        else:
-            statut = 200
-            taille = random.randint(180, 9000)
-            duree = round(random.uniform(0.008, 0.240), 3)
-        lignes.append(
-            '%s - - [%s] "GET %s HTTP/1.1" %d %d "-" %s %.3f'
-            % (random.choice(IPS),
-               h.strftime("%d/%b/%Y:%H:%M:%S +0200"),
-               route, statut, taille, UA, duree))
-    t += dt.timedelta(minutes=1)
-lignes.sort(key=lambda s: s.split("[")[1][:20])
-with open(os.path.join(NGXD, "access.log"), "w") as f:
-    f.write("\n".join(lignes) + "\n")
-with open(os.path.join(NGXD, "error.log"), "w") as f:
-    f.write("\n".join(sorted(err)) + "\n")
-
-# --- 7.2 factura app.log : 7 jours d'historique -------------------------
-NIVEAUX = [("INFO", 78), ("DEBUG", 12), ("WARN", 7), ("ERROR", 3)]
-
-
-def tire_niveau():
-    x = random.randint(1, 100)
-    c = 0
-    for nom, poids in NIVEAUX:
-        c += poids
-        if x <= c:
-            return nom
-    return "INFO"
-
-
-MSG = {
-    "INFO": ["requete traitee", "cache renouvele", "export genere",
-             "connexion client etablie", "tache planifiee terminee"],
-    "DEBUG": ["entree dans traiter_facture()", "requete SQL preparee",
-              "cache hit", "serialisation du payload"],
-    "WARN": ["requete lente", "pool de connexions a 80%",
-             "reessai apres echec temporaire", "certificat expire dans 12j"],
-    "ERROR": ["echec d'ecriture en base", "timeout upstream",
-              "payload invalide rejete", "echec d'envoi de mail"],
+table ip nat {
+  chain prerouting {
+    type nat hook prerouting priority -100; policy accept;
+    # TODO : dnat 8080 -> 172.20.0.11:8000 (avec counter)
+  }
+  chain postrouting {
+    type nat hook postrouting priority 100; policy accept;
+    # TODO : masquerade pour 172.20.0.0/24 en sortie par ens18 (avec counter)
+  }
 }
 
-app = open(os.path.join(LOGD, "app.log"), "w")
-erreurs = open(os.path.join(LOGD, "erreurs.log"), "w")
-t = maintenant - dt.timedelta(days=7)
-n = 0
-API = [r for r in ROUTES if r.startswith("/api/")]
-while t < maintenant:
-    niveau = tire_niveau()
-    route = random.choice(API if niveau in ("WARN", "ERROR") else ROUTES)
-    ligne = ("%s factura-api[918] %-5s req_id=%s route=%s duree_ms=%d %s\n"
-             % (t.strftime("%Y-%m-%dT%H:%M:%S+02:00"), niveau, rid(),
-                route, random.randint(8, 3200),
-                random.choice(MSG[niveau])))
-    app.write(ligne)
-    if niveau == "ERROR":
-        erreurs.write(ligne)
-    n += 1
-    t += dt.timedelta(seconds=random.uniform(2, 10))
-app.close()
-erreurs.close()
-
-# --- 7.3 acces.log : lignes numérotées, plus deux générations ----------
-acces = open(os.path.join(LOGD, "acces.log"), "w")
-t = maintenant - dt.timedelta(hours=6)
-for i in range(1, 20001):
-    acces.write("%s seq=%d service=factura-acces etat=ok\n"
-                % ((t + dt.timedelta(seconds=i)).strftime(
-                    "%Y-%m-%dT%H:%M:%S+0200"), i))
-acces.close()
-
-# --- 7.4 metier.log absent : c'est le travail de l'apprenant -----------
-
-# --- 7.5 échantillons pour lecture (jamais dans /var/log) --------------
-auth = []
-t = maintenant - dt.timedelta(hours=3)
-for i in range(400):
-    t += dt.timedelta(seconds=random.randint(5, 40))
-    h = t.strftime("%b %d %H:%M:%S")
-    r = random.random()
-    if r < 0.35:
-        auth.append("%s lab-web sshd[%d]: Failed password for invalid user "
-                    "admin from 203.0.113.%d port %d ssh2"
-                    % (h, random.randint(2000, 9000),
-                       random.randint(2, 250), random.randint(30000, 65000)))
-    elif r < 0.55:
-        auth.append("%s lab-web sshd[%d]: Accepted publickey for mathieu "
-                    "from 10.10.10.10 port %d ssh2: ED25519 SHA256:"
-                    "9k2Jb1vQ8mZc0pT7rXn4Ls6Yw3Ae5Uf2Hd1Gi8Ko0Pq"
-                    % (h, random.randint(2000, 9000),
-                       random.randint(30000, 65000)))
-    elif r < 0.75:
-        auth.append("%s lab-web sudo: mathieu : TTY=pts/1 ; PWD=/home/mathieu"
-                    " ; USER=root ; COMMAND=/usr/bin/systemctl restart "
-                    "factura-api" % h)
-    else:
-        auth.append("%s lab-web systemd-logind[712]: New session %d of user "
-                    "mathieu." % (h, random.randint(10, 400)))
-open(os.path.join(ECH, "auth.log"), "w").write("\n".join(auth) + "\n")
-
-pg = []
-t = maintenant - dt.timedelta(hours=3)
-for i in range(180):
-    t += dt.timedelta(seconds=random.randint(20, 120))
-    h = t.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " CEST"
-    r = random.random()
-    if r < 0.15:
-        pg.append("%s [%d] LOG:  duration: %.3f ms  statement: SELECT * FROM "
-                  "factures WHERE client_id = %d"
-                  % (h, random.randint(900, 9999),
-                     random.uniform(1200, 9000), random.randint(1, 9000)))
-    elif r < 0.25:
-        pg.append("%s [%d] FATAL:  sorry, too many clients already"
-                  % (h, random.randint(900, 9999)))
-    elif r < 0.35:
-        pg.append("%s [%d] WARNING:  there is already a transaction in "
-                  "progress" % (h, random.randint(900, 9999)))
-    else:
-        pg.append("%s [%d] LOG:  checkpoint complete: wrote %d buffers "
-                  "(%.1f%%); write=%.3f s, sync=%.3f s, total=%.3f s"
-                  % (h, random.randint(900, 9999), random.randint(80, 4000),
-                     random.uniform(0.2, 9.0), random.uniform(0.1, 3.0),
-                     random.uniform(0.01, 0.9), random.uniform(0.4, 9.5)))
-open(os.path.join(ECH, "postgresql-16-main.log"), "w").write(
-    "\n".join(pg) + "\n")
-
-ci = """\
-2026-09-11 08:12:03,441 - stages.py[DEBUG]: Using distro class <class \
-'cloudinit.distros.ubuntu.Distro'>
-2026-09-11 08:12:03,512 - handlers.py[DEBUG]: start: init-network/\
-check-cache: attempting to read from cache [trust]
-2026-09-11 08:12:04,120 - DataSourceNoCloud.py[DEBUG]: Seeing DataSource \
-NoCloud [seed=/var/lib/cloud/seed/nocloud-net]
-2026-09-11 08:12:06,884 - cc_set_hostname.py[DEBUG]: Setting hostname to \
-lab-web (lab-web)
-2026-09-11 08:12:11,006 - cc_ssh.py[DEBUG]: Restoring authorized_keys for \
-mathieu
-2026-09-11 08:12:19,773 - util.py[WARNING]: Failed to run module \
-scripts-user (scripts in /var/lib/cloud/instance/scripts)
-2026-09-11 08:12:19,774 - util.py[DEBUG]: Failed running \
-/var/lib/cloud/instance/scripts [1]
-"""
-open(os.path.join(ECH, "cloud-init.log"), "w").write(ci)
-
-uu = """\
-2026-09-17 06:32:01,004 INFO Starting unattended upgrades script
-2026-09-17 06:32:01,118 INFO Allowed origins are: o=Ubuntu,a=noble-security
-2026-09-17 06:32:47,552 INFO Packages that will be upgraded: libssl3t64 \
-openssl
-2026-09-17 06:32:47,552 INFO Writing dpkg log to \
-/var/log/unattended-upgrades/unattended-upgrades-dpkg.log
-2026-09-17 06:33:29,901 INFO All upgrades installed
-2026-09-17 06:33:30,004 WARNING Found /var/run/reboot-required, rebooting \
-is needed
-"""
-open(os.path.join(ECH, "unattended-upgrades.log"), "w").write(uu)
-
-# une génération déjà compressée, pour montrer zcat/zgrep
-with gzip.open(os.path.join(ECH, "app.log.3.gz"), "wt") as g:
-    t = maintenant - dt.timedelta(days=9)
-    for i in range(4000):
-        t += dt.timedelta(seconds=random.uniform(3, 12))
-        g.write("%s factura-api[918] INFO  req_id=%s route=%s duree_ms=%d "
-                "requete traitee\n"
-                % (t.strftime("%Y-%m-%dT%H:%M:%S+02:00"), rid(),
-                   random.choice(ROUTES), random.randint(8, 300)))
-
-print("   access.log : %d lignes" % len(lignes))
-print("   app.log    : %d lignes" % n)
-GENEOF
-  touch "$MARQ"
-else
-  echo "   journaux déjà générés (marqueur $MARQ) — rien à refaire"
-fi
-
-chown factura:adm "$LOGD"/*.log
-chmod 0640 "$LOGD"/*.log
-chown -R "$LAB_USER":"$LAB_USER" "$BASE"
-[ -d "$NGXD" ] && chmod 0755 "$NGXD"
-
-# ---------------------------------------------------------------------
-# 8. Rejeu de l'incident INC-4102 dans le journal systemd
-# ---------------------------------------------------------------------
-FEN="$BASE/inc-4102/fenetre.txt"
-if [ "$SYSTEMD" -eq 1 ]; then
-  systemctl daemon-reload
-  if [ ! -f "$FEN" ]; then
-    echo "   rejeu de l'incident INC-4102 dans le journal..."
-    DEB=$(date '+%Y-%m-%d %H:%M:%S')
-    sed -i 's/^FACTURA_REJEU=.*/FACTURA_REJEU=1/' "$ETC/api.env"
-    systemctl start factura-api.service || true
-    sleep 3
-    # trace noyau contemporaine (OOM killer) : journalctl -k la verra
-    printf '<4>Out of memory: Killed process 918 (factura-api) '\
-'total-vm:2148600kB, anon-rss:1515208kB, file-rss:0kB, shmem-rss:0kB, '\
-'UID:996 pgtables:3068kB oom_score_adj:0\n' > /dev/kmsg 2>/dev/null || true
-    FIN=$(date '+%Y-%m-%d %H:%M:%S')
-    sed -i 's/^FACTURA_REJEU=.*/FACTURA_REJEU=0/' "$ETC/api.env"
-    systemctl reset-failed factura-api.service >/dev/null 2>&1 || true
-    {
-      echo "INC-4102 — fenêtre de rejeu dans le journal systemd"
-      echo "DEBUT=$DEB"
-      echo "FIN=$FIN"
-      echo
-      echo "Les journaux fichiers (/var/log/nginx/access.log,"
-      echo "/var/log/factura/app.log) couvrent les 40 minutes qui"
-      echo "précèdent DEBUT : la dégradation y est visible avant la"
-      echo "chute du service."
-    } > "$FEN"
-    chown "$LAB_USER":"$LAB_USER" "$FEN"
-  fi
-  systemctl enable --now factura-api.service >/dev/null 2>&1 || true
-  systemctl enable --now factura-ecrivain.service >/dev/null 2>&1 || true
-  # factura-bruyant est installé mais PAS démarré : c'est l'apprenant qui
-  # le lance quand il en a besoin (E13.10, BF13.3).
-  systemctl disable factura-bruyant.service >/dev/null 2>&1 || true
-else
-  {
-    echo "INC-4102 — pas de systemd sur cette machine."
-    echo "Le rejeu dans le journal n'a pas eu lieu."
-  } > "$FEN"
-  chown "$LAB_USER":"$LAB_USER" "$FEN"
-fi
-
-# ---------------------------------------------------------------------
-# 9. Résumé
-# ---------------------------------------------------------------------
-cat <<EOF
-
-Terrain prêt.
-
-  $BIN/factura-api.py         service journalisé (unité factura-api)
-  $BIN/factura-bruyant.sh     service bruyant (unité factura-bruyant, arrêtée)
-  $BIN/factura-ecrivain.py    écrivain fichier (unité factura-ecrivain)
-  $LOGD/                      app.log, erreurs.log, acces.log
-  $NGXD/                      access.log, error.log
-  $ECH/                       auth.log, postgresql, cloud-init, .gz
-  $FEN                        fenêtre de l'incident INC-4102
-
-Aucune configuration logrotate ni rsyslog n'a été écrite : c'est le travail
-du module. Commence par §13.5.
+table inet filter {
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    # TODO : established,related ; invalid ; br-lab -> ens18 ;
+    #        trafic DNATé ; log "fwd-drop: " puis drop
+  }
+}
 EOF
+
+[ -f "$BASE/nft/input.nft" ] || cat > "$BASE/nft/input.nft" <<'EOF'
+#!/usr/sbin/nft -f
+# input.nft — E13.11 : pare-feu stateful minimal pour lab-adm
+# Charger avec : sudo nft -c -f input.nft (vérification) puis nft -f
+flush ruleset
+table inet filter {
+  set admin {
+    type ipv4_addr
+    flags interval
+    # TODO : elements = { ... }
+  }
+  chain input {
+    type filter hook input priority 0; policy drop;
+    # TODO
+  }
+}
+EOF
+
+# --- squelettes DNS --------------------------------------------------
+cat > "$BASE/dns/README.txt" <<'EOF'
+Squelettes du lab L13.4. Rien n'est appliqué automatiquement.
+  named.conf.options.primary   -> /etc/bind/named.conf.options (lab-ops)
+  named.conf.local.primary     -> /etc/bind/named.conf.local   (lab-ops)
+  db.lab.local                 -> /etc/bind/zones/db.lab.local (lab-ops)
+  db.10.10.10                  -> /etc/bind/zones/db.10.10.10  (lab-ops)
+  named.conf.options.secondary -> /etc/bind/named.conf.options (lab-adm)
+  named.conf.local.secondary   -> /etc/bind/named.conf.local   (lab-adm)
+  unbound-lab.conf             -> /etc/unbound/unbound.conf.d/lab.conf
+Valide avant de démarrer : named-checkconf -z, named-checkzone,
+unbound-checkconf. Résolveur : 10.10.10.53 ; ns1 : 10.10.10.14 ;
+ns2 : 10.10.10.10.
+EOF
+
+cat > "$BASE/dns/named.conf.options.primary" <<'EOF'
+options {
+    directory "/var/cache/bind";
+    listen-on { 10.10.10.14; };
+    listen-on-v6 { none; };
+    recursion no;
+    allow-query { any; };
+    allow-transfer { none; };
+    dnssec-validation no;
+    notify explicit;
+};
+EOF
+
+cat > "$BASE/dns/named.conf.local.primary" <<'EOF'
+zone "lab.local" {
+    type primary;
+    file "/etc/bind/zones/db.lab.local";
+    allow-transfer { 10.10.10.10; };
+    also-notify { 10.10.10.10; };
+};
+zone "10.10.10.in-addr.arpa" {
+    type primary;
+    file "/etc/bind/zones/db.10.10.10";
+    allow-transfer { 10.10.10.10; };
+    also-notify { 10.10.10.10; };
+};
+EOF
+
+cat > "$BASE/dns/db.lab.local" <<'EOF'
+$TTL 3600
+$ORIGIN lab.local.
+@       IN  SOA  ns1.lab.local. hostmaster.lab.local. (
+            2026091901 ; serial AAAAMMJJnn -- A INCREMENTER a chaque modif
+            3600       ; refresh
+            900        ; retry
+            1209600    ; expire
+            300 )      ; TTL negatif
+        IN  NS   ns1.lab.local.
+        IN  NS   ns2.lab.local.
+; TODO : MX, TXT, SRV
+ns1     IN  A    10.10.10.14
+ns2     IN  A    10.10.10.10
+; TODO : A et AAAA (fd00:10:10:10::<octet>) des sept VM, CNAME www, A mail
+EOF
+
+cat > "$BASE/dns/db.10.10.10" <<'EOF'
+$TTL 3600
+$ORIGIN 10.10.10.in-addr.arpa.
+@   IN  SOA  ns1.lab.local. hostmaster.lab.local. (
+        2026091901 3600 900 1209600 300 )
+    IN  NS   ns1.lab.local.
+    IN  NS   ns2.lab.local.
+; TODO : un PTR par VM (10 -> lab-adm.lab.local. ... 16 -> lab-virt.lab.local.)
+EOF
+
+cat > "$BASE/dns/named.conf.options.secondary" <<'EOF'
+options {
+    directory "/var/cache/bind";
+    listen-on { 10.10.10.10; };
+    listen-on-v6 { none; };
+    recursion no;
+    allow-query { any; };
+    allow-transfer { none; };
+    dnssec-validation no;
+};
+EOF
+
+cat > "$BASE/dns/named.conf.local.secondary" <<'EOF'
+zone "lab.local" {
+    type secondary;
+    primaries { 10.10.10.14; };
+    file "db.lab.local";
+};
+zone "10.10.10.in-addr.arpa" {
+    type secondary;
+    primaries { 10.10.10.14; };
+    file "db.10.10.10";
+};
+EOF
+
+cat > "$BASE/dns/unbound-lab.conf" <<'EOF'
+# /etc/unbound/unbound.conf.d/lab.conf — résolveur récursif du lab
+server:
+    interface: 127.0.0.1
+    interface: 10.10.10.53
+    access-control: 127.0.0.0/8 allow
+    access-control: 10.10.10.0/24 allow
+    do-ip6: no
+    # TODO : prefetch, qname-minimisation, hide-identity, hide-version
+    # TODO : domain-insecure pour lab.local et 10.in-addr.arpa
+    # TODO : local-zone: "10.in-addr.arpa." nodefault
+    # TODO : private-domain / private-address
+
+# TODO : deux stub-zone (lab.local, 10.10.10.in-addr.arpa) vers ns1 puis ns2
+EOF
+
+# --- extrait docker network inspect (L13.1 étape 9) -------------------
+cat > "$BASE/docs/docker-network-inspect.json" <<'EOF'
+[
+    {
+        "Name": "bridge",
+        "Driver": "bridge",
+        "IPAM": {
+            "Config": [ { "Subnet": "172.17.0.0/16", "Gateway": "172.17.0.1" } ]
+        },
+        "Containers": {
+            "3f1c2a": {
+                "Name": "web",
+                "MacAddress": "02:42:ac:11:00:02",
+                "IPv4Address": "172.17.0.2/16"
+            }
+        },
+        "Options": {
+            "com.docker.network.bridge.default_bridge": "true",
+            "com.docker.network.bridge.enable_icc": "true",
+            "com.docker.network.bridge.enable_ip_masquerade": "true",
+            "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+            "com.docker.network.bridge.name": "docker0",
+            "com.docker.network.driver.mtu": "1500"
+        }
+    }
+]
+EOF
+
+# --- gabarits de rapports --------------------------------------------
+mk_rapport() { # mk_rapport <fichier> <titre>
+  [ -f "$BASE/rapports/$1" ] || printf '# %s\n\n<!-- à compléter -->\n' "$2" \
+    > "$BASE/rapports/$1"
+}
+mk_rapport minidocker.md     "L13.1 — mini-Docker : hairpin, trace, conntrack"
+mk_rapport policy-routing.md "L13.2 — policy routing : route asymétrique"
+mk_rapport overlay.md        "L13.3 — VXLAN / WireGuard : mesures iperf3"
+mk_rapport dns.md            "L13.4 — DNS du lab"
+mk_rapport bonding.md        "L13.5 — bonding : bascule observée"
+mk_rapport minicloud.md      "D13 — minicloud"
+
+# --- squelette du défi -----------------------------------------------
+[ -f "$BASE/bin/minicloud.sh" ] || cat > "$BASE/bin/minicloud.sh" <<'EOF'
+#!/usr/bin/env bash
+# minicloud.sh — up | down | status | test   (D13)
+# Deux locataires (br-t1 10.100.1.0/24, br-t2 10.100.2.0/24), un netns
+# routeur "rtr" (10.100.1.1, 10.100.2.1, transit 10.100.0.2/30), double NAT,
+# publication par map nftables (8081 -> t1-web, 8082 -> t2-web).
+set -euo pipefail
+# TODO
+case "${1:-}" in
+  up|down|status|test) "$1" ;;
+  *) echo "usage: $0 up|down|status|test" >&2; exit 2 ;;
+esac
+EOF
+chmod 755 "$BASE/bin/minicloud.sh"
+
+chown -R "$LAB_USER:$LAB_USER" "$BASE"
+
+# ---------------------------------------------------------------------
+# 3. Rappels utiles
+# ---------------------------------------------------------------------
+echo
+echo "Préparation terminée : $BASE"
+case "$HOSTN" in
+  lab-adm)
+    if ufw status 2>/dev/null | grep -q 'Status: active'; then
+      echo "ATTENTION : ufw est actif, il interférera avec les labs netfilter."
+    fi
+    echo "Règles nftables présentes : $(nft list tables 2>/dev/null | wc -l) table(s)"
+    ;;
+  lab-ops)
+    echo "Unbound et BIND sont installés mais ARRÊTÉS : configure-les (L13.4)."
+    ;;
+esac

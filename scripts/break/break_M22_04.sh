@@ -1,49 +1,62 @@
 #!/usr/bin/env bash
-# break_M22_04.sh — panne BF22.4 (ImagePullBackOff après redémarrage)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/M22_04/.
-# Suppose L22.2 terminé (namespace factura, Secret registre-lab, API).
+# break_M22_04.sh — panne BF22.4 (/var/lib/docker remplit le disque)
+# Idempotent. Rien à sauvegarder : l'espace est pris dans la couche
+# d'écriture d'un conteneur.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+BF=/opt/factura-docker/bf
+SAUV=/root/.breakfix-backup
+REF=/opt/factura-docker/api
+mkdir -p "$SAUV" "$BF"
 
-LAB_USER="${SUDO_USER:-mathieu}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-export KUBECONFIG="${KUBECONFIG:-$HOMEDIR/.kube/config}"
-[ -r "$KUBECONFIG" ] || export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-SAUV=/root/.breakfix-backup/M22_04
-mkdir -p "$SAUV"
+[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M22.sh" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
+  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L22.1" >&2
+  exit 1; }
 
-kubectl get deploy factura-api -n factura >/dev/null 2>&1 \
-  || { echo "Deployment factura-api absent : fais d'abord L22.2" >&2; exit 1; }
+# image de base commune aux Break & Fix (construite une seule fois)
+construire_base() {
+  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
+  mkdir -p "$BF/base"
+  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
+  cat > "$BF/base/Dockerfile" <<'DEOF'
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+ENTRYPOINT ["python3", "app.py"]
+DEOF
+  echo "construction de l'image factura-bf:base (une fois)…"
+  docker build -q -t factura-bf:base "$BF/base" >/dev/null
+}
 
-if [ ! -s "$SAUV/secret-registre-lab.yaml" ]; then
-  kubectl get secret registre-lab -n factura -o yaml \
-    > "$SAUV/secret-registre-lab.yaml" 2>/dev/null || true
+construire_base
+FICHIER=/var/tmp/export-clients-$(date +%Y%m).bin
+
+if ! docker inspect factura-export >/dev/null 2>&1; then
+  docker run -d --name factura-export --entrypoint sleep \
+    --restart unless-stopped factura-bf:base infinity >/dev/null
 fi
-REPL=$(kubectl get deploy factura-api -n factura -o jsonpath='{.spec.replicas}')
-echo "${REPL:-2}" > "$SAUV/replicas"
 
-# --- la panne -----------------------------------------------------------
-# 1. le Secret de registre disparaît du namespace factura
-kubectl delete secret registre-lab -n factura --ignore-not-found >/dev/null
-# 2. le cache d'images du nœud est purgé (« pour libérer du disque »)
-kubectl scale deploy/factura-api -n factura --replicas=0 >/dev/null
-for i in $(seq 1 30); do
-  [ "$(kubectl get pods -n factura -l app=factura-api --no-headers 2>/dev/null | wc -l)" -eq 0 ] && break
-  sleep 2
-done
-for img in $(k3s crictl images -q 2>/dev/null); do
-  if k3s crictl inspecti "$img" 2>/dev/null | grep -q 'factura-api'; then
-    k3s crictl rmi "$img" >/dev/null 2>&1 || true
-  fi
-done
-# 3. « rollout restart » : les pods reviennent
-kubectl scale deploy/factura-api -n factura --replicas="${REPL:-2}" >/dev/null
-sleep 5
+if docker exec factura-export test -f "$FICHIER" 2>/dev/null; then
+  echo "le disque est déjà rempli (fichier présent)"
+else
+  # espace libre réel du système de fichiers de Docker, blocs réservés
+  # à root compris (Docker tourne en root), moins 48 Mio de marge
+  DOCKER_ROOT=$(docker info --format '{{.DockerRootDir}}')
+  read -r BLOCS TAILLE_BLOC < <(stat -f -c '%f %S' "$DOCKER_ROOT")
+  LIBRE=$(( BLOCS * TAILLE_BLOC ))
+  TAILLE=$(( LIBRE - 48 * 1024 * 1024 ))
+  [ "$TAILLE" -gt $((1024 * 1024 * 1024)) ] || {
+    echo "moins de 1 Go de libre : panne non déclenchée" >&2; exit 1; }
+  docker exec factura-export fallocate -l "$TAILLE" "$FICHIER"
+fi
 
-cat <<'EOF'
+cat <<'EOF2'
 
-Symptôme attendu : après le redémarrage de l'API, les nouveaux pods
-restent en ErrImagePull puis ImagePullBackOff. L'image existe : un
-« docker pull 10.10.10.14:5000/factura-api:1.0 » avec login fonctionne
-depuis lab-ops. Le namespace casse n'est pas affecté.
-EOF
+Symptôme attendu : df -h / affiche 100 % d'utilisation. docker build
+échoue avec « no space left on device », apt et journalctl se plaignent.
+Personne n'a copié de fichier sur la VM, du -sh /home /srv /var/log ne
+montre rien d'anormal.
+EOF2

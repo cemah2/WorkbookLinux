@@ -80,7 +80,7 @@ cd ~/factura-v2
 git init -b main
 git config user.name "Mathieu"; git config user.email "mathieu@lab.local"
 git remote add origin ssh://git@lab-ops.lab.local:2222/mathieu/factura.git
-# (port 2222 = SSH du conteneur Gitea du module 21 ; sinon HTTP :
+# (port 2222 = SSH du conteneur Gitea du module 25 ; sinon HTTP :
 #  http://lab-ops.lab.local:3000/mathieu/factura.git)
 ```
 
@@ -2653,7 +2653,7 @@ documenté.
 `ops-host`, images poussées avec un tag `sha-<7>` (et `vX.Y.Z` sur un tag
 Git), scan trivy bloquant, secrets par `env:`, digest en sortie de job.*
 
-**1. Préparation du runner (`lab-ops`, une fois, module 21 rappelé)**
+**1. Préparation du runner (`lab-ops`, une fois, module 25 rappelé)**
 
 ```bash
 # sur lab-ops : les outils dans le PATH du compte runner
@@ -4006,7 +4006,7 @@ monitoring_dir: /opt/factura-monitoring
   vars:
     src: "{{ playbook_dir }}/../../infra/monitoring"
   tasks:
-    - name: Ancienne pile du module 22 arrêtée (si présente)
+    - name: Ancienne pile du module 26 arrêtée (si présente)
       community.docker.docker_compose_v2:
         project_src: /opt/observabilite
         state: absent
@@ -4243,7 +4243,7 @@ qu'une modification à la souris diverge du dépôt.
 :::
 
 ::: piege
-* Le port de Grafana : la pile du module 22 utilisait 3001 aussi ; si
+* Le port de Grafana : la pile du module 26 utilisait 3001 aussi ; si
   `/opt/observabilite` tourne encore, le `up -d` échoue avec « port is
   already allocated ». Le playbook l'arrête d'abord.
 * `promtool check rules` sur `alerts.yml` : deux alertes du même nom
@@ -5467,7 +5467,7 @@ Dans `prometheus.yml`, ajouter au job `factura-api` :
 et au job `node` la cible `10.10.10.41:9100`. Le NodePort répartit sur
 les réplicas : les compteurs sont **par pod**, le scrape en voit un au
 hasard — suffisant pour le lab, faux en vrai (il faudrait un
-`kubernetes_sd_configs` avec un ServiceAccount, comme au module 22).
+`kubernetes_sd_configs` avec un ServiceAccount, comme au module 26).
 Promtail sur k3s lit `/var/log/pods` (variable de PB.3) :
 `{env="k3s", container="api"} | json` dans Grafana.
 

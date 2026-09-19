@@ -7,7 +7,7 @@
 # Ce qu'il fait :
 #   1. outils de base (vim curl git tmux htop jq tree net-tools dnsutils
 #      rsync unzip shellcheck) + qemu-guest-agent + chrony
-#   2. /etc/hosts avec les 6 VM du lab (10.10.10.10-15, domaine lab.local)
+#   2. /etc/hosts avec les 7 VM du lab (10.10.10.10-16, domaine lab.local)
 #   3. fuseau horaire Europe/Paris, locale, historique bash horodaté
 #   4. message du jour (motd) qui rappelle le rôle de la machine
 #   5. répertoire ~/workbook accessible à l'utilisateur de lab
@@ -54,7 +54,7 @@ systemctl enable --now chronyd >/dev/null 2>&1 \
   || systemctl enable --now chrony >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------
-# 2. /etc/hosts — les 6 VM, entre deux marqueurs pour rester idempotent
+# 2. /etc/hosts — les 7 VM, entre deux marqueurs pour rester idempotent
 # ---------------------------------------------------------------------
 info "/etc/hosts"
 sed -i '/^# BEGIN workbook/,/^# END workbook/d' /etc/hosts
@@ -66,6 +66,7 @@ cat >> /etc/hosts <<'EOF'
 10.10.10.13  lab-rhel.lab.local lab-rhel
 10.10.10.14  lab-ops.lab.local  lab-ops
 10.10.10.15  lab-git.lab.local  lab-git
+10.10.10.16  lab-virt.lab.local lab-virt
 # END workbook
 EOF
 
@@ -114,6 +115,7 @@ case "$HOST" in
   lab-rhel) ROLE="variantes RHEL : dnf, firewalld, SELinux" ;;
   lab-ops)  ROLE="Docker, CI runner, monitoring, registre" ;;
   lab-git)  ROLE="forge Gitea : versionner le workbook, portfolio" ;;
+  lab-virt) ROLE="hyperviseur KVM/QEMU/libvirt imbrique (module 20)" ;;
   *)        ROLE="machine hors table du lab" ;;
 esac
 

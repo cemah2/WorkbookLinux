@@ -1,95 +1,40 @@
 #!/usr/bin/env bash
-# break_M20_03.sh — panne BF20.3 : « le token est dans le pipeline ».
-# Dans ~/lab20/02-lab2 : variable avec le token en default + output de debug
-# (debug.tf), log d'un job CI qui affiche l'output, plan.txt, commit git, et
-# si possible un apply qui enregistre l'output dans l'état. Idempotent.
-# Sauvegardes dans /root/.breakfix-backup/.
+# break_M20_03.sh — panne BF20.3 : « clone-1 refuse de démarrer : fichier
+# introuvable ». « Range » la base du pool lab20 dans /srv/vm/archive/ après
+# avoir arrêté les clones. Idempotent. Note l'emplacement d'origine dans
+# /root/.breakfix-backup/. À lancer avec sudo sur lab-virt (L20.3 fait).
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-BASE="$LAB_HOME/lab20"
-ENVF="$BASE/.env"
-DIR="${DIR:-$BASE/02-lab2}"
+V="virsh -c qemu:///system"
+DIR=/srv/vm ; BASE=ubuntu-24.04-base.qcow2
 SAUV=/root/.breakfix-backup
 mkdir -p "$SAUV"
-[ -r "$ENVF" ] || { echo "$ENVF absent : fais E20.8 d'abord" >&2; exit 1; }
-[ -d "$DIR" ] || { echo "$DIR absent : fais L20.2 d'abord" >&2; exit 1; }
-set -a; . "$ENVF"; set +a
-: "${PROXMOX_VE_API_TOKEN:?}"
-TOKEN="$PROXMOX_VE_API_TOKEN"
 
-as_user() { sudo -u "$LAB_USER" -H bash -c "set -a; . '$ENVF'; set +a; cd '$DIR' && $*"; }
+$V pool-info lab20 >/dev/null 2>&1 || { echo "pool lab20 absent : fais L20.3 d'abord" >&2; exit 1; }
+$V dominfo clone-1 >/dev/null 2>&1 || { echo "clone-1 absente : fais L20.3 d'abord" >&2; exit 1; }
 
-if [ -f "$DIR/debug.tf" ] && grep -qF "$TOKEN" "$DIR/debug.tf"; then
-  echo "debug.tf déjà en place : rien à refaire"
+# les VM en marche gardent le fichier ouvert : il faut les arrêter d'abord
+for vm in $($V list --name); do
+  if $V domblklist "$vm" | grep -q "^ *vd[a-z] *$DIR/"; then
+    $V destroy "$vm" >/dev/null 2>&1 || true
+  fi
+done
+
+if [ -f "$DIR/$BASE" ]; then
+  mkdir -p "$DIR/archive"
+  echo "$DIR/$BASE -> $DIR/archive/$BASE" > "$SAUV/M20_03_emplacement.txt"
+  mv "$DIR/$BASE" "$DIR/archive/$BASE"
+  $V pool-refresh lab20 >/dev/null 2>&1 || true
 else
-  [ -f "$DIR/debug.tf" ] && cp -a "$DIR/debug.tf" "$SAUV/M20_03_debug.tf.orig"
-  as_user tofu state pull > "$SAUV/M20_03_state.json" 2>/dev/null || true
-
-  # 1. le code : « pour faciliter le debug »
-  cat > "$DIR/debug.tf" <<EOF
-# Ajout temporaire pour le debug du job CI (à retirer un jour)
-variable "api_token" {
-  description = "token Proxmox utilisé par le pipeline"
-  type        = string
-  default     = "$TOKEN"
-}
-
-output "debug_token" {
-  description = "affiché en fin de job pour vérifier que le CI a le bon token"
-  value       = var.api_token
-}
-EOF
-
-  # 2. le log du dernier job CI (les outputs sont affichés par apply)
-  cat > "$DIR/ci-job-42.log" <<EOF
-[job 42] tofu init -input=false
-[job 42] tofu apply -auto-approve -input=false
-
-No changes. Your infrastructure matches the configuration.
-
-Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
-
-Outputs:
-
-debug_token = "$TOKEN"
-ips = {
-  "lab2-adm" = "10.10.10.101"
-  "lab2-web" = "10.10.10.102"
-}
-[job 42] Job succeeded
-EOF
-
-  # 3. un plan.txt « pour la revue », committé de force
-  printf 'Changes to Outputs:\n  + debug_token = "%s"\n' "$TOKEN" > "$DIR/plan.txt"
-
-  chown "$LAB_USER":"$LAB_USER" "$DIR/debug.tf" "$DIR/ci-job-42.log" "$DIR/plan.txt"
-
-  # 4. l'historique git (le dépôt de L20.4, ou un dépôt créé pour l'occasion)
-  sudo -u "$LAB_USER" -H bash -c "
-    cd '$BASE' || exit 0
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || git init -q
-    git config user.email >/dev/null || git config user.email julien@lab.local
-    git config user.name  >/dev/null || git config user.name  Julien
-    git add -f 02-lab2/debug.tf 02-lab2/ci-job-42.log 02-lab2/plan.txt
-    git commit -qm 'debug : expose le token pour le job CI' || true
-  "
-
-  # 5. l'état : l'output y est enregistré si l'apply passe (meilleur effort)
-  timeout 180 sudo -u "$LAB_USER" -H bash -c \
-    "set -a; . '$ENVF'; set +a; cd '$DIR' && tofu apply -auto-approve \
-     -input=false -refresh=false -lock-timeout=30s >/dev/null 2>&1" || true
+  echo "la base a déjà été rangée : rien à refaire"
 fi
 
-cat <<EOF
+cat <<'EOF'
 
-Symptôme attendu : la sécurité a repéré le token Proxmox en clair dans les
-logs du dernier job CI (tofu apply affiche les outputs) et dans un fichier
-committé. Le projet $DIR a été « amélioré pour faciliter le debug ».
-Le job CI reste vert. Interdit de simplement supprimer l'output, et de garder
-le token actuel. Objectif : lister TOUS les endroits où le secret a fui,
-corriger le code, faire tourner le token, vérifier l'état, plan vide.
+Symptôme attendu : après un « rangement » de /srv/vm validé par l'équipe,
+« virsh start clone-1 » échoue. L'erreur cite un fichier que clone-1 n'a
+jamais eu comme disque, alors que « virsh domblklist clone-1 » montre un
+disque qui existe bel et bien. clone-4, si tu l'as gardé, démarre sans
+problème. Interdit de recréer les VM, de relancer clone3.sh ou de
+retélécharger l'image ; le rangement ne doit pas être défait.
 EOF

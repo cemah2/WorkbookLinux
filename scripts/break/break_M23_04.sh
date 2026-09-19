@@ -1,61 +1,66 @@
 #!/usr/bin/env bash
-# break_M23_04.sh — panne BF23.4 : un except nu qui renvoie un faux OK
-# Dépose ~/lab23/bf4/verif-site.py et sa liste de sites.
+# break_M23_04.sh — panne BF23.4 : « on change le vhost, nginx ne bouge pas »
+# Dépose ~/lab23/casse/vhost-update.yml (réutilise le template de L23.2).
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 LAB_USER="${SUDO_USER:-mathieu}"
 LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-
 BASE="$LAB_HOME/lab23"
-BF="$BASE/bf4"
-mkdir -p /root/.breakfix-backup
+CASSE="$BASE/casse"
+SAUV=/root/.breakfix-backup
+mkdir -p "$SAUV" "$CASSE"
 
-rm -rf "$BF"
-mkdir -p "$BF"
-cat > "$BF/sites.txt" <<'EOF'
-http://10.10.10.11/
-http://10.10.10.14:3000/
-http://10.10.10.11:8099/
-http://10.10.10.99/
+[ -f "$BASE/playbooks/templates/vitrine.conf.j2" ] \
+  || echo "[warn] playbooks/templates/vitrine.conf.j2 absent : fais L23.2 d'abord"
+
+[ -f "$CASSE/vhost-update.yml" ] \
+  && cp -a "$CASSE/vhost-update.yml" "$SAUV/M23_04_vhost-update.yml"
+
+cat > "$CASSE/vhost-update.yml" <<'EOF'
+---
+# vhost-update.yml — change la version annoncée par le vhost vitrine
+# usage : ansible-playbook casse/vhost-update.yml -e vitrine_version=1.0.1
+- name: Mise a jour du vhost vitrine
+  hosts: web
+  become: true
+  vars:
+    vitrine_version: "1.0.1"
+
+  tasks:
+    - name: Deployer le vhost
+      ansible.builtin.template:
+        src: ../playbooks/templates/vitrine.conf.j2
+        dest: "{{ nginx_vhost_dir }}/vitrine.conf"
+        owner: root
+        group: root
+        mode: "0644"
+      changed_when: false
+      notify: Reload nginx
+
+    - name: Verifier que le vhost est bien en place
+      ansible.builtin.command: grep -q X-Vitrine-Version /etc/nginx/conf.d/vitrine.conf
+      changed_when: false
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: reloaded
+      when: "'ubuntu' in group_names"
 EOF
+chown -R "$LAB_USER":"$LAB_USER" "$CASSE"
 
-cat > "$BF/verif-site.py" <<'EOF'
-#!/usr/bin/env python3
-"""verif-site.py — vérifie que les sites de sites.txt répondent.
-Sort en 0 si tout va bien, 2 sinon."""
-import sys
-import urllib.request
+cat <<'EOF'
 
-
-def verifier(url):
-    try:
-        with urllib.request.urlopen(url, timeout=2) as rep:
-            if rep.status != 200:
-                print(f"KO {url} : {rep.status}")
-                sys.exit(2)
-            print(f"OK {url}")
-    except:
-        pass
-    return True
-
-
-with open(sys.argv[1]) as f:
-    urls = [l.strip() for l in f if l.strip()]
-
-for url in urls:
-    verifier(url)
-
-print("tous les sites OK")
-sys.exit(0)
-EOF
-chmod 755 "$BF/verif-site.py"
-chown -R "$LAB_USER":"$LAB_USER" "$BF"
-
-cat <<EOF
-
-Symptôme attendu : "$BF/verif-site.py $BF/sites.txt" termine sur
-"tous les sites OK" avec le code 0, alors que deux des quatre URL ne
-répondent pas. La supervision qui l'appelle n'a jamais alerté.
+Symptôme attendu (prérequis : L23.2 appliqué) :
+  cd ~/lab23 && ansible-playbook casse/vhost-update.yml
+se termine sans erreur sur lab-rhel et en erreur sur lab-web ; dans les deux
+cas, curl -skI https://10.10.10.11/ et https://10.10.10.13/ renvoient
+toujours X-Vitrine-Version: 1.0.0, alors que le fichier vitrine.conf sur les
+deux hôtes contient bien 1.0.1. Objectif : trois mécanismes distincts
+empêchent le handler de tourner ; corrige-les et prouve que le handler se
+déclenche une fois par hôte modifié, et pas du tout quand rien ne change.
 EOF

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# check_M13_05.sh — vérifie le lab L13.5 (node_exporter)
-#                   À LANCER SUR lab-ops (10.10.10.14).
+# check_M13_05.sh — vérifie le lab L13.5 (bonding active-backup)
+# À lancer sur lab-db.
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8,98 +8,53 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L13.5 =="
 
-IP=10.10.10.14
 LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-DOC="$HOMEDIR/lab13/use-golden.md"
+RAP="$HOMEDIR/lab13/rapports/bonding.md"
+B=/proc/net/bonding/bond0
 
-# --- 1. le service tourne --------------------------------------------------
-UNITE=""
-for U in prometheus-node-exporter.service node_exporter.service; do
-  systemctl cat "$U" >/dev/null 2>&1 && UNITE="$U" && break
-done
-if [ -n "$UNITE" ]; then
-  ok "unité trouvée : $UNITE"
-  [ "$(systemctl is-active "$UNITE")" = active ] \
-    && ok "$UNITE est active" || ko "$UNITE n'est pas active"
-  [ "$(systemctl is-enabled "$UNITE" 2>/dev/null)" = enabled ] \
-    && ok "$UNITE démarre au boot" || ko "$UNITE n'est pas activée au boot"
-  UTIL=$(systemctl show -p User --value "$UNITE")
-  [ "$UTIL" != root ] && [ -n "$UTIL" ] \
-    && ok "tourne sous l'utilisateur $UTIL (pas root)" \
-    || ko "le service tourne sous root : utilise un compte dédié"
+if [ -r "$B" ]; then
+  ok "bond0 existe"
+  grep -q 'active-backup' "$B" && ok "mode active-backup" \
+    || ko "le mode n'est pas active-backup ($(grep 'Bonding Mode' "$B"))"
+  n=$(grep -c '^Slave Interface' "$B")
+  [ "$n" -eq 2 ] && ok "deux esclaves" || ko "$n esclave(s) au lieu de 2"
+  grep -q 'Primary Slave: ens19' "$B" && ok "ens19 est l'esclave primaire" \
+    || ko "pas de primary ens19 (paramètre primary)"
+  grep -q 'MII Polling Interval (ms): 100' "$B" && ok "miimon 100 ms" \
+    || ko "miimon n'est pas à 100 ms"
+  grep -q 'Currently Active Slave: ens' "$B" && ok "un esclave est actif" \
+    || ko "aucun esclave actif : les NIC sont-elles up ?"
+  f=$(awk '/Link Failure Count/ {s+=$4} END {print s+0}' "$B")
+  [ "$f" -ge 1 ] && ok "au moins une bascule a eu lieu (Link Failure Count=$f)" \
+    || note "Link Failure Count = 0 : la bascule n'a pas encore été jouée"
 else
-  ko "aucune unité node_exporter trouvée"
+  ko "bond0 absent (/proc/net/bonding/bond0)"
 fi
+ip addr show dev bond0 2>/dev/null | grep -q '172\.31\.0\.12/24' \
+  && ok "bond0 = 172.31.0.12/24" || ko "bond0 sans 172.31.0.12/24"
+ping -c1 -W2 172.31.0.11 >/dev/null 2>&1 \
+  && ok "lab-web (172.31.0.11) répond à travers le bond" \
+  || ko "172.31.0.11 ne répond pas (ens19 de lab-web configurée ?)"
 
-# --- 2. écoute restreinte --------------------------------------------------
-ECOUTE=$(ss -tlnp 2>/dev/null | grep ':9100 ' | awk '{print $4}' | head -1)
-if [ -n "$ECOUTE" ]; then
-  ok "quelque chose écoute sur le port 9100 ($ECOUTE)"
-  case "$ECOUTE" in
-    0.0.0.0:9100|\[::\]:9100|*:::9100)
-      ko "écoute sur toutes les interfaces : restreins à $IP \
-(--web.listen-address)" ;;
-    "$IP":9100) ok "écoute uniquement sur $IP" ;;
-    *) note "adresse d'écoute inhabituelle : $ECOUTE" ;;
-  esac
-else
-  ko "rien n'écoute sur 9100"
-fi
+grep -qs 'bonds:' /etc/netplan/*.yaml \
+  && ok "configuration persistante (Netplan bonds:)" \
+  || ko "pas de bloc bonds: dans Netplan"
+grep -qs 'mii-monitor-interval' /etc/netplan/*.yaml \
+  && ok "mii-monitor-interval déclaré" || ko "mii-monitor-interval manquant"
 
-# --- 3. le drop-in, pas le fichier du paquet -------------------------------
-DROP=$(find /etc/systemd/system -path '*node*exporter*.d/*.conf' 2>/dev/null \
-       | head -1)
-if [ -n "$DROP" ]; then
-  ok "drop-in présent : $DROP"
-  grep -q 'ExecStart=$' "$DROP" \
-    && ok "l'ExecStart d'origine est bien remis à zéro avant redéfinition" \
-    || note "si tu redéfinis ExecStart, pense à la ligne ExecStart= vide"
+if [ -s "$RAP" ] && [ "$(grep -cv '^[[:space:]]*$' "$RAP")" -ge 10 ]; then
+  ok "rapport bonding.md rédigé"
+  grep -q 'Link Failure Count' "$RAP" \
+    && ok "extrait de /proc/net/bonding/bond0 dans le rapport" \
+    || ko "le rapport ne contient pas d'extrait de /proc/net/bonding/bond0"
+  grep -qiE 'perdu|lost|loss' "$RAP" \
+    && ok "les pertes pendant la bascule sont chiffrées" \
+    || ko "le rapport ne chiffre pas les paquets perdus"
+  grep -qiE '802\.3ad|lacp' "$RAP" \
+    && ok "la variante LACP est décrite" || ko "pas de variante 802.3ad/LACP"
 else
-  ko "aucun drop-in sous /etc/systemd/system : le fichier du paquet a-t-il \
-été modifié directement ?"
-fi
-if [ -n "$UNITE" ]; then
-  CHEMIN=$(systemctl show -p FragmentPath --value "$UNITE")
-  case "$CHEMIN" in
-    /lib/*|/usr/lib/*) ok "le fichier d'unité du paquet est intact" ;;
-    *) ko "l'unité vient de $CHEMIN : le paquet a été contourné" ;;
-  esac
-fi
-
-# --- 4. /metrics ------------------------------------------------------------
-M=$(curl -sf --max-time 5 "http://$IP:9100/metrics" 2>/dev/null)
-if [ -n "$M" ]; then
-  ok "/metrics répond sur $IP:9100"
-  N=$(echo "$M" | grep -vc '^#')
-  ok "$N séries exposées"
-  for MET in node_load1 node_memory_MemAvailable_bytes \
-             node_filesystem_avail_bytes node_cpu_seconds_total \
-             node_network_receive_bytes_total; do
-    echo "$M" | grep -q "^$MET" \
-      && ok "métrique $MET présente" \
-      || ko "métrique $MET absente (collecteur désactivé ?)"
-  done
-else
-  ko "/metrics injoignable sur http://$IP:9100/metrics"
-fi
-
-# --- 5. le document -----------------------------------------------------
-if [ -s "$DOC" ]; then
-  ok "$DOC existe"
-  for MOT in latence trafic erreur saturation; do
-    grep -qi "$MOT" "$DOC" \
-      && ok "les signaux dorés : « $MOT » traité" \
-      || ko "le tableau des signaux dorés ne traite pas « $MOT »"
-  done
-  grep -qiE 'utilisation' "$DOC" && grep -qiE 'saturation' "$DOC" \
-    && ok "le tableau USE est rempli" \
-    || ko "le tableau USE (Utilisation/Saturation/Erreurs) est incomplet"
-  [ "$(grep -c '^|' "$DOC")" -ge 10 ] \
-    && ok "les deux tableaux contiennent des lignes" \
-    || ko "les tableaux semblent vides (moins de 10 lignes de tableau)"
-else
-  ko "$DOC manquant"
+  ko "rapport absent ou trop court : $RAP"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

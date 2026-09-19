@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M11_02.sh — vérifie le lab L11.2 (configuration persistante)
+# check_M11_02.sh — vérifie le lab L11.2 (base sous LVM, extension, pvmove)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,95 +7,107 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L11.2 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab11/rapports/reseau-3-formalismes.md"
-IFACE=$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')
-[ -n "$IFACE" ] || IFACE=ens18
+command -v lvs >/dev/null 2>&1 || {
+  echo "  [FAIL] lvm2 n'est pas installé : sudo apt install -y lvm2"
+  exit 1; }
 
-# --- 1. état du noyau : c'est le résultat qui compte -------------------
-if ip -4 a show dev "$IFACE" 2>/dev/null | grep -q '10\.10\.10\.'; then
-  ok "adresse principale présente sur $IFACE"
+DB=/srv/factura/db
+VG=vg_data
+[ -f /etc/lab11.env ] && . /etc/lab11.env
+DISQUE1="${DISQUE1:-/dev/sdb}"
+
+# --- 1. le VG et les LV existent ---------------------------------------
+if vgs --noheadings -o vg_name 2>/dev/null | grep -qw "$VG"; then
+  ok "le groupe de volumes $VG existe"
 else
-  ko "aucune adresse 10.10.10.x sur $IFACE"
+  ko "le groupe $VG n'existe pas (vgcreate $VG <pv>)"
 fi
 
-if ip -4 a show dev "$IFACE" 2>/dev/null | grep -q '10\.10\.20\.'; then
-  ok "adresse secondaire 10.10.20.x présente"
+if lvs --noheadings -o lv_name "$VG" 2>/dev/null | grep -qw lv_pgdata; then
+  ok "le volume logique lv_pgdata existe"
 else
-  ko "adresse secondaire 10.10.20.<dernier octet>/24 absente (ip -br a)"
+  ko "lv_pgdata est absent de $VG (lvcreate -L 2G -n lv_pgdata $VG)"
 fi
 
-if ip -4 r 2>/dev/null | grep -q '^default via 10\.10\.10\.1'; then
-  ok "route par défaut via 10.10.10.1"
+# --- 2. /srv/factura/db est monté sur ce LV ----------------------------
+if findmnt -no TARGET "$DB" >/dev/null 2>&1; then
+  SRC=$(findmnt -no SOURCE "$DB")
+  REEL=$(readlink -f "/dev/$VG/lv_pgdata" 2>/dev/null)
+  if [ "$(readlink -f "$SRC")" = "$REEL" ] && [ -n "$REEL" ]; then
+    ok "$DB est monté sur $VG/lv_pgdata"
+  else
+    ko "$DB est monté sur $SRC, pas sur /dev/$VG/lv_pgdata"
+  fi
+  TAILLE=$(df -BM --output=size "$DB" 2>/dev/null | tail -1 | tr -dc '0-9')
+  if [ "${TAILLE:-0}" -ge 3000 ]; then
+    ok "le système de fichiers fait ${TAILLE} Mio (extension propagée)"
+  else
+    ko "le système de fichiers ne fait que ${TAILLE:-0} Mio : as-tu utilisé \
+lvextend -r (ou resize2fs) après l'extension du LV ?"
+  fi
 else
-  ko "route par défaut absente ou mauvaise passerelle (ip r)"
+  ko "$DB n'est pas monté"
 fi
 
-NDEF=$(ip -4 r 2>/dev/null | grep -c '^default')
-if [ "$NDEF" -le 1 ]; then
-  ok "une seule route par défaut ($NDEF)"
+# --- 3. le VG ne contient plus le premier disque -----------------------
+PVS=$(pvs --noheadings -o pv_name --select "vg_name=$VG" 2>/dev/null \
+  | tr -d ' ' | tr '\n' ' ')
+if [ -n "$PVS" ]; then
+  note "PV du groupe $VG : $PVS"
+  if echo "$PVS" | grep -q "^${DISQUE1}[0-9]* $\|${DISQUE1}[0-9]* "; then
+    ko "$DISQUE1 appartient encore à $VG : pvmove puis vgreduce n'ont pas \
+été menés à leur terme"
+  else
+    ok "$DISQUE1 ne fait plus partie de $VG"
+  fi
+  NB=$(echo "$PVS" | wc -w)
+  [ "$NB" -eq 1 ] && ok "le groupe ne contient plus qu'un seul PV" \
+    || note "le groupe contient $NB PV (1 attendu après l'étape 7)"
 else
-  ko "$NDEF routes par défaut : deux gestionnaires se disputent l'interface"
+  ko "impossible de lister les PV de $VG"
 fi
 
-# --- 2. domaine de recherche ------------------------------------------
-if command -v resolvectl >/dev/null 2>&1 &&
-   resolvectl status 2>/dev/null | grep -qi 'lab\.local'; then
-  ok "domaine de recherche lab.local déclaré"
-elif grep -qE '^(search|domain).*lab\.local' /etc/resolv.conf 2>/dev/null
-then
-  ok "domaine de recherche lab.local déclaré (resolv.conf)"
-else
-  ko "search lab.local absent (resolvectl status / nameservers.search)"
-fi
+# --- 4. lv_test réduit à 1 Go, données intactes ------------------------
+if lvs --noheadings -o lv_name "$VG" 2>/dev/null | grep -qw lv_test; then
+  ok "lv_test existe"
+  MO=$(lvs --noheadings --units m --nosuffix -o lv_size "$VG/lv_test" \
+    2>/dev/null | tr -d ' ' | cut -d. -f1)
+  if [ "${MO:-0}" -ge 900 ] && [ "${MO:-0}" -le 1100 ]; then
+    ok "lv_test fait ${MO} Mio (~1 Go, réduction réussie)"
+  else
+    ko "lv_test fait ${MO:-?} Mio : la réduction à 1 Go n'a pas abouti"
+  fi
 
-# --- 3. persistance : Netplan (Ubuntu) ou NetworkManager (Rocky) ------
-if [ -d /etc/netplan ] && ls /etc/netplan/*.yaml >/dev/null 2>&1; then
-  FIC=$(grep -lE '10\.10\.20\.' /etc/netplan/*.yaml 2>/dev/null | head -1)
-  if [ -n "$FIC" ]; then
-    ok "configuration persistante trouvée dans $FIC"
-    M=$(stat -c '%a' "$FIC")
-    [ "$M" = 600 ] \
-      && ok "droits du fichier Netplan : 0600" \
-      || ko "droits $M sur $FIC — netplan attend 0600 (chmod 600)"
-    grep -qE '^[[:space:]]*renderer:[[:space:]]*networkd' "$FIC" \
-      && ok "renderer networkd déclaré" \
-      || note "renderer non déclaré dans $FIC (valeur par défaut utilisée)"
-    grep -qE 'to:[[:space:]]*default' "$FIC" \
-      && ok "route par défaut écrite en syntaxe routes: (pas gateway4)" \
-      || ko "utilise routes: [{to: default, via: ...}] — gateway4 est retiré"
-    if command -v netplan >/dev/null 2>&1; then
-      netplan generate >/dev/null 2>&1 \
-        && ok "netplan generate valide la syntaxe" \
-        || ko "netplan generate échoue : la configuration ne s'appliquera pas"
+  MNT=$(lvs --noheadings -o lv_path "$VG/lv_test" 2>/dev/null | tr -d ' ')
+  CIBLE=$(findmnt -nro TARGET -S "$(readlink -f "$MNT")" 2>/dev/null | head -1)
+  if [ -n "$CIBLE" ]; then
+    if [ -s "$CIBLE/donnees.bin" ]; then
+      ok "les données de lv_test sont intactes ($CIBLE/donnees.bin)"
+    else
+      ko "donnees.bin est absent ou vide sur $CIBLE : la réduction a mangé \
+les données (mauvais ordre resize2fs / lvreduce ?)"
     fi
   else
-    ko "aucun fichier /etc/netplan/*.yaml ne contient l'adresse secondaire"
-  fi
-elif [ -d /etc/NetworkManager/system-connections ]; then
-  if grep -rqE '10\.10\.20\.' /etc/NetworkManager/system-connections/ \
-       2>/dev/null; then
-    ok "configuration persistante trouvée dans un keyfile NetworkManager"
-  else
-    ko "aucun keyfile ne contient l'adresse secondaire (nmcli con mod)"
+    note "lv_test n'est pas monté : impossible de vérifier les données. \
+Remonte-le puis relance le contrôle."
   fi
 else
-  ko "ni /etc/netplan ni keyfiles NetworkManager : rien de persistant"
+  ko "lv_test est absent : l'étape 8 (réduction) n'a pas été faite"
 fi
 
-# --- 4. le rapport aux trois formalismes ------------------------------
+# --- 5. le rapport ------------------------------------------------------
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab11/rapports/inf-4118.md"
 if [ -s "$RAP" ]; then
-  ok "rapport reseau-3-formalismes.md présent"
-  n=0
-  grep -qi 'netplan'   "$RAP" && n=$((n+1))
-  grep -qi 'nmcli'     "$RAP" && n=$((n+1))
-  grep -qi 'interfaces' "$RAP" && n=$((n+1))
-  [ "$n" -eq 3 ] \
-    && ok "les trois formalismes sont documentés" \
-    || ko "seulement $n/3 formalismes dans le rapport"
+  L=$(grep -c . "$RAP")
+  [ "$L" -ge 10 ] && ok "rapport inf-4118.md rédigé ($L lignes)" \
+    || ko "rapport inf-4118.md trop court ($L lignes, 10 minimum)"
+  for mot in pvmove lvextend resize2fs; do
+    grep -qi "$mot" "$RAP" || note "le rapport ne mentionne pas « $mot »"
+  done
 else
-  ko "rapport absent : $RAP (Netplan, nmcli, /etc/network/interfaces)"
+  ko "rapport absent : $RAP"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

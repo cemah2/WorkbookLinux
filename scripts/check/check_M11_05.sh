@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M11_05.sh — vérifie le lab L11.5 (capture, MTU, bande passante)
+# check_M11_05.sh — vérifie le lab L11.5 (LUKS + client NFS)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,74 +7,119 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L11.5 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-CAP="$HOMEDIR/lab11/captures/http.pcap"
-RCAP="$HOMEDIR/lab11/rapports/capture.md"
-RDEB="$HOMEDIR/lab11/rapports/debit.md"
-IFACE=$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')
-[ -n "$IFACE" ] || IFACE=ens18
+COFFRE=/srv/coffre
+NFSMNT=/mnt/archives-adm
 
-# --- 1. la capture produite par l'apprenant ---------------------------
-if [ -s "$CAP" ]; then
-  ok "capture http.pcap présente ($(stat -c '%s' "$CAP") octets)"
-  if command -v tcpdump >/dev/null 2>&1; then
-    N=$(tcpdump -nn -r "$CAP" 2>/dev/null | wc -l)
-    [ "$N" -ge 6 ] \
-      && ok "la capture contient $N paquets (échange complet)" \
-      || ko "seulement $N paquets : la capture a été arrêtée trop tôt"
-    tcpdump -nn -r "$CAP" 2>/dev/null | grep -q 'Flags \[S\]' \
-      && ok "un SYN figure dans la capture" \
-      || ko "aucun SYN : le filtre ou le moment de capture est à revoir"
-  fi
+# ======================= Partie A : LUKS ==============================
+if ! command -v cryptsetup >/dev/null 2>&1; then
+  ko "cryptsetup absent : sudo apt install -y cryptsetup-bin"
 else
-  ko "capture absente : $CAP (tcpdump -w)"
+
+# --- 1. le volume déchiffré est monté ----------------------------------
+if findmnt -no TARGET "$COFFRE" >/dev/null 2>&1; then
+  SRC=$(findmnt -no SOURCE "$COFFRE")
+  case "$SRC" in
+    /dev/mapper/coffre) ok "$COFFRE est monté depuis /dev/mapper/coffre" ;;
+    *) ko "$COFFRE est monté depuis $SRC, pas depuis /dev/mapper/coffre" ;;
+  esac
+else
+  ko "$COFFRE n'est pas monté (cryptsetup luksOpen puis mount)"
 fi
 
-# --- 2. l'analyse de la capture d'incident ----------------------------
-if [ -s "$RCAP" ] && [ "$(grep -cv '^[[:space:]]*$' "$RCAP")" -ge 4 ]; then
-  ok "rapport capture.md rédigé"
-  if grep -qiE '\bRST\b|\[R' "$RCAP"; then
-    ok "le rapport identifie les RST de la capture d'incident"
+# --- 2. le périphérique déchiffré est bien un conteneur LUKS ouvert ----
+if [ -e /dev/mapper/coffre ]; then
+  ok "/dev/mapper/coffre existe (conteneur ouvert)"
+  BACKING=$(lsblk -nrpo NAME,TYPE 2>/dev/null \
+    | awk '$2=="crypt"{print}' | head -1)
+  PARENT=$(lsblk -nrpso NAME /dev/mapper/coffre 2>/dev/null | sed -n 2p)
+  if [ -n "$PARENT" ] && cryptsetup isLuks "$PARENT" 2>/dev/null; then
+    ok "le périphérique sous-jacent ($PARENT) est un conteneur LUKS"
+
+    # --- 3. crypttab référence l'UUID DU CONTENEUR --------------------
+    UUID_LUKS=$(cryptsetup luksUUID "$PARENT" 2>/dev/null)
+    if grep -qs "$UUID_LUKS" /etc/crypttab 2>/dev/null; then
+      ok "/etc/crypttab référence l'UUID du conteneur LUKS"
+    elif grep -qs '^coffre' /etc/crypttab 2>/dev/null; then
+      ko "/etc/crypttab contient bien une entrée « coffre » mais pas l'UUID \
+du conteneur ($UUID_LUKS) : c'est celui de cryptsetup luksUUID, pas celui \
+du système de fichiers"
+    else
+      ko "aucune entrée « coffre » dans /etc/crypttab : le volume ne sera \
+pas déverrouillé au démarrage"
+    fi
+
+    # --- 4. deux emplacements de clé ----------------------------------
+    NBK=$(cryptsetup luksDump "$PARENT" 2>/dev/null \
+      | grep -cE '^[[:space:]]+[0-9]+: luks2|^Key Slot [0-9]+: ENABLED')
+    if [ "${NBK:-0}" -ge 2 ]; then
+      ok "$NBK emplacements de clé occupés"
+    else
+      ko "${NBK:-0} emplacement de clé occupé : ajoute-en un second \
+(cryptsetup luksAddKey $PARENT)"
+    fi
   else
-    ko "le rapport ne mentionne pas les RST : relis la capture avec \
-un filtre sur tcp-rst"
+    ko "impossible d'identifier le conteneur LUKS sous /dev/mapper/coffre"
+    [ -n "$BACKING" ] && note "vu par lsblk : $BACKING"
   fi
-  grep -qE '8199|8099' "$RCAP" \
-    && ok "le port en jeu est identifié" \
-    || ko "le rapport ne nomme pas le port concerné"
 else
-  ko "rapport absent ou trop court : $RCAP (5 lignes de conclusion)"
+  ko "/dev/mapper/coffre n'existe pas : le conteneur n'est pas ouvert"
 fi
 
-# --- 3. le rapport de débit -------------------------------------------
-if [ -s "$RDEB" ] && [ "$(grep -cv '^[[:space:]]*$' "$RDEB")" -ge 4 ]; then
-  ok "rapport debit.md rédigé"
-  grep -qiE 'retr' "$RDEB" \
-    && ok "la colonne Retr est reportée" \
-    || ko "le rapport ne reporte pas la colonne Retr (interprétation \
-attendue)"
-  grep -qiE 'bits/sec|mbit|gbit' "$RDEB" \
-    && ok "les débits mesurés sont reportés" \
-    || ko "aucun débit chiffré dans le rapport"
+# --- 5. fstab utilise le nom du mapper et des options durcies ----------
+LIGNE=$(awk -v m="$COFFRE" '$0 !~ /^[[:space:]]*#/ && $2 == m {print}' \
+  /etc/fstab 2>/dev/null | tail -1)
+if [ -n "$LIGNE" ]; then
+  echo "$LIGNE" | grep -q '^/dev/mapper/coffre' \
+    && ok "/etc/fstab utilise /dev/mapper/coffre" \
+    || ko "/etc/fstab doit référencer /dev/mapper/coffre, pas un UUID"
+  OPT=$(echo "$LIGNE" | awk '{print $4}')
+  for o in nodev nosuid noexec; do
+    case ",$OPT," in
+      *",$o,"*) ok "option $o présente dans fstab" ;;
+      *) note "option $o absente : recommandée sur un volume de données" ;;
+    esac
+  done
 else
-  ko "rapport absent ou trop court : $RDEB"
+  ko "aucune ligne /etc/fstab pour $COFFRE"
 fi
 
-# --- 4. le MTU est revenu à la normale --------------------------------
-MTU=$(cat "/sys/class/net/$IFACE/mtu" 2>/dev/null)
-if [ "${MTU:-0}" = 1500 ]; then
-  ok "MTU de $IFACE remis à 1500"
+fi  # fin cryptsetup
+
+# ======================= Partie B : NFS ===============================
+if findmnt -no TARGET "$NFSMNT" >/dev/null 2>&1; then
+  ok "$NFSMNT est monté"
+  FS=$(findmnt -no FSTYPE "$NFSMNT")
+  case "$FS" in
+    nfs4|nfs) ok "le type est $FS" ;;
+    *) ko "le type est $FS, un montage NFS était demandé" ;;
+  esac
+  OPTS=$(findmnt -no OPTIONS "$NFSMNT")
+  case ",$OPTS," in
+    *",ro,"*) ok "le partage est monté en lecture seule" ;;
+    *) ko "le partage n'est pas en ro (options : $OPTS)" ;;
+  esac
+  case "$OPTS" in
+    *soft*) ko "le partage est monté en soft : préfère hard pour éviter \
+les corruptions silencieuses" ;;
+    *) ok "le partage n'est pas en soft" ;;
+  esac
 else
-  ko "MTU de $IFACE = ${MTU:-?} : remets-le à 1500 (ip link set dev \
-$IFACE mtu 1500)"
+  ko "$NFSMNT n'est pas monté (showmount -e 10.10.10.10 puis mount -t nfs4)"
 fi
 
-# --- 5. pas de serveur iperf3 oublié en écoute ------------------------
-if ss -tln 2>/dev/null | grep -q ':5201'; then
-  note "un serveur iperf3 écoute encore sur 5201 : pense à l'arrêter"
+LNFS=$(awk -v m="$NFSMNT" '$0 !~ /^[[:space:]]*#/ && $2 == m {print}' \
+  /etc/fstab 2>/dev/null | tail -1)
+if [ -n "$LNFS" ]; then
+  ok "une ligne /etc/fstab couvre $NFSMNT"
+  echo "$LNFS" | awk '{print $4}' | grep -q '_netdev' \
+    && ok "l'option _netdev est présente" \
+    || ko "il manque _netdev : le montage serait tenté avant le réseau"
+  echo "$LNFS" | awk '{print $4}' | grep -qE 'nofail|x-systemd.automount' \
+    && ok "le boot est protégé (nofail ou x-systemd.automount)" \
+    || ko "ajoute nofail ou x-systemd.automount : sinon lab-adm éteint \
+bloque le démarrage de lab-db"
 else
-  ok "aucun serveur iperf3 résiduel"
+  ko "aucune ligne /etc/fstab pour $NFSMNT"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

@@ -828,5 +828,5 @@ Pour aller plus loin :
 * Explore `man 5 acl` et `man setfacl` : monte un cas à trois groupes où seules les
   ACL par défaut évitent un `setfacl` manuel après chaque dépôt.
 * Compare le modèle POSIX vu ici avec le contrôle d'accès obligatoire de SELinux
-  (module 15) : discretionary vs mandatory, qui décide, et pourquoi les deux
+  (module 18) : discretionary vs mandatory, qui décide, et pourquoi les deux
   coexistent.

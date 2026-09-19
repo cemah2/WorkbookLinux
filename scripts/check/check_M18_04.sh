@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# check_M18_04.sh — vérifie le lab L18.4 (pile Compose factura)
+# check_M18_04.sh — vérifie le lab L18.4 (mini-PKI, HTTPS, surveillance)
+# À lancer depuis lab-adm : le contrôle porte sur le service distant.
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,104 +8,122 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L18.4 =="
 
-D="$HOME/lab18/compose"
-docker info >/dev/null 2>&1 || { ko "Docker inaccessible (L18.1)"; \
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-[ -f "$D/compose.yaml" ] || { ko "$D/compose.yaml absent"; \
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-cd "$D" || exit 1
+LAB_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
+PKI="$LAB_HOME/lab18/pki"
+CIBLE=${CIBLE:-app.lab.local}
+IP=${IP:-10.10.10.11}
 
-# --- 1. fichiers valides ------------------------------------------------
-CONF=$(docker compose config 2>/dev/null)
-[ -n "$CONF" ] && ok "compose.yaml (+ override) est valide" \
-  || ko "docker compose config échoue : $(docker compose config 2>&1 | head -1)"
-[ "$(docker compose config --format json 2>/dev/null | jq -r .name)" \
-  = factura ] && ok "nom de projet : factura" \
-  || ko "le projet doit s'appeler factura (name: factura)"
-for s in proxy app db cache; do
-  echo "$CONF" | grep -qE "^  $s:" && ok "service $s défini" \
-    || ko "service $s absent"
-done
-docker compose config --services 2>/dev/null | grep -qx adminer \
-  && ko "adminer démarre sans profil : profiles: [debug] manquant" \
-  || ok "adminer n'est pas actif par défaut"
-docker compose --profile debug config --services 2>/dev/null \
-  | grep -qx adminer && ok "adminer disponible avec --profile debug" \
-  || ko "adminer absent du profil debug"
-[ -f compose.override.yaml ] && ok "compose.override.yaml présent" \
-  || ko "compose.override.yaml manquant"
-if [ -f compose.prod.yaml ]; then
-  PROD=$(docker compose -f compose.yaml -f compose.prod.yaml config \
-    --format json 2>/dev/null)
-  [ -n "$PROD" ] && ok "compose.prod.yaml valide" \
-    || ko "compose.prod.yaml invalide"
-  echo "$PROD" | jq -e '.services.app.image | test("lab-ops.lab.local:5000")' \
-    >/dev/null 2>&1 && ok "prod : image tirée du registre" \
-    || ko "prod : app.image doit pointer sur lab-ops.lab.local:5000/…"
-  echo "$PROD" | jq -e '.services.app.build == null' >/dev/null 2>&1 \
-    && ok "prod : pas de build:" \
-    || ko "prod : la clé build: est encore présente (build: !reset null)"
-  echo "$PROD" | jq -e '.services.app.logging.options["max-size"]' \
-    >/dev/null 2>&1 && ok "prod : rotation des journaux définie" \
-    || ko "prod : logging.options.max-size manquant sur app"
+# --- 1. la PKI locale --------------------------------------------------
+if [ -f "$PKI/ca.crt" ] && [ -f "$PKI/ca.key" ]; then
+  ok "la CA existe dans $PKI"
+  M=$(stat -c '%a' "$PKI/ca.key")
+  [ "$M" = 600 ] || [ "$M" = 400 ] \
+    && ok "la clé de la CA est en $M" \
+    || ko "la clé de la CA est en $M : personne d'autre que son \
+propriétaire ne doit pouvoir la lire (chmod 600)"
+  openssl x509 -in "$PKI/ca.crt" -noout -checkend 0 >/dev/null 2>&1 \
+    && ok "le certificat de la CA est valide" \
+    || ko "le certificat de la CA est expiré"
 else
-  ko "compose.prod.yaml manquant"
+  ko "pas de CA dans $PKI (étape 1)"
 fi
 
-# --- 2. dépendances et santé -------------------------------------------
-J=$(docker compose config --format json 2>/dev/null)
-for s in db cache; do
-  echo "$J" | jq -e ".services.$s.healthcheck.test" >/dev/null 2>&1 \
-    && ok "healthcheck sur $s" || ko "healthcheck manquant sur $s"
-  [ "$(echo "$J" | jq -r ".services.app.depends_on.$s.condition")" \
-    = service_healthy ] && ok "app attend $s healthy" \
-    || ko "app.depends_on.$s doit avoir condition: service_healthy"
-done
-[ "$(echo "$J" | jq -r '.services.proxy.depends_on.app.condition')" \
-  = service_healthy ] && ok "proxy attend app healthy" \
-  || ko "proxy.depends_on.app doit avoir condition: service_healthy"
-
-# --- 3. secret et durcissement ------------------------------------------
-echo "$J" | jq -e '.secrets.db_password.file' >/dev/null 2>&1 \
-  && ok "secret db_password déclaré (file)" \
-  || ko "secret db_password manquant au niveau racine"
-echo "$J" | jq -e '.services.app.environment | to_entries[] | select(.value | tostring | test("Factura-2024|password|passwd"; "i"))' \
-  >/dev/null 2>&1 && ko "un mot de passe transite par environment: de app" \
-  || ok "pas de mot de passe dans environment: de app"
-echo "$J" | jq -e '.services.app.read_only == true' >/dev/null 2>&1 \
-  && ok "app en lecture seule" || ko "app : read_only: true manquant"
-echo "$J" | jq -e '.services.app.cap_drop | index("ALL")' >/dev/null 2>&1 \
-  && ok "app : cap_drop ALL" || ko "app : cap_drop: [ALL] manquant"
-RP=0
-for s in proxy app db cache; do
-  [ "$(echo "$J" | jq -r ".services.$s.restart")" = unless-stopped ] \
-    || { ko "$s : restart: unless-stopped attendu"; RP=1; }
-done
-[ "$RP" -eq 0 ] && ok "restart: unless-stopped sur les quatre services"
-
-# --- 4. pile en marche --------------------------------------------------
-for s in app db cache; do
-  ST=$(docker inspect "factura-$s-1" --format '{{.State.Health.Status}}' \
-    2>/dev/null)
-  [ "$ST" = healthy ] && ok "factura-$s-1 est healthy" \
-    || ko "factura-$s-1 n'est pas healthy (état : ${ST:-absent})"
-done
-[ "$(docker inspect factura-proxy-1 --format '{{.State.Running}}' \
-  2>/dev/null)" = true ] && ok "factura-proxy-1 tourne" \
-  || ko "factura-proxy-1 ne tourne pas"
-curl -fsS --max-time 4 http://127.0.0.1:8080/clients 2>/dev/null \
-  | grep -q clients && ok "/clients répond via le proxy (PostgreSQL OK)" \
-  || ko "/clients ne répond pas sur :8080 (proxy, DATABASE_URL, secret ?)"
-curl -fsS --max-time 4 http://127.0.0.1:8080/compteur 2>/dev/null \
-  | grep -q compteur && ok "/compteur répond via le proxy (Redis OK)" \
-  || ko "/compteur ne répond pas sur :8080"
-if SEC=$(cat secrets/db_password.txt 2>/dev/null) && [ -n "$SEC" ]; then
-  docker inspect factura-app-1 --format '{{.Config.Env}}' 2>/dev/null \
-    | grep -qF "$SEC" && ko "le mot de passe est visible dans docker inspect" \
-    || ok "le mot de passe n'apparaît pas dans docker inspect de app"
+if [ -f "$PKI/app.crt" ]; then
+  openssl verify -CAfile "$PKI/ca.crt" "$PKI/app.crt" >/dev/null 2>&1 \
+    && ok "le certificat serveur est bien signé par la CA" \
+    || ko "openssl verify échoue : le certificat n'est pas signé par \
+cette CA"
+  SAN=$(openssl x509 -in "$PKI/app.crt" -noout -ext subjectAltName \
+        2>/dev/null)
+  grep -q "DNS:$CIBLE" <<<"$SAN" \
+    && ok "le SAN contient DNS:$CIBLE" \
+    || ko "le SAN ne couvre pas $CIBLE : les clients modernes ignorent \
+le CN (voir Q18.16)"
+  grep -q "IP Address:$IP" <<<"$SAN" \
+    && ok "le SAN contient IP:$IP" \
+    || note "le SAN ne contient pas l'IP : https://$IP échouera"
+  # clé et certificat appariés
+  if [ -f "$PKI/app.key" ]; then
+    A=$(openssl x509 -in "$PKI/app.crt" -noout -modulus | openssl sha256)
+    B=$(openssl rsa -in "$PKI/app.key" -noout -modulus 2>/dev/null \
+        | openssl sha256)
+    [ "$A" = "$B" ] \
+      && ok "la clé privée correspond au certificat" \
+      || ko "la clé et le certificat ne correspondent pas"
+  fi
+else
+  ko "pas de certificat serveur dans $PKI (étape 2)"
 fi
-[ -s "$HOME/lab18/rapports/compose.md" ] && ok "rapport compose.md présent" \
-  || ko "~/lab18/rapports/compose.md absent"
+
+# --- 2. la confiance côté client --------------------------------------
+if [ -f /usr/local/share/ca-certificates/lab-local-ca.crt ] \
+   || [ -f /etc/pki/ca-trust/source/anchors/lab-local-ca.crt ]; then
+  ok "le CA du lab est déposé dans le magasin système"
+else
+  ko "le CA n'est pas dans le magasin système (update-ca-certificates)"
+fi
+getent hosts "$CIBLE" >/dev/null 2>&1 \
+  && ok "$CIBLE se résout" \
+  || ko "$CIBLE ne se résout pas (ajoute-le à /etc/hosts)"
+
+# --- 3. le service distant --------------------------------------------
+H=$(curl -sI --max-time 6 "https://$CIBLE/" 2>/dev/null)
+if [ -n "$H" ]; then
+  ok "curl https://$CIBLE aboutit SANS -k (la chaîne est validée)"
+else
+  ko "curl https://$CIBLE échoue : $(curl -sI --max-time 6 \
+"https://$CIBLE/" 2>&1 | head -1)"
+fi
+
+grep -qi '^strict-transport-security' <<<"$H" \
+  && ok "l'en-tête HSTS est présent" \
+  || ko "pas d'en-tête Strict-Transport-Security"
+
+MA=$(grep -io 'max-age=[0-9]*' <<<"$H" | head -1 | cut -d= -f2)
+[ "${MA:-0}" -ge 63072000 ] \
+  && ok "max-age = $MA (>= 2 ans)" \
+  || ko "max-age = ${MA:-absent}, l'énoncé demande au moins 63072000"
+
+# redirection 80 -> 443
+R=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 6 \
+    "http://$CIBLE/" 2>/dev/null)
+grep -qE '^30[18] https://' <<<"$R" \
+  && ok "HTTP redirige en permanence vers HTTPS ($R)" \
+  || ko "pas de redirection 301 de 80 vers 443 (obtenu : $R)"
+
+# --- 4. ce que sert réellement le serveur ------------------------------
+S=$(openssl s_client -connect "$IP:443" -servername "$CIBLE" \
+    </dev/null 2>/dev/null)
+grep -q 'Verify return code: 0 (ok)' <<<"$S" \
+  && ok "openssl s_client : Verify return code 0 (ok)" \
+  || ko "openssl s_client ne valide pas la chaîne : \
+$(grep 'Verify return code' <<<"$S" | head -1)"
+
+PROTO=$(grep -oE 'TLSv1\.[0-9]' <<<"$S" | head -1)
+case "$PROTO" in
+  TLSv1.2|TLSv1.3) ok "protocole négocié : $PROTO" ;;
+  *) ko "protocole négocié : ${PROTO:-inconnu} — TLS 1.0/1.1 sont à \
+proscrire" ;;
+esac
+
+printf '%s' "$S" | openssl x509 -noout -checkend 2592000 >/dev/null 2>&1 \
+  && ok "le certificat servi n'expire pas dans les 30 jours" \
+  || ko "le certificat servi expire sous 30 jours (ou est déjà expiré)"
+
+# --- 5. le script de surveillance --------------------------------------
+V="$LAB_HOME/lab18/bin/verif-certs.sh"
+if [ -x "$V" ]; then
+  ok "$V existe et est exécutable"
+  OUT=$("$V" "$CIBLE:443" 2>/dev/null); RC=$?
+  grep -qE '[0-9]+' <<<"$OUT" \
+    && ok "le script produit une sortie exploitable" \
+    || ko "le script ne renvoie rien d'utilisable"
+  [ "$RC" -le 2 ] \
+    && ok "code retour $RC conforme au contrat (0/1/2)" \
+    || ko "code retour $RC hors contrat"
+else
+  ko "~/lab18/bin/verif-certs.sh absent ou non exécutable (étape 8)"
+fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

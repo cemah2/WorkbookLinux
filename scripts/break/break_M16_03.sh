@@ -1,75 +1,57 @@
 #!/usr/bin/env bash
-# break_M16_03.sh — panne BF16.3 (disque plein : fichier supprimé encore
-#                   ouvert par un processus)
+# break_M16_03.sh — panne BF16.3 (les logs du service ont des trous)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-DATA=/srv/vitrine/data
-GARDE=/usr/local/sbin/vitrine-rotation
-mkdir -p "$SAUV"
+DROPD=/etc/systemd/journald.conf.d
+DROP="$DROPD/90-limite-debit.conf"
+UDROPD=/etc/systemd/system/factura-api.service.d
+UDROP="$UDROPD/10-debit.conf"
+mkdir -p "$SAUV" "$DROPD" "$UDROPD"
 
-mountpoint -q "$DATA" || {
-  echo "$DATA n'est pas monté : lance setup_M16.sh" >&2; exit 1; }
+[ -d /run/systemd/system ] || {
+  echo "systemd ne pilote pas cette machine : panne inapplicable" >&2
+  exit 1; }
+[ -x /opt/factura/bin/factura-api.py ] || {
+  echo "factura-api absent : lance setup_M16.sh" >&2; exit 1; }
 
-# --- déjà cassé ? on ne rejoue pas --------------------------------------
-if pgrep -f "$GARDE" >/dev/null 2>&1; then
-  cat <<'EOF'
+# --- 1. un limiteur de débit resserré « pour protéger le disque » -------
+[ -f "$DROP" ] && [ ! -f "$SAUV/M16_03.journald.conf" ] && \
+  cp -a "$DROP" "$SAUV/M16_03.journald.conf"
 
-Symptôme attendu : toute écriture échoue avec « OSError: [Errno 28] No
-space left on device ». « df -h /srv/vitrine/data » affiche 100 %, alors
-que « du -xsh /srv/vitrine/data » ne trouve que quelques Mo.
+cat > "$DROP" <<'EOF'
+# Durcissement appliqué après l'incident disque de mars.
+[Journal]
+RateLimitIntervalSec=30s
+RateLimitBurst=50
 EOF
-  exit 0
-fi
+chmod 0644 "$DROP"
 
-if [ ! -f "$SAUV/M16_03.etat" ]; then
-  df -h "$DATA" > "$SAUV/M16_03.etat"
-fi
+# --- 2. l'application, elle, s'est mise à parler beaucoup ---------------
+# Une ligne par requête, et le trafic a été multiplié par cinquante.
+[ -f "$UDROP" ] && [ ! -f "$SAUV/M16_03.unit.conf" ] && \
+  cp -a "$UDROP" "$SAUV/M16_03.unit.conf"
 
-# --- le processus qui retient l'espace ----------------------------------
-cat > "$GARDE" <<'PYEOF'
-#!/usr/bin/env python3
-"""vitrine-rotation — agent d'archivage des journaux de vitrine.
+cat > "$UDROP" <<'EOF'
+[Service]
+Environment=FACTURA_PERIODE=0.01
+EOF
+chmod 0644 "$UDROP"
 
-Ouvre son fichier de travail, l'utilise, puis le retire du répertoire
-(il continue de s'en servir par son descripteur). Version 1.4.
-"""
-import os
-import sys
-import time
+systemctl daemon-reload
+systemctl restart systemd-journald
+systemctl restart factura-api.service >/dev/null 2>&1 || \
+  systemctl start factura-api.service >/dev/null 2>&1 || true
 
-CIBLE = sys.argv[1] if len(sys.argv) > 1 else "/srv/vitrine/data"
-chemin = os.path.join(CIBLE, "rotation-en-cours.tmp")
-f = open(chemin, "wb")
-bloc = b"a" * (1024 * 1024)
-try:
-    while True:
-        f.write(bloc)
-        f.flush()
-except OSError:
-    pass
-try:
-    os.unlink(chemin)
-except OSError:
-    pass
-while True:
-    time.sleep(3600)
-PYEOF
-chmod 0755 "$GARDE"
-
-setsid nohup "$GARDE" "$DATA" >/dev/null 2>&1 < /dev/null &
-sleep 4
-
-if [ -d /run/systemd/system ]; then
-  systemctl restart vitrine-api.service >/dev/null 2>&1 || true
-fi
+# on laisse le limiteur frapper au moins une fois avant de rendre la main
+sleep 35
 
 cat <<'EOF'
 
-Symptôme attendu : toute écriture échoue avec « OSError: [Errno 28] No
-space left on device ». « df -h /srv/vitrine/data » affiche 100 %, alors
-que « du -xsh /srv/vitrine/data » ne trouve que quelques Mo.
-Pour reproduire : curl -s http://127.0.0.1:8080/commande
+Symptôme attendu : « journalctl -u factura-api -f » montre quelques
+lignes, puis plus rien pendant une trentaine de secondes, puis reprend.
+L'application tourne, « systemctl status factura-api » est vert, et le
+développeur affirme qu'elle écrit une ligne par requête.
 EOF

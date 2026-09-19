@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# check_M13_01.sh — vérifie le lab L13.1 (enquête journal, INC-4102)
+# check_M13_01.sh — vérifie le lab L13.1 (mini-Docker : netns, bridge, NAT)
+# À lancer sur lab-adm, avec sudo (netns et nft exigent root).
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,84 +8,93 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L13.1 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
+[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+LAB_USER="${SUDO_USER:-mathieu}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-DOS="$HOMEDIR/lab13/inc-4102"
-EXTRAIT="$DOS/journal-api.log"
-RAPPORT="$DOS/rapport.md"
+BIN="$HOMEDIR/lab13/bin/minidocker.sh"
+RAP="$HOMEDIR/lab13/rapports/minidocker.md"
 
-# --- 1. journal persistant ----------------------------------------------
-if [ -d /var/log/journal ]; then
-  ok "/var/log/journal existe : le journal survit au redémarrage"
+# --- 1. le script et ses trois sous-commandes ---------------------------
+if [ -x "$BIN" ] && grep -qE '^\s*(up|down|status)\)' "$BIN"; then
+  ok "minidocker.sh existe, exécutable, avec up/down/status"
 else
-  ko "le journal est encore volatile (crée /var/log/journal puis \
-redémarre systemd-journald)"
+  ko "minidocker.sh absent, non exécutable ou sans up/down/status : $BIN"
 fi
 
-STO=$(systemd-analyze cat-config systemd/journald.conf 2>/dev/null \
-      | grep -E '^\s*Storage=' | tail -1 | cut -d= -f2)
-case "${STO:-auto}" in
-  persistent|auto) ok "Storage=${STO:-auto} (compatible persistant)" ;;
-  *) ko "Storage=$STO empêche la persistance" ;;
-esac
+# --- 2. les objets réseau ----------------------------------------------
+for ns in c1 c2 c3; do
+  ip netns list 2>/dev/null | grep -qw "$ns" \
+    && ok "netns $ns présent" \
+    || ko "netns $ns absent (ip netns add / lance minidocker.sh up)"
+done
 
-if journalctl --list-boots >/dev/null 2>&1; then
-  NB=$(journalctl --list-boots 2>/dev/null | wc -l)
-  ok "journalctl --list-boots répond ($NB démarrage(s) connu(s))"
+if ip -d link show br-lab 2>/dev/null | grep -q 'bridge'; then
+  ok "bridge br-lab présent"
+  ip addr show dev br-lab | grep -q '172\.20\.0\.1/24' \
+    && ok "br-lab porte 172.20.0.1/24" \
+    || ko "br-lab n'a pas l'adresse 172.20.0.1/24"
+  n=$(bridge link show 2>/dev/null | grep -c 'master br-lab')
+  [ "$n" -ge 3 ] && ok "$n ports raccordés au bridge" \
+    || ko "seulement $n port(s) sur br-lab (bridge link show)"
 else
-  ko "journalctl --list-boots échoue (droits ? groupe systemd-journal ?)"
+  ko "bridge br-lab absent"
 fi
 
-# --- 2. extraction de la fenêtre ----------------------------------------
-if [ -s "$EXTRAIT" ]; then
-  ok "$EXTRAIT existe et n'est pas vide"
-  if grep -qE 'factura-api' "$EXTRAIT"; then
-    ok "l'extrait contient bien des entrées de factura-api"
-  else
-    ko "aucune entrée factura-api dans l'extrait (journalctl -u \
-factura-api.service)"
-  fi
-  if grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' "$EXTRAIT"; then
-    ok "horodatage ISO (-o short-iso)"
-  else
-    ko "l'extrait n'est pas en horodatage ISO (option -o short-iso)"
-  fi
-  if grep -qiE 'pool|connexion' "$EXTRAIT"; then
-    ok "les lignes du pool de connexions sont dans la fenêtre extraite"
-  else
-    ko "la fenêtre extraite ne couvre pas l'incident (relis \
-$DOS/fenetre.txt)"
-  fi
-else
-  ko "$EXTRAIT manquant ou vide"
-fi
+for i in 1 2 3; do
+  ip -n c$i addr show dev eth0 2>/dev/null | grep -q "172\.20\.0\.1$i/24" \
+    && ok "c$i : eth0 = 172.20.0.1$i/24" \
+    || ko "c$i : eth0 sans 172.20.0.1$i/24"
+done
+ip -n c1 link show lo 2>/dev/null | grep -q 'UP' \
+  && ok "lo monté dans c1" || ko "lo est DOWN dans c1 (ip -n c1 link set lo up)"
+ip -n c1 route show default 2>/dev/null | grep -q '172\.20\.0\.1' \
+  && ok "route par défaut de c1 via 172.20.0.1" \
+  || ko "c1 n'a pas de route par défaut via 172.20.0.1"
 
-# --- 3. le rapport -------------------------------------------------------
-if [ -s "$RAPPORT" ]; then
-  L=$(grep -cve '^\s*$' "$RAPPORT")
-  [ "$L" -ge 15 ] && ok "rapport.md fait $L lignes utiles" \
-    || ko "rapport.md ne fait que $L lignes utiles (on en attend 15)"
-  for MOT in 502 pool journalctl; do
-    grep -qi "$MOT" "$RAPPORT" \
-      && ok "le rapport mentionne « $MOT »" \
-      || ko "le rapport ne parle pas de « $MOT »"
-  done
-  grep -qiE 'cause racine|cause-racine' "$RAPPORT" \
-    && ok "une section cause racine est identifiée" \
-    || ko "le rapport ne nomme pas explicitement la cause racine"
-  grep -qiE 'nginx|access\.log' "$RAPPORT" \
-    && ok "la corrélation avec les journaux nginx est faite" \
-    || ko "le rapport n'exploite pas /var/log/nginx/access.log"
-else
-  ko "$RAPPORT manquant"
-fi
+# --- 3. forwarding et NAT ----------------------------------------------
+[ "$(sysctl -n net.ipv4.ip_forward 2>/dev/null)" = 1 ] \
+  && ok "ip_forward = 1" || ko "net.ipv4.ip_forward vaut 0"
 
-# --- 4. indice si l'histogramme n'a pas été fait -------------------------
-if [ -r /var/log/nginx/access.log ]; then
-  N502=$(awk '$9==502' /var/log/nginx/access.log 2>/dev/null | wc -l)
-  note "pour information : $N502 réponses 502 dans access.log"
+RS=$(nft list ruleset 2>/dev/null)
+echo "$RS" | grep -q 'masquerade' \
+  && ok "règle masquerade présente" \
+  || ko "aucune règle masquerade dans nft list ruleset"
+echo "$RS" | grep -q 'dnat to 172\.20\.0\.11:8000' \
+  && ok "DNAT vers 172.20.0.11:8000 présent" \
+  || ko "pas de dnat to 172.20.0.11:8000 (chaîne prerouting, table nat)"
+echo "$RS" | grep -q 'ct state established,related accept' \
+  && ok "règle stateful established,related présente" \
+  || ko "il manque ct state established,related accept"
+echo "$RS" | grep -q 'hook output' \
+  && ok "chaîne nat output (accès local au port publié)" \
+  || ko "pas de chaîne 'type nat hook output' : curl local vers 8080 échouera"
+
+# --- 4. les résultats observables ----------------------------------------
+if ip netns exec c1 curl -s -m 3 http://10.10.10.11/ >/dev/null 2>&1; then
+  ok "c1 sort vers lab-web en NAT"
 else
-  note "/var/log/nginx/access.log illisible sans sudo (groupe adm)"
+  ko "c1 ne joint pas http://10.10.10.11/ (ip_forward ? masquerade ? nginx ?)"
+fi
+if curl -s -m 3 http://10.10.10.10:8080/ 2>/dev/null | grep -q 'c1'; then
+  ok "port publié joignable depuis lab-adm (10.10.10.10:8080)"
+else
+  ko "curl http://10.10.10.10:8080/ échoue localement (chaîne nat output ?)"
+fi
+if ip netns exec c2 curl -s -m 3 http://10.10.10.10:8080/ 2>/dev/null \
+   | grep -q 'c1'; then
+  ok "hairpin : c2 joint le port publié"
+else
+  ko "c2 ne joint pas 10.10.10.10:8080 (masquerade de retour ct status dnat ?)"
+fi
+note "vérifie aussi depuis lab-web : curl http://10.10.10.10:8080/"
+
+# --- 5. rapport -----------------------------------------------------------
+if [ -s "$RAP" ] && [ "$(grep -cv '^[[:space:]]*$' "$RAP")" -ge 12 ]; then
+  ok "rapport minidocker.md rédigé"
+  grep -qi 'trace' "$RAP" && ok "la trace nft monitor est documentée" \
+    || ko "le rapport ne mentionne pas la trace (nft monitor trace)"
+else
+  ko "rapport absent ou trop court : $RAP"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

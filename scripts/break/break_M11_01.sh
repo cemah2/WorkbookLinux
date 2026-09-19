@@ -1,35 +1,51 @@
 #!/usr/bin/env bash
-# break_M11_01.sh — panne BF11.1 (route par défaut supprimée)
+# break_M11_01.sh — panne BF11.1 (fstab fautif : la VM ne démarre plus)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
+#
+# ATTENTION : cette panne empêche RÉELLEMENT le démarrage. Prends un
+# snapshot Proxmox avant (qm snapshot 9003 avant-bf10-1) et prépare-toi
+# à utiliser la console noVNC : le SSH ne répondra pas.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-mkdir -p "$SAUV"
+CIBLE=/srv/factura/archives
+MARQUE="# break_M11_01"
+mkdir -p "$SAUV" "$CIBLE"
 
-DEF="$(ip -o -4 route show default | head -1)"
+# --- sauvegarde de l'état avant de casser -------------------------------
+[ -f "$SAUV/M11_01.fstab" ] || cp -a /etc/fstab "$SAUV/M11_01.fstab"
 
-if [ -n "$DEF" ]; then
-  # on note la route exacte pour pouvoir la remettre en cas de besoin
-  [ -f "$SAUV/M11_01.default-route" ] || \
-    printf '%s\n' "$DEF" > "$SAUV/M11_01.default-route"
-  GW="$(printf '%s' "$DEF" | awk '{print $3}')"
-  DEV="$(printf '%s' "$DEF" | awk '{print $5}')"
-  ip route del default >/dev/null 2>&1 || true
-  # certaines configurations en posent plusieurs : on vide
-  while ip -o -4 route show default | grep -q .; do
-    ip route del default >/dev/null 2>&1 || break
-  done
-  echo "  (sauvegarde : $SAUV/M11_01.default-route — $GW via $DEV)" >&2
-else
-  [ -f "$SAUV/M11_01.default-route" ] || \
-    echo "default via 10.10.10.1 dev ens18" > "$SAUV/M11_01.default-route"
-fi
+# --- on retire une éventuelle exécution précédente ----------------------
+FAUX="9c1f7a30-2b4e-4d81-a5c6-7e0f3b9d1234"
+sed -i "/$FAUX/d" /etc/fstab
+sed -i "\|^$MARQUE|d" /etc/fstab
+
+# --- on neutralise la ligne correcte, si l'apprenant en a posé une ------
+# (elle est conservée, simplement commentée, pour que la réparation
+#  consiste bien à corriger un UUID et non à en inventer un)
+awk -v c="$CIBLE" '
+  $0 !~ /^[[:space:]]*#/ && $2 == c { print "#break# " $0; next }
+  { print }
+' /etc/fstab > /etc/fstab.new && mv /etc/fstab.new /etc/fstab
+
+# --- la ligne fautive ---------------------------------------------------
+# UUID plausible mais qui ne correspond à aucun volume de la machine.
+# Pas de nofail, pass=2 : l'échec entraîne local-fs.target, donc
+# emergency.target. Le marqueur est sur sa propre ligne : une ligne de
+# fstab ne doit compter que six champs.
+printf '%s (panne volontaire)\nUUID=%s  %s  ext4  defaults  0  2\n' \
+  "$MARQUE" "$FAUX" "$CIBLE" >> /etc/fstab
+
+[ -d /run/systemd/system ] && systemctl daemon-reload >/dev/null 2>&1 || true
 
 cat <<'EOF'
 
-Symptôme attendu : le réseau local répond normalement (ping 10.10.10.11,
-ssh lab-web), mais « ping 9.9.9.9 » renvoie « Network is unreachable »
-immédiatement, sans attente, et « apt update » finit par échouer.
-Aucune configuration sur disque n'a été modifiée.
+Symptôme attendu : après « sudo reboot », la VM ne répond plus en SSH.
+Dans la console Proxmox, le démarrage s'arrête environ 1 min 30 s sur
+« A start job is running for /dev/disk/by-uuid/9c1f... », puis affiche
+« Dependency failed for Local File Systems » et
+« You are in emergency mode ».
+
+Rappel : console Proxmox obligatoire, le réseau n'est pas démarré.
 EOF

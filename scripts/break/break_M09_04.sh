@@ -1,39 +1,33 @@
 #!/usr/bin/env bash
-# break_M09_04.sh — panne BF9.4 (épinglage trop large : apt veut
-#                   rétrograder la moitié du système)
+# break_M09_04.sh — panne BF9.4 (règle udev qui renomme l'interface :
+#                   Netplan ne trouve plus ens18). NE REDÉMARRE PAS la VM.
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
 mkdir -p "$SAUV"
+R=/etc/udev/rules.d/70-lab-net-stable.rules
 
-. /etc/os-release
-SUITE="${VERSION_CODENAME:-noble}"
+IF=$(ip -o route show default 2>/dev/null | awk '{print $5; exit}')
+[ -n "$IF" ] || { echo "aucune interface par défaut trouvée" >&2; exit 1; }
+MAC=$(cat "/sys/class/net/$IF/address")
+[ -n "$MAC" ] || { echo "adresse MAC de $IF introuvable" >&2; exit 1; }
 
-# --- sauvegarde --------------------------------------------------------
-if [ ! -f "$SAUV/M09_04.liste" ]; then
-  ls -1 /etc/apt/preferences.d/ > "$SAUV/M09_04.liste" 2>/dev/null || true
-fi
+echo "$IF $MAC" > "$SAUV/M09_04.interface"
+[ -f "$R" ] && [ ! -f "$SAUV/M09_04.rules" ] && cp -a "$R" "$SAUV/M09_04.rules"
 
-# --- la casse ----------------------------------------------------------
-# Intention d'origine : « rester sur les versions de la release, ne pas
-# prendre les nouveautés ». Écrit sans comprendre ce que veut dire
-# Pin-Priority > 1000 ni ce que couvre « Package: * ».
-cat > /etc/apt/preferences.d/00-socle-fige.pref <<EOF
-# Socle fige — ticket CHG-4402
-# « on reste sur la release, on ne prend pas les nouveautes »
-Package: *
-Pin: release a=$SUITE
-Pin-Priority: 1001
-EOF
-chmod 0644 /etc/apt/preferences.d/00-socle-fige.pref
+cat > "$R" <<EOF2
+# OPS-455 : nom d'interface « stable » pour la supervision
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="$MAC", NAME="net0"
+EOF2
+chmod 0644 "$R"
+udevadm control --reload 2>/dev/null || true
 
-cat <<'EOF'
+cat <<'EOF2'
 
-Symptôme attendu : « sudo apt upgrade » annonce plusieurs centaines de
-paquets sous un intitulé qui n'est pas « will be upgraded », et propose
-de remplacer des versions installées par des versions plus anciennes,
-dont apt, dpkg et libc6. Aucune mise à jour de sécurité n'est plus
-proposée.
-EOF
+Symptôme attendu : APRÈS « sudo reboot », la VM n'a plus d'adresse IP.
+Sur la console (qm terminal 9001), l'interface existe, le pilote est chargé,
+mais elle ne s'appelle plus ens18, et « netplan apply » ne signale rien.
+Rien n'est cassé tant que la VM n'a pas redémarré.
+EOF2

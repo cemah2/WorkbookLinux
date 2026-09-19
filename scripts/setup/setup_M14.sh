@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
-# setup_M14.sh — prépare le terrain du module 14
-#                (cron, at, anacron, timers systemd)
-# À lancer avec sudo. Idempotent : relançable sans effet de bord.
-#
-# Ce script NE crée AUCUNE tâche planifiée « propre » : les écrire est le
-# travail du module. Il installe l'application factura, un certificat qui
-# expire bientôt, le bac à sable de l'apprenant, et le fatras de tâches
-# héritées que L14.1 doit inventorier.
+# setup_M14.sh — prépare le terrain du module 14 (SSH)
+# À lancer avec sudo SUR CHAQUE VM du lab. Idempotent.
+# Le script détecte le nom d'hôte et n'applique que la partie qui le concerne.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
@@ -16,293 +11,226 @@ LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
 
 BASE="$LAB_HOME/lab14"
-BIN=/opt/factura/bin
-ETC=/etc/factura
-LOGD=/var/log/factura
-DATA=/srv/factura/data
-BACK=/srv/factura/backups
-ETAT=/srv/factura/etat
-STATE=/var/lib/factura
+SAUV=/root/.m12-backup
+HOTE="$(hostname -s)"
 
 echo "== Préparation du module 14 =="
+echo "   machine     : $HOTE"
 echo "   utilisateur : $LAB_USER"
-echo "   base        : $BASE"
 
 # ---------------------------------------------------------------------
-# 1. Compte de service, répertoires
+# 0. Outils du module
 # ---------------------------------------------------------------------
-groupadd -f factura
-if ! getent passwd factura >/dev/null; then
-  useradd -r -g factura -d /srv/factura -s /usr/sbin/nologin factura
+for p in ssh sshd ssh-keygen ssh-keyscan ssh-add ssh-agent ssh-copy-id; do
+  command -v "$p" >/dev/null 2>&1 || echo "  note : $p absent (voir §14.1)"
+done
+command -v ssh-audit >/dev/null 2>&1 || \
+  echo "  note : ssh-audit absent — apt install ssh-audit (L14.3)"
+
+# ---------------------------------------------------------------------
+# 1. Sauvegarde de /etc/ssh, une seule fois
+# ---------------------------------------------------------------------
+mkdir -p "$SAUV"
+if [ ! -d "$SAUV/etc-ssh" ] && [ -d /etc/ssh ]; then
+  cp -a /etc/ssh "$SAUV/etc-ssh"
+  echo "   /etc/ssh sauvegardé dans $SAUV/etc-ssh"
 fi
 
-mkdir -p "$BIN" "$ETC/tls" "$LOGD" "$DATA" "$BACK" "$ETAT" "$STATE"
-mkdir -p "$BASE"/{bin,logs,rapports,unites,sauv}
-chown -R factura:factura "$LOGD" /srv/factura "$STATE"
-chmod 0755 /opt/factura "$BIN" "$ETC" /srv/factura "$DATA" "$BACK" "$ETAT"
-chmod 0775 "$LOGD"
+# ---------------------------------------------------------------------
+# 2. Bac à sable de l'apprenant (toutes les machines)
+# ---------------------------------------------------------------------
+mkdir -p "$BASE"/{bin,conf,rapports}
+install -d -o "$LAB_USER" -g "$LAB_USER" -m 700 "$LAB_HOME/.ssh"
+
+# script utilisé par E14.12 (exécution distante d'un script local)
+cat > "$BASE/bin/etat.sh" <<'EOF'
+#!/usr/bin/env bash
+# etat.sh [--court|--long] — état résumé de la machine
+set -euo pipefail
+mode="${1:---court}"
+printf 'hote     : %s\n' "$(hostname -f 2>/dev/null || hostname)"
+printf 'uptime   : %s\n' "$(uptime -p 2>/dev/null || uptime)"
+case "$mode" in
+  --court) : ;;
+  --long)
+    printf 'noyau    : %s\n' "$(uname -r)"
+    printf 'charge   : %s\n' "$(cut -d' ' -f1-3 /proc/loadavg)"
+    printf 'memoire  : %s\n' "$(free -h | awk '/^Mem:/{print $3" / "$2}')"
+    printf 'sshd     : %s\n' "$(systemctl is-active ssh 2>/dev/null \
+                                || systemctl is-active sshd 2>/dev/null \
+                                || echo inconnu)"
+    ;;
+  *) echo "usage: etat.sh [--court|--long]" >&2; exit 64 ;;
+esac
+EOF
+chmod 755 "$BASE/bin/etat.sh"
+
+# ---------------------------------------------------------------------
+# 3. La vieille clé RSA 2048 sans passphrase, à faire tourner en L14.1
+# ---------------------------------------------------------------------
+if [ ! -f "$LAB_HOME/.ssh/id_rsa" ]; then
+  runuser -u "$LAB_USER" -- ssh-keygen -q -t rsa -b 2048 -N '' \
+    -C "$LAB_USER@$HOTE-heritee" -f "$LAB_HOME/.ssh/id_rsa"
+  echo "   clé RSA 2048 héritée créée (sans passphrase : c'est voulu)"
+fi
+# elle est réellement utilisable : on l'autorise sur la machine courante
+touch "$LAB_HOME/.ssh/authorized_keys"
+if ! grep -qxF "$(cat "$LAB_HOME/.ssh/id_rsa.pub")" \
+     "$LAB_HOME/.ssh/authorized_keys" 2>/dev/null; then
+  cat "$LAB_HOME/.ssh/id_rsa.pub" >> "$LAB_HOME/.ssh/authorized_keys"
+fi
+chown -R "$LAB_USER":"$LAB_USER" "$LAB_HOME/.ssh"
+chmod 700 "$LAB_HOME/.ssh"
+chmod 600 "$LAB_HOME/.ssh/authorized_keys" "$LAB_HOME/.ssh/id_rsa"
+chmod 644 "$LAB_HOME/.ssh/id_rsa.pub"
+chmod go-w "$LAB_HOME"
+
+# ---------------------------------------------------------------------
+# 4. Faux services (rôle par rôle)
+# ---------------------------------------------------------------------
+mkdir -p /opt/lab14
+
+# --- 4a. faux serveur de base de données, écoute 5432, répond une bannière
+faux_pg() {
+  cat > /opt/lab14/faux-pg.py <<'EOF'
+#!/usr/bin/env python3
+"""Faux service 'base de données' du module 14 : bannière sur le port 5432."""
+import socket, socketserver, sys
+
+PORT = 5432
+
+class Banniere(socketserver.BaseRequestHandler):
+    def handle(self):
+        self.request.sendall(
+            ("LAB12-DB-OK %s\n" % socket.gethostname()).encode())
+
+class Serveur(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+
+if __name__ == "__main__":
+    try:
+        Serveur(("0.0.0.0", PORT), Banniere).serve_forever()
+    except KeyboardInterrupt:
+        sys.exit(0)
+EOF
+  chmod 755 /opt/lab14/faux-pg.py
+  cat > /etc/systemd/system/lab14-db.service <<'EOF'
+[Unit]
+Description=Lab12 — faux service de base de données (port 5432)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/opt/lab14/faux-pg.py
+DynamicUser=yes
+Restart=on-failure
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+# --- 4b. fausse application web locale, port 3000 (cible du tunnel -R)
+faux_app() {
+  cat > /opt/lab14/faux-app.py <<'EOF'
+#!/usr/bin/env python3
+"""Fausse application du module 14 : HTTP sur 127.0.0.1:3000."""
+import socket
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class App(BaseHTTPRequestHandler):
+    def do_GET(self):
+        corps = ("LAB12-APP-OK %s\n" % socket.gethostname()).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(corps)))
+        self.end_headers()
+        self.wfile.write(corps)
+    def log_message(self, *a):
+        pass
+
+if __name__ == "__main__":
+    HTTPServer(("127.0.0.1", 3000), App).serve_forever()
+EOF
+  chmod 755 /opt/lab14/faux-app.py
+  cat > /etc/systemd/system/lab14-app.service <<'EOF'
+[Unit]
+Description=Lab12 — fausse application locale (127.0.0.1:3000)
+After=network.target
+
+[Service]
+Type=exec
+ExecStart=/opt/lab14/faux-app.py
+DynamicUser=yes
+Restart=on-failure
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+activer() {
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable --now "$1" >/dev/null 2>&1 || \
+      echo "  note : $1 n'a pas démarré (systemctl status $1)"
+  else
+    echo "  note : systemd absent, $1 non démarré"
+  fi
+}
+
+case "$HOTE" in
+  lab-db)
+    faux_pg; activer lab14-db.service
+    echo "   faux service base de données actif sur 5432"
+    ;;
+  lab-adm)
+    faux_app; activer lab14-app.service
+    mkdir -p "$LAB_HOME/.ssh/cm" "$LAB_HOME/.ssh/config.d"
+    chown -R "$LAB_USER":"$LAB_USER" "$LAB_HOME/.ssh"
+    chmod 700 "$LAB_HOME/.ssh/cm" "$LAB_HOME/.ssh/config.d"
+    echo "   fausse application active sur 127.0.0.1:3000"
+    echo "   ~/.ssh/cm et ~/.ssh/config.d prêts"
+    ;;
+  lab-web)
+    # compte de service de L14.5 : pas de mot de passe, home dédié
+    if ! getent passwd sauvegarde >/dev/null; then
+      useradd -m -U -d /home/sauvegarde -s /bin/bash \
+              -c "Depot de sauvegardes (lab14)" sauvegarde
+      passwd -q -l sauvegarde >/dev/null 2>&1 || true
+    fi
+    install -d -o sauvegarde -g sauvegarde -m 700 /home/sauvegarde/.ssh
+    install -d -o sauvegarde -g sauvegarde -m 750 /srv/sauvegarde
+    mkdir -p /srv/app
+    printf 'donnees applicatives du lab14\n' > /srv/app/donnees.txt
+    : > /srv/sauvegarde/.conserver
+    echo "   compte sauvegarde + /srv/sauvegarde + /srv/app prêts"
+    ;;
+  lab-ops)
+    echo "   rôle CI : rien de particulier à installer"
+    ;;
+  *)
+    echo "  note : nom d'hôte '$HOTE' hors du lab, seule la partie"
+    echo "         commune a été appliquée"
+    ;;
+esac
+
 chown -R "$LAB_USER":"$LAB_USER" "$BASE"
 
-# jeu de données à sauvegarder
-for i in 01 02 03 04 05; do
-  f="$DATA/factures-2026-$i.csv"
-  [ -f "$f" ] || {
-    printf 'id;client;montant\n' > "$f"
-    for n in $(seq 1 40); do
-      printf 'F%s%04d;client-%02d;%d.00\n' "$i" "$n" \
-        $(( n % 12 + 1 )) $(( n * 37 + 100 )) >> "$f"
-    done
-  }
-done
-chown -R factura:factura "$DATA"
-
-# compteur de BF14.3 (valeur initiale cohérente)
-[ -f "$ETAT/compteur.txt" ] || echo 1000 > "$ETAT/compteur.txt"
-chown factura:factura "$ETAT/compteur.txt"
-
 # ---------------------------------------------------------------------
-# 2. /usr/local/bin/factura-inventaire
-#    Volontairement hors du PATH de cron (/usr/bin:/bin) mais DANS le
-#    secure_path de sudo : c'est le ressort de BF14.1 et de E14.5.
+# 5. Rappel des points d'entrée
 # ---------------------------------------------------------------------
-cat > /usr/local/bin/factura-inventaire <<'EOF'
-#!/usr/bin/env bash
-# factura-inventaire — compte les enregistrements du jeu de données.
-set -euo pipefail
-DIR="${1:-/srv/factura/data}"
-n=0
-for f in "$DIR"/*.csv; do
-  [ -f "$f" ] || continue
-  n=$(( n + $(( $(wc -l < "$f") - 1 )) ))
-done
-printf '%d\n' "$n"
-EOF
-chmod 0755 /usr/local/bin/factura-inventaire
-
-# ---------------------------------------------------------------------
-# 3. Les scripts factura
-# ---------------------------------------------------------------------
-
-# 3.1 collecte : dépend de factura-inventaire trouvé via le PATH
-cat > "$BIN/factura-collecte.sh" <<'EOF'
-#!/usr/bin/env bash
-# factura-collecte.sh — collecte périodique (workbook, module 14).
-# Appelle factura-inventaire SANS chemin absolu : c'est volontaire,
-# le module s'appuie dessus.
-set -euo pipefail
-LOG="${FACTURA_LOG:-/var/log/factura/collecte.log}"
-DATA="${FACTURA_DATA:-/srv/factura/data}"
-n=$(factura-inventaire "$DATA")
-printf '%s collecte ok : %s enregistrements\n' \
-  "$(date '+%F %T')" "$n" >> "$LOG"
-EOF
-
-# 3.2 rapport : produit un rapport, écrit sur stdout ET stderr
-cat > "$BIN/factura-rapport.sh" <<'EOF'
-#!/usr/bin/env bash
-# factura-rapport.sh — rapport quotidien (workbook, module 14).
-set -euo pipefail
-DATA="${FACTURA_DATA:-/srv/factura/data}"
-OUT="${FACTURA_RAPPORTS:-/srv/factura/etat}"
-mkdir -p "$OUT"
-cible="$OUT/rapport-$(date '+%Y%m%d-%H%M%S').txt"
-printf 'rapport factura du %s\n' "$(date '+%F %T')" > "$cible"
-total=0
-for f in "$DATA"/*.csv; do
-  [ -f "$f" ] || continue
-  l=$(( $(wc -l < "$f") - 1 ))
-  printf '  %-28s %4d lignes\n' "$(basename "$f")" "$l" >> "$cible"
-  total=$(( total + l ))
-done
-printf '  TOTAL %d\n' "$total" >> "$cible"
-echo "rapport écrit : $cible"
-[ "$total" -gt 0 ] || echo "ATTENTION : jeu de données vide" >&2
-EOF
-
-# 3.3 lent : occupe le verrou pour les démos de concurrence
-cat > "$BIN/factura-lent.sh" <<'EOF'
-#!/usr/bin/env bash
-# factura-lent.sh [secondes] — simule un traitement long.
-set -euo pipefail
-d="${1:-30}"
-echo "$(date '+%T') début (pid $$, ${d}s)"
-sleep "$d"
-echo "$(date '+%T') fin (pid $$)"
-EOF
-
-# 3.4 compteur : lecture-modification-écriture non atomique.
-#     C'est le cœur de BF14.3 : deux exécutions qui se chevauchent
-#     perdent un incrément ou écrivent un fichier incohérent.
-cat > "$BIN/factura-compteur.sh" <<'EOF'
-#!/usr/bin/env bash
-# factura-compteur.sh — cumule les factures traitées.
-# Lecture, calcul, écriture : trois étapes distinctes, non atomiques.
-set -euo pipefail
-F="${FACTURA_COMPTEUR:-/srv/factura/etat/compteur.txt}"
-LENT="${FACTURA_LENTEUR:-4}"
-valeur=$(cat "$F")            # 1. lecture
-lot=$(factura-inventaire "${FACTURA_DATA:-/srv/factura/data}")
-sleep "$LENT"                 # 2. le traitement réel prendrait ce temps
-: > "$F"                      # 3. troncature
-sleep 0.2
-printf '%d' $(( valeur + lot )) >> "$F"   # 4. écriture
-echo "$(date '+%T') compteur : $valeur -> $(( valeur + lot ))"
-EOF
-
-chmod 0755 "$BIN"/*.sh
-chown root:root "$BIN"/*.sh
-
-# ---------------------------------------------------------------------
-# 4. ~/lab14/bin/rapport.sh — le script de E14.5
-# ---------------------------------------------------------------------
-cat > "$BASE/bin/rapport.sh" <<'EOF'
-#!/usr/bin/env bash
-# rapport.sh — marche en session, échoue en cron. À toi de dire pourquoi.
-set -euo pipefail
-echo "PATH vu par le script : $PATH"
-n=$(factura-inventaire)
-echo "$n enregistrements"
-EOF
-chmod 0755 "$BASE/bin/rapport.sh"
-chown "$LAB_USER":"$LAB_USER" "$BASE/bin/rapport.sh"
-
-# /opt/factura/bin dans le PATH de l'apprenant (session interactive)
-PROF="$LAB_HOME/.profile"
-if [ -f "$PROF" ] && ! grep -q 'opt/factura/bin' "$PROF"; then
-  printf '\n# workbook module 14\nPATH="$PATH:/opt/factura/bin"\n' >> "$PROF"
-fi
-
-# ---------------------------------------------------------------------
-# 5. Certificat TLS qui expire dans 12 jours (L14.4)
-# ---------------------------------------------------------------------
-CRT="$ETC/tls/portail.crt"
-KEY="$ETC/tls/portail.key"
-regen=1
-if [ -f "$CRT" ] && openssl x509 -in "$CRT" -noout -checkend 0 >/dev/null 2>&1
-then
-  regen=0
-fi
-if [ "$regen" -eq 1 ]; then
-  if command -v openssl >/dev/null 2>&1; then
-    openssl req -x509 -newkey rsa:2048 -nodes -days 12 \
-      -keyout "$KEY" -out "$CRT" \
-      -subj "/CN=portail.lab.local/O=Factura/C=FR" >/dev/null 2>&1
-    chmod 0640 "$KEY"; chmod 0644 "$CRT"
-    chown root:factura "$KEY" "$CRT"
-  else
-    echo "  ! openssl absent : certificat non généré (L14.4 inapplicable)" >&2
-  fi
-fi
-
-# ---------------------------------------------------------------------
-# 6. Unité de montage référencée par L14.3 (créée, NI activée NI démarrée)
-# ---------------------------------------------------------------------
-mkdir -p /var/lib/factura-store
-cat > /etc/systemd/system/srv-factura.mount <<'EOF'
-# Unité de montage de démonstration (workbook module 14).
-# Volontairement NI activée NI démarrée : elle sert uniquement de cible
-# à une dépendance d'ordre (After=) dans L14.3.
-[Unit]
-Description=Stockage factura (demonstration workbook)
-
-[Mount]
-What=/var/lib/factura-store
-Where=/srv/factura
-Type=none
-Options=bind
-
-[Install]
-WantedBy=local-fs.target
-EOF
-
-# ---------------------------------------------------------------------
-# 7. Le fatras hérité que L14.1 doit inventorier
-# ---------------------------------------------------------------------
-
-# 7.1 crontab de l'utilisateur factura : sortie jetée dans /dev/null
-if command -v crontab >/dev/null 2>&1; then
-  TMPC=$(mktemp)
-  cat > "$TMPC" <<'EOF'
-# héritage prestataire — ne pas modifier sans ticket (sic)
-MAILTO=""
-13 4 * * * /opt/factura/bin/factura-rapport.sh > /dev/null 2>&1
-EOF
-  crontab -u factura "$TMPC"
-  rm -f "$TMPC"
-else
-  echo "  ! crontab absent : installe le paquet cron (voir §14.1)" >&2
-fi
-
-# 7.2 /etc/cron.d bien formé (avec champ utilisateur et PATH)
-cat > /etc/cron.d/factura-veille-legacy <<'EOF'
-# Tâche héritée : purge des rapports de plus de 30 jours.
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-MAILTO=""
-40 5 * * * factura find /srv/factura/etat -name 'rapport-*' -mtime +30 -delete
-EOF
-chmod 0644 /etc/cron.d/factura-veille-legacy
-
-# 7.3 /etc/cron.d mal formé : pas de champ utilisateur (anomalie L14.1)
-cat > /etc/cron.d/factura-archives <<'EOF'
-# ANOMALIE VOLONTAIRE (workbook) : il manque le champ utilisateur.
-*/30 * * * * /opt/factura/bin/factura-lent.sh 2
-EOF
-chmod 0644 /etc/cron.d/factura-archives
-
-# 7.4 deux scripts dans cron.daily, dont un que run-parts ignorera
-cat > /etc/cron.daily/factura-purge <<'EOF'
-#!/bin/sh
-# purge quotidienne des journaux de plus de 14 jours
-find /var/log/factura -name '*.log.*' -mtime +14 -delete 2>/dev/null
-exit 0
-EOF
-cat > /etc/cron.daily/factura-stats.sh <<'EOF'
-#!/bin/sh
-# ANOMALIE VOLONTAIRE (workbook) : le nom contient un point, donc
-# run-parts ne l'exécutera jamais.
-/opt/factura/bin/factura-rapport.sh >> /var/log/factura/stats.log 2>&1
-EOF
-chmod 0755 /etc/cron.daily/factura-purge /etc/cron.daily/factura-stats.sh
-
-# 7.5 un timer activé dont le service n'existe pas (anomalie L14.1)
-cat > /etc/systemd/system/factura-orphelin.timer <<'EOF'
-# ANOMALIE VOLONTAIRE (workbook) : ce timer déclenche une unité
-# factura-orphelin.service qui n'existe pas.
-[Unit]
-Description=Timer herite sans service associe
-
-[Timer]
-OnCalendar=*-*-* 05:20:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-
-if [ -d /run/systemd/system ]; then
-  systemctl daemon-reload
-  systemctl enable factura-orphelin.timer >/dev/null 2>&1 || true
-  systemctl start  factura-orphelin.timer >/dev/null 2>&1 || true
-fi
-
-# journaux de départ
-touch "$LOGD/collecte.log" "$LOGD/alertes.log"
-chown factura:factura "$LOGD"/*.log
-chmod 0664 "$LOGD"/*.log
-
 cat <<EOF
 
-Terrain prêt.
+Prêt sur $HOTE. Points d'entrée :
+  $BASE/bin/etat.sh        script local à exécuter à distance (E14.12)
+  $BASE/conf/              tes fichiers de configuration livrables
+  $BASE/rapports/          tes rapports
+  ~/.ssh/id_rsa            vieille clé RSA 2048 à faire tourner (L14.1)
+  $SAUV/etc-ssh            sauvegarde de /etc/ssh avant le module
 
-  application  : /opt/factura/bin/ (collecte, rapport, lent, compteur)
-  utilitaire   : /usr/local/bin/factura-inventaire
-  données      : $DATA   sauvegardes : $BACK
-  état         : $ETAT   témoin : $STATE
-  certificat   : $CRT (expire dans ~12 jours)
-  bac à sable  : $BASE
-
-Héritage à inventorier en L14.1 : crontab de « factura »,
-/etc/cron.d/factura-*, /etc/cron.daily/factura-*, factura-orphelin.timer.
-
-Rappel : ce script ne crée aucune planification propre, c'est ton travail.
+Rappel : garde une session ouverte avant toute modification de sshd_config.
 EOF

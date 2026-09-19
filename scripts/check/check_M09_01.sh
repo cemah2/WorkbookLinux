@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M09_01.sh — vérifie le lab L9.1 (inventaire du parc)
+# check_M09_01.sh — vérifie le lab L9.1 (chaîne de démarrage, console série)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,86 +7,68 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L9.1 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab09/rapports/inventaire.md"
-SCR="$HOMEDIR/lab09/bin/inventaire.sh"
+HOME_DIR="$(getent passwd "${SUDO_USER:-${USER:-$(id -un)}}" | cut -d: -f6)"
+RAP="$HOME_DIR/lab09/rapports"
 
-# --- 1. le script -------------------------------------------------------
-if [ -f "$SCR" ]; then
-  ok "$SCR existe"
-  [ -x "$SCR" ] && ok "script exécutable" \
-    || ko "script non exécutable (chmod +x)"
-  head -1 "$SCR" | grep -q '^#!' \
-    && ok "shebang présent" || ko "pas de shebang en première ligne"
-  SORTIE=$(bash "$SCR" 2>/dev/null)
-  if [ -n "$SORTIE" ]; then
-    ok "le script produit une sortie"
+# --- 1. ligne de commande du noyau en cours -----------------------------
+if grep -q 'console=ttyS0' /proc/cmdline; then
+  ok "le noyau en cours a console=ttyS0 (/proc/cmdline)"
+else
+  ko "console=ttyS0 absent de /proc/cmdline : GRUB régénéré ? redémarré ?"
+fi
+
+# --- 2. configuration GRUB effective ----------------------------------
+if [ -f /boot/grub/grub.cfg ]; then
+  grep -E '^\s+linux' /boot/grub/grub.cfg | grep -q 'ttyS0' \
+    && ok "grub.cfg (Ubuntu) porte ttyS0 sur les lignes linux" \
+    || ko "les lignes linux de /boot/grub/grub.cfg n'ont pas ttyS0 \
+(update-grub ?)"
+  grep -qE '^serial ' /boot/grub/grub.cfg \
+    && ok "GRUB lui-même est sur le port série (commande serial)" \
+    || ko "pas de GRUB_TERMINAL/GRUB_SERIAL_COMMAND appliqués \
+(grep '^serial' grub.cfg)"
+  T=$(grep -oE '^set timeout=[0-9-]+' /boot/grub/grub.cfg | tail -1 \
+      | cut -d= -f2)
+  if [ -n "${T:-}" ] && { [ "$T" -ge 5 ] || [ "$T" -lt 0 ]; }; then
+    ok "menu GRUB visible ($T s)"
   else
-    ko "le script n'écrit rien sur stdout"
+    ko "timeout GRUB = ${T:-?} : il faut GRUB_TIMEOUT>=5 et \
+GRUB_TIMEOUT_STYLE=menu"
   fi
+  grep -hE '^GRUB_TIMEOUT_STYLE' /etc/default/grub /etc/default/grub.d/*.cfg \
+    2>/dev/null | tail -1 | grep -q menu \
+    && ok "GRUB_TIMEOUT_STYLE=menu" \
+    || ko "GRUB_TIMEOUT_STYLE n'est pas 'menu' (fichier de rang le plus élevé)"
+elif command -v grubby >/dev/null 2>&1; then
+  grubby --info=ALL 2>/dev/null | grep -q 'ttyS0' \
+    && ok "grubby (Rocky) : ttyS0 sur les entrées" \
+    || ko "grubby --info=ALL ne montre pas ttyS0"
 else
-  ko "$SCR introuvable"
-  SORTIE=""
+  ko "ni /boot/grub/grub.cfg ni grubby : où est GRUB ?"
 fi
 
-# --- 2. le rapport ------------------------------------------------------
-if [ -s "$RAP" ]; then
-  ok "$RAP existe"
-else
-  ko "rapport absent : ~/lab09/rapports/inventaire.md"
+# --- 3. getty série actif ----------------------------------------------
+if [ -d /run/systemd/system ]; then
+  [ "$(systemctl is-active serial-getty@ttyS0.service 2>/dev/null)" = active ] \
+    && ok "serial-getty@ttyS0.service est actif" \
+    || ko "serial-getty@ttyS0 inactif : le port série existe-t-il \
+(qm set 9001 --serial0 socket) et la VM a-t-elle redémarré ?"
 fi
 
-TITRES="Paquets installés|Installés manuellement|États anormaux"
-TITRES="$TITRES|Hors dépôt officiel|Conffiles modifiés"
-MANQUE=""
-for t in "Paquets installés" "Installés manuellement" "États anormaux" \
-         "Hors dépôt officiel" "Conffiles modifiés"; do
-  grep -qF "$t" "$RAP" 2>/dev/null || MANQUE="$MANQUE « $t »"
-done
-if [ -z "$MANQUE" ]; then
-  ok "les cinq sections imposées sont présentes"
+# --- 4. livrables --------------------------------------------------------
+[ -s "$RAP/boot.svg" ] && grep -q '<svg' "$RAP/boot.svg" \
+  && ok "boot.svg produit par systemd-analyze plot" \
+  || ko "$RAP/boot.svg absent ou vide"
+if [ -f "$RAP/demarrage.md" ] && [ "$(wc -l < "$RAP/demarrage.md")" -ge 15 ]
+then
+  ok "rapport demarrage.md présent ($(wc -l < "$RAP/demarrage.md") lignes)"
+  grep -qiE 'init=/bin/bash' "$RAP/demarrage.md" \
+    && ok "le rapport décrit la procédure mot de passe perdu" \
+    || ko "le rapport ne mentionne pas init=/bin/bash"
 else
-  ko "section(s) manquante(s) dans le rapport :$MANQUE"
+  ko "rapport $RAP/demarrage.md absent ou trop court (15 lignes minimum)"
 fi
-
-# --- 3. les chiffres sont-ils plausibles ? ------------------------------
-REEL=$(dpkg-query -f '${binary:Package}\n' -W 2>/dev/null | wc -l)
-if grep -qE "\b$REEL\b" "$RAP" 2>/dev/null; then
-  ok "le nombre de paquets du rapport ($REEL) correspond au système"
-else
-  ko "le rapport ne contient pas le nombre réel de paquets ($REEL) — \
-compte avec dpkg-query -W, pas avec dpkg -l dont l'en-tête fait 5 lignes"
-fi
-
-# --- 4. états anormaux --------------------------------------------------
-ANORMAUX=$(dpkg-query -f '${db:Status-Abbrev} ${binary:Package}\n' -W \
-           2>/dev/null | grep -cv '^ii ')
-if [ "$ANORMAUX" -eq 0 ]; then
-  note "aucun paquet en état anormal sur cette machine : la section \
-« États anormaux » doit le dire explicitement"
-else
-  note "$ANORMAUX paquet(s) en état anormal : ils doivent figurer nommément"
-fi
-
-# --- 5. hors dépôt officiel ---------------------------------------------
-if command -v apt-cache >/dev/null 2>&1; then
-  HORS=$(apt-mark showmanual 2>/dev/null | while read -r p; do
-    apt-cache policy "$p" 2>/dev/null \
-      | awk -v P="$p" '/^ +\*\*\*/ {v=$2} /http|file:/ {t=1}
-                       END {if (!t) print P}'
-  done | wc -l)
-  note "paquets sans dépôt d'origine détectés côté check : $HORS"
-fi
-
-# --- 6. le rapport n'est pas une copie brute de dpkg -l ------------------
-if [ -s "$RAP" ] && grep -q 'Desired=Unknown/Install/Remove/Purge/Hold' \
-     "$RAP" 2>/dev/null; then
-  ko "le rapport contient l'en-tête brut de dpkg -l : c'est un rapport, \
-pas un copier-coller de sortie"
-else
-  ok "pas de copier-coller brut de dpkg -l"
-fi
+note "l'étape 5 (rescue.target / init=/bin/bash) n'est pas testable ici"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

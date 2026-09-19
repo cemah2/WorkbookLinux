@@ -402,7 +402,7 @@ fumée post-déploiement (`curl https://factura.lab.local/version` doit renvoyer
 ::: pourquoi
 `active (running)` signifie seulement que le processus principal de l'unité
 tourne et n'a pas planté — pas qu'il fait ce qu'on attend, ni qu'il écoute où il
-faut. C'est exactement le piège du module 16 (« le service tourne mais ne répond
+faut. C'est exactement le piège du module 19 (« le service tourne mais ne répond
 pas ») transposé au couple nginx/upstream. Le bon réflexe pour un 502 est
 toujours : lire `error.log` de nginx (il nomme l'upstream et l'erreur), puis
 comparer le port réel d'écoute (`ss -tlnp`) au port ciblé par la conf. Ici
@@ -1046,7 +1046,7 @@ résolution (ce n'est pas le cas ici).
 
 **Prévention.** Mettre `/etc/hosts` sous gestion (Ansible, git) pour qu'un
 nettoyage manuel soit détecté et rétabli, ou basculer vers un vrai DNS interne
-(le module 11 fait mieux que `/etc/hosts`) avec supervision de la résolution.
+(le module 12 fait mieux que `/etc/hosts`) avec supervision de la résolution.
 
 ::: pourquoi
 `could not translate host name` est une erreur de **résolution** (`getaddrinfo`
@@ -1310,7 +1310,7 @@ mémoire qui devait coûter des nanosecondes coûte des millisecondes (disque). 
 politique d'éviction décide quoi faire quand `maxmemory` est atteint :
 `noeviction` fait **échouer les écritures** (mauvais pour un cache),
 `allkeys-lru` supprime les clés les moins récemment utilisées (comportement de
-cache attendu). Le distinguo du module 16 s'applique : du swap **utilisé** n'est
+cache attendu). Le distinguo du module 19 s'applique : du swap **utilisé** n'est
 pas un problème, du swap **en mouvement** en est un.
 :::
 
@@ -1392,8 +1392,8 @@ qu'il répond, juste un peu plus lentement que la fenêtre autorisée. La
 `start-period` existe pour ne pas compter les échecs pendant le démarrage : trop
 courte, un service lent à chauffer est tué avant d'être prêt. Un healthcheck est
 un contrat de temps : il doit refléter le comportement réel du service, pas un
-idéal. C'est le pendant conteneur de `StartLimitBurst` en systemd (module 16,
-BF16.8) : le mécanisme de redémarrage se retourne contre un service sain quand
+idéal. C'est le pendant conteneur de `StartLimitBurst` en systemd (module 19,
+BF19.8) : le mécanisme de redémarrage se retourne contre un service sain quand
 ses seuils sont trop serrés.
 :::
 
@@ -1404,7 +1404,7 @@ l'aveugle `interval` sans corriger `timeout` : le conteneur reste unhealthy,
 juste moins souvent testé. Et croire que « ça redémarre donc l'appli plante » :
 ici c'est **systemd/l'autoheal** qui tue un conteneur sain à cause du seuil, pas
 l'appli qui échoue — la distinction « qui a arrêté le service » est la même
-qu'au module 16.
+qu'au module 19.
 :::
 
 **Ce qu'il fallait écrire dans le ticket :** « factura-worker en boucle
@@ -1616,7 +1616,7 @@ création du FS). Des millions de fichiers **vides** consomment tous les inodes
 sans consommer d'espace : `df -h` reste bas, `df -i` est à 100 %, et toute
 création échoue avec `ENOSPC` (« No space left »), le même code d'erreur que
 pour un disque plein — d'où la confusion. La commande qui tranche est `df -i`.
-C'est le pendant du module 16 (« df plein, du d'accord ? fichier supprimé ?
+C'est le pendant du module 19 (« df plein, du d'accord ? fichier supprimé ?
 inodes ? ») : ici, la troisième branche. Agrandir le volume n'ajoute pas
 d'inodes à un ext4 existant ; il faudrait recréer le FS — donc ce n'est pas la
 solution.

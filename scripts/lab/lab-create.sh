@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# lab-create.sh — clone les 6 VM du laboratoire depuis les templates
+# lab-create.sh — clone les 7 VM du laboratoire depuis les templates
 # (9000 Ubuntu 24.04, 9010 Rocky 9), fixe IP / RAM / CPU / disques,
 # les démarre, puis (deuxième passe) pose le snapshot de référence.
 # À lancer en root sur le nœud Proxmox VE 8, après make-templates.sh.
 #
 # Usage :
-#   bash lab-create.sh            # clone + configure + démarre les 6 VM
-#   bash lab-create.sh snapshot   # pose snap-clean sur les 6 VM
+#   bash lab-create.sh            # clone + configure + démarre les 7 VM
+#   bash lab-create.sh snapshot   # pose snap-clean sur les 7 VM
 #                                 # (après bootstrap-lab.sh dans chaque VM)
-#   bash lab-create.sh destroy    # supprime les 6 VM (demande confirmation)
+#   bash lab-create.sh destroy    # supprime les 7 VM (demande confirmation)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,6 +76,19 @@ create_vm() {
     qm resize "$vmid" scsi0 "${disk}G"
   fi
 
+  # lab-virt : CPU réel exposé (vmx/svm) pour KVM imbriqué (module 20).
+  if [ "$vmid" -eq "$LAB_VIRT_VMID" ]; then
+    info "  cpu host (virtualisation imbriquée : nested=1 requis sur le nœud)"
+    qm set "$vmid" --cpu host >/dev/null
+    local nested
+    nested=$(cat /sys/module/kvm_intel/parameters/nested \
+             /sys/module/kvm_amd/parameters/nested 2>/dev/null | head -1)
+    case "$nested" in
+      Y|1) ;;
+      *) ko "nested=${nested:-?} sur le nœud : pas de /dev/kvm dans $name (§0.3)" ;;
+    esac
+  fi
+
   # Disques bruts supplémentaires pour LVM (lab-db uniquement).
   if [ "$vmid" -eq "$LAB_DB_VMID" ]; then
     local n=1 size
@@ -117,7 +130,7 @@ snapshot_all() {
 # ---------------------------------------------------------------------
 destroy_all() {
   local line vmid name
-  echo "Cette action SUPPRIME les 6 VM du lab (pas les templates)."
+  echo "Cette action SUPPRIME les 7 VM du lab (pas les templates)."
   read -r -p "Taper OUI pour confirmer : " rep
   [ "$rep" = "OUI" ] || die "abandon"
   for line in "${LAB_VMS[@]}"; do

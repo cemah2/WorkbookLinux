@@ -994,7 +994,238 @@ isolation impossible.
 
 ---
 
-## 09 · Paquets
+## 09 · Noyau et démarrage
+
+### Espace noyau, appels système
+
+| Commande | Effet |
+|---|---|
+| `strace -c ls /` | compte les appels système (observer) |
+| `strace -e trace=openat -o out ls` | filtre un appel, sortie à part |
+| `cat /proc/PID/syscall` | appel en cours : numéro + arguments |
+| `ausyscall 257` / `ausyscall --dump` | numéro → nom (paquet `auditd`) |
+| `cat /proc/PID/wchan` | fonction noyau où le processus dort |
+| `sudo cat /proc/PID/stack` | pile noyau (processus en `D`) |
+| `cat /sys/devices/system/clocksource/clocksource0/current_clocksource` | `kvm-clock` en VM |
+
+`printf`, `readdir`, `gettimeofday` (vDSO) ne passent pas par le noyau ;
+un `D` est **dans** un appel système, les signaux attendent son retour.
+
+### Démarrage et GRUB
+
+| Commande | Effet |
+|---|---|
+| `cat /proc/cmdline` | ligne du noyau en cours |
+| `[ -d /sys/firmware/efi ] && echo UEFI` | mode de boot |
+| `efibootmgr -v` / `findmnt /boot/efi` | entrées firmware, ESP |
+| `grep -E '^\s+linux' /boot/grub/grub.cfg` | paramètres réellement générés |
+| `grep -r CMDLINE /etc/default/grub /etc/default/grub.d/` | d'où vient un paramètre |
+| `sudo update-grub` | régénère `/boot/grub/grub.cfg` |
+| `sudo grub-reboot 'entrée'` | démarre une fois sur une autre entrée |
+| `systemd-analyze` / `blame` / `critical-chain` | temps de boot |
+| `systemd-analyze plot > boot.svg` | diagramme de Gantt |
+| `qm set 9001 --serial0 socket` / `qm terminal 9001` | console série (`Ctrl-O`) |
+
+```ini
+# /etc/default/grub.d/90-lab.cfg  (lu APRÈS /etc/default/grub)
+GRUB_TIMEOUT_STYLE=menu
+GRUB_TIMEOUT=5
+GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200"
+GRUB_TERMINAL="serial console"
+GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
+```
+
+Au menu : `e`, fin de la ligne `linux`, `Ctrl-x`. Dépannage :
+`init=/bin/bash` (shell sans mot de passe, puis `mount -o remount,rw /`,
+`passwd`, `exec /sbin/init`) ; `systemd.unit=rescue.target` (demande le
+mot de passe root, verrouillé sur Ubuntu) ; Rocky : `rd.break`,
+`chroot /sysroot`, `touch /.autorelabel`.
+
+| Paramètre | Effet |
+|---|---|
+| `quiet` / `nomodeset` | silence / pas de pilote graphique |
+| `net.ifnames=0` | `eth0` au lieu de `ens18` |
+| `mitigations=off` | +10 % CPU, Spectre ouvert : jamais en prod |
+| `crashkernel=256M` | réserve pour kdump |
+| `transparent_hugepage=never` | THP off (bases de données) |
+| `break=premount` | shell dans l'initramfs (Ubuntu) |
+
+::: rhel
+`grubby --info=ALL` · `grubby --update-kernel=ALL --args="console=ttyS0"`
+· `grubby --set-default /boot/vmlinuz-...` · entrées BLS dans
+`/boot/loader/entries/` · `grub2-mkconfig -o /boot/grub2/grub.cfg`.
+:::
+
+### Noyaux et initramfs
+
+| Commande | Effet |
+|---|---|
+| `uname -r` / `dpkg -l 'linux-image-*' \| grep ^ii` | courant / installés |
+| `ls -lh /boot ; df -h /boot` | fichiers, place |
+| `sudo apt install linux-generic-hwe-24.04` | noyau HWE |
+| `sudo apt autoremove --purge` | purge les vieux noyaux |
+| `dpkg -S /boot/vmlinuz-*` | orphelins = pas de paquet |
+| `lsinitramfs /boot/initrd.img-$(uname -r) \| grep virtio` | contenu initrd |
+| `sudo update-initramfs -u -k all` | régénère tous les initrd |
+| `unmkinitramfs initrd.img-X /tmp/ird` | extrait (`early/`, `main/`) |
+| `mokutil --sb-state` / `modinfo -F signer m` | Secure Boot, signature |
+| `kdump-config show` / `cat /sys/kernel/kexec_crash_loaded` | kdump prêt ? |
+
+Régénérer l'initrd : racine sur LVM/LUKS/RAID, pilote de stockage,
+`modprobe.d` touché, nouveau noyau. `/etc/initramfs-tools/initramfs.conf` :
+`MODULES=most` (gros, portable) ou `dep` (petit, fragile).
+
+::: rhel
+`dnf install kernel` (garde `installonly_limit=3`) · `dnf remove
+--oldinstallonly` · `kernel-core` (vmlinuz) + `kernel-modules` (pilotes) ·
+`dracut -f` · `lsinitrd` · `/etc/dracut.conf.d/` (`hostonly`).
+:::
+
+### Modules
+
+| Commande | Effet |
+|---|---|
+| `lsmod` / `modinfo -F depends m` / `modinfo -p m` | chargés, dépendances, paramètres |
+| `sudo modprobe dummy numdummies=2` / `modprobe -r dummy` | charge avec paramètre / décharge |
+| `cat /sys/module/dummy/parameters/numdummies` | valeur effective |
+| `basename $(readlink /sys/class/net/ens18/device/driver)` | pilote réel |
+| `modprobe --show-depends m` / `sudo depmod -a` | chaîne / rafraîchit `modules.dep` |
+| `sudo systemctl restart systemd-modules-load` | rejoue `modules-load.d` |
+| `dkms status` | modules tiers par noyau |
+
+```ini
+# /etc/modprobe.d/lab.conf
+options dummy numdummies=2
+blacklist joydev            # bloque l'auto-chargement (alias)
+install joydev /bin/false   # bloque aussi modprobe explicite
+# /etc/modules-load.d/lab.conf
+dummy
+```
+
+### /proc, /sys, sysctl
+
+| Commande | Effet |
+|---|---|
+| `grep -m1 -w hypervisor /proc/cpuinfo` | dans une VM ? |
+| `grep -E 'MemAvailable\|Dirty' /proc/meminfo` | mémoire, pages sales |
+| `grep virtio /proc/interrupts` | IRQ par CPU |
+| `cat /proc/PID/{status,limits,cgroup}` | état, limites, cgroup |
+| `cat /sys/block/sda/queue/scheduler` | `[mq-deadline] none kyber bfq` |
+| `echo none \| sudo tee /sys/block/sda/queue/scheduler` | volatile |
+| `cat /sys/kernel/mm/transparent_hugepage/enabled` | THP |
+| `sysctl -n vm.swappiness` / `sudo sysctl -w k=v` | lire / poser (volatile) |
+| `sudo sysctl --system` | rejoue les fichiers, dans l'ordre |
+| `journalctl -u systemd-sysctl -b` | erreurs du boot |
+| `cat /proc/sys/fs/file-nr` / `sysctl fs.nr_open` | fichiers ouverts |
+
+```ini
+# /etc/sysctl.d/60-factura.conf   (rang > 10-*, < 99-sysctl.conf)
+vm.swappiness = 10
+vm.dirty_background_ratio = 5
+vm.dirty_ratio = 10
+net.core.somaxconn = 8192
+net.ipv4.ip_local_port_range = 10240 65000
+fs.inotify.max_user_watches = 524288
+kernel.panic = 10
+kernel.kptr_restrict = 2
+net.netfilter.nf_conntrack_max = 131072   # exige nf_conntrack chargé
+```
+
+Ordre `--system` : `sysctl.d` de `/etc`, `/run`, `/usr/lib` triés par nom,
+puis `/etc/sysctl.conf` (Ubuntu : lien `99-sysctl.conf`). Le dernier gagne.
+Sans `.conf` : ignoré. Défauts Ubuntu : `swappiness` 60, `somaxconn` 4096,
+`sysrq` 176, `kptr_restrict` 1, `dmesg_restrict` 1, `pid_max` 4194304.
+
+### Périphériques et udev
+
+| Commande | Effet |
+|---|---|
+| `ls -l /dev/disk/by-id/ /dev/disk/by-path/` | noms stables |
+| `udevadm info -q property -n /dev/sdb \| grep ID_` | propriétés |
+| `udevadm info -a -n /dev/sdb` | attributs pour `ATTR{}` |
+| `sudo udevadm monitor -u -k` | événements noyau + udev |
+| `sudo udevadm test /sys/block/sdb` | règle à blanc |
+| `sudo udevadm control --reload ; udevadm trigger --action=add /dev/sdb` | applique |
+| `echo '- - -' \| sudo tee /sys/class/scsi_host/host*/scan` | disque ajouté à chaud |
+| `echo 1 \| sudo tee /sys/class/block/sdb/device/rescan` | disque agrandi |
+| `qm set 9001 --scsi1 local-lvm:1` / `qm disk resize 9001 scsi1 +1G` | côté Proxmox |
+
+```ini
+# /etc/udev/rules.d/61-lab.rules  (après 60-persistent-storage)
+SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", \
+  ENV{ID_SERIAL}=="0QEMU_QEMU_HARDDISK_drive-scsi1", \
+  SYMLINK+="disk/lab/cache", ATTR{queue/scheduler}="none"
+```
+
+Nom d'interface : Netplan `match: {macaddress: ...}` + `set-name: lan0`,
+ou `/etc/systemd/network/10-lan.link` (`[Match] MACAddress=`,
+`[Link] Name=`). Une règle `NAME=` seule casse Netplan.
+
+### Journal noyau, SysRq
+
+| Commande | Effet |
+|---|---|
+| `sudo dmesg -T --level=err,warn` / `dmesg -T -w` | erreurs, suivi |
+| `journalctl -k -b -1 -p warning` | noyau du boot précédent |
+| `cat /proc/sys/kernel/printk` | console, défaut, min, boot |
+| `echo m \| sudo tee /proc/sysrq-trigger` | état mémoire (`w` : bloqués, `c` : crash) |
+
+| Trace | Couche |
+|---|---|
+| `Out of memory: Killed process` | RAM → `oom_score_adj`, `MemoryMax` |
+| `I/O error, dev sda, sector` | disque / stockage hôte |
+| `soft lockup - CPU#1 stuck` | vCPU non ordonnancé (`st`), hôte |
+| `task X blocked for more than 120 seconds` | stockage, NFS (`D`) |
+| `Kernel panic - not syncing` | kdump puis `kernel.panic=10` |
+
+### Temps
+
+| Commande | Effet |
+|---|---|
+| `timedatectl` | heure, RTC, fuseau, synchronisé ? |
+| `sudo timedatectl set-timezone Europe/Paris` | fuseau (RTC reste UTC) |
+| `sudo hwclock --show` / `--systohc` | RTC lire / écrire |
+| `chronyc tracking` / `sources -v` / `sourcestats` | état, sources |
+| `sudo chronyc makestep` | saut immédiat |
+| `sudo chronyc clients` | clients vus (serveur) |
+
+```ini
+# serveur : /etc/chrony/conf.d/10-lab.conf
+allow 10.10.10.0/24
+local stratum 10
+# client : /etc/chrony/sources.d/10-lab-adm.sources
+server 10.10.10.10 iburst prefer
+```
+
+Ubuntu : `chrony.service`, `/etc/chrony/` ; Rocky : `chronyd.service`,
+`/etc/chrony.conf`. Slew max 8,3 % ; `makestep 1 3` = saut au démarrage
+seulement. Une VM dérive : steal, pause, snapshot, RTC de l'hôte.
+
+::: piege
+* `/etc/default/grub` édité sans `update-grub` : rien ne change.
+* `/etc/default/grub.d/*.cfg` écrase `/etc/default/grub`.
+* Menu GRUB caché (`TIMEOUT=0`) : dépannage impossible en série.
+* `rm initrd.img-$(uname -r)` « pour faire de la place » : plus de boot.
+* `blacklist` n'interdit pas `modprobe` explicite ; `install /bin/false` oui.
+* `sysctl -p fichier` marche, `--system` est la vérité ; `.conf` obligatoire.
+* `net.netfilter.*` absent tant que `nf_conntrack` n'est pas chargé.
+* Règle udev `61-` minimum pour utiliser `ID_SERIAL` ; `NAME=` bloc ignoré.
+* `date -s` répare TLS mais pas la cause : `chronyc makestep` + service.
+:::
+
+::: astuce
+* `grep -r CMDLINE /etc/default/grub*` avant tout diagnostic GRUB.
+* `qm terminal` + `console=ttyS0` avant d'en avoir besoin.
+* `lsinitramfs ... | grep -E 'virtio|lvm|modprobe.d'` après tout changement.
+* `sudo sysctl --system 2>&1 | grep -E '^\*|cannot'` = ordre + erreurs.
+* `udevadm test` avant `udevadm trigger`, toujours ciblé.
+* `journalctl -u systemd-sysctl -b` et `chronyc tracking` dans tout script
+  de conformité.
+:::
+
+---
+
+## 10 · Paquets
 
 ### apt (clavier) et apt-get (scripts)
 
@@ -1119,7 +1350,7 @@ Priorités : `100` installé / backports, `500` dépôt, `990` cible `-t`,
 
 ---
 
-## 10 · Stockage et LVM
+## 11 · Stockage et LVM
 
 ### Identifier
 
@@ -1174,7 +1405,7 @@ Types GPT : `8300` Linux, `8e00` LVM, `8200` swap, `8309` LUKS, `fd00` RAID.
 | `fuser -km /srv/data` | tue les coupables |
 | `systemctl daemon-reload` | après édition de fstab |
 | `systemctl list-units -t mount` | montages vus par systemd |
-| `mount -t nfs 10.10.10.12:/export /mnt` | NFS |
+| `mount -t nfs4 -o hard 10.10.10.14:/srv/nfs/partage /mnt` | NFS |
 | `mount -o loop image.iso /mnt` | image |
 | `mount -t tmpfs -o size=512m tmpfs /mnt/ram` | tmpfs |
 
@@ -1183,7 +1414,8 @@ Types GPT : `8300` Linux, `8e00` LVM, `8200` swap, `8309` LUKS, `fd00` RAID.
 UUID=8f3c-...  /srv/factura/db  ext4  defaults,noatime,nofail  0 2
 /dev/vg_data/lv_sauv  /srv/sauv  xfs   defaults,nofail        0 0
 /swapfile             none       swap  sw                      0 0
-10.10.10.12:/export   /mnt/nfs   nfs   _netdev,nofail          0 0
+10.10.10.14:/srv/nfs/p /mnt/p nfs4 _netdev,nofail,hard,x-systemd.automount 0 0
+/dev/vg_iscsi/lv_depots /srv/depots ext4 defaults,_netdev,nofail 0 2
 ```
 
 Options : `nodev,nosuid,noexec` durcissement, `nofail` ne bloque pas le
@@ -1219,17 +1451,105 @@ boot, `x-systemd.automount` à la demande, `_netdev` attend le réseau.
 Réduire ext4 : démonter, `e2fsck -f`, `resize2fs` à la taille cible, puis
 `lvreduce -L` à la même taille (`lvreduce -r` enchaîne). XFS ne se réduit pas.
 
+### XFS
+
+| Commande | Effet |
+|---|---|
+| `mkfs.xfs -L pgdata /dev/sdc1` | formate |
+| `xfs_info /point` | paramètres (FS monté) |
+| `xfs_growfs /point` | agrandit à chaud (jamais de réduction) |
+| `xfs_repair -n /dev/sdc1` / `xfs_repair /dev/sdc1` | diagnostic / réparation, démonté |
+| `xfs_repair -L /dev/sdc1` | vide le journal, dernier recours |
+| `mount -o prjquota /dev/vg/lv /point` | active les quotas de projet |
+| `/etc/projects` (`10:/point/app1`), `/etc/projid` (`app1:10`) | déclare le projet |
+| `xfs_quota -x -c 'project -s app1' /point` | marque le répertoire |
+| `xfs_quota -x -c 'limit -p bhard=200m app1' /point` | limite dure |
+| `xfs_quota -x -c 'report -p -h' /point` | rapport |
+| `mount -o ro,nouuid /dev/vg/snap /mnt` | snapshot LVM d'un XFS |
+
+ext4 : mûr, réductible, petits fichiers. XFS : gros fichiers, parallélisme,
+quotas de projet, pas de réduction (les inodes encodent leur position).
+
+### NFS serveur
+
+| Commande | Effet |
+|---|---|
+| `apt install nfs-kernel-server` / `nfs-server.service` | serveur (Rocky : `nfs-utils`) |
+| `/etc/exports` : `/srv/nfs/p 10.10.10.0/24(rw,sync,no_subtree_check,root_squash)` | export |
+| `exportfs -ra` / `exportfs -v` | applique / options effectives |
+| `showmount -e 10.10.10.14` | exports vus du client |
+| `cat /proc/fs/nfsd/versions` | versions servies |
+| `nfsstat -m` | version et options négociées (client) |
+| `cat /var/lib/nfs/etab` | table des exports actifs |
+| `ufw allow from 10.10.10.0/24 to any port 2049 proto tcp` | pare-feu |
+
+Options : `sync` (acquitte après écriture), `no_subtree_check`,
+`root_squash` (root → `nobody`, défaut), `no_root_squash` (confiance),
+`anonuid=`/`anongid=`. NFSv4 : port 2049 seul, état, idmap (`/etc/idmapd.conf`,
+`Domain=`) ; v3 : `rpcbind` 111 + `mountd`. `Stale file handle` : inode
+recréé côté serveur → `umount -l` puis `mount`. Serveur parti + `hard` :
+processus en `D`, `umount -f -l` ; `soft` renvoie `EIO` (lecture seule
+uniquement).
+
+### iSCSI
+
+| Commande | Effet |
+|---|---|
+| `apt install targetcli-fb` / `rtslib-fb-targetctl.service` | cible (Rocky : `targetcli`, `target.service`) |
+| `targetcli` → `/backstores/fileio create d0 /var/lib/iscsi/d0.img 2G` | backstore |
+| `/iscsi create iqn.2026-09.local.lab:ops.d0` | cible (IQN) |
+| `cd /iscsi/iqn...:ops.d0/tpg1` puis `luns create /backstores/fileio/d0` | LUN |
+| `acls create iqn.2026-09.local.lab:db` | ACL par IQN |
+| `acls/iqn...:db set auth userid=u password=p` | CHAP |
+| `set attribute authentication=1` | CHAP exigé |
+| `portals delete 0.0.0.0 3260` / `portals create 10.10.10.14 3260` | portail |
+| `saveconfig` | → `/etc/rtslib-fb-target/saveconfig.json` |
+| `apt install open-iscsi` / `/etc/iscsi/initiatorname.iscsi` | initiateur |
+| `iscsiadm -m discovery -t sendtargets -p 10.10.10.14` | découverte |
+| `iscsiadm -m node -T iqn -p ip --op update -n node.session.auth.username -v u` | CHAP (+ `authmethod`, `password`) |
+| `iscsiadm -m node -T iqn -p ip --login` / `--logout` | session |
+| `iscsiadm -m session -P 3` / `lsblk -o NAME,VENDOR` | disque `LIO-ORG` |
+| `iscsiadm -m node -T iqn -p ip --op update -n node.startup -v automatic` | relogin au boot |
+| `systemctl enable iscsid open-iscsi` | services |
+| `/dev/disk/by-path/ip-...-iscsi-iqn...-lun-0` | nom stable |
+
+Toujours LVM ou `by-path` sur le disque iSCSI, jamais `/dev/sdX` ;
+`_netdev,nofail` dans `fstab`. Multipath : `multipath-tools`,
+`multipath -ll`, un seul `/dev/mapper/mpatha` pour deux chemins.
+
+### E/S bloc et ordonnanceurs
+
+| Commande | Effet |
+|---|---|
+| `cat /sys/block/sdb/queue/scheduler` | `[none] mq-deadline bfq` |
+| `echo mq-deadline > /sys/block/sdb/queue/scheduler` | bascule à chaud |
+| `cat /sys/block/sdb/queue/rotational` | 0 SSD / 1 rotatif |
+| règle udev `ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="none"` | persistance |
+| `udevadm test /sys/block/sdb` | simule la règle |
+| `fio --rw=randread --bs=4k --iodepth=32 --direct=1 --time_based` | IOPS, `clat`, percentiles |
+| `blktrace -d /dev/sdb -w 5 -o - \| blkparse -i -` | trace bloc |
+
+`none` : SSD/NVMe/VM ; `mq-deadline` : rotatif ; `bfq` : poste de travail.
+Loi de Little : `iodepth ≈ IOPS × latence`. `r_await` (`iostat -x`) ≈ `clat`.
+
 ### RAID, swap, chiffrement, performance
 
 | Commande | Effet |
 |---|---|
 | `mdadm --create /dev/md0 -l 1 -n 2 /dev/sdb1 /dev/sdc1` | RAID 1 |
-| `cat /proc/mdstat` | `[UU]` sain, `[U_]` dégradé |
-| `mdadm --detail /dev/md0` | détail |
+| `mdadm --create /dev/md1 -l 5 -n 3 /dev/sd{b,c,d}1` | RAID 5 (n-1 utiles) |
+| `cat /proc/mdstat` | `[UU]` sain, `[U_]` dégradé, `(F)` faulty |
+| `mdadm --detail /dev/md0` / `--examine /dev/sdb1` | tableau / membre |
 | `mdadm --detail --scan >> /etc/mdadm/mdadm.conf` | persistance |
-| `update-initramfs -u` / `dracut -f` | assemblage au boot |
+| `update-initramfs -u` / `dracut -f` | assemblage au boot (sinon `md127`) |
 | `mdadm /dev/md0 --fail /dev/sdb1 --remove /dev/sdb1` | retire un disque |
-| `mdadm /dev/md0 --add /dev/sdd1` | remplace |
+| `mdadm --zero-superblock /dev/sdb1` | disque « neuf » |
+| `mdadm /dev/md0 --add /dev/sdd1` / `--re-add` | remplace / réintègre |
+| `cat /sys/block/md0/md/sync_action` | `idle`, `resync`, `recovery` |
+| `sysctl dev.raid.speed_limit_min=50000` | accélère la reconstruction |
+| `MAILADDR root` + `systemctl enable --now mdmonitor` | alerte |
+| `mdadm --monitor --scan --oneshot --test` | teste l'alerte |
+| `pvcreate /dev/md0` | LVM au-dessus du RAID |
 | `fallocate -l 2G /swapfile && chmod 600 /swapfile` | fichier de swap |
 | `mkswap /swapfile && swapon /swapfile` | active |
 | `swapon --show` / `swapoff -a` | état / désactive |
@@ -1250,6 +1570,12 @@ Réduire ext4 : démonter, `e2fsck -f`, `resize2fs` à la taille cible, puis
 * Snapshot LVM plein = invalide, l'origine continue sans lui.
 * `e2fsck` sur un FS monté en écriture corrompt.
 * `%util` 100 % sur un NVMe ne dit rien : regarde `await`.
+* `mdadm --create` pour « réparer » un tableau : c'est `--add` / `--assemble`.
+* RAID dégradé sans `mdmonitor` = personne ne le sait avant le second disque.
+* `soft` sur un NFS en écriture = corruption silencieuse ; `hard` + automount.
+* `umount -l` seul sur un NFS mort ne libère pas les processus en `D` : `-f -l`.
+* iSCSI : `/dev/sdX` dans `fstab` ou `pvcreate` par nom : passe par LVM/`by-path`.
+* `saveconfig` oublié dans `targetcli` : la cible disparaît au redémarrage.
 :::
 
 ::: astuce
@@ -1260,7 +1586,7 @@ Réduire ext4 : démonter, `e2fsck -f`, `resize2fs` à la taille cible, puis
 
 ---
 
-## 11 · Réseau
+## 12 · Réseau
 
 ### iproute2
 
@@ -1407,7 +1733,313 @@ Flags : `[S]` SYN, `[S.]` SYN-ACK, `[.]` ACK, `[P.]` données, `[F.]` FIN,
 
 ---
 
-## 12 · SSH
+## 13 · Réseau Linux avancé
+
+### Chemin du paquet et compteurs
+
+```text
+NIC -> pilote -> [prerouting] -> routage -> [input] -> socket
+                                  `-> [forward] -> [postrouting] -> qdisc -> NIC
+processus -> socket -> routage -> [output] -> [postrouting] -> qdisc -> NIC
+```
+
+| Commande | Effet |
+|---|---|
+| `ip -s -s link show ens18` | erreurs, drops, missed, overrun |
+| `ethtool -S ens18` / `-k` / `-g` / `-l` | stats pilote / offloads / anneaux / files |
+| `ethtool -K ens18 gro off` | désactive un offload (test) |
+| `nstat -az \| grep -E 'Retrans\|ListenDrops'` | compteurs TCP/IP |
+| `awk '/^Tcp:/' /proc/net/snmp` | brut |
+| `conntrack -S` | stats conntrack (drop, insert_failed) |
+| `tc qdisc show dev ens18` | file de sortie |
+| `tc qdisc add dev ens18 root netem delay 100ms 20ms loss 5%` | réseau dégradé |
+| `tc qdisc add dev ens18 root tbf rate 10mbit burst 32kbit latency 400ms` | limite débit |
+| `tc -s qdisc show dev ens18` / `tc qdisc del dev ens18 root` | compteurs / retire |
+| `ss -K dst 10.10.10.99` | tue des connexions |
+| `mtr --tcp -P 443 -rwc 10 x` | traceroute TCP |
+| `dropwatch -l kas` | où le noyau jette (notion) |
+
+### Namespaces, veth, bridge
+
+| Commande | Effet |
+|---|---|
+| `ip netns add c1` / `ip netns list` / `ip netns del c1` | crée (`/run/netns/c1`) / liste / détruit |
+| `ip -n c1 link` / `ip -n c1 addr` / `ip -n c1 route` | dans le netns |
+| `ip netns exec c1 bash` / `nsenter --net=/run/netns/c1 cmd` | entrer |
+| `nsenter -t <pid> -n cmd` | par PID (conteneur Docker) |
+| `ip netns identify <pid>` / `ip netns pids c1` / `lsns -t net` | qui est où |
+| `ip -n c1 link set lo up` | **obligatoire** dans un netns neuf |
+| `ip link add v1 type veth peer name v2` | paire veth |
+| `ip link add veth-c1 type veth peer name eth0 netns c1` | bout direct dans c1 |
+| `ip link set v2 netns c1` | déplace une interface |
+| `ip link add br-lab type bridge` / `ip link set br-lab up` | bridge |
+| `ip link set veth-c1 master br-lab up` | port du bridge |
+| `bridge link show` / `bridge fdb show br br-lab` | ports / table MAC |
+| `bridge fdb show dev vxlan0` | pairs VXLAN |
+| `ip link set br-lab type bridge stp_state 1` | STP (off par défaut) |
+| `sysctl net.bridge.bridge-nf-call-iptables` | trafic commuté via netfilter (`br_netfilter`) |
+| `ip netns exec c1 tc qdisc add dev eth0 root netem delay 30ms` | netem dans un netns |
+
+Un netns isole : interfaces, routes, `ip rule`, voisinage, nftables,
+conntrack, sockets, `/proc/sys/net`. Pas les processus ni les fichiers.
+
+### Routage avancé
+
+| Commande | Effet |
+|---|---|
+| `ip route show table all` / `table local` / `table main` | toutes / locale / principale |
+| `ip rule` | 0 local, 32766 main, 32767 default |
+| `ip route get 10.0.0.5 from 10.10.12.2 iif eth2` | simule un paquet relayé |
+| `ip route get 9.9.9.9 mark 0x5` | simule un paquet marqué |
+| `ip route add X via GW dev ens18 onlink` | GW hors du préfixe |
+| `ip route add X dev ens18 src 10.10.20.10 metric 50` | source préférée, métrique |
+| `ip route add default nexthop via A weight 1 nexthop via B weight 1` | ECMP |
+| `echo "200 prod" > /etc/iproute2/rt_tables.d/lab.conf` | table nommée |
+| `ip route add 10.10.12.0/24 dev eth2 src 10.10.12.2 table prod` | **route connectée** dans la table |
+| `ip route add default via 10.10.12.1 dev eth2 table prod` | passerelle de la table |
+| `ip rule add from 10.10.12.2 table prod priority 100` | par source |
+| `ip rule add fwmark 0x2 table prod priority 110` | par marque |
+| `ip route show table prod` / `ip route flush table prod` | voir / vider |
+| `ip rule del from 10.10.12.2 table prod` | retire la règle |
+| `sysctl net.ipv4.conf.all.rp_filter` | 1 strict, 2 loose (multi-liens) |
+
+```yaml
+# Netplan : policy routing
+      routes:
+        - {to: default, via: 10.10.11.1, table: 200}
+        - {to: 10.10.11.0/24, scope: link, table: 200}
+      routing-policy:
+        - {from: 10.10.11.11, table: 200}
+```
+
+### VLAN, tunnels, bonding
+
+| Commande | Effet |
+|---|---|
+| `ip link add link ens18 name ens18.10 type vlan id 10` | sous-interface 802.1Q |
+| `ip -d link show ens18.10` | détails (id, protocole) |
+| `tcpdump -i ens18 -nn -e vlan 10` | tag visible (`-e`) |
+| `qm set 9001 --net0 virtio,bridge=vmbr1,tag=10` | port access côté Proxmox |
+| `ip link add vxlan0 type vxlan id 42 local A remote B dstport 4789 dev ens18` | VXLAN unicast |
+| `ip link add vxlan1 type vxlan id 43 group 239.1.1.1 dstport 4789 dev ens18` | VXLAN multicast |
+| `ip link set vxlan0 mtu 1450 up` | MTU = 1500 − 50 |
+| `bridge fdb append 00:00:00:00:00:00 dev vxlan0 dst C` | pair supplémentaire |
+| `ip tunnel add gre1 mode gre local A remote B ttl 255` | GRE (MTU 1476) |
+| `ip tunnel add ipip1 mode ipip local A remote B` | IPIP (MTU 1480) |
+| `wg genkey \| tee priv \| wg pubkey > pub` | clés WireGuard |
+| `wg-quick up wg0` / `systemctl enable --now wg-quick@wg0` | monte (`/etc/wireguard/wg0.conf`, 0600) |
+| `wg show` | pairs, handshake, compteurs ; MTU 1420 |
+| `ip link add bond0 type bond mode active-backup miimon 100 primary ens19` | bond |
+| `ip link set ens19 down; ip link set ens19 master bond0` | esclave |
+| `cat /proc/net/bonding/bond0` | esclave actif, Link Failure Count |
+| `cat /sys/class/net/bond0/bonding/active_slave` | actif |
+| `qm set 9003 --net1 "$(qm config 9003 \| awk '/^net1:/{print $2}'),link_down=1"` | coupe une NIC |
+
+```yaml
+# Netplan
+  vlans:
+    ens18.10: {id: 10, link: ens18, addresses: [10.10.20.10/24]}
+  tunnels:
+    vxlan0: {mode: vxlan, id: 42, link: ens18, local: 10.10.10.11,
+             remote: 10.10.10.12, port: 4789, mtu: 1450,
+             addresses: [192.168.42.11/24]}
+  bonds:
+    bond0:
+      interfaces: [ens19, ens20]
+      addresses: [172.31.0.12/24]
+      parameters: {mode: active-backup, primary: ens19,
+                   mii-monitor-interval: 100}
+```
+
+```ini
+# /etc/wireguard/wg0.conf
+[Interface]
+Address = 10.99.0.1/24
+ListenPort = 51820
+PrivateKey = <priv>
+[Peer]
+PublicKey = <pub du pair>
+AllowedIPs = 10.99.0.2/32
+Endpoint = 10.10.10.14:51820
+PersistentKeepalive = 25
+```
+
+Modes bond : `active-backup` (1, sans switch), `802.3ad` (4, LACP requis),
+`balance-xor` (2), `balance-tlb`/`alb` (5/6). Surcoûts : VXLAN 50, GRE 24,
+IPIP 20, WireGuard 60-80. flannel = VXLAN `flannel.1`, Calico = IPIP/VXLAN,
+Cilium = VXLAN/Geneve/WireGuard.
+
+### nftables
+
+| Commande | Effet |
+|---|---|
+| `nft list ruleset` / `nft -a list ruleset` | tout / avec handles |
+| `nft list table inet filter` / `nft list chain inet filter input` | une table / une chaîne |
+| `nft add table inet filter` | table |
+| `nft add chain inet filter input '{ type filter hook input priority 0; policy drop; }'` | chaîne de base |
+| `nft add chain inet filter web` | chaîne régulière (`jump web`) |
+| `nft add rule inet filter input ct state established,related accept` | **la** règle stateful |
+| `nft add rule inet filter input ct state invalid drop` | hors machine à états |
+| `nft add rule inet filter input tcp dport { 22, 80 } counter accept` | set anonyme + compteur |
+| `nft add rule inet filter input log prefix '"in-drop: "' counter drop` | journalise (`journalctl -k`) |
+| `nft insert rule inet filter input iif lo accept` | en tête |
+| `nft add rule inet filter input position <h> ...` | après le handle |
+| `nft replace rule inet filter input handle <h> ...` | remplace |
+| `nft delete rule inet filter input handle <h>` | supprime |
+| `nft add set inet filter admin '{ type ipv4_addr; flags interval; }'` | set nommé |
+| `nft add element inet filter admin { 10.10.10.0/24 }` | élément |
+| `nft add map ip nat publish '{ type inet_service : ipv4_addr . inet_service; }'` | map |
+| `... dnat to tcp dport map @publish` | DNAT piloté par map |
+| `nft -c -f f.nft` / `nft -f f.nft` | vérifie / charge (transaction) |
+| `nft flush table inet filter` / `nft delete table inet filter` / `nft flush ruleset` | vide / supprime / tout |
+| `nft add rule ... tcp dport 8080 meta nftrace set 1` + `nft monitor trace` | suit un paquet |
+| `iptables-translate -A INPUT ...` / `iptables-restore-translate -f rules.v4` | traduit |
+| `iptables -S` (= `iptables-nft`) | écrit dans le même noyau |
+
+Hooks : `prerouting`, `input`, `forward`, `output`, `postrouting`.
+Priorités : raw −300, conntrack −200, mangle −150, dstnat −100, filter 0,
+srcnat 100. Types : `filter`, `route` (output, re-routage après marque),
+`nat`. Verdicts : `accept`, `drop`, `reject with tcp reset`, `jump`, `goto`,
+`return`, `continue`. Fichier rechargeable : `table ip nat {}` puis
+`flush table ip nat` puis la définition.
+
+### conntrack et NAT
+
+| Commande | Effet |
+|---|---|
+| `conntrack -L` / `-L -p tcp --dport 8000` | table des flux |
+| `conntrack -E` | en direct |
+| `conntrack -S` / `conntrack -C` | stats / nombre |
+| `conntrack -D -p udp -s 10.10.10.10` | supprime un sous-ensemble |
+| `conntrack -F` | **vide tout** (coupe le NAT) |
+| `sysctl net.netfilter.nf_conntrack_max` / `_count` | taille / occupation |
+| `sysctl net.netfilter.nf_conntrack_tcp_timeout_established` | 432000 (5 j) |
+| `sysctl net.netfilter.nf_conntrack_udp_timeout` | 30 |
+| `dmesg \| grep 'table full'` | table pleine |
+| `nft add rule ip nat postrouting ip saddr 172.20.0.0/24 oifname "ens18" masquerade` | SNAT dynamique |
+| `... snat to 10.10.10.10` | SNAT fixe |
+| `nft add rule ip nat prerouting iifname "ens18" tcp dport 8080 dnat to 172.20.0.11:8000` | DNAT |
+| `nft add chain ip nat output '{ type nat hook output priority -100; }'` | DNAT pour le trafic local |
+| `... ip saddr 172.20.0.0/24 ip daddr 172.20.0.11 tcp dport 8000 ct status dnat masquerade` | hairpin |
+| `... tcp dport 8081 redirect to :8000` | redirection locale |
+| `ct state` : `new`, `established`, `related`, `invalid`, `untracked` | états |
+| `ct status dnat` / `ct mark set 0x2` / `meta mark set ct mark` | flux DNATé / marques |
+| `iptables -I DOCKER-USER -s 10.0.0.0/8 -j DROP` | seule chaîne Docker à toi |
+
+NAT décidé au 1er paquet, mémorisé dans conntrack. DNAT avant routage
+(`prerouting`/`output`), SNAT après (`postrouting`). `prerouting` ne voit
+pas le trafic local.
+
+### DNS serveur
+
+| Commande | Effet |
+|---|---|
+| `dig @10.10.10.14 x` → `aa` | autoritaire |
+| `dig @10.10.10.53 x` → `ra`, `ad` | récursif validant |
+| `dig +norecurse @srv x` | sonde le cache sans le remplir |
+| `dig +trace x` | descente depuis la racine |
+| `dig +dnssec x` / `dig +cd x` | signatures / sans validation |
+| `dig @10.10.10.14 lab.local AXFR` | transfert de zone (TCP) |
+| `dig +short SOA lab.local @ns1` / `@ns2` | comparer les serials |
+| `named-checkconf -z` / `named-checkzone lab.local db.lab.local` | valider |
+| `rndc reload [zone]` / `rndc reconfig` / `rndc status` | recharge / relit conf / état |
+| `rndc retransfer lab.local` / `rndc refresh lab.local` | force AXFR / vérifie SOA |
+| `rndc querylog on` | journalise les requêtes |
+| `unbound-checkconf` / `unbound-control reload` | valider / recharger |
+| `unbound-control stats_noreset \| grep cache` | hits / misses |
+| `unbound-control flush_zone x` / `flush x` / `flush_negative` | purges |
+| `unbound-control list_stubs` / `list_forwards` / `dump_infra` | rôles, serveurs contactés |
+| `resolvectl dns ens18 10.10.10.53` / `resolvectl domain ens18 lab.local` | client (volatile) |
+
+```text
+# BIND primaire (/etc/bind/named.conf.local)
+zone "lab.local" { type primary; file "/etc/bind/zones/db.lab.local";
+  allow-transfer { 10.10.10.10; }; also-notify { 10.10.10.10; }; };
+# secondaire
+zone "lab.local" { type secondary; primaries { 10.10.10.14; };
+  file "db.lab.local"; };
+# options : listen-on { 10.10.10.14; }; listen-on-v6 { none; }; recursion no;
+```
+
+```text
+$TTL 3600
+$ORIGIN lab.local.
+@   IN SOA ns1.lab.local. hostmaster.lab.local. (
+        2026091901 3600 900 1209600 300 )   ; serial refresh retry expire neg
+    IN NS  ns1.lab.local.
+    IN MX  10 mail.lab.local.
+    IN TXT "v=spf1 mx -all"
+ns1 IN A   10.10.10.14
+www IN CNAME lab-web.lab.local.
+_http._tcp IN SRV 0 5 80 lab-web.lab.local.
+; inverse : $ORIGIN 10.10.10.in-addr.arpa.   11 IN PTR lab-web.lab.local.
+```
+
+```text
+# Unbound (/etc/unbound/unbound.conf.d/lab.conf)
+server:
+    interface: 10.10.10.53
+    access-control: 10.10.10.0/24 allow
+    domain-insecure: "lab.local"
+    local-zone: "10.in-addr.arpa." nodefault
+stub-zone:
+    name: "lab.local"
+    stub-addr: 10.10.10.14
+# forwarder DoT : forward-zone: name: "."
+#   forward-addr: 9.9.9.9@853#dns.quad9.net  forward-tls-upstream: yes
+```
+
+Autoritaire (`aa`, `REFUSED` hors zone) / récursif (racine → délégations,
+cache, DNSSEC) / forwarder (relaie) / stub (`127.0.0.53`). CoreDNS =
+autoritaire `cluster.local` + forwarder. `.local` = mDNS : déclarer
+`search: [lab.local]`.
+
+### IPv6
+
+| Commande | Effet |
+|---|---|
+| `ip -6 addr` / `ip -6 route` / `ip -6 neigh` | adresses / routes / ND (remplace ARP) |
+| `ip -6 addr add fd00:10:10:10::10/64 dev ens18` | ULA à chaud |
+| `ping -6 fd00:10:10:10::11` / `ping fe80::1%ens18` | v6 / link-local avec zone |
+| `curl -6 "http://[fd00:10:10:10::11]:8000/"` | littéral entre crochets |
+| `ss -6 -tlnp` | sockets v6 |
+| `sysctl net.ipv6.conf.ens18.accept_ra` | 0 sur un serveur/routeur |
+
+États ND : `REACHABLE`, `STALE` (normal), `DELAY`, `PROBE`, `FAILED`.
+SLAAC = préfixe du RA + auto ; DHCPv6 = attribution centrale, la passerelle
+vient toujours du RA.
+
+::: piege
+* `lo` down dans un netns neuf : « Network is unreachable » sur 127.0.0.1.
+* `ip_forward=0` : le routeur jette tout après `prerouting`, sans ICMP ni
+  compteur netfilter.
+* Table dédiée sans la route connectée : le trafic local part à la
+  passerelle (Q13.4).
+* `forward` sans `established,related` : le SYN passe, le SYN-ACK est jeté ;
+  `tcpdump` le voit quand même (capture avant netfilter).
+* DNAT en `prerouting` invisible depuis la machine (→ chaîne `output`) et
+  cassé depuis le LAN de la cible (→ hairpin `masquerade`).
+* `conntrack -F` sur un routeur NAT coupe toutes les sessions.
+* `nft add rule` ajoute **en fin** : après un `drop`, jamais atteint. `insert`.
+* MTU 1500 sur un VXLAN : petits paquets OK, gros paquets fragmentés/jetés.
+* Serial SOA non incrémenté : secondaire jamais à jour, aucune erreur.
+* `listen-on { any; }` de BIND et `interface: 0.0.0.0` d'Unbound entrent en
+  conflit avec `127.0.0.53` : adresses explicites.
+* `tag=10` côté Proxmox **et** `ens18.10` dans la VM = double tag.
+:::
+
+::: astuce
+* `ip route get X from S iif I` — la seule preuve d'un policy routing.
+* `nft -c -f` avant `nft -f` ; règle finale `log ... counter drop` explicite.
+* `nft monitor trace` + `meta nftrace set 1` — le `strace` de netfilter.
+* `dig +short SOA zone @ns1` vs `@ns2` — première commande sur un secondaire.
+* `unbound-control list_forwards` — récursif ou forwarder ? en une ligne.
+* `ping -M do -s 1422` sur un VXLAN — test de mise en service d'un tunnel.
+:::
+
+---
+
+## 14 · SSH
 
 ### Client et clés
 
@@ -1516,7 +2148,216 @@ Clé restreinte dans `authorized_keys` :
 
 ---
 
-## 13 · Journalisation et supervision
+## 15 · nginx, PostgreSQL, Redis
+
+### HTTP et nginx
+
+| Commande | Effet |
+|---|---|
+| `curl -sI URL` / `curl -sv URL -o /dev/null` | en-têtes seuls / dialogue complet |
+| `curl -s -o /dev/null -w '%{http_code} %{time_total}\n' URL` | code et temps |
+| `curl -H 'Host: app.lab.local' http://10.10.10.11/` | tester un vhost sans DNS |
+| `curl --resolve app.lab.local:443:10.10.10.11 https://app.lab.local/` | idem en HTTPS (SNI) |
+| `curl -sIL --max-redirs 5 URL` | suivre les redirections (boucle ?) |
+| `curl -N URL` / `curl --compressed -sI URL` | flux sans tampon / test gzip |
+| `sudo nginx -t` / `sudo nginx -T \| less` | valider / conf effective, includes résolus |
+| `sudo systemctl reload nginx` | sans coupure (conf invalide = ancienne gardée) |
+| `ln -s ../sites-available/X sites-enabled/` ; `rm sites-enabled/default` | activer / désactiver (Debian) |
+| `htpasswd -cB /etc/nginx/htpasswd user` | auth basic (bcrypt) ; `-c` écrase |
+| `tail -f /var/log/nginx/error.log` | **la** source des 502/504/403/404 |
+
+Priorité des `location` : `=` exact > préfixe le plus long si `^~` >
+**regex `~`/`~*` dans l'ordre du fichier** > préfixe le plus long.
+`root` ajoute l'URI complète ; `alias` remplace la partie de la location.
+`proxy_pass http://b;` garde l'URI ; `proxy_pass http://b/;` remplace le
+préfixe par `/`.
+
+```nginx
+upstream api { server 127.0.0.1:8001; server 127.0.0.1:8002; keepalive 16; }
+limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+log_format factura '$remote_addr - $remote_user [$time_local] "$request" '
+  '$status $body_bytes_sent rt=$request_time urt=$upstream_response_time '
+  'ua=$upstream_addr us=$upstream_status';
+server {
+  listen 80; server_name app.lab.local; return 301 https://$host$request_uri;
+}
+server {
+  listen 443 ssl http2; server_name app.lab.local;
+  ssl_certificate /etc/nginx/ssl/app.crt;
+  ssl_certificate_key /etc/nginx/ssl/app.key;
+  ssl_protocols TLSv1.2 TLSv1.3; ssl_session_cache shared:SSL:10m;
+  add_header Strict-Transport-Security "max-age=31536000" always;
+  root /srv/www/app; index index.html; client_max_body_size 2m;
+  access_log /var/log/nginx/app.access.log factura;
+  location / { try_files $uri $uri/ /index.html; }
+  location ^~ /api/ {
+    proxy_pass http://api; proxy_http_version 1.1;
+    proxy_set_header Connection ""; proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 3s; proxy_read_timeout 30s;
+  }
+  location = /api/login { limit_req zone=login burst=5 nodelay;
+    limit_req_status 429; proxy_pass http://api; }
+  location = /api/metrics { allow 10.10.10.14; deny all;
+    proxy_pass http://api; }
+}
+```
+
+| Code | `error.log` | Cause usuelle |
+|---|---|---|
+| 502 | `connect() failed (111: Connection refused)` / `(13: Permission denied)` | backend mort, mauvais port / socket, SELinux |
+| 504 | `upstream timed out (110)` | backend lent, `proxy_read_timeout` |
+| 413 | `client intended to send too large body` | `client_max_body_size` |
+| 403 | `directory index ... is forbidden` / `open() ... (13)` | pas d'`index`, droits `www-data` |
+| 404 | `open() "/chemin/tenté" failed (2)` | `root`/`alias`, regex qui capture |
+| 301 en boucle | (rien) | `return 301` dans le server 443, LB sans `X-Forwarded-Proto` |
+
+### PostgreSQL 16
+
+| Commande | Effet |
+|---|---|
+| `pg_lsclusters` ; `systemctl restart postgresql@16-main` | clusters ; l'unité réelle |
+| `sudo -u postgres psql` ; `psql -h 10.10.10.12 -U app -d base` | peer local / TCP |
+| `\l+ \du \dt+ \d+ table \di \x \timing \conninfo` | catalogue, affichage, chrono |
+| `psql -Atc "SELECT 1"` ; `psql -f f.sql -v ON_ERROR_STOP=1` | scripts |
+| `~/.pgpass` (`hôte:port:base:rôle:mdp`, **0600**) ; `PGPASSWORD=` | sans prompt (env visible) |
+| `SHOW x;` ; `SELECT pg_reload_conf();` ; `ALTER SYSTEM SET x = y;` | reload ; `postgresql.auto.conf` |
+| `SELECT name, setting, context, pending_restart FROM pg_settings` | `postmaster` = restart |
+| `SELECT * FROM pg_hba_file_rules;` | règles chargées + erreurs |
+| `pg_dump -Fc -d base -f base.dump` ; `pg_dumpall --globals-only` | logique ; rôles |
+| `pg_restore -l base.dump` ; `pg_restore --no-owner -j 2 -d cible base.dump` | contenu ; restaurer |
+| `pg_basebackup -D dir -Ft -z -Xs -P -c fast` | physique |
+| `SELECT pg_switch_wal();` ; `pg_stat_archiver` | forcer / suivre l'archivage |
+| `pg_upgradecluster 16 main` ; `pg_dropcluster 16 main` | montée de version (Ubuntu) |
+
+Fichiers (Ubuntu) : `/etc/postgresql/16/main/{postgresql.conf,conf.d/,pg_hba.conf}`,
+`PGDATA=/var/lib/postgresql/16/main`, journal
+`/var/log/postgresql/postgresql-16-main.log`, socket
+`/run/postgresql/.s.PGSQL.5432`. Rocky : `dnf module enable postgresql:16`,
+`postgresql-setup --initdb`, `PGDATA=/var/lib/pgsql/data` (conf dedans),
+`postgresql.service`.
+
+```ini
+# conf.d/10-site.conf (VM 2 Go)          contexte
+listen_addresses = 'localhost,10.10.10.12'   # restart
+max_connections = 100                        # restart
+shared_buffers = 512MB                       # restart (25 % RAM)
+work_mem = 8MB                               # par tri, par requête
+effective_cache_size = 1536MB                # indice planificateur
+shared_preload_libraries = 'pg_stat_statements'   # restart
+log_min_duration_statement = 500             # ms
+log_line_prefix = '%m [%p] %u@%d %a '
+log_lock_waits = on
+timezone = 'Europe/Paris'
+password_encryption = scram-sha-256
+idle_in_transaction_session_timeout = '5min'
+```
+
+```text
+# pg_hba.conf : première ligne qui correspond, et une seule
+local  all           postgres                       peer
+local  all           all                            peer
+host   all           all           127.0.0.1/32     scram-sha-256
+host   factura       factura_app   10.10.10.11/32   scram-sha-256
+```
+
+```sql
+-- qui tourne, qui bloque, qui coûte
+SELECT pid, usename, state, wait_event_type, now()-query_start AS age,
+       left(query,60) FROM pg_stat_activity WHERE state<>'idle'
+ ORDER BY age DESC;
+SELECT pid, pg_blocking_pids(pid), state, left(query,50) FROM pg_stat_activity
+ WHERE cardinality(pg_blocking_pids(pid))>0;
+SELECT pg_cancel_backend(pid);  SELECT pg_terminate_backend(pid);
+SELECT calls, round(total_exec_time) ms, left(query,60) FROM pg_stat_statements
+ ORDER BY total_exec_time DESC LIMIT 5;
+SELECT relname, seq_scan, idx_scan, n_dead_tup, last_autovacuum
+  FROM pg_stat_user_tables ORDER BY n_dead_tup DESC;
+SELECT pg_size_pretty(pg_database_size('factura'));
+SELECT pg_size_pretty(pg_total_relation_size('invoices'));
+EXPLAIN (ANALYZE, BUFFERS) SELECT ...;   -- Seq Scan + Rows Removed = index
+CREATE INDEX CONCURRENTLY ON invoices (customer_id);
+VACUUM (VERBOSE, ANALYZE) invoices;      -- FULL = verrou exclusif
+```
+
+PITR : `restore_command = 'cp /srv/pg-archive/wal/%f %p'`,
+`recovery_target_time = '...'`, `recovery_target_action = 'promote'`,
+`touch $PGDATA/recovery.signal`, démarrer.
+
+### Redis 7
+
+| Commande | Effet |
+|---|---|
+| `redis-cli -h 10.10.10.12 --user app --pass 'x' PING` | `REDISCLI_AUTH=` évite `ps` |
+| `INFO memory` / `stats` / `clients` / `persistence` / `keyspace` | sections utiles |
+| `CONFIG GET maxmemory*` ; `CONFIG SET ...` ; `CONFIG REWRITE` | à chaud, puis persister |
+| `redis-cli --scan --pattern 'sess:*'` ; `DBSIZE` | jamais `KEYS *` |
+| `--stat` ; `--latency` ; `--bigkeys` ; `SLOWLOG GET 10` ; `CLIENT LIST` | observer |
+| `MONITOR` | quelques secondes maximum |
+| `BGSAVE` ; `LASTSAVE` ; `cp /var/lib/redis/dump.rdb ...` | sauvegarde (rename atomique) |
+| `ACL LIST` ; `ACL SETUSER app >nouveau <ancien` | rotation sans coupure |
+| `SET k v EX 60` `TTL` `INCR` ; `HSET`/`HGETALL` ; `LPUSH`/`BRPOP`/`LLEN` | string, hash, file |
+
+```text
+# redis.conf
+bind 127.0.0.1 10.10.10.12
+protected-mode yes
+user default off
+user app on >mdp ~sess:* ~app:* &* +@all -@dangerous
+maxmemory 128mb
+maxmemory-policy volatile-lru   # noeviction (file), allkeys-lru (cache pur)
+appendonly yes
+appendfsync everysec
+```
+
+`mem_fragmentation_ratio` : > 1,5 fragmentation, **< 1 = swap** (panne).
+`OOM command not allowed` = `maxmemory` + `noeviction`. `MISCONF` = `BGSAVE`
+en échec, écritures refusées.
+
+### Transversal
+
+`systemctl cat nginx postgresql@16-main redis-server` : `www-data`,
+`postgres`, `redis`. Socket PostgreSQL `0777` protégée par `pg_hba` (`peer`) ;
+socket Redis `0700`/groupe `redis`. App locale : `After=postgresql.service
+redis-server.service` + `Wants=` ; app distante : `After=network-online.target`
+et reconnexion applicative.
+
+::: piege
+* Regex `~* \.(json|js|css)$` « pour le cache » : capture `/api/x.json`.
+  Écrire `location ^~ /api/`.
+* Un `add_header` (ou `proxy_set_header`) dans une location **annule** ceux
+  du `server` : HSTS disparaît sur `/api/`.
+* `systemctl restart nginx` sans `nginx -t` : site coupé si la conf est
+  invalide ; `reload` garde l'ancienne.
+* `listen_addresses`, `shared_buffers`, `max_connections` : restart, pas
+  reload ; `pending_restart` le dit.
+* `pg_hba` : première ligne gagnante, pas la plus précise ; `reject` en
+  haut bloque tout.
+* Secret `md5` en base + méthode `scram-sha-256` : `password authentication
+  failed` avec le bon mot de passe (`DETAIL` côté serveur).
+* `pg_wal` plein : **jamais** `rm` ; chercher `archive_command` en échec ou
+  slot inactif.
+* `.pgpass` en `0644` : ignoré ; en cron, `fe_sendauth: no password
+  supplied` et un dump de 0 octet si `> f 2>/dev/null`.
+* `KEYS *` en prod gèle l'instance ; `allkeys-lru` avec une file évince
+  les travaux ; `CONFIG SET` sans `CONFIG REWRITE` disparaît au restart.
+:::
+
+::: astuce
+* `curl http://127.0.0.1:8001/api/health` direct, puis via nginx : si le
+  direct répond, nginx est coupable.
+* `nginx -T | grep -n location` — la liste réelle des locations.
+* `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state='idle'
+  AND state_change < now()-interval '10 min';` — libère les slots.
+* `sudo -u postgres psql` passe toujours (socket + `peer` + slots réservés).
+* `redis-cli --user admin INFO stats | grep evicted_keys` — le cache est-il
+  trop petit ?
+:::
+
+---
+
+## 16 · Journalisation et supervision
 
 ### journalctl
 
@@ -1644,7 +2485,7 @@ sysstat`.
 
 ---
 
-## 14 · Cron et timers
+## 17 · Cron et timers
 
 ### crontab
 
@@ -1751,7 +2592,7 @@ intervalle. `AccuracySec=1s` si l'heure exacte compte (défaut 1 min).
 
 ---
 
-## 15 · Sécurité
+## 18 · Sécurité
 
 ### ufw (Ubuntu)
 
@@ -1912,7 +2753,7 @@ fs.protected_symlinks = 1
 
 ---
 
-## 16 · Dépannage et performance
+## 19 · Dépannage et performance
 
 ### Les 60 premières secondes
 
@@ -2022,7 +2863,187 @@ top -b -n1 | head -20   # vue d'ensemble
 
 ---
 
-## 17 · Git
+## 20 · Virtualisation KVM / libvirt
+
+### L'empilement et l'hôte
+
+Proxmox (`qm`) ou libvirt (`virsh`) → `qemu-system-x86_64` (1 processus par
+VM, périphériques) → `-accel kvm` → module `kvm_intel`/`kvm_amd`
+(`/dev/kvm`) → VT-x/AMD-V. Sans KVM : TCG, 10 à 50 fois plus lent.
+
+| Commande | Effet |
+|---|---|
+| `ls -l /dev/kvm ; kvm-ok` | KVM utilisable ? |
+| `lscpu \| grep -iE 'virtualization\|hypervisor'` | `VT-x` = imbrication possible |
+| `lsmod \| grep '^kvm'` | modules chargés |
+| `cat /sys/module/kvm_intel/parameters/nested` | `Y` (AMD : `kvm_amd` → `1`) |
+| `echo "options kvm-intel nested=1" > /etc/modprobe.d/kvm-intel.conf` | activer (reboot) |
+| `qm set 9007 --cpu host` | CPU réel exposé à la VM (Proxmox) |
+| `virsh version ; virsh nodeinfo` | libvirt 10.0 / QEMU 8.2 sur 24.04 |
+| `virsh capabilities \| grep "type='kvm'"` | libvirt voit KVM |
+| `virsh domcapabilities --virttype kvm` | modes CPU, modèles utilisables |
+| `export LIBVIRT_DEFAULT_URI=qemu:///system` | sinon `qemu:///session` vide |
+| `adduser mathieu libvirt` | accès à `/run/libvirt/libvirt-sock` |
+
+Rocky : `dnf install qemu-kvm libvirt virt-install guestfs-tools`,
+`journalctl -u virtqemud`, `/usr/libexec/qemu-kvm`, SELinux `svirt_t`.
+
+### virsh
+
+| Commande | Effet |
+|---|---|
+| `virsh list --all` / `--name` / `--managed-save` | inventaire |
+| `virsh start\|shutdown\|reboot\|destroy\|autostart vm` | cycle de vie |
+| `virsh shutdown vm --mode agent` | arrêt via l'agent (ACPI ignoré) |
+| `virsh dumpxml vm [--inactive]` / `virsh edit vm` | XML actif / persistant |
+| `virt-xml vm --edit target=vda --disk path=/x.qcow2` | modifier sans éditeur |
+| `virt-xml vm --add-device --rng /dev/urandom --update` | hot-plug + persistant |
+| `virsh dominfo\|domstate --reason\|domstats\|domblklist\|domiflist vm` | état |
+| `virsh domifaddr vm [--source agent\|arp]` | IP (bail libvirt sinon agent) |
+| `virsh console vm` (`Ctrl+]`) | série : `<serial>` + `console=ttyS0` |
+| `virsh setmem vm 512M --live --config` | ballon, ≤ `<memory>` |
+| `virsh setvcpus vm 2 --live` | ≤ `<vcpu current='1'>4</vcpu>` |
+| `virsh attach-disk vm /p.qcow2 vdb --driver qemu --subdriver qcow2 --targetbus virtio --persistent` | disque à chaud |
+| `virsh attach-interface vm network isole --model virtio --persistent` | NIC à chaud |
+| `virsh blockresize vm vda 30G` | puis `growpart` + `resize2fs` |
+| `virsh managedsave vm` / `managedsave-remove` | RAM sur disque, `shut off (saved)` |
+| `virsh qemu-agent-command vm '{"execute":"guest-ping"}'` | agent |
+| `virsh domfsinfo\|domhostname\|guestinfo\|domfsfreeze\|domfsthaw vm` | via agent |
+| `virsh set-user-password vm mathieu 'x'` | mot de passe console |
+| `virsh event --all --loop` | événements |
+| `virsh undefine vm --remove-all-storage` | supprime aussi les volumes (ISO !) |
+
+### Images (`qemu-img`)
+
+| Commande | Effet |
+|---|---|
+| `qemu-img create -f qcow2 vm.qcow2 20G` | thin |
+| `qemu-img create -f qcow2 -F qcow2 -b base.qcow2 vm.qcow2 20G` | overlay |
+| `qemu-img info -U --backing-chain vm.qcow2` | chaîne (`-U` si VM allumée) |
+| `qemu-img convert -p -U -O qcow2 in out` | aplatit, autoportant |
+| `qemu-img resize vm.qcow2 +10G` | jamais réduire |
+| `qemu-img rebase -u -F qcow2 -b /new/base.qcow2 vm.qcow2` | pointeur seul |
+| `qemu-img snapshot -l -U vm.qcow2` | snapshots internes |
+| `qemu-img measure -O qcow2 -f raw x.raw` | taille prévue |
+
+raw = perf, rien d'autre ; qcow2 = thin, snapshots, backing, compression.
+Cache : `none` (O_DIRECT, migration, Proxmox), `writeback` (défaut QEMU),
+`unsafe` (jetable). `discard='unmap'` + `fstrim` = espace rendu à l'hôte.
+
+### virtio et XML
+
+| Périphérique | XML |
+|---|---|
+| virtio-blk | `<target dev='vda' bus='virtio'/>` |
+| virtio-scsi | `<controller type='scsi' model='virtio-scsi'/>` + `bus='scsi'` (sda, TRIM) |
+| virtio-net | `<model type='virtio'/>` |
+| balloon / rng | `<memballoon model='virtio'/>` / `<rng model='virtio'>` |
+| agent | `<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/>` |
+| CPU | `<cpu mode='host-passthrough'/>` (perf) ; `host-model` (migrable) |
+| type | `<domain type='kvm'>` (jamais `qemu` = TCG) |
+
+### Créer
+
+```bash
+cloud-localds seed.iso user-data meta-data [-N network-config]
+genisoimage -output seed.iso -volid cidata -joliet -rock user-data meta-data
+virsh vol-create-as default vm.qcow2 20G --format qcow2 \
+  --backing-vol ubuntu-24.04-base.qcow2 --backing-vol-format qcow2
+virsh vol-create-as default vm-seed.iso "$(stat -c %s seed.iso)" --format raw
+virsh vol-upload --pool default vm-seed.iso seed.iso
+virt-install --name vm --memory 1024 --vcpus 1 --cpu host-passthrough \
+  --osinfo ubuntu24.04 --import \
+  --disk vol=default/vm.qcow2,bus=virtio,discard=unmap \
+  --disk vol=default/vm-seed.iso,device=cdrom \
+  --network network=default,model=virtio --graphics none --noautoconsole
+virt-clone --original vm --name vm2 --auto-clone      # copie aplatie
+sudo virt-sysprep -d vm2 --hostname vm2 --operations defaults,-ssh-userdir
+```
+
+### Réseau et stockage
+
+| Commande | Effet |
+|---|---|
+| `virsh net-list --all ; net-dumpxml default ; net-dhcp-leases default` | NAT `virbr0` + dnsmasq |
+| `virsh net-define x.xml ; net-start ; net-autostart` | réseau |
+| `virsh net-update default add ip-dhcp-host "<host mac='..' ip='..'/>" --live --config` | réservation |
+| `--network bridge=br0` / `<forward mode='bridge'/><bridge name='br0'/>` | VM sur le LAN |
+| pas de `<forward>` | isolé (VM ↔ VM ↔ hôte) |
+| `iptables -L LIBVIRT_FWO -nv ; -t nat -L LIBVIRT_PRT -nv` | règles libvirt |
+| `virsh pool-define-as p dir --target /srv/vm ; pool-build ; pool-start ; pool-autostart` | pool |
+| `virsh pool-refresh p ; vol-list p --details ; vol-info --pool p v` | volumes |
+
+```yaml
+# /etc/netplan/60-br0.yaml (+ eth0 sans adresse, cloud-init net désactivé)
+network:
+  version: 2
+  bridges:
+    br0:
+      interfaces: [eth0]
+      addresses: [10.10.10.16/24]
+      routes: [{to: default, via: 10.10.10.1}]
+      nameservers: {addresses: [10.10.10.1], search: [lab.local]}
+      parameters: {stp: false, forward-delay: 0}
+```
+
+### Snapshots, sauvegarde, migration
+
+```bash
+virsh snapshot-create-as vm s1                     # interne, RAM incluse
+virsh snapshot-list vm ; snapshot-revert vm s1 ; snapshot-delete vm s1
+I=/var/lib/libvirt/images
+virsh snapshot-create-as vm sauv --disk-only --atomic --quiesce \
+  --no-metadata --diskspec vda,snapshot=external,file=$I/vm.sauv \
+  --diskspec sda,snapshot=no
+qemu-img convert -U -O qcow2 $I/vm.qcow2 /backup/vm-$(date +%F).qcow2
+virsh blockcommit vm vda --active --pivot --verbose && rm $I/vm.sauv
+virsh migrate --live --persistent --undefinesource vm \
+  qemu+ssh://10.10.10.17/system [--copy-storage-all]
+```
+
+Proxmox : `qm snapshot 9007 s1` (LVM-thin/ZFS/qcow2), `vzdump 9007 --mode
+snapshot`, `qmrestore`, `qm migrate 9007 pve2 --online --with-local-disks`.
+
+### Exploitation
+
+| Commande | Effet |
+|---|---|
+| `sudo tail /var/log/libvirt/qemu/vm.log` | ligne QEMU + erreur |
+| `journalctl -u libvirtd` ; `journalctl -k \| grep DENIED` | démon ; AppArmor |
+| `ps -o user,pid,args -C qemu-system-x86_64 \| grep -o -- '-accel [a-z]*'` | kvm ou tcg ? |
+| `cat /proc/PID/cgroup` → `machine.slice/machine-qemu\x2d1\x2dvm.scope` | cgroup |
+| `machinectl list ; systemd-cgls -u machine.slice` | VM vues par systemd |
+| `virsh cpu-stats vm ; domstats vm --cpu-total --block ; virt-top -b -n 1` | perf |
+| `top` dans l'invité, colonne `st` | steal = hôte saturé |
+| `aa-status \| grep libvirt` ; `/etc/apparmor.d/libvirt/libvirt-<uuid>` | sVirt |
+| `qm agent 9007 ping ; qm guest exec 9007 -- uptime` | agent côté Proxmox |
+| `pct create 9200 local:vztmpl/ubuntu-24.04-standard_...tar.zst --hostname ct1 ...` | LXC Proxmox |
+
+::: piege
+* `virsh list` vide sans erreur : `qemu:///session`. `LIBVIRT_DEFAULT_URI`.
+* `<domain type='qemu'>` = TCG : VM qui « marche » à 100 % de CPU.
+* Base d'un overlay déplacée : `Cannot access backing file`. `rebase -u`.
+* Image dans `/root` : QEMU tourne en `libvirt-qemu`, `/root` est 0700.
+* Snapshot externe sans `blockcommit` : overlay orphelin qui remplit l'hôte,
+  invisible dans `snapshot-list` si `--no-metadata`. `domblklist` dit vrai.
+* `qemu-img info` sans `-U` sur une VM allumée : verrou refusé.
+* `--remove-all-storage` supprime aussi les ISO partagées.
+* Bridge : pas de DHCP sur `10.10.10.0/24` → `network-config` statique.
+* `setvcpus --live` refuse au-delà du maximum : `<vcpu current='1'>4`.
+* `virt-clone` sans sysprep ni nouveau seed : même `machine-id`, mêmes
+  clés d'hôte, Netplan épinglé sur l'ancien MAC.
+:::
+
+::: astuce
+* `virt-install --osinfo list | grep ubuntu` avant de choisir `--osinfo`.
+* `virsh domifaddr vm --source agent` pour une VM bridgée.
+* `netplan try` avant tout changement de bridge sur une machine distante.
+* `for d in $(virsh list --name); do virsh domblklist $d; done` : une VM
+  dont `vda` n'est pas son fichier de référence a une chaîne ouverte.
+* `virsh -c qemu+ssh://mathieu@10.10.10.16/system list` depuis `lab-adm`.
+:::
+
+## 21 · Git
 
 ### Configuration et démarrage
 
@@ -2130,7 +3151,7 @@ top -b -n1 | head -20   # vue d'ensemble
 
 ---
 
-## 18 · Docker et Compose
+## 22 · Docker et Compose
 
 ### Images
 
@@ -2266,7 +3287,7 @@ Rocky 9 : dépôt `download.docker.com/linux/centos/docker-ce.repo` ou Podman
 
 ---
 
-## 19 · Ansible
+## 23 · Ansible
 
 ### Inventaire et ad hoc
 
@@ -2389,7 +3410,7 @@ tâche.
 
 ---
 
-## 20 · OpenTofu, cloud-init, Proxmox
+## 24 · OpenTofu, cloud-init, Proxmox
 
 ### OpenTofu / Terraform
 
@@ -2512,7 +3533,7 @@ qm template 9100
 
 ---
 
-## 21 · CI/CD
+## 25 · CI/CD
 
 ### Runner et forge (Gitea)
 
@@ -2615,7 +3636,7 @@ Contexte : `${{ gitea.sha }}`, `gitea.ref`, `gitea.event_name`,
 
 ---
 
-## 22 · Kubernetes et observabilité
+## 26 · Kubernetes et observabilité
 
 ### kubectl
 
@@ -2777,14 +3798,14 @@ d'erreur : 99,9 % sur 30 j = 43,2 min. Node Exporter Full = dashboard 1860.
 
 ---
 
-## 23 · Python pour l'ops
+## 27 · Python pour l'ops
 
 ### Installation, venv, outils
 
 | Commande | Effet |
 |---|---|
 | `python3 --version` / `python3 -m sysconfig` | version, chemins |
-| `python3 -m venv ~/lab23/venv` | crée un venv (paquet `python3-venv`) |
+| `python3 -m venv ~/lab27/venv` | crée un venv (paquet `python3-venv`) |
 | `source venv/bin/activate` / `deactivate` | active (modifie `PATH`) / quitte |
 | `venv/bin/python script.py` | **sans activer** : chemin absolu (timers) |
 | `venv/bin/pip install -r requirements.txt` | dépendances du projet |
@@ -3042,7 +4063,7 @@ SuccessExitStatus=1 2    # un code verdict n'est pas une panne
 | `qm status 9002` / `qm config 9002` | état / configuration |
 | `qm start 9002` / `qm shutdown 9002 --timeout 60` / `qm stop 9002` | propre / brutal |
 | `qm reboot 9002` / `qm reset 9002` | redémarre / reset matériel |
-| `qm snapshot 9002 avant-lab18 --description "avant Docker"` | snapshot |
+| `qm snapshot 9002 avant-lab22 --description "avant Docker"` | snapshot |
 | `qm listsnapshot 9002` / `qm rollback 9002 snap-clean` / `qm delsnapshot 9002 x` | gestion |
 | `qm clone 9100 9110 --name ci-test --full 1` | clone complet |
 | `qm template 9100` | transforme en template (irréversible) |

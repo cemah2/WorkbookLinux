@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# check_M12_01.sh — vérifie le lab L12.1 (accès par clé sur tout le parc)
-# À lancer sur lab-adm, SANS sudo, avec l'utilisateur du lab.
+# check_M12_01.sh — vérifie le lab L12.1 (plan d'adressage, tests à chaud)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8,112 +7,74 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L12.1 =="
 
-HOTES="10.10.10.11 10.10.10.12 10.10.10.13 10.10.10.14"
-KEY="$HOME/.ssh/id_ed25519"
-SSHOPT="-o BatchMode=yes -o ConnectTimeout=5 -o PasswordAuthentication=no"
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab12/rapports/plan-adressage.md"
 
-command -v ssh-keygen >/dev/null 2>&1 || { \
-  ko "ssh-keygen introuvable : installe openssh-client"; \
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-
-# --- 1. la nouvelle clé ---------------------------------------------------
-if [ -f "$KEY" ] && [ -f "$KEY.pub" ]; then
-  ok "paire ~/.ssh/id_ed25519 présente"
-  LIGNE=$(ssh-keygen -lf "$KEY.pub" 2>/dev/null)
-  case "$LIGNE" in
-    *"(ED25519)") ok "la clé est bien de type ED25519" ;;
-    *) ko "type inattendu : $LIGNE (ed25519 attendu)" ;;
-  esac
-  COMMENT=$(printf '%s\n' "$LIGNE" | awk '{$1="";$2="";$NF="";print}' \
-            | tr -s ' ' | sed 's/^ //;s/ $//')
-  [ -n "$COMMENT" ] \
-    && ok "commentaire présent : $COMMENT" \
-    || ko "clé sans commentaire (ssh-keygen -c -C ... pour en poser un)"
-  if ssh-keygen -y -P '' -f "$KEY" >/dev/null 2>&1; then
-    ko "la clé privée n'a PAS de passphrase (ssh-keygen -p -f $KEY)"
-  else
-    ok "la clé privée est protégée par une passphrase"
-  fi
+# --- 1. le rapport existe et a été rempli ------------------------------
+if [ -s "$RAP" ] && [ "$(grep -cv '^[[:space:]]*$' "$RAP")" -ge 15 ]; then
+  ok "rapport plan-adressage.md rédigé"
 else
-  ko "clé absente : ~/.ssh/id_ed25519(.pub)"
+  ko "rapport absent ou trop court : $RAP (15 lignes utiles minimum)"
 fi
 
-# --- 2. permissions -------------------------------------------------------
-[ "$(stat -c %a "$HOME/.ssh" 2>/dev/null)" = 700 ] \
-  && ok "~/.ssh en 700" \
-  || ko "~/.ssh doit être en 700 (lu : $(stat -c %a "$HOME/.ssh" 2>/dev/null))"
-if [ -f "$KEY" ]; then
-  [ "$(stat -c %a "$KEY")" = 600 ] \
-    && ok "clé privée en 600" \
-    || ko "clé privée en $(stat -c %a "$KEY") : ssh l'ignorera (600 attendu)"
-fi
-[ "$(( 0$(stat -c %a "$HOME") & 022 ))" -eq 0 ] \
-  && ok "le home n'est pas accessible en écriture au groupe ni aux autres" \
-  || ko "home en $(stat -c %a "$HOME") : StrictModes refusera (chmod go-w ~)"
+# --- 2. les quatre sous-réseaux, avec les bonnes frontières ------------
+manque=""
+for v in '10\.10\.10\.0/26' '10\.10\.10\.64/26' \
+         '10\.10\.10\.128/26' '10\.10\.10\.192/26'; do
+  grep -qE "$v" "$RAP" 2>/dev/null || manque="$manque ${v//\\/}"
+done
+[ -z "$manque" ] \
+  && ok "les quatre préfixes /26 sont présents" \
+  || ko "préfixes manquants :$manque — un /24 en 4 parts donne des /26"
 
-# --- 3. agent -------------------------------------------------------------
-if ssh-add -l >/dev/null 2>&1; then
-  ok "un agent est joignable"
-  if [ -f "$KEY.pub" ]; then
-    FP=$(ssh-keygen -lf "$KEY.pub" | awk '{print $2}')
-    ssh-add -l | awk '{print $2}' | grep -qxF "$FP" \
-      && ok "la clé ed25519 est chargée dans l'agent" \
-      || ko "la clé n'est pas dans l'agent (ssh-add -t 28800 $KEY)"
-  fi
+# --- 3. adresses de diffusion : la valeur qui prouve le calcul ---------
+manque=""
+for v in '10\.10\.10\.63' '10\.10\.10\.127' '10\.10\.10\.191'; do
+  grep -qE "$v" "$RAP" 2>/dev/null || manque="$manque ${v//\\/}"
+done
+[ -z "$manque" ] \
+  && ok "les adresses de diffusion intermédiaires figurent au rapport" \
+  || ko "diffusions manquantes :$manque (pas de 64 dans le dernier octet)"
+
+grep -qE '255\.255\.255\.192' "$RAP" 2>/dev/null \
+  && ok "le masque décimal est donné" \
+  || ko "le masque décimal du /26 manque (255.255.255.192)"
+
+# --- 4. la proposition de DMZ (62 hôtes = /26, hors 10.10.10.0/24) -----
+DMZ=$(grep -oE '10\.10\.[0-9]{1,3}\.[0-9]{1,3}/26' "$RAP" 2>/dev/null |
+      grep -v '^10\.10\.10\.' | head -1)
+if [ -n "$DMZ" ]; then
+  ok "proposition de DMZ hors 10.10.10.0/24 : $DMZ"
 else
-  ko "aucun agent joignable (eval \"\$(ssh-agent -s)\" puis ssh-add)"
+  ko "aucune DMZ en /26 hors de 10.10.10.0/24 (62 hôtes -> /26)"
 fi
 
-# --- 4. connexion par clé sur les quatre serveurs -------------------------
-for h in $HOTES; do
-  # shellcheck disable=SC2086
-  if ssh $SSHOPT "$h" true 2>/dev/null; then
-    ok "connexion par clé vers $h"
-  else
-    ko "échec de connexion par clé vers $h (ssh -v $h, puis le journal)"
-  fi
+# --- 5. les trois ip route get ----------------------------------------
+n=0
+for m in '10\.10\.30\.5' '10\.10\.20\.99' '9\.9\.9\.9'; do
+  grep -qE "$m" "$RAP" 2>/dev/null && n=$((n+1))
 done
+[ "$n" -eq 3 ] \
+  && ok "les trois destinations testées sont documentées" \
+  || ko "il manque des sorties de ip route get ($n/3 destinations citées)"
 
-# --- 5. la vieille clé RSA ne doit plus rien ouvrir ------------------------
-if [ -f "$HOME/.ssh/id_rsa" ]; then
-  ko "~/.ssh/id_rsa existe encore sur le poste : la rotation est incomplète"
-  RSAFP=$(ssh-keygen -lf "$HOME/.ssh/id_rsa.pub" 2>/dev/null | awk '{print $2}')
+# --- 6. nettoyage effectif du système ----------------------------------
+if ip -4 a 2>/dev/null | grep -q '10\.10\.20\.10/24'; then
+  ko "l'adresse de test 10.10.20.10/24 est encore posée (ip a del)"
 else
-  ok "la vieille clé RSA a été retirée du poste"
-  RSAFP=""
+  ok "aucune adresse de test résiduelle"
 fi
-for h in $HOTES; do
-  # shellcheck disable=SC2086
-  SORTIE=$(ssh $SSHOPT "$h" \
-    'ssh-keygen -lf ~/.ssh/authorized_keys 2>/dev/null' 2>/dev/null) || {
-      note "$h injoignable : vérification des authorized_keys sautée"
-      continue; }
-  if printf '%s\n' "$SORTIE" | grep -q '(RSA)'; then
-    ko "$h : une clé RSA figure encore dans ~/.ssh/authorized_keys"
-  else
-    ok "$h : plus aucune clé RSA autorisée"
-  fi
-done
 
-# --- 6. lab-web n'accepte plus le mot de passe ----------------------------
-SORTIE=$(ssh -o BatchMode=yes -o ConnectTimeout=5 \
-  -o PubkeyAuthentication=no -o PreferredAuthentications=password \
-  10.10.10.11 true 2>&1)
-case "$SORTIE" in
-  *"Permission denied (publickey)"*)
-      ok "lab-web refuse l'authentification par mot de passe" ;;
-  *"Permission denied"*)
-      ko "lab-web refuse, mais propose encore d'autres méthodes : $SORTIE" ;;
-  "")  ko "lab-web accepte encore une méthode sans clé" ;;
-  *)   ko "réponse inattendue de lab-web : $SORTIE" ;;
-esac
+if ip -4 r 2>/dev/null | grep -q '10\.10\.30\.0/24'; then
+  ko "la route de test vers 10.10.30.0/24 est encore là (ip r del)"
+else
+  ok "aucune route de test résiduelle"
+fi
 
-# --- 7. rapports ----------------------------------------------------------
-for f in cles-avant.md cles-apres.md; do
-  [ -s "$HOME/lab12/rapports/$f" ] \
-    && ok "rapport présent : ~/lab12/rapports/$f" \
-    || ko "rapport manquant ou vide : ~/lab12/rapports/$f"
-done
+ip -4 r 2>/dev/null | grep -q '^default' \
+  && ok "la route par défaut est intacte" \
+  || note "aucune route par défaut : le nettoyage a été trop large ?"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

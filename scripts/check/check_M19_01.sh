@@ -1,121 +1,93 @@
 #!/usr/bin/env bash
-# check_M19_01.sh — vérifie le lab L19.1 (baseline commune du parc)
-# À lancer sur lab-adm, en tant que mathieu. QUICK=1 saute la 2e exécution.
+# check_M19_01.sh — vérifie le lab L19.1 (triage des 60 secondes)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-has()  { grep "$@" >/dev/null; }
 echo "== Vérification L19.1 =="
 
-export PATH="$HOME/.local/bin:$PATH"
-BASE="$HOME/lab19"
-cd "$BASE" 2>/dev/null || { ko "$BASE absent (setup_M19.sh)"; exit 1; }
-command -v ansible >/dev/null || { ko "ansible introuvable dans le PATH"; exit 1; }
-PB=playbooks/baseline.yml
-[ -f "$PB" ] && ok "$PB présent" || { ko "$PB absent"; exit 1; }
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+BASE="$HOMEDIR/lab19"
+SCRIPT="$BASE/bin/triage.sh"
+RAP="$BASE/rapports/triage.md"
 
-# --- 1. compte de service et ansible.cfg -----------------------------------
-if grep -Eq '^\s*remote_user\s*=\s*ansible\b' ansible.cfg; then
-  ok "ansible.cfg : remote_user = ansible"
-else ko "ansible.cfg : remote_user n'est pas ansible"; fi
-
-if out=$(ansible all -m ansible.builtin.ping 2>&1) && \
-   [ "$(printf '%s\n' "$out" | grep -c SUCCESS)" -eq 4 ]; then
-  ok "ping SUCCESS sur les 4 hôtes sans -K"
-else ko "ping échoue sans -K sur au moins un hôte (compte ansible, clé, sudoers ?)"; fi
-
-# ad hoc en become, une commande sur les 4 hôtes ; renvoie 'hôte | ...'
-adhoc() { ansible all -b -m ansible.builtin.shell -a "$1" -o 2>/dev/null; }
-
-r=$(adhoc 'id -u ansible; visudo -cf /etc/sudoers.d/ansible')
-[ "$(printf '%s\n' "$r" | grep -c '900.*parsed OK')" -eq 4 ] \
-  && ok "uid 900 et /etc/sudoers.d/ansible valide partout" \
-  || ko "uid ou sudoers.d/ansible incorrect sur un hôte (id ansible ; visudo -cf)"
-
-# --- 2. paquets ------------------------------------------------------------
-r=$(adhoc 'for p in htop vim curl tree chrony; do command -v $p; done | wc -l')
-[ "$(printf '%s\n' "$r" | grep -c '| 5$')" -eq 4 ] \
-  && ok "htop vim curl tree chrony présents sur les 4 hôtes" \
-  || ko "il manque un paquet du tronc commun sur un hôte"
-
-# --- 3. fuseau et chrony ---------------------------------------------------
-r=$(adhoc 'timedatectl show -p Timezone --value')
-[ "$(printf '%s\n' "$r" | grep -c 'Europe/Paris')" -eq 4 ] \
-  && ok "fuseau Europe/Paris partout" || ko "fuseau incorrect sur un hôte"
-r=$(adhoc 'systemctl is-active chrony chronyd 2>/dev/null | grep -c ^active')
-[ "$(printf '%s\n' "$r" | grep -c '| 1$')" -eq 4 ] \
-  && ok "chrony actif partout" || ko "chrony(d) inactif sur un hôte"
-
-# --- 4. mises à jour automatiques -----------------------------------------
-r=$(ansible ubuntu -b -m ansible.builtin.shell -o \
-      -a 'grep -c "\"1\"" /etc/apt/apt.conf.d/20auto-upgrades' 2>/dev/null)
-[ "$(printf '%s\n' "$r" | grep -c '| 2$')" -eq 3 ] \
-  && ok "20auto-upgrades configuré sur les 3 Ubuntu" \
-  || ko "20auto-upgrades incomplet sur un Ubuntu"
-r=$(ansible rhel -b -m ansible.builtin.shell -o \
-      -a 'grep -c "^apply_updates *= *yes" /etc/dnf/automatic.conf; \
-          systemctl is-active dnf-automatic.timer' 2>/dev/null)
-printf '%s\n' "$r" | has -E '1.*active' \
-  && ok "dnf-automatic configuré et timer actif sur lab-rhel" \
-  || ko "dnf-automatic : apply_updates ou timer manquant sur lab-rhel"
-
-# --- 5. sshd durci ---------------------------------------------------------
-r=$(adhoc 'sshd -T 2>/dev/null | grep -Ei "^(passwordauthentication|permitrootlogin|maxauthtries) "')
-[ "$(printf '%s\n' "$r" | grep -ci 'passwordauthentication no')" -eq 4 ] \
-  && ok "PasswordAuthentication no effectif (sshd -T) partout" \
-  || ko "sshd -T ne rapporte pas passwordauthentication no sur un hôte"
-[ "$(printf '%s\n' "$r" | grep -ci 'permitrootlogin no')" -eq 4 ] \
-  && ok "PermitRootLogin no partout" || ko "PermitRootLogin non durci"
-[ "$(printf '%s\n' "$r" | grep -ci 'maxauthtries 3')" -eq 4 ] \
-  && ok "MaxAuthTries 3 partout" || ko "MaxAuthTries != 3 sur un hôte"
-r=$(adhoc 'test -f /etc/ssh/sshd_config.d/50-baseline.conf && echo present')
-[ "$(printf '%s\n' "$r" | grep -c present)" -eq 4 ] \
-  && ok "50-baseline.conf déployé partout" || ko "50-baseline.conf absent quelque part"
-
-# --- 6. pare-feu -----------------------------------------------------------
-r=$(ansible ubuntu -b -m ansible.builtin.shell -o \
-      -a 'ufw status | grep -c "^Status: active"' 2>/dev/null)
-[ "$(printf '%s\n' "$r" | grep -c '| 1$')" -eq 3 ] \
-  && ok "ufw actif sur les 3 Ubuntu" || ko "ufw inactif sur un Ubuntu"
-r=$(ansible ubuntu -b -m ansible.builtin.shell -o \
-      -a 'ufw status | grep 9100 | grep -c 10.10.10.14' 2>/dev/null)
-[ "$(printf '%s\n' "$r" | grep -c '| 1$')" -eq 3 ] \
-  && ok "9100/tcp limité à 10.10.10.14 (ufw)" || ko "règle ufw 9100 depuis 10.10.10.14 absente"
-r=$(ansible rhel -b -m ansible.builtin.shell -o \
-      -a 'firewall-cmd --list-rich-rules | grep 9100 | grep -c 10.10.10.14' 2>/dev/null)
-printf '%s\n' "$r" | has '| 1$' \
-  && ok "rich rule 9100 depuis 10.10.10.14 (firewalld)" \
-  || ko "firewalld : rich rule 9100/10.10.10.14 absente sur lab-rhel"
-
-# --- 7. node_exporter ------------------------------------------------------
-r=$(adhoc 'curl -s localhost:9100/metrics | head -1')
-[ "$(printf '%s\n' "$r" | grep -c '# HELP')" -eq 4 ] \
-  && ok "node_exporter répond sur :9100 partout" \
-  || ko "node_exporter ne répond pas sur un hôte (systemctl status node_exporter)"
-r=$(adhoc '/usr/local/bin/node_exporter --version 2>&1 | head -1')
-[ "$(printf '%s\n' "$r" | grep -c '1\.9\.1')" -eq 4 ] \
-  && ok "node_exporter 1.9.1 dans /usr/local/bin" || ko "version ou chemin du binaire incorrect"
-r=$(adhoc 'getent passwd node_exporter | cut -d: -f7')
-[ "$(printf '%s\n' "$r" | grep -c nologin)" -eq 4 ] \
-  && ok "utilisateur node_exporter sans shell" || ko "utilisateur node_exporter absent ou avec shell"
-
-# --- 8. idempotence et lint ------------------------------------------------
-if [ "${QUICK:-0}" = 1 ]; then note "QUICK=1 : seconde exécution non testée"
-else
-  out=$(ansible-playbook "$PB" 2>&1)
-  if [ "$(printf '%s\n' "$out" | grep -c 'changed=0 .*failed=0')" -eq 4 ] && \
-     printf '%s\n' "$out" | has -E 'ok=[0-9]+ .*changed=0'; then
-    ok "seconde exécution : changed=0 failed=0 sur les 4 hôtes"
+# --- 1. le script existe et tourne vite ---------------------------------
+if [ -s "$SCRIPT" ]; then
+  ok "triage.sh présent"
+  T0=$(date +%s)
+  if timeout 45 bash "$SCRIPT" >/tmp/triage-check.$$ 2>&1; then
+    T1=$(date +%s)
+    D=$((T1 - T0))
+    if [ "$D" -le 30 ]; then
+      ok "triage.sh s'exécute en ${D}s (limite : 30 s)"
+    else
+      ko "triage.sh met ${D}s : trop long pour un triage (vmstat 1 5, pas \
+vmstat 1 60)"
+    fi
   else
-    ko "la seconde exécution n'est pas changed=0 partout (relis le recap)"
+    ko "triage.sh sort en erreur ou dépasse 45 s"
   fi
+  rm -f /tmp/triage-check.$$
+
+  # contenu : la checklist doit être complète
+  MANQUE=""
+  for c in uptime vmstat free dmesg top; do
+    grep -qE "(^|[^[:alnum:]_])$c" "$SCRIPT" || MANQUE="$MANQUE $c"
+  done
+  grep -qE 'iostat|/proc/diskstats' "$SCRIPT" || MANQUE="$MANQUE iostat"
+  grep -qE 'mpstat|pidstat|ps ' "$SCRIPT"     || MANQUE="$MANQUE mpstat/pidstat"
+  grep -qE '\bss\b|netstat|sar -n' "$SCRIPT"  || MANQUE="$MANQUE ss"
+  if [ -z "$MANQUE" ]; then
+    ok "la checklist couvre CPU, mémoire, disque, réseau et noyau"
+  else
+    ko "commandes absentes de triage.sh :$MANQUE (revois §19.2)"
+  fi
+
+  grep -qE 'systemctl (restart|stop)|kill |reboot' "$SCRIPT" \
+    && ko "triage.sh modifie l'état de la machine : un triage observe, \
+il ne répare pas" \
+    || ok "triage.sh ne modifie rien sur la machine"
+else
+  ko "script absent : $SCRIPT"
 fi
-if command -v ansible-lint >/dev/null; then
-  ansible-lint -q "$PB" >/dev/null 2>&1 && ok "ansible-lint muet sur $PB" \
-    || ko "ansible-lint signale des problèmes sur $PB"
-else note "ansible-lint absent, lint non testé"; fi
+
+# --- 2. le rapport horodaté ---------------------------------------------
+N=$(ls -1 "$BASE"/rapports/triage-*.txt 2>/dev/null | wc -l)
+if [ "$N" -ge 1 ]; then
+  ok "$N rapport(s) horodaté(s) dans $BASE/rapports/"
+  DERNIER=$(ls -1t "$BASE"/rapports/triage-*.txt 2>/dev/null | head -1)
+  if [ "$(wc -l < "$DERNIER")" -ge 25 ]; then
+    ok "le dernier rapport contient des sorties réelles"
+  else
+    ko "le rapport $DERNIER est trop court : les sorties ne sont pas \
+capturées (redirection oubliée ?)"
+  fi
+else
+  ko "aucun rapport triage-<date>.txt : le script doit écrire sa sortie"
+fi
+
+# --- 3. la conclusion écrite --------------------------------------------
+if [ -s "$RAP" ]; then
+  ok "triage.md présent"
+  [ "$(grep -c '[^[:space:]]' "$RAP")" -ge 12 ] \
+    && ok "triage.md est étoffé" \
+    || ko "triage.md fait moins de 12 lignes utiles : symptôme, ressource, \
+trois preuves, hypothèse suivante"
+  grep -qiE 'cpu|m[ée]moire|disque|r[ée]seau' "$RAP" \
+    && ok "une ressource est désignée" \
+    || ko "triage.md ne désigne aucune ressource en cause"
+  grep -qiE 'hypoth[èe]se' "$RAP" \
+    && ok "l'hypothèse suivante est formulée" \
+    || ko "triage.md ne formule pas l'hypothèse à tester ensuite"
+  grep -qE '[0-9]+[.,][0-9]+|load average|%[a-z]{2}' "$RAP" \
+    && ok "des valeurs mesurées sont recopiées" \
+    || ko "aucun chiffre dans triage.md : recopie les lignes de sortie qui \
+t'ont fait conclure"
+else
+  ko "rapport absent : $RAP"
+fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

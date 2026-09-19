@@ -1,79 +1,49 @@
 #!/usr/bin/env bash
-# break_M14_02.sh — panne BF14.2 (le rapport hebdo n'arrive plus,
-#                   et rien n'est en erreur)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
+# break_M14_02.sh — panne BF14.2 (AllowUsers déposé dans un fragment)
+# À lancer SUR lab-web, avec sudo. Idempotent.
+# Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-UD=/etc/systemd/system
-mkdir -p "$SAUV"
+FRAG=/etc/ssh/sshd_config.d/00-maintenance.conf
+SSHD=$(command -v sshd || echo /usr/sbin/sshd)
+mkdir -p "$SAUV" /etc/ssh/sshd_config.d
 
-[ -d /run/systemd/system ] || {
-  echo "systemd ne pilote pas cette machine : BF14.2 inapplicable" >&2
-  exit 1; }
-[ -x /opt/factura/bin/factura-rapport.sh ] || {
-  echo "/opt/factura/bin/factura-rapport.sh absent : lance setup_M14.sh" >&2
-  exit 1; }
+# --- le fichier principal doit bien inclure les fragments ----------------
+if ! grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d' \
+     /etc/ssh/sshd_config; then
+  [ -f "$SAUV/M14_02.sshd_config" ] || \
+    cp -a /etc/ssh/sshd_config "$SAUV/M14_02.sshd_config"
+  sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+fi
 
-# --- le service, parfaitement sain --------------------------------------
-cat > "$UD/factura-hebdo.service" <<'EOF'
-[Unit]
-Description=Factura - rapport hebdomadaire de direction
+# --- sauvegarde de l'existant, une seule fois ---------------------------
+if [ ! -d "$SAUV/M14_02.d" ]; then
+  mkdir -p "$SAUV/M14_02.d"
+  cp -a /etc/ssh/sshd_config.d/. "$SAUV/M14_02.d/" 2>/dev/null || true
+fi
 
-[Service]
-Type=oneshot
-User=factura
-Group=factura
-Environment=FACTURA_RAPPORTS=/srv/factura/etat
-ExecStart=/opt/factura/bin/factura-rapport.sh
-
-[Install]
-WantedBy=multi-user.target
+# --- le fragment fautif, au nom rassurant et au préfixe prioritaire -----
+cat > "$FRAG" <<'EOF'
+# Déposé pendant la fenêtre de maintenance du 17/09 (ticket CHG-4471).
+# Restriction temporaire des accès pendant la migration.
+AllowUsers root deploiement
 EOF
+chmod 0644 "$FRAG"
 
-# --- le timer, sain lui aussi -------------------------------------------
-cat > "$UD/factura-hebdo.timer" <<'EOF'
-[Unit]
-Description=Declenche le rapport hebdomadaire factura
-
-[Timer]
-OnCalendar=Mon *-*-* 06:45:00
-Persistent=true
-AccuracySec=5min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-chmod 0644 "$UD/factura-hebdo.service" "$UD/factura-hebdo.timer"
-systemctl daemon-reload
-
-# --- l'état « d'avant », pour mémoire -----------------------------------
-cat > "$SAUV/M14_02.etat" <<'EOF'
-# état attendu (workbook module 14)
-# factura-hebdo.timer   : enabled + active
-# factura-hebdo.service : disabled (c'est le timer qui le déclenche)
-EOF
-
-# --- le geste fautif ----------------------------------------------------
-# Un prédécesseur a voulu « activer la tâche » et a activé le SERVICE.
-# Puis, voyant qu'il tournait à chaque démarrage, il a désactivé… le
-# timer. Résultat : plus aucune planification, et « systemctl is-enabled
-# factura-hebdo » (sans suffixe, donc .service) répond « enabled ».
-systemctl disable --now factura-hebdo.timer >/dev/null 2>&1 || true
-systemctl enable factura-hebdo.service >/dev/null 2>&1 || true
-systemctl stop factura-hebdo.service >/dev/null 2>&1 || true
-systemctl reset-failed factura-hebdo.service >/dev/null 2>&1 || true
-
-# On efface l'horodatage de persistance pour que rien ne rattrape.
-rm -f /var/lib/systemd/timers/stamp-factura-hebdo.timer
+"$SSHD" -t
+if [ -d /run/systemd/system ]; then
+  systemctl reload ssh >/dev/null 2>&1 || \
+  systemctl reload sshd >/dev/null 2>&1 || \
+  systemctl restart ssh >/dev/null 2>&1 || true
+fi
 
 cat <<'EOF'
 
-Symptôme attendu : aucun rapport hebdomadaire depuis trois semaines.
-« systemctl status factura-hebdo.service » affiche inactive (dead),
-aucune unité n'est en failed, « systemctl is-enabled factura-hebdo »
-répond enabled, et le journal ne contient rien d'anormal.
-Le script produit bien un rapport quand on le lance à la main.
+Symptôme attendu : depuis lab-adm, « ssh mathieu@lab-web » répond
+immédiatement « Permission denied (publickey). » pour tous les comptes
+d'exploitation. La clé est bonne, les permissions sont bonnes, le
+service est actif, et une relecture ligne à ligne de
+/etc/ssh/sshd_config ne montre rien d'anormal.
 EOF

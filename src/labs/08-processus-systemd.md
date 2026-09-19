@@ -13,6 +13,16 @@
   approximation (`VSZ` contre `RSS`, `PR`/`NI`, `wa`, `st`) ;
 * arbitrer des ressources : `nice`/`renice`, `ionice`, et poser une limite
   réelle avec cgroups v2 via une unité systemd ;
+* lire l'arbre des cgroups v2 (`systemd-cgls`, `systemd-cgtop`,
+  `/sys/fs/cgroup/<slice>/memory.current`, `cpu.stat`, `pids.current`,
+  `memory.events`), confiner une commande à la volée avec `systemd-run
+  --scope -p MemoryMax= -p CPUQuota=`, et regrouper des services dans un
+  slice dont l'OOM killer ne touche que le contenu ;
+* cibler des processus sans erreur : `pgrep -f`/`-u`/`-a`/`-x`, `pkill` plutôt
+  que `killall`, `top` interactif (`P`, `M`, `1`, `c`, `k`, `u`), `ps` trié
+  par `%cpu`, `%mem` ou `etimes`, `/proc/PID/status` (`VmRSS` contre
+  `VmSize`, `Threads`, `State`), et distinguer la consommation d'un processus
+  de celle de ses threads (`ps -L`, `top -H`) ;
 * choisir le bon signal, expliquer ce que fait un service correctement écrit à
   la réception d'un `SIGTERM`, et justifier pourquoi un `kill -9` est un aveu
   d'échec ;
@@ -31,9 +41,9 @@
 * dérouler une méthode de diagnostic complète sur un service qui refuse de
   démarrer, et lire un `systemctl status` ligne par ligne.
 
-Temps estimé : 6 h
+Temps estimé : 7 h
 Prérequis : modules 01 (shell, redirections), 03 (permissions, comptes de
-service). Les journaux sont vus en profondeur au module 13 : ici, `journalctl`
+service). Les journaux sont vus en profondeur au module 16 : ici, `journalctl`
 sert uniquement à lire une erreur.
 :::
 
@@ -66,7 +76,7 @@ Sous Rocky 9 : `sudo dnf install -y htop tmux psmisc procps-ng lsof python3
 curl sysstat iproute`. Attention à deux écarts qui reviennent dans le module :
 Rocky monte `/tmp` sur le disque et non en tmpfs, et `systemd-analyze security`
 y affiche des scores légèrement différents parce que SELinux est comptabilisé
-(module 15).
+(module 18).
 :::
 
 Préparation du terrain (idempotent, à relancer sans crainte) :
@@ -145,6 +155,29 @@ cat /proc/1234/limits ; cat /proc/1234/oom_score_adj
 périmètre. `VSZ` = espace d'adressage réservé (mensonger), `RSS` = pages
 réellement en RAM (mais comptées plusieurs fois si partagées).
 
+```bash
+ps -eo pid,user,pcpu,pmem,etimes,args --sort=-pcpu | head    # gros CPU
+ps -eo pid,user,pcpu,pmem,etimes,args --sort=-pmem | head    # grosse RAM
+ps -eo pid,etimes,args --sort=-etimes | head                 # plus anciens
+ps -L -o pid,lwp,pcpu,stat,comm -p 1234      # une ligne par THREAD (LWP)
+top -H -p 1234                               # threads dans top
+grep -E '^(State|VmSize|VmRSS|Threads)' /proc/1234/status
+```
+
+`ps -o pcpu` est une moyenne **depuis le lancement** (temps CPU / `etimes`),
+pas l'instantané de `top`. Le `%CPU` d'un processus est la **somme** de ses
+threads : 380 % sur 4 vCPU = quatre threads à plein. `VmSize` = `VSZ`,
+`VmRSS` = `RSS` ; `Threads` dit s'il y a lieu de regarder `-L`.
+
+| `top` | Effet |
+|---|---|
+| `P` / `M` | trier par CPU / par mémoire (`T` : temps cumulé) |
+| `1` | un compteur par cœur au lieu de la moyenne |
+| `c` | ligne de commande complète au lieu du nom |
+| `u` puis nom | ne montrer qu'un utilisateur |
+| `H` | afficher les threads ; `k` : envoyer un signal ; `r` : renice |
+| `E` / `e` | changer l'unité du résumé / de la liste (Kio → Mio → Gio) |
+
 ### Signaux
 
 | Signal | N° | Attrapable | Usage |
@@ -160,10 +193,19 @@ réellement en RAM (mais comptées plusieurs fois si partagées).
 ```bash
 kill -TERM 1234 ; kill -l              # jamais "kill -9" en premier réflexe
 pgrep -a -f 'factura-api'              # chercher : -f = ligne complète
-pkill -f 'factura-api' ; pkill -u factura
+pgrep -u factura -a ; pgrep -x sshd    # par utilisateur ; nom exact
+pkill -f 'factura-api' ; pkill -u factura -HUP -f 'factura-api'
 killall factura-api.py                 # nom exact du binaire, pas un motif
 kill %1                                # par numéro de job du shell
 ```
+
+`killall` compare le **nom du processus** (`/proc/PID/comm`, 15 caractères
+max) : un script lancé par `python3 script.py` s'appelle `python3`, et
+`killall script.py` répond `no process found`. `pgrep`/`pkill` sans `-f`
+ont la même limite, mais `-f` compare la ligne de commande entière, `-u`
+borne à un utilisateur et `-a` affiche ce qu'on va toucher : `pgrep -a`
+d'abord, `pkill` ensuite, `killall` jamais dans un script (sur d'autres
+Unix, `killall` tue **tout**).
 
 ### Jobs et survie à la déconnexion
 
@@ -190,6 +232,56 @@ systemd-cgls ; systemd-cgtop
 
 Nice va de `-20` (prioritaire) à `19`. **Seul root peut descendre**, et on ne
 remonte jamais un nice une fois baissé sans privilège.
+
+### cgroups v2 en pratique
+
+Un cgroup est un répertoire sous `/sys/fs/cgroup` ; systemd y range chaque
+service (`.service`), chaque session (`.scope`) et chaque groupe (`.slice`).
+Ubuntu 24.04 et Rocky 9 sont en v2 pur (`stat -fc %T /sys/fs/cgroup` →
+`cgroup2fs`).
+
+```text
+/sys/fs/cgroup/
+├── system.slice/            services : nginx.service, factura-api.service
+├── factura.slice/           un slice maison (à la racine), ses limites
+│   └── factura-api.service/     rattaché par Slice=factura.slice
+├── user.slice/user-1000.slice/session-3.scope/   ta session SSH
+└── machine.slice/           VM et conteneurs
+```
+
+```bash
+systemd-cgls                                  # l'arbre, avec les PID
+systemd-cgls /system.slice/factura-api.service
+systemd-cgtop -1 ; systemd-cgtop --order=memory   # top par cgroup
+cat /proc/1234/cgroup                         # 0::/system.slice/…
+C=/sys/fs/cgroup/system.slice/factura-api.service
+cat $C/memory.current $C/memory.max $C/memory.peak
+cat $C/cpu.stat            # usage_usec, nr_throttled, throttled_usec
+cat $C/pids.current $C/pids.max
+cat $C/memory.events       # low high max oom oom_kill
+systemd-run --scope -p MemoryMax=200M -p MemorySwapMax=0 \
+  -p CPUQuota=50% commande           # scope : reste dans ton terminal
+systemd-run --unit=lot -p MemoryMax=200M --slice=factura.slice commande
+systemctl set-property factura.slice MemoryMax=512M       # à chaud, persistant
+systemctl set-property --runtime factura-api CPUQuota=25%  # jusqu'au reboot
+systemctl show -p MemoryMax,CPUQuotaPerSecUSec,TasksMax factura-api
+```
+
+| Fichier | Lecture |
+|---|---|
+| `memory.current` / `memory.max` / `memory.peak` | usage, plafond (`max` = aucun), pic (noyau ≥ 5.19 : absent sur Rocky 9) |
+| `memory.events` : `max`, `oom_kill` | fois où le plafond a été touché ; processus tués |
+| `cpu.max` : `50000 100000` | 50 ms par période de 100 ms = un demi-cœur |
+| `cpu.stat` : `nr_throttled` | le quota a bridé (la latence vient de là) |
+| `pids.current` / `pids.max` | processus + threads, `fork: Resource temporarily unavailable` |
+
+Un `.slice` regroupe des unités et leur impose un plafond **commun**
+(`Slice=factura.slice` dans chaque service). Le tiret fait la hiérarchie :
+`system-factura.slice` serait enfant de `system.slice`, `factura.slice` est
+enfant de la racine : l'OOM killer déclenché dans un
+slice ne tue **que** dedans, le reste de la machine ne voit rien. Un
+`--scope` confine une commande lancée depuis ton shell sans la détacher ;
+une unité transitoire (`--unit`) la détache et la journalise.
 
 ### systemd — l'essentiel
 
@@ -429,6 +521,43 @@ b) le noyau a envoyé un `SIGKILL` : aucun code de nettoyage n'a tourné, et
 c) c'est systemd qui a tué le processus à cause de `MemoryMax=`
 d) le processus est passé en `Z` faute de mémoire pour le récupérer
 
+**Q8.19** — `factura-api.py` tourne, lancé par `python3
+/opt/factura/bin/factura-api.py`. Tu tapes `killall factura-api.py` et
+obtiens `factura-api.py: no process found`. Pourquoi, et quelle commande
+fait le travail ? **Deux réponses correctes.**
+
+a) `killall` n'a pas les droits : il faut `sudo`
+b) `killall` compare le nom du processus (`/proc/PID/comm`), qui vaut ici
+   `python3` ; le nom du script n'est qu'un argument
+c) `pkill -f factura-api.py` cible la ligne de commande complète, et
+   `pgrep -a -f factura-api.py` montre avant ce qui sera touché
+d) `killall python3` est la bonne réponse : il ne tuera que ce script
+
+**Q8.20** — `systemctl status factura-lots` affiche `Result: oom-kill` et
+`/sys/fs/cgroup/batch.slice/memory.events` contient `oom_kill 3`.
+`free -m` montre 1,4 Go de disponible et `dmesg` ne contient **aucune**
+ligne `Out of memory: Killed process` mais trois lignes `Memory cgroup out
+of memory`. Que s'est-il passé ?
+
+a) la machine a manqué de mémoire trois fois ; il faut ajouter du swap
+b) le slice `batch.slice` a atteint son `MemoryMax=` : l'OOM killer a
+   frappé **dans ce cgroup uniquement**, trois fois, sans que le reste de
+   la machine soit concerné — c'est exactement le rôle du slice
+c) `systemd-oomd` a tué le service à cause de la pression mémoire globale
+d) le service a fait `exit(137)` de lui-même
+
+**Q8.21** — `factura-charge.sh 2` (deux processus qui brûlent chacun un
+cœur) est lancé par `systemd-run --scope -p CPUQuota=50%`. `lab-web` a deux
+vCPU. Que montre `top` et pourquoi ?
+
+a) chaque processus à 50 % : le quota s'applique par processus
+b) les deux à 100 % : `CPUQuota` ne s'applique qu'aux services, pas aux
+   scopes
+c) environ 25 % chacun, 50 % au total : `CPUQuota=50%` = `cpu.max 50000
+   100000` = un demi-cœur pour **tout le cgroup**, réparti entre ses
+   processus ; `cpu.stat` montre `nr_throttled` qui grimpe
+d) les deux à 100 % pendant 50 % du temps, puis rien : le quota est temporel
+
 ---
 
 ## 8.4 Quiz — questions ouvertes
@@ -517,6 +646,20 @@ commandes, quelles valeurs par défaut).
 lignes: 8
 :::
 
+**QO8.10** — *On te demande en entretien* : « Un traitement batch met la
+machine à genoux chaque nuit et emporte l'API avec lui. Comment tu le
+contiens sans le mettre dans un conteneur ? » Décris la solution avec les
+cgroups v2 de systemd : slice ou scope ou unité transitoire (et quand
+choisir l'un ou l'autre), les directives à poser (mémoire, swap, CPU,
+tâches), les fichiers de `/sys/fs/cgroup` que tu lis pour prouver que la
+limite agit, ce que fait l'OOM killer d'un cgroup par rapport à l'OOM killer
+global, et où tu retrouves la trace. Termine par le rôle de `systemd-oomd`
+sur Ubuntu 24.04 et ce qu'il change à ton diagnostic.
+
+::: repondre
+lignes: 12
+:::
+
 ---
 
 ## 8.5 Exercices guidés ★
@@ -593,6 +736,61 @@ valeur effective de `Restart=`, `RestartSec=` et `LimitNOFILE=` pour cette unit�
 dont `ssh.service` dépend, en te limitant au premier niveau. Enfin, montre les
 10 unités les plus lentes au dernier démarrage et la chaîne critique du boot.
 
+**E8.17** — Lance `factura-api.py` à la main (`python3
+/opt/factura/bin/factura-api.py &`). Montre que `killall factura-api.py`
+échoue et explique-le en lisant `/proc/PID/comm` et `/proc/PID/cmdline`.
+Donne ensuite, en une commande chacune : la liste (PID + commande) de tous
+les processus dont la ligne de commande contient `factura`, ceux qui
+appartiennent à l'utilisateur `factura`, le processus dont le nom est
+**exactement** `sshd`, et le plus ancien processus contenant `factura`. Puis
+arrête l'API par `pkill` en vérifiant **avant** ce que tu vas tuer.
+
+**E8.18** — Lance `/opt/factura/bin/factura-charge.sh 2` et
+`/opt/factura/bin/factura-gourmand.py 20 2` (arrête ce dernier avant
+600 Mo). Dans `top` interactif, et sans quitter : trie par CPU puis par
+mémoire, affiche un compteur par cœur, la ligne de commande complète, ne
+montre que les processus de `mathieu`, puis envoie `SIGTERM` au gourmand
+depuis `top`. Reproduis chacune des trois vues (CPU, mémoire, ancienneté)
+avec une commande `ps` non interactive, avec les colonnes `pid`, `user`,
+`%cpu`, `%mem`, `etimes` et `args`. Explique pourquoi `%cpu` de `ps` et
+`%CPU` de `top` ne donnent pas la même valeur pour la charge.
+
+**E8.19** — Relance `factura-gourmand.py 20 2`. Dans `/proc/PID/status`,
+relève `State`, `VmSize`, `VmRSS` et `Threads`, puis observe `VmRSS` toutes
+les deux secondes pendant dix secondes et explique l'écart avec `VmSize`.
+Lance ensuite un processus à trois threads occupés :
+
+```bash
+python3 -c 'import threading
+def b():
+    while True: pass
+for _ in range(3): threading.Thread(target=b).start()' &
+```
+
+et montre : le nombre de threads dans `status`, la vue par thread avec
+`ps -L` et avec `top -H`, le `%CPU` total du processus et celui de chaque
+thread. Explique pourquoi le total ne dépasse pas 100 % alors qu'il y a
+trois threads et deux vCPU.
+
+**E8.20** — Exécute `factura-gourmand.py 50 0.5` dans un **scope** limité à
+200 Mo sans swap et à un demi-cœur. Pendant qu'il tourne, retrouve son
+cgroup avec `systemd-cgls`, observe-le dans `systemd-cgtop`, lis
+`memory.current`, `pids.current` et `cpu.stat` dans le répertoire du cgroup,
+puis prouve après sa mort : `oom_kill 1` dans `memory.events` (attention :
+le scope disparaît, réfléchis à quand lire le fichier), la ligne du noyau,
+et l'état de l'unité `.scope` dans `systemctl`. Compare avec l'équivalent
+en unité transitoire (`--unit`) : où partent les sorties, où va la trace.
+
+**E8.21** — Crée un slice `factura.slice` avec `MemoryMax=300M`,
+`MemorySwapMax=0`, `CPUQuota=100%` et `TasksMax=64`. Lance dedans deux
+unités transitoires : `factura-charge.sh 2` et `factura-api.py` (port 8080
+libre). Montre dans `systemd-cgls` la hiérarchie obtenue, la somme CPU des
+deux unités dans `systemd-cgtop`, et les fichiers `cpu.max`, `memory.max`,
+`pids.max` **du slice** et **d'une unité** (qui hérite quoi ?). Abaisse à
+chaud `CPUQuota` du slice à 50 % sans redémarrer quoi que ce soit, prouve
+l'effet dans `top`, puis montre où systemd a écrit la modification et
+comment la rendre temporaire.
+
 ---
 
 ## 8.6 Labs ★★
@@ -601,7 +799,7 @@ dont `ssh.service` dépend, en te limitant au premier niveau. Enfin, montre les
 
 ::: contexte
 Le support remonte que l'API met plusieurs secondes à répondre depuis ce matin.
-Le monitoring n'est pas encore branché sur cette VM (module 17). On te demande un
+Le monitoring n'est pas encore branché sur cette VM (module 21). On te demande un
 diagnostic de premier niveau et une mesure de mitigation immédiate, sans
 redémarrer quoi que ce soit.
 :::
@@ -851,6 +1049,78 @@ bash check_M08_05.sh
 
 ---
 
+### **L8.6** — Contenir le batch de nuit dans un slice
+
+::: contexte
+Ticket INC-3244 : « chaque nuit vers 2 h, l'API `factura-api` disparaît
+pendant dix minutes ». Le journal du noyau montre `Out of memory: Killed
+process … (python3)` — et la victime n'est pas le batch, c'est l'API. Le
+batch (`factura-gourmand.py`, un import qui charge tout en mémoire) doit
+continuer à tourner, mais il ne doit plus jamais emporter autre chose que
+lui-même. Interdit : toucher au code du batch, ajouter de la RAM.
+:::
+
+Prérequis : `factura-api.service` en place (L8.2) et actif ; sinon lance
+l'API à la main dans une unité transitoire (`systemd-run --unit=factura-api
+-p User=factura /opt/factura/bin/factura-api.py`).
+
+1. Reproduis le symptôme **de façon contrôlée** : lance
+   `factura-gourmand.py 100 0.2` sans limite dans une unité transitoire
+   `batch-nu`, et observe dans un second terminal `free -m`, `vmstat 1`
+   et `curl -m1 http://127.0.0.1:8080/sante`. Note ce que tue l'OOM killer
+   global (`journalctl -k`) et pourquoi ce n'est pas forcément le batch
+   (`oom_score` des deux processus **avant** l'incident). Arrête tout et
+   vérifie que l'API est revenue.
+2. Écris `/etc/systemd/system/batch.slice` : `MemoryMax=300M`,
+   `MemorySwapMax=0`, `CPUQuota=50%`, `TasksMax=32`, avec une `Description=`.
+   Recharge, et prouve que le slice existe avec ses valeurs
+   (`systemctl show`). Explique pourquoi il n'apparaît pas encore dans
+   `systemd-cgls`.
+3. Écris `/etc/systemd/system/factura-lots.service` : lance
+   `factura-gourmand.py 20 1` sous le compte `factura`, dans le slice, avec
+   `Restart=on-failure`, `RestartSec=10s`, un `StartLimitBurst` qui laisse
+   au plus trois relances en cinq minutes, sorties dans le journal. Démarre-
+   le et regarde-le vivre : `systemd-cgtop`, puis, dans le répertoire du
+   cgroup de l'unité, `memory.current` toutes les secondes,
+   `memory.events` et `pids.current`.
+4. Quand il meurt : relève dans l'ordre `systemctl status factura-lots`
+   (`Result:`), `memory.events` du **slice** (`oom_kill`), `journalctl -k`
+   (quelle ligne, quel cgroup nommé), `journalctl -u factura-lots`. Prouve
+   que l'API n'a rien vu : `/sante` répond, `free -m` est stable, aucune
+   ligne `Out of memory: Killed` globale. Laisse le service épuiser ses
+   relances et note l'état final.
+5. Ajoute `factura-charge.sh 2` dans le même slice (unité transitoire
+   `lots-cpu`) et prouve avec `top` (touche `1`) et `cpu.stat` du slice que
+   la charge plafonne à un demi-cœur, quel que soit le nombre de processus.
+   Relève `nr_throttled`.
+6. Le chef de projet veut « un peu plus de marge » : passe `MemoryMax` du
+   slice à 400M **à chaud**, montre le fichier créé par systemd, puis
+   relance `factura-lots` et vérifie qu'il va plus loin avant de mourir
+   (`memory.peak` ou ta lecture périodique).
+7. Rédige `~/lab08/rapports/inc-3244.md` : cause, correctif (les deux
+   unités), preuve que l'OOM est confiné, valeurs retenues et comment les
+   changer, ce qui reste à faire côté développeurs.
+
+::: astuce
+`systemd-run -p MemoryMax=300M -p MemorySwapMax=0 --unit=test commande` te
+laisse tester une limite avant de l'écrire dans une unité. Et `watch -n1
+cat /sys/fs/cgroup/batch.slice/memory.current` remplace
+avantageusement `top` pour regarder une limite se faire toucher.
+:::
+
+::: check
+Critère de succès : `batch.slice` chargé avec `MemoryMax` ≤ 400 Mo et
+un `CPUQuota`, `factura-lots.service` rattaché au slice avec `Restart=`,
+au moins un `oom_kill` compté dans le slice, aucune ligne d'OOM global dans
+le journal du noyau, `factura-api` toujours actif, rapport rédigé.
+
+```bash
+sudo bash check_M08_07.sh
+```
+:::
+
+---
+
 ## 8.7 Break & Fix ★★★
 
 ::: attention
@@ -1043,6 +1313,10 @@ bash check_M08_06.sh
 | Durcir une unité et mesurer avec `systemd-analyze security` | ☐ | ☐ |
 | Modifier une unité de paquet par drop-in, connaître la précédence | ☐ | ☐ |
 | Dérouler la méthode complète sur un service qui ne démarre pas | ☐ | ☐ |
+| Cibler des processus avec `pgrep`/`pkill` et savoir pourquoi `killall` rate | ☐ | ☐ |
+| Piloter `top` interactif, trier `ps`, lire `/proc/PID/status` et les threads | ☐ | ☐ |
+| Confiner une commande avec `systemd-run --scope` et lire son cgroup | ☐ | ☐ |
+| Créer un slice, y rattacher des services, prouver un OOM confiné | ☐ | ☐ |
 
 Pour aller plus loin :
 

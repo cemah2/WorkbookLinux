@@ -1,49 +1,78 @@
 #!/usr/bin/env bash
-# break_M16_02.sh — panne BF16.2 (descripteurs de fichiers épuisés)
+# break_M16_02.sh — panne BF16.2 (le journal systemd a mangé 4 Go)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
+#
+# Le volume est écrit par journald lui-même : des fichiers .journal
+# fabriqués à la main seraient ignorés par journalctl --disk-usage, et
+# l'exercice n'aurait aucun sens.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-DROPD=/etc/systemd/system/vitrine-api.service.d
-DROP="$DROPD/90-m16-02.conf"
+DROPD=/etc/systemd/journald.conf.d
+DROP="$DROPD/99-debug-heritage.conf"
+CIBLE_GO="${TAILLE_GO:-4}"
 mkdir -p "$SAUV" "$DROPD"
 
-[ -x /opt/vitrine/bin/vitrine-api.py ] || {
-  echo "/opt/vitrine/bin/vitrine-api.py absent : lance setup_M16.sh" >&2
+[ -d /run/systemd/system ] || {
+  echo "systemd ne pilote pas cette machine : panne inapplicable" >&2
   exit 1; }
 
-if [ ! -f "$SAUV/M16_02.etat" ]; then
-  {
-    echo "LimitNOFILE avant : \
-$(systemctl show vitrine-api -p LimitNOFILE --value 2>/dev/null)"
-    echo "VITRINE_FD avant : \
-$(grep -s '^VITRINE_FD=' /etc/vitrine/api.env || echo absent)"
-  } > "$SAUV/M16_02.etat"
+LIBRE_GO=$(df -BG --output=avail /var | awk 'NR==2 {gsub("G","");print $1}')
+if [ "$LIBRE_GO" -lt $((CIBLE_GO + 4)) ]; then
+  echo "Il faut au moins $((CIBLE_GO + 4)) Go libres sur /var " \
+       "(actuellement ${LIBRE_GO} Go)." >&2
+  echo "Relance avec TAILLE_GO=1 sudo bash break_M16_02.sh" >&2
+  exit 1
 fi
 
-# --- la panne -----------------------------------------------------------
-# Limite basse héritée d'un « durcissement » mal calibré + une application
-# qui ne referme pas ce qu'elle ouvre : la dérive est lente, l'incident
-# arrive après quelques centaines de requêtes.
+# --- 1. la configuration « d'un prédécesseur pressé » -------------------
+[ -f "$DROP" ] && [ ! -f "$SAUV/M16_02.journald.conf" ] && \
+  cp -a "$DROP" "$SAUV/M16_02.journald.conf"
+
 cat > "$DROP" <<'EOF'
-[Service]
-LimitNOFILE=128
-Environment=VITRINE_FD=3
+# Ajouté pour une session de debug (ticket INC-3901). À retirer.
+[Journal]
+Storage=persistent
+SystemMaxUse=8G
+SystemMaxFileSize=256M
+RateLimitIntervalSec=0
+RateLimitBurst=0
 EOF
 chmod 0644 "$DROP"
 
-if [ -d /run/systemd/system ]; then
-  systemctl daemon-reload
-  systemctl reset-failed vitrine-api.service >/dev/null 2>&1 || true
-  systemctl restart vitrine-api.service >/dev/null 2>&1 || true
-fi
+mkdir -p /var/log/journal
+systemd-tmpfiles --create --prefix /var/log/journal >/dev/null 2>&1 || true
+systemctl restart systemd-journald
+journalctl --flush >/dev/null 2>&1 || true
+
+# --- 2. on remplit réellement le journal --------------------------------
+echo "écriture de ${CIBLE_GO} Go dans le journal (plusieurs minutes)..." >&2
+python3 - "$CIBLE_GO" <<'PYEOF' | systemd-cat -t factura-debug -p info
+import base64
+import os
+import sys
+
+cible = int(sys.argv[1]) * 1024 * 1024 * 1024
+ecrit = 0
+# Des données incompressibles : journald compresse les champs volumineux,
+# du texte répétitif ne consommerait presque rien sur disque.
+while ecrit < cible:
+    bloc = base64.b64encode(os.urandom(3000)).decode()
+    ligne = "trace debug INC-3901 payload=%s\n" % bloc
+    sys.stdout.write(ligne)
+    ecrit += len(ligne)
+    if ecrit % (200 * 1024 * 1024) < len(ligne):
+        sys.stdout.flush()
+PYEOF
+
+sync
+journalctl --rotate >/dev/null 2>&1 || true
+sleep 2
 
 cat <<'EOF'
 
-Symptôme attendu : tout va bien au démarrage. Après quelques dizaines de
-requêtes, une requête sur trois échoue en erreur 500 et le journal
-applicatif répète « OSError: [Errno 24] Too many open files ».
-Un redémarrage du service règle le problème... jusqu'à la prochaine fois.
-Pour reproduire : bash /opt/vitrine/bin/vitrine-charge.sh /rapport 5 30
+Symptôme attendu : « df -h /var » affiche moins de 1 Go libre, et
+« du -sh /var/log/* » désigne /var/log/journal comme premier consommateur.
+Aucun fichier .log n'est anormalement gros.
 EOF

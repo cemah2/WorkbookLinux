@@ -1,47 +1,79 @@
 #!/usr/bin/env bash
-# break_M23_03.sh — panne BF23.3 : fuite de descripteurs de fichiers
-# Dépose ~/lab23/bf3/compte-erreurs.py et 1500 journaux à analyser.
+# break_M23_03.sh — panne BF23.3 : « le vault ne s'ouvre plus »
+# Rechiffre inventory/group_vars/all/vault.yml avec un autre mot de passe et
+# retire vault_password_file d'ansible.cfg. Laisse un mail dans ~/lab23/casse.
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 LAB_USER="${SUDO_USER:-mathieu}"
 LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-
 BASE="$LAB_HOME/lab23"
-BF="$BASE/bf3"
-mkdir -p /root/.breakfix-backup
+VAULT="$BASE/inventory/group_vars/all/vault.yml"
+CFG="$BASE/ansible.cfg"
+VP="$BASE/.vault_pass"
+SAUV=/root/.breakfix-backup
+mkdir -p "$SAUV" "$BASE/casse"
+[ -f "$VAULT" ] && [ -f "$VP" ] && [ -f "$CFG" ] \
+  || { echo "projet ~/lab23 incomplet : lance setup_M23.sh" >&2; exit 1; }
 
-rm -rf "$BF"
-mkdir -p "$BF/logs"
-for i in $(seq -w 1 1500); do
-  printf 'INFO ok\nERROR panne %s\nINFO fin\n' "$i" > "$BF/logs/svc-$i.log"
-done
+as_user() { sudo -u "$LAB_USER" -H env PATH="$LAB_HOME/.local/bin:$PATH" "$@"; }
+JULIEN_PASS='Julien-Temp-2026!'
+TMPJ=$(mktemp); printf '%s\n' "$JULIEN_PASS" > "$TMPJ"; chmod 644 "$TMPJ"
+trap 'rm -f "$TMPJ"' EXIT
 
-cat > "$BF/compte-erreurs.py" <<'EOF'
-#!/usr/bin/env python3
-"""compte-erreurs.py — compte les lignes ERROR de chaque journal d'un
-répertoire. Ouvre tout d'abord (« pour aller plus vite »), lit ensuite."""
-import sys
-from pathlib import Path
+# état sain ? -> sauvegarde ; déjà cassé ? -> on repart de la sauvegarde
+if as_user ansible-vault view --vault-password-file "$VP" "$VAULT" \
+     >/dev/null 2>&1; then
+  cp -a "$VAULT" "$SAUV/M23_03_vault.yml"
+  cp -a "$CFG" "$SAUV/M23_03_ansible.cfg"
+elif [ -f "$SAUV/M23_03_vault.yml" ]; then
+  cp -a "$SAUV/M23_03_vault.yml" "$VAULT"
+  cp -a "$SAUV/M23_03_ansible.cfg" "$CFG"
+else
+  echo "vault.yml ne se déchiffre pas et aucune sauvegarde : relance" \
+       "setup_M23.sh" >&2; exit 1
+fi
 
-rep = Path(sys.argv[1])
-ouverts = {}
-for p in sorted(rep.glob("*.log")):
-    ouverts[p.name] = open(p)
+# 1. rechiffrage avec le mot de passe perso de Julien
+as_user ansible-vault rekey --vault-password-file "$VP" \
+  --new-vault-password-file "$TMPJ" "$VAULT" >/dev/null
+# 2. « nettoyage » d'ansible.cfg : plus de fichier de mot de passe
+sed -i 's/^vault_password_file/# vault_password_file/' "$CFG"
 
-total = 0
-for nom, f in ouverts.items():
-    n = sum(1 for ligne in f if "ERROR" in ligne)
-    total += n
-print(f"{len(ouverts)} fichiers, {total} erreurs")
+# 3. le mail
+cat > "$BASE/casse/mail-julien.txt" <<'EOF'
+De      : julien@lab.local
+À       : ops@lab.local
+Objet   : vault - pense-bête avant mes congés
+Date    : vendredi, 17:52
+
+Salut,
+
+j'ai dû tester baseline.yml depuis mon portable perso où je n'ai pas le
+.vault_pass de l'équipe (et je ne voulais pas le copier dessus). J'ai donc
+rechiffré inventory/group_vars/all/vault.yml avec un mot de passe à moi le
+temps du test, et j'ai enlevé la ligne vault_password_file d'ansible.cfg qui
+me générait une erreur sur le portable.
+
+Je remets tout en ordre lundi en rentrant. Si vous en avez besoin avant, mon
+mot de passe temporaire est : Julien-Temp-2026!
+(ne le notez nulle part, je le change à mon retour)
+
+Bon week-end,
+Julien
 EOF
-chmod 755 "$BF/compte-erreurs.py"
-chown -R "$LAB_USER":"$LAB_USER" "$BF"
+chown -R "$LAB_USER":"$LAB_USER" "$BASE/casse" "$VAULT" "$CFG"
 
-cat <<EOF
+cat <<'EOF'
 
-Symptôme attendu : "$BF/compte-erreurs.py $BF/logs" s'arrête avec
-"OSError: [Errno 24] Too many open files" avant d'avoir compté quoi que ce
-soit. Le même script fonctionnait quand le répertoire avait 200 journaux.
+Symptôme attendu : dans ~/lab23, n'importe quelle commande Ansible, même
+ansible all -m ansible.builtin.ping, s'arrête avant de toucher un hôte :
+  ERROR! Attempting to decrypt but no vault secrets found
+Après un premier bricolage dans ansible.cfg, le message devient :
+  ERROR! Decryption failed (no vault secrets were found that could decrypt)
+Un mail de Julien traîne dans ~/lab23/casse/. Objectif : retrouver l'accès,
+rechiffrer avec le mot de passe de l'équipe (~/lab23/.vault_pass), remettre
+ansible.cfg en état.
 EOF

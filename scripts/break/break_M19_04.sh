@@ -1,66 +1,63 @@
 #!/usr/bin/env bash
-# break_M19_04.sh — panne BF19.4 : « on change le vhost, nginx ne bouge pas »
-# Dépose ~/lab19/casse/vhost-update.yml (réutilise le template de L19.2).
+# break_M19_04.sh — panne BF19.4 (processus en boucle, CPU saturé)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-BASE="$LAB_HOME/lab19"
-CASSE="$BASE/casse"
 SAUV=/root/.breakfix-backup
-mkdir -p "$SAUV" "$CASSE"
+BINL=/usr/local/sbin/vitrine-reindex
+UNIT=/etc/systemd/system/vitrine-reindex.service
+mkdir -p "$SAUV"
 
-[ -f "$BASE/playbooks/templates/vitrine.conf.j2" ] \
-  || echo "[warn] playbooks/templates/vitrine.conf.j2 absent : fais L19.2 d'abord"
+if [ ! -f "$SAUV/M19_04.etat" ]; then
+  uptime > "$SAUV/M19_04.etat"
+fi
 
-[ -f "$CASSE/vhost-update.yml" ] \
-  && cp -a "$CASSE/vhost-update.yml" "$SAUV/M19_04_vhost-update.yml"
+# --- le brûleur de CPU --------------------------------------------------
+cat > "$BINL" <<'SHEOF'
+#!/usr/bin/env bash
+# vitrine-reindex — reconstruction incrementale de l'index de recherche.
+# Boucle de calcul : la condition de sortie n'est jamais atteinte
+# (regression introduite en 2.3.1).
+set -u
+N="${1:-3}"
+pids=()
+brule() { local i=0; while :; do i=$(( (i + 7) % 1000003 )); done; }
+trap 'kill "${pids[@]}" 2>/dev/null; exit 0' TERM INT
+for _ in $(seq 1 "$N"); do brule & pids+=("$!"); done
+wait
+SHEOF
+chmod 0755 "$BINL"
 
-cat > "$CASSE/vhost-update.yml" <<'EOF'
----
-# vhost-update.yml — change la version annoncée par le vhost vitrine
-# usage : ansible-playbook casse/vhost-update.yml -e vitrine_version=1.0.1
-- name: Mise a jour du vhost vitrine
-  hosts: web
-  become: true
-  vars:
-    vitrine_version: "1.0.1"
+# --- maintenu en vie par systemd : tuer le PID ne suffit pas ------------
+cat > "$UNIT" <<'EOF'
+[Unit]
+Description=Vitrine — reconstruction de l'index de recherche
+After=vitrine-api.service
 
-  tasks:
-    - name: Deployer le vhost
-      ansible.builtin.template:
-        src: ../playbooks/templates/vitrine.conf.j2
-        dest: "{{ nginx_vhost_dir }}/vitrine.conf"
-        owner: root
-        group: root
-        mode: "0644"
-      changed_when: false
-      notify: Reload nginx
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/vitrine-reindex 3
+Restart=always
+RestartSec=2s
 
-    - name: Verifier que le vhost est bien en place
-      ansible.builtin.command: grep -q X-Vitrine-Version /etc/nginx/conf.d/vitrine.conf
-      changed_when: false
-
-  handlers:
-    - name: Reload nginx
-      ansible.builtin.systemd_service:
-        name: nginx
-        state: reloaded
-      when: "'ubuntu' in group_names"
+[Install]
+WantedBy=multi-user.target
 EOF
-chown -R "$LAB_USER":"$LAB_USER" "$CASSE"
+chmod 0644 "$UNIT"
+
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  systemctl enable --now vitrine-reindex.service >/dev/null 2>&1 || true
+else
+  pgrep -f "$BINL" >/dev/null 2>&1 || \
+    setsid nohup "$BINL" 3 >/dev/null 2>&1 < /dev/null &
+fi
 
 cat <<'EOF'
 
-Symptôme attendu (prérequis : L19.2 appliqué) :
-  cd ~/lab19 && ansible-playbook casse/vhost-update.yml
-se termine sans erreur sur lab-rhel et en erreur sur lab-web ; dans les deux
-cas, curl -skI https://10.10.10.11/ et https://10.10.10.13/ renvoient
-toujours X-Vitrine-Version: 1.0.0, alors que le fichier vitrine.conf sur les
-deux hôtes contient bien 1.0.1. Objectif : trois mécanismes distincts
-empêchent le handler de tourner ; corrige-les et prouve que le handler se
-déclenche une fois par hôte modifié, et pas du tout quand rien ne change.
+Symptôme attendu : le site répond en 2 à 4 secondes au lieu de 40 ms.
+La charge moyenne dépasse 4 sur une VM à 2 vCPU et ne redescend pas.
+Un coup d'oeil rapide à « top » ne montre aucun nom de processus connu de
+l'équipe applicative.
 EOF

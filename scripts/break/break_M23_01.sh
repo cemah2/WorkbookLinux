@@ -1,103 +1,73 @@
 #!/usr/bin/env bash
-# break_M23_01.sh — panne BF23.1 : marche dans le shell, plante sous timer
-# Dépose ~/lab23/bf1/export-rapport.py, un notifieur dans ~/.local/bin,
-# et une unité systemd + timer qui lancent le script toutes les 2 minutes.
+# break_M23_01.sh — panne BF23.1 : le playbook « qu'il faut lancer deux fois »
+# Dépose ~/lab23/casse/prepa-deploy.yml, écrit par un collègue en congé.
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 LAB_USER="${SUDO_USER:-mathieu}"
 LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-
-BASE="$LAB_HOME/lab23"
-BF="$BASE/bf1"
+CASSE="$LAB_HOME/lab23/casse"
 SAUV=/root/.breakfix-backup
-mkdir -p "$SAUV"
-[ -d "$BASE/venv" ] || { echo "$BASE/venv absent : lance setup_M23.sh" >&2; \
-  exit 1; }
+mkdir -p "$SAUV" "$CASSE/files"
 
-for u in export-rapport.service export-rapport.timer; do
-  if [ -f "/etc/systemd/system/$u" ] && [ ! -f "$SAUV/M23_01.$u" ]; then
-    cp -a "/etc/systemd/system/$u" "$SAUV/M23_01.$u"
-  fi
-done
+[ -f "$CASSE/prepa-deploy.yml" ] \
+  && cp -a "$CASSE/prepa-deploy.yml" "$SAUV/M23_01_prepa-deploy.yml"
 
-# --- données et notifieur ------------------------------------------------
-rm -rf "$BF"
-mkdir -p "$BF/conf" "$BF/rapports" "$LAB_HOME/.local/bin"
-cat > "$BF/conf/export.yaml" <<'EOF'
-titre: Rapport quotidien factura
-sites:
-  - nom: boutique
-    url: http://10.10.10.11/
-  - nom: gitea
-    url: http://10.10.10.14:3000/
+cat > "$CASSE/prepa-deploy.yml" <<'EOF'
+---
+# prepa-deploy.yml — prépare les frontaux pour l'appli vitrine (Julien)
+# Testé sur mon poste, ça marche.
+- name: Preparation des frontaux
+  hosts: web
+  become: true
+  tasks:
+    - name: nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: compte deploy
+      ansible.builtin.shell: useradd -m -s /bin/bash deploy
+
+    - name: dossier de release
+      ansible.builtin.shell: mkdir /srv/deploy
+
+    - name: droits sur le dossier
+      ansible.builtin.shell: chown deploy:deploy /srv/deploy && chmod 750 /srv/deploy
+
+    - name: sudo pour deploy
+      ansible.builtin.shell: echo 'deploy ALL=(ALL) NOPASSWD: /bin/systemctl reload nginx' >> /etc/sudoers.d/deploy
+
+    - name: page de maintenance
+      ansible.builtin.copy:
+        src: maintenance.html
+        dest: /var/www/html/maintenance.html
+
+    - name: redemarrer nginx
+      ansible.builtin.shell: systemctl restart nginx
 EOF
-cat > "$LAB_HOME/.local/bin/notifier" <<'EOF'
-#!/usr/bin/env bash
-# notifieur maison : en prod il pousse vers le chat, ici il journalise.
-logger -t notifier "$*"
-echo "notifié : $*"
+
+cat > "$CASSE/files/maintenance.html" <<'EOF'
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Maintenance</title></head>
+<body><h1>Vitrine en maintenance</h1><p>Retour dans quelques minutes.</p>
+</body></html>
 EOF
-chmod 755 "$LAB_HOME/.local/bin/notifier"
 
-# --- le script fautif ----------------------------------------------------
-cat > "$BF/export-rapport.py" <<'EOF'
-#!/usr/bin/env python3
-"""export-rapport.py — génère le rapport quotidien depuis conf/export.yaml.
-Testé à la main : « ça marche chez moi ». """
-import subprocess
-from datetime import date
-
-import yaml
-
-with open("conf/export.yaml") as f:
-    conf = yaml.safe_load(f)
-
-lignes = [f"# {conf['titre']} — {date.today()}", ""]
-for site in conf["sites"]:
-    lignes.append(f"* {site['nom']} : {site['url']}")
-
-sortie = f"rapports/rapport-{date.today()}.md"
-with open(sortie, "w") as f:
-    f.write("\n".join(lignes) + "\n")
-
-subprocess.run(["notifier", f"rapport écrit : {sortie}"], check=True)
-print(f"OK {sortie}")
-EOF
-chmod 755 "$BF/export-rapport.py"
-chown -R "$LAB_USER":"$LAB_USER" "$BF" "$LAB_HOME/.local"
-
-# --- l'unité et le timer ---------------------------------------------------
-cat > /etc/systemd/system/export-rapport.service <<EOF
-[Unit]
-Description=Export du rapport quotidien factura
-
-[Service]
-Type=oneshot
-User=$LAB_USER
-ExecStart=/usr/bin/python3 $BF/export-rapport.py
-EOF
-cat > /etc/systemd/system/export-rapport.timer <<'EOF'
-[Unit]
-Description=Export du rapport toutes les 2 minutes (lab)
-
-[Timer]
-OnCalendar=*:0/2
-AccuracySec=10s
-
-[Install]
-WantedBy=timers.target
-EOF
-systemctl daemon-reload
-systemctl enable --now export-rapport.timer >/dev/null 2>&1
-systemctl start export-rapport.service >/dev/null 2>&1 || true
+chown -R "$LAB_USER":"$LAB_USER" "$CASSE"
 
 cat <<EOF
 
-Symptôme attendu : lancé à la main depuis ~/lab23/bf1 avec le venv du module
-activé, export-rapport.py écrit son rapport et affiche "OK". Lancé par
-export-rapport.timer, il échoue à chaque fois : "systemctl status
-export-rapport.service" est en failed et aucun rapport n'apparaît dans
-$BF/rapports/.
+Symptôme attendu : ~/lab23/casse/prepa-deploy.yml, laissé par Julien,
+« marche » selon lui. Première exécution (cd ~/lab23 &&
+ansible-playbook casse/prepa-deploy.yml) : lab-rhel échoue dès la première
+tâche, lab-web finit changed=7. Deuxième exécution : lab-web échoue à son
+tour (useradd: user 'deploy' already exists, puis mkdir: cannot create
+directory). Une fois ces deux tâches commentées, tout est changed à chaque
+passage et /etc/sudoers.d/deploy s'allonge d'une ligne identique par run.
+Objectif : le même playbook, même intentions, changed=0 en seconde passe
+sur lab-web ET lab-rhel, nginx redémarré seulement si sa conf change.
 EOF

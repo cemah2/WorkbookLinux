@@ -1,112 +1,164 @@
 #!/usr/bin/env bash
-# check_M17_06.sh — vérifie le défi D17 (dépôt de référence de l'équipe)
-# À lancer sur lab-adm, en tant que mathieu.
+# check_M17_06.sh — vérifie le défi D17 (audit de la planification)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-has()  { grep "$@" >/dev/null; }   # comme grep -q, sans SIGPIPE (pipefail)
 echo "== Vérification D17 =="
 
-D="$HOME/lab17/factura-infra"
-BARE=/srv/git/factura-infra.git
-RAP="$HOME/lab17/rapports/D17.md"
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-cd "$D" 2>/dev/null || { ko "$D absent"; exit 1; }
-g() { git "$@" 2>/dev/null; }
+[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-# --- 1. hooks côté client, versionnés -------------------------------------
-[ "$(g config core.hooksPath)" = .githooks ] \
-  && ok "core.hooksPath = .githooks" \
-  || ko "core.hooksPath n'est pas .githooks (git config core.hooksPath .githooks)"
-for h in pre-commit commit-msg; do
-  if g ls-files --error-unmatch ".githooks/$h" >/dev/null 2>&1 && \
-     [ -x ".githooks/$h" ]; then ok ".githooks/$h est versionné et exécutable"
-  else ko ".githooks/$h manquant, non versionné ou non exécutable"; fi
-done
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+AUDIT="$HOMEDIR/bin/audit-planif.sh"
+RAPP="$HOMEDIR/lab17/rapports/audit-lab-web.md"
+DEC="$HOMEDIR/lab17/rapports/decisions.md"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-# test des hooks dans un clone jetable
-git clone -q "$D" "$TMP/c" 2>/dev/null
-cd "$TMP/c" || exit 1
-git config user.name t; git config user.email t@t
-git config core.hooksPath .githooks; git config commit.gpgsign false
-printf 'x=1\n' > ok.txt; git add ok.txt
-git commit -q -m "chore: test" >/dev/null 2>&1 \
-  && ok "un commit conforme passe les hooks" \
-  || ko "un commit conforme (chore: test) est refusé par les hooks"
-printf 'y=2\n' > ok2.txt; git add ok2.txt
-git commit -q -m "modif rapide" >/dev/null 2>&1 \
-  && ko "commit-msg laisse passer « modif rapide » (Conventional Commits ?)" \
-  || ok "commit-msg refuse un message hors convention"
-git reset -q
-printf 'DB_PASSWORD=Hop-2026\n' > prod.env; git add -f prod.env
-git commit -q -m "chore: conf" >/dev/null 2>&1 \
-  && ko "pre-commit laisse passer un DB_PASSWORD=" \
-  || ok "pre-commit bloque un secret"
-git reset -q; rm -f prod.env
-printf '#!/bin/bash\nrm -rf $1/*\n' > bad.sh; git add bad.sh
-if command -v shellcheck >/dev/null 2>&1; then
-  git commit -q -m "chore: script" >/dev/null 2>&1 \
-    && ko "pre-commit laisse passer un script que shellcheck refuse" \
-    || ok "pre-commit fait passer shellcheck sur les .sh"
-else note "shellcheck absent : contrôle shellcheck non testé"; fi
-cd "$D" || exit 1
+# --- 1. le script ------------------------------------------------------
+if [ -x "$AUDIT" ]; then
+  ok "$AUDIT existe et est exécutable"
+  head -1 "$AUDIT" | grep -q '#!/usr/bin/env bash' \
+    && ok "shebang #!/usr/bin/env bash" \
+    || ko "shebang attendu : #!/usr/bin/env bash"
+  grep -q 'set -euo pipefail' "$AUDIT" \
+    && ok "set -euo pipefail" \
+    || ko "set -euo pipefail manquant"
+  grep -qE 'crond?\.service|command -v crontab|cronie|/etc/redhat-release|\
+ID_LIKE|is-active cron' "$AUDIT" \
+    && ok "le script s'adapte au nom du service cron (cron vs crond)" \
+    || ko "le script suppose un seul nom de service : il doit tourner sur \
+lab-web (cron.service) et lab-rhel (crond.service) sans modification"
+else
+  ko "$AUDIT absent ou non exécutable"
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1
+fi
 
-# --- 2. fichiers de gouvernance ------------------------------------------
-if [ -f CONTRIBUTING.md ]; then
-  ok "CONTRIBUTING.md présent"
-  for mot in 'feat' 'fix' 'main' 'secret'; do
-    grep -qi "$mot" CONTRIBUTING.md || ko "CONTRIBUTING.md ne parle pas de « $mot »"
-  done
-else ko "CONTRIBUTING.md absent"; fi
-for p in '.env' '*.pem' '*.key' '*.tfstate'; do
-  grep -qxF "$p" .gitignore && ok ".gitignore contient $p" \
-                            || ko ".gitignore ne contient pas $p"
-done
-grep -q 'eol=lf' .gitattributes 2>/dev/null \
-  && ok ".gitattributes force LF" || ko ".gitattributes sans eol=lf"
+# --- 2. séparation stdout / stderr ------------------------------------
+"$AUDIT" > "$TMP/out.md" 2> "$TMP/err.txt"
+RC=$?
+if [ -s "$TMP/out.md" ]; then
+  ok "le script produit un rapport sur stdout"
+  grep -qE '^#|^\|' "$TMP/out.md" \
+    && ok "la sortie est du Markdown (titres ou tableau)" \
+    || ko "stdout ne ressemble pas à du Markdown"
+  grep -qiE 'diagnostic|analyse en cours|\[debug\]|lecture de' "$TMP/out.md" \
+    && ko "des traces de diagnostic polluent stdout : elles vont sur stderr" \
+    || ok "stdout ne contient que le rapport"
+else
+  ko "stdout est vide"
+fi
 
-# --- 3. signature ----------------------------------------------------------
-if g cat-file -p v1.2.0 | has 'BEGIN \(SSH\|PGP\) SIGNATURE'; then
-  ok "v1.2.0 est un tag annoté et signé"
-else ko "v1.2.0 absent, léger ou non signé (git tag -s)"; fi
-sig=$(g log -1 --format=%G? main)
-case "$sig" in G) ok "le dernier commit de main est signé et vérifié" ;;
-  N) ko "le dernier commit de main n'est pas signé" ;;
-  *) note "signature présente mais non vérifiable ici (%G? = $sig) : \
-gpg.ssh.allowedSignersFile ?" ;;
-esac
-grep -q '1.2.0' CHANGELOG.md 2>/dev/null \
-  && ok "CHANGELOG.md documente 1.2.0" || ko "CHANGELOG.md sans entrée 1.2.0"
+# --- 3. contenu du rapport --------------------------------------------
+sec() {
+  grep -qiE "$2" "$TMP/out.md" \
+    && ok "rapport : $1" \
+    || ko "rapport : $1 manquant"
+}
+sec "crontabs utilisateurs recensées" 'crontab'
+sec "/etc/cron.d recensé"             '/etc/cron\.d|cron\.d'
+sec "répertoires cron.* recensés"     'cron\.(daily|hourly|weekly|monthly)'
+sec "timers systemd recensés"         'timer'
+sec "section Anomalies"               'anomalie'
 
-# --- 4. serveur : pre-receive ---------------------------------------------
-if [ -d "$BARE" ]; then
-  if [ -x "$BARE/hooks/pre-receive" ]; then
-    ok "pre-receive présent sur $BARE"
-    cp -a "$BARE" "$TMP/bare"
-    git clone -q "$TMP/bare" "$TMP/s" 2>/dev/null
-    cd "$TMP/s" || exit 1
-    git config user.name t; git config user.email t@t
-    git config commit.gpgsign false
-    printf 'z\n' > z.txt; git add z.txt
-    git commit -q -m "n'importe quoi" >/dev/null 2>&1
-    git push -q origin HEAD:main >/dev/null 2>&1 \
-      && ko "le serveur accepte sur main un commit hors convention" \
-      || ok "le serveur refuse un commit hors convention sur main"
-    git reset -q --hard HEAD~1
-    printf 'DB_PASSWORD=x\n' > .env; git add -f .env
-    git commit -q -m "chore: conf" >/dev/null 2>&1
-    git push -q origin HEAD:main >/dev/null 2>&1 \
-      && ko "le serveur accepte un push qui ajoute .env" \
-      || ok "le serveur refuse un push contenant .env"
-    cd "$D" || exit 1
-  else ko "pas de hook pre-receive exécutable sur $BARE"; fi
-  git -C "$BARE" tag 2>/dev/null | has -x v1.2.0 \
-    && ok "v1.2.0 est sur le serveur" || ko "v1.2.0 n'est pas poussé sur lab-adm"
-else note "$BARE absent : partie serveur non vérifiée (lance sur lab-adm)"; fi
+if grep -qE '^\|.*\|.*\|.*\|.*\|.*\|' "$TMP/out.md"; then
+  ok "tableau à 5 colonnes (source, planification, commande, user, dernière)"
+else
+  ko "le tableau du rapport n'a pas les 5 colonnes demandées au point 2"
+fi
 
-[ -f "$RAP" ] && ok "rapport D17.md présent" || ko "rapport $RAP absent"
+# --- 4. les sept détections, éprouvées sur des cas fabriqués ----------
+echo "  -- mise en place de cas de test --"
+BK="$TMP/backup"; mkdir -p "$BK"
+CLEAN=""
+
+# (a) % non échappé + (b) /dev/null, dans un fichier de /etc/cron.d
+cat > /etc/cron.d/zz-audit-test1 <<'EOF'
+17 3 * * * root tar czf /tmp/t-$(date +%F).tgz /srv/factura/data
+23 3 * * * root /opt/factura/bin/factura-rapport.sh > /dev/null 2>&1
+EOF
+# (c) script cron.daily invisible pour run-parts
+printf '#!/bin/sh\nexit 0\n' > /etc/cron.daily/zz-audit-test.sh
+chmod 0755 /etc/cron.daily/zz-audit-test.sh
+# (d) entrée /etc/cron.d sans champ utilisateur
+printf '*/7 * * * * /bin/true\n' > /etc/cron.d/zz-audit-test2
+chmod 0644 /etc/cron.d/zz-audit-test1 /etc/cron.d/zz-audit-test2
+# (g) tâche fréquente sans verrou
+printf '*/5 * * * * root /opt/factura/bin/factura-lent.sh 2\n' \
+  > /etc/cron.d/zz-audit-test3
+chmod 0644 /etc/cron.d/zz-audit-test3
+
+"$AUDIT" > "$TMP/out2.md" 2>/dev/null
+RC2=$?
+
+det() {
+  grep -qiF "$2" "$TMP/out2.md" \
+    && ok "détection : $1" \
+    || ko "détection manquante : $1 (cas fabriqué : $2)"
+}
+det "% non échappé"                     "zz-audit-test1"
+det "script cron.daily jamais exécuté"  "zz-audit-test.sh"
+det "entrée /etc/cron.d sans user"      "zz-audit-test2"
+det "tâche fréquente sans verrou"       "zz-audit-test3"
+grep -qF '/dev/null' "$TMP/out2.md" \
+  && ok "détection : sortie envoyée dans /dev/null" \
+  || ko "détection manquante : une tâche jette toute sa sortie"
+grep -qiF 'factura-orphelin' "$TMP/out2.md" \
+  && ok "détection : timer sans unité déclenchée" \
+  || ko "détection manquante : factura-orphelin.timer déclenche une unité \
+inexistante"
+grep -qiE 'dernière exécution|derniere execution|jamais exécuté|obsolète|\
+obsolete|périmé|perime|trop ancien' "$TMP/out2.md" \
+  && ok "détection : timer dont la dernière exécution est trop ancienne" \
+  || ko "détection manquante : timer dont la dernière exécution remonte à \
+plus de deux fois son intervalle"
+
+[ "$RC2" -ne 0 ] \
+  && ok "code de sortie non nul en présence d'anomalies ($RC2)" \
+  || ko "le script sort en 0 alors que 7 anomalies sont présentes"
+
+rm -f /etc/cron.d/zz-audit-test1 /etc/cron.d/zz-audit-test2 \
+      /etc/cron.d/zz-audit-test3 /etc/cron.daily/zz-audit-test.sh
+
+# --- 5. la machine est effectivement propre ---------------------------
+"$AUDIT" > "$TMP/out3.md" 2>/dev/null
+RC3=$?
+[ "$RC3" -eq 0 ] \
+  && ok "sur la machine nettoyée, audit-planif.sh sort en 0 (point 5)" \
+  || ko "audit-planif.sh sort encore en $RC3 : il reste des anomalies à \
+corriger sur lab-web (voir la section Anomalies de sa propre sortie)"
+
+if [ "$RC3" -ne 0 ]; then
+  note "anomalies restantes :"
+  sed -n '/[Aa]nomalie/,$p' "$TMP/out3.md" | head -12 | sed 's/^/        /'
+fi
+
+# --- 6. les livrables --------------------------------------------------
+[ -s "$RAPP" ] \
+  && ok "livrable présent : $RAPP" \
+  || ko "livrable manquant : $RAPP (généré par le script)"
+if [ -s "$DEC" ]; then
+  ok "livrable présent : $DEC"
+  L=$(grep -cE '^[-*|[:alnum:]]' "$DEC")
+  [ "$L" -ge 3 ] \
+    && ok "decisions.md documente au moins 3 migrations" \
+    || ko "decisions.md trop court : une ligne par tâche migrée, indiquant \
+ce que le timer apporte"
+else
+  ko "livrable manquant : $DEC"
+fi
+
+# --- 7. la règle interne est appliquée --------------------------------
+if [ -d /run/systemd/system ]; then
+  NT=$(systemctl list-timers --all --no-pager 2>/dev/null \
+       | grep -c 'factura')
+  [ "$NT" -ge 2 ] \
+    && ok "$NT timers factura en place" \
+    || ko "seulement $NT timer factura : les tâches récurrentes devaient \
+être converties (point 5)"
+fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

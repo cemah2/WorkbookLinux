@@ -1,104 +1,101 @@
 #!/usr/bin/env bash
-# check_M19_03.sh — vérifie le lab L19.3 (PostgreSQL : base, rôle, accès réseau)
-# À lancer sur lab-adm, en tant que mathieu. QUICK=1 saute la 2e exécution.
+# check_M19_03.sh — vérifie le lab L19.3 (disque plein, lent, en erreur)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-has()  { grep "$@" >/dev/null; }
 echo "== Vérification L19.3 =="
 
-export PATH="$HOME/.local/bin:$PATH"
-BASE="$HOME/lab19"
-cd "$BASE" 2>/dev/null || { ko "$BASE absent (setup_M19.sh)"; exit 1; }
-command -v ansible >/dev/null || { ko "ansible introuvable dans le PATH"; exit 1; }
-PB=playbooks/postgresql.yml
-[ -f "$PB" ] && ok "$PB présent" || { ko "$PB absent"; exit 1; }
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+BASE="$HOMEDIR/lab19"
+SCRIPT="$BASE/bin/verif-disque.sh"
+RAP="$BASE/rapports/disque.md"
+DATA=/srv/vitrine/data
 
-# --- 1. secrets : vault chiffré, référence en clair -----------------------
-VAULT=""
-for f in inventory/group_vars/db/vault.yml group_vars/db/vault.yml; do
-  [ -f "$f" ] && VAULT=$f && break
-done
-if [ -n "$VAULT" ]; then
-  head -1 "$VAULT" | has '^\$ANSIBLE_VAULT' \
-    && ok "$VAULT chiffré (\$ANSIBLE_VAULT)" || ko "$VAULT n'est pas chiffré"
-  ansible-vault view "$VAULT" 2>/dev/null | has '^vault_vitrine_db_password:' \
-    && ok "vault_vitrine_db_password présent dans le vault (déchiffrable)" \
-    || ko "vault_vitrine_db_password absent du vault ou vault indéchiffrable"
-else ko "group_vars/db/vault.yml absent"; fi
-nclair=$(grep -rl 'vault_vitrine_db_password' inventory/group_vars group_vars \
-           2>/dev/null | grep -vc 'vault.yml$')
-[ "$nclair" -eq 1 ] \
-  && ok "une seule référence en clair à vault_vitrine_db_password" \
-  || ko "vault_vitrine_db_password référencé dans $nclair fichier(s) clair(s) (attendu 1)"
-grep -rEq 'vitrine_db_password:\s*"?\{\{\s*vault_vitrine_db_password' \
-  inventory/group_vars group_vars 2>/dev/null \
-  && ok "vitrine_db_password référence la variable vault_*" \
-  || ko "vitrine_db_password ne pointe pas sur vault_vitrine_db_password"
-grep -Eq 'lineinfile' "$PB" && grep -Eq 'postgresql\.conf' "$PB" \
-  && ko "lineinfile sur postgresql.conf détecté (utilise postgresql_set)" \
-  || ok "pas de lineinfile sur postgresql.conf"
-
-# --- 2. état de lab-db -----------------------------------------------------
-pgq() { # pgq <sql>  : exécuté en postgres sur lab-db, résultat brut
-  ansible lab-db -b --become-user postgres -m ansible.builtin.command -o \
-    -a "psql -tAc \"$1\"" 2>/dev/null | sed 's/.*(stdout) //'
-}
-r=$(pgq "SHOW listen_addresses")
-printf '%s\n' "$r" | has '10.10.10.12' \
-  && ok "listen_addresses contient 10.10.10.12 (effectif, donc redémarré)" \
-  || ko "listen_addresses effectif = '$r' (postgresql_set + handler restart ?)"
-r=$(pgq "SELECT datname||' '||pg_get_userbyid(datdba)||' '||pg_encoding_to_char(encoding) FROM pg_database WHERE datname='vitrine'")
-printf '%s\n' "$r" | has 'vitrine vitrine_app UTF8' \
-  && ok "base vitrine, propriétaire vitrine_app, UTF8" \
-  || ko "base vitrine absente ou mauvais propriétaire/encodage ('$r')"
-r=$(ansible lab-db -b -m ansible.builtin.shell -o \
-      -a 'grep -E "^host\s+vitrine\s+vitrine_app\s+10.10.10.11/32\s+scram-sha-256" \
-          /etc/postgresql/*/main/pg_hba.conf | wc -l' 2>/dev/null)
-printf '%s\n' "$r" | has '| 1$' \
-  && ok "entrée pg_hba host vitrine vitrine_app 10.10.10.11/32 scram-sha-256" \
-  || ko "entrée pg_hba attendue absente (postgresql_pg_hba)"
-r=$(ansible lab-db -b -m ansible.builtin.shell -o \
-      -a 'ufw status | grep 5432 | grep -c 10.10.10.11' 2>/dev/null)
-printf '%s\n' "$r" | has '| 1$' \
-  && ok "ufw : 5432/tcp autorisé depuis 10.10.10.11" \
-  || ko "ufw : règle 5432 depuis 10.10.10.11 absente sur lab-db"
-
-# --- 3. connexion réseau depuis lab-web, refus depuis lab-adm --------------
-PW=$(ansible lab-db -m ansible.builtin.debug -o \
-       -a 'msg={{ vitrine_db_password }}' 2>/dev/null \
-     | sed -n 's/.*"msg": *"\([^"]*\)".*/\1/p')
-if [ -n "$PW" ]; then
-  # PGPASSWORD via environment: impossible en ad hoc, on passe par shell
-  r=$(ansible lab-web -m ansible.builtin.shell -o \
-        -a "PGPASSWORD='$PW' PGCONNECT_TIMEOUT=5 psql -h 10.10.10.12 \
-            -U vitrine_app -d vitrine -tAc 'SELECT 1'" 2>/dev/null)
-  printf '%s\n' "$r" | has -E 'SUCCESS|CHANGED' && printf '%s\n' "$r" | has '(stdout) 1' \
-    && ok "SELECT 1 réussit depuis lab-web avec vitrine_app" \
-    || ko "psql depuis lab-web échoue (pg_hba, ufw, listen_addresses, client ?)"
-  if command -v psql >/dev/null; then
-    PGPASSWORD="$PW" PGCONNECT_TIMEOUT=5 psql -h 10.10.10.12 -U vitrine_app \
-      -d vitrine -tAc 'SELECT 1' >/dev/null 2>&1 \
-      && ko "psql depuis lab-adm est ACCEPTÉ (pg_hba ou ufw trop larges)" \
-      || ok "psql depuis lab-adm est refusé (pg_hba / ufw)"
-  else note "psql absent sur lab-adm : refus depuis lab-adm non testé"; fi
-else ko "impossible de lire vitrine_db_password via Ansible (vault, vars.yml ?)"; fi
-
-# --- 4. idempotence et lint ------------------------------------------------
-if [ "${QUICK:-0}" = 1 ]; then note "QUICK=1 : seconde exécution non testée"
+# --- 1. le script de qualification --------------------------------------
+if [ -s "$SCRIPT" ]; then
+  ok "verif-disque.sh présent"
+  SORTIE=$(timeout 60 bash "$SCRIPT" "$DATA" 2>&1); RC=$?
+  if [ "$RC" -le 2 ]; then
+    ok "verif-disque.sh sort en $RC (0/1/2 attendus)"
+  else
+    ko "verif-disque.sh sort en $RC : le contrat est 0 sain, 1 \
+avertissement, 2 anomalie bloquante"
+  fi
+  MANQUE=""
+  a() { printf '%s' "$SORTIE" | grep -qiE "$1" || MANQUE="$MANQUE $2"; }
+  a '%|utilis|occup'         'occupation'
+  a 'inode'                  'inodes'
+  a 'supprim|deleted'        'fichiers-supprimes'
+  a '\bro\b|\brw\b|lecture'  'mode-de-montage'
+  if [ -z "$MANQUE" ]; then
+    ok "la sortie couvre occupation, inodes, fichiers supprimés, montage"
+  else
+    ko "absent de la sortie :$MANQUE"
+  fi
+  grep -qE 'df -i|/proc/mounts|findmnt' "$SCRIPT" \
+    && ok "le script interroge les inodes et le montage" \
+    || ko "le script doit utiliser df -i et findmnt (ou /proc/mounts)"
+  grep -qE 'lsof' "$SCRIPT" \
+    && ok "le script cherche les fichiers supprimés encore ouverts" \
+    || ko "le script doit détecter les fichiers supprimés (lsof +L1)"
+  grep -qE 'dmesg|journalctl -k' "$SCRIPT" \
+    && ok "le script lit les erreurs d'E/S du noyau" \
+    || ko "le script doit regarder dmesg pour les erreurs d'E/S"
 else
-  out=$(ansible-playbook "$PB" 2>&1)
-  if printf '%s\n' "$out" | has -E '^lab-db .*changed=0 .*failed=0' && \
-     ! printf '%s\n' "$out" | has -E 'failed=[1-9]'; then
-    ok "seconde exécution : changed=0 failed=0 sur lab-db"
-  else ko "la seconde exécution n'est pas changed=0 (relis le recap)"; fi
+  ko "script absent : $SCRIPT"
 fi
-if command -v ansible-lint >/dev/null; then
-  ansible-lint -q "$PB" >/dev/null 2>&1 && ok "ansible-lint muet sur $PB" \
-    || ko "ansible-lint signale des problèmes sur $PB"
-else note "ansible-lint absent, lint non testé"; fi
+
+# --- 2. l'état réel du volume -------------------------------------------
+if mountpoint -q "$DATA" 2>/dev/null; then
+  ok "$DATA est monté"
+  OPT=$(findmnt -n -o OPTIONS --target "$DATA")
+  case "$OPT" in
+    ro,*|*,ro|*,ro,*) ko "$DATA est monté en lecture seule" ;;
+    *) ok "$DATA est monté en écriture" ;;
+  esac
+  USE=$(df --output=pcent "$DATA" | tail -1 | tr -dc '0-9')
+  if [ "${USE:-100}" -lt 90 ]; then
+    ok "occupation de $DATA : ${USE}%"
+  else
+    ko "occupation de $DATA : ${USE}% — l'espace n'a pas été récupéré"
+  fi
+  IUSE=$(df -i --output=ipcent "$DATA" | tail -1 | tr -dc '0-9')
+  [ "${IUSE:-100}" -lt 90 ] \
+    && ok "inodes de $DATA : ${IUSE}%" \
+    || ko "inodes de $DATA saturés : ${IUSE}%"
+  if [ "$(id -u)" -eq 0 ] && command -v lsof >/dev/null 2>&1; then
+    RET=$(lsof +L1 2>/dev/null | awk -v d="$DATA" '$0 ~ d {s+=$8} END \
+      {printf "%d", s/1048576}')
+    if [ "${RET:-0}" -lt 50 ]; then
+      ok "aucun fichier supprimé ne retient plus de 50 Mo sur $DATA"
+    else
+      ko "${RET} Mo encore retenus par un fichier supprimé ouvert \
+(truncate via /proc/<pid>/fd/<n>)"
+    fi
+  else
+    note "lance en root pour contrôler les fichiers supprimés (lsof +L1)"
+  fi
+else
+  ko "$DATA n'est pas monté"
+fi
+
+# --- 3. le rapport -------------------------------------------------------
+if [ -s "$RAP" ]; then
+  ok "disque.md présent"
+  for m in 'lsof' 'df -i' 'await'; do
+    grep -qF "$m" "$RAP" \
+      && ok "disque.md traite « $m »" \
+      || ko "disque.md ne mentionne pas « $m »"
+  done
+  [ "$(grep -c '[^[:space:]]' "$RAP")" -ge 18 ] \
+    && ok "disque.md couvre les trois tickets" \
+    || ko "disque.md fait moins de 18 lignes utiles pour trois tickets"
+else
+  ko "rapport absent : $RAP"
+fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

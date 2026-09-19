@@ -1,71 +1,58 @@
 #!/usr/bin/env bash
-# break_M20_02.sh — panne BF20.2 : « le refactoring veut tout détruire ».
-# Réindexe les VM lab2 dans l'état comme si elles avaient été créées avec
-# count (lab[0]..lab[4] ou module.vm[0]..[4]) alors que le code est en
-# for_each : le plan annonce 5 to add, 5 to destroy. Idempotent.
-# Sauvegarde de l'état dans /root/.breakfix-backup/.
+# break_M20_02.sh — panne BF20.2 : « après la maintenance réseau, vm-lan ne
+# démarre plus ». Réécrit le Netplan de lab-virt sans le bridge br0 (l'adresse
+# revient sur l'interface physique : lab-virt reste joignable), puis arrête
+# vm-lan. Idempotent. Sauvegarde /etc/netplan dans /root/.breakfix-backup/.
+# À lancer avec sudo sur lab-virt (L20.2 fait). Garde qm terminal 9007 ouvert.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-BASE="$LAB_HOME/lab20"
-ENVF="$BASE/.env"
-SAUV=/root/.breakfix-backup
+V="virsh -c qemu:///system"
+SAUV=/root/.breakfix-backup/M20_02
 mkdir -p "$SAUV"
-[ -r "$ENVF" ] || { echo "$ENVF absent : fais E20.8 d'abord" >&2; exit 1; }
 
-DIR="${DIR:-$BASE/02-lab2}"
-[ -f "$DIR/.terraform/terraform.tfstate" ] \
-  || { echo "$DIR n'est pas initialisé (tofu init) : fais L20.2 d'abord" >&2; exit 1; }
+$V dominfo vm-lan >/dev/null 2>&1 || { echo "vm-lan n'existe pas : fais L20.2 d'abord" >&2; exit 1; }
 
-tofu_as_user() {
-  sudo -u "$LAB_USER" -H bash -c "set -a; . '$ENVF'; set +a; cd '$DIR' && $*"
-}
+if ip link show br0 >/dev/null 2>&1; then
+  PORT=$(ip -o link show master br0 | awk -F': ' '{print $2}' | grep -v '^vnet' | head -1)
+  [ -n "$PORT" ] || { echo "br0 sans port physique : Netplan inattendu, abandon" >&2; exit 1; }
+  ADDR=$(ip -4 -o addr show br0 | awk '{print $4}' | head -1)
+  [ -n "$ADDR" ] || ADDR=10.10.10.16/24
+  MAC=$(cat "/sys/class/net/$PORT/address")
+  [ -e "$SAUV/netplan-saved" ] || { cp -a /etc/netplan/. "$SAUV/"; touch "$SAUV/netplan-saved"; }
 
-ST=$(tofu_as_user tofu state pull)
-[ -n "$ST" ] || { echo "impossible de lire l'état (tofu state pull)" >&2; exit 1; }
-[ -f "$SAUV/M20_02_state.json" ] || printf '%s\n' "$ST" > "$SAUV/M20_02_state.json"
-
-if jq -e '[.resources[] | select(.type == "proxmox_virtual_environment_vm"
-           and .name == "lab" and (.module // "") == "")
-           | .instances[] | select(.index_key | type == "string")] | length > 0' \
-     <<<"$ST" >/dev/null; then
-  # cas 02-lab2 : resource "lab" indexée par clé -> par entier
-  NEW=$(jq '.serial += 1
-    | (.resources[] | select(.type == "proxmox_virtual_environment_vm"
-        and .name == "lab" and (.module // "") == ""))
-      |= (.each = "list"
-          | .instances = ([.instances[]] | sort_by(.index_key) | to_entries
-                          | map(.value + {index_key: .key})))' <<<"$ST")
-elif jq -e '[.resources[] | select((.module // "") | startswith("module.vm[\""))]
-             | length > 0' <<<"$ST" >/dev/null; then
-  # cas 04-modules : module.vm["nom"] -> module.vm[n]
-  NEW=$(jq '.serial += 1
-    | ([.resources[] | select((.module // "") | startswith("module.vm[\""))
-        | .module] | unique | sort) as $mods
-    | (.resources[] | select((.module // "") | startswith("module.vm[\"")))
-      |= (.module as $m
-          | .module = "module.vm[" + ($mods | index($m) | tostring) + "]")' \
-    <<<"$ST")
+  # « simplification » : plus de bridge, l'adresse revient sur l'interface
+  rm -f /etc/netplan/*.yaml
+  cat > /etc/netplan/50-cloud-init.yaml <<EOF
+network:
+  version: 2
+  ethernets:
+    $PORT:
+      match:
+        macaddress: $MAC
+      set-name: $PORT
+      addresses: [$ADDR]
+      routes:
+        - to: default
+          via: 10.10.10.1
+      nameservers:
+        addresses: [10.10.10.1]
+        search: [lab.local]
+EOF
+  chmod 600 /etc/netplan/50-cloud-init.yaml
+  $V destroy vm-lan >/dev/null 2>&1 || true
+  netplan apply 2>/dev/null || true
+  ip link del br0 2>/dev/null || true
+  netplan apply 2>/dev/null || true
 else
-  echo "l'état est déjà indexé par entier : rien à refaire"
-  NEW=""
+  echo "br0 est déjà absent : rien à refaire"
+  $V destroy vm-lan >/dev/null 2>&1 || true
 fi
 
-if [ -n "$NEW" ]; then
-  TMP=$(mktemp); printf '%s\n' "$NEW" > "$TMP"; chown "$LAB_USER" "$TMP"
-  tofu_as_user tofu state push "$TMP" >/dev/null
-  rm -f "$TMP"
-fi
+cat <<'EOF'
 
-cat <<EOF
-
-Symptôme attendu : dans $DIR, un collègue a remplacé count par for_each
-(c'est le code actuel) et
-  tofu plan
-annonce 5 to add, 5 to destroy : les cinq VM lab2 seraient détruites puis
-recréées, données comprises. Interdit d'appliquer, de revenir à count, ou de
-faire state rm + import. Objectif : plan vide, relisible en PR.
+Symptôme attendu : un collègue a « simplifié » le Netplan de lab-virt pour
+régler un problème de DNS. lab-virt répond toujours en 10.10.10.16, mais
+« virsh start vm-lan » échoue avec une erreur qui parle de MTU et de
+périphérique introuvable. vm-01 démarre normalement. Interdit de rattacher
+vm-lan au réseau default ou de modifier son XML.
 EOF

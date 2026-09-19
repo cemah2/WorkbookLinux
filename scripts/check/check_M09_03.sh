@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M09_03.sh — vérifie le lab L9.3 (figer une version)
+# check_M09_03.sh — vérifie le lab L9.3 (modules : dummy, blacklist, virtio)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,79 +7,76 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L9.3 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab09/rapports/figer.md"
+HOME_DIR="$(getent passwd "${SUDO_USER:-${USER:-$(id -un)}}" | cut -d: -f6)"
+RAP="$HOME_DIR/lab09/rapports"
 
-POL=$(apt-cache policy outil-lab 2>/dev/null)
-INST=$(printf '%s' "$POL" | awk '/Installed:/ {print $2}')
-CAND=$(printf '%s' "$POL" | awk '/Candidate:/ {print $2}')
-
-# --- 1. la version en place ---------------------------------------------
-[ "$INST" = "1.0.0" ] \
-  && ok "outil-lab installé en 1.0.0" \
-  || ko "version installée : ${INST:-aucune} — on attend 1.0.0 \
-(apt install --allow-downgrades outil-lab=1.0.0)"
-
-# --- 2. la version candidate --------------------------------------------
-[ "$CAND" = "1.0.0" ] \
-  && ok "version candidate ramenée à 1.0.0" \
-  || ko "version candidate : ${CAND:-aucune} — tant qu'elle vaut 1.2.0, \
-le prochain apt upgrade remontera le paquet"
-
-# --- 3. l'épinglage existe et est lisible --------------------------------
-PREF=$(grep -rls 'outil-lab' /etc/apt/preferences.d/ /etc/apt/preferences \
-       2>/dev/null | head -1)
-if [ -n "$PREF" ]; then
-  ok "fichier d'épinglage trouvé : $PREF"
-  grep -qiE '^Pin-Priority:[[:space:]]*(100[0-9]|[2-9][0-9]{3})' "$PREF" \
-    && ok "priorité supérieure à 1000 (autorise la rétrogradation)" \
-    || ko "la priorité de $PREF ne dépasse pas 1000 : apt refusera de \
-redescendre une version déjà installée"
-  grep -qiE '^Pin:[[:space:]]*version' "$PREF" \
-    && ok "épinglage sur une version explicite" \
-    || note "l'épinglage ne porte pas sur « Pin: version ... »"
-  grep -qiE '^Package:[[:space:]]*\*[[:space:]]*$' "$PREF" \
-    && ko "« Package: * » : cet épinglage s'applique à TOUT le système" \
-    || ok "l'épinglage ne vise que outil-lab"
+# --- 1. dummy chargé avec deux interfaces --------------------------------
+if lsmod | grep -q '^dummy '; then
+  ok "module dummy chargé"
+  V=$(cat /sys/module/dummy/parameters/numdummies 2>/dev/null)
+  [ "$V" = 2 ] && ok "numdummies=2 (lu dans /sys/module)" \
+    || ko "numdummies vaut ${V:-?} : options dummy dans /etc/modprobe.d ? \
+module rechargé ?"
 else
-  ko "aucun fichier d'épinglage ne mentionne outil-lab dans \
-/etc/apt/preferences.d/"
+  ko "dummy n'est pas chargé (lsmod) : modules-load.d + \
+systemctl restart systemd-modules-load"
+fi
+for i in dummy0 dummy1; do
+  [ -d /sys/class/net/$i ] && ok "interface $i présente" \
+    || ko "interface $i absente"
+done
+ip -4 -o addr show dummy0 2>/dev/null | grep -q '10.10.99.10' \
+  && ok "dummy0 porte 10.10.99.10" \
+  || ko "dummy0 n'a pas 10.10.99.10 (fichier Netplan séparé + netplan apply)"
+ls /etc/netplan/*.yaml 2>/dev/null | grep -qv '50-cloud-init\|00-installer' \
+  && ok "un fichier Netplan séparé existe" \
+  || note "pas de fichier Netplan supplémentaire détecté (non bloquant)"
+
+# --- 2. persistance -------------------------------------------------------
+grep -qsE '^\s*dummy\s*$' /etc/modules-load.d/*.conf /etc/modules 2>/dev/null \
+  && ok "dummy listé dans modules-load.d" \
+  || ko "dummy absent de /etc/modules-load.d/*.conf"
+grep -qsE '^\s*options\s+dummy\s+numdummies=2' /etc/modprobe.d/*.conf \
+  && ok "options dummy numdummies=2 dans modprobe.d" \
+  || ko "pas de 'options dummy numdummies=2' dans /etc/modprobe.d/*.conf"
+
+# --- 3. module interdit ---------------------------------------------------
+BL=""
+for m in joydev mac_hid pcspkr; do
+  if grep -qsE "^\s*install\s+$m\s+/bin/(false|true)" /etc/modprobe.d/*.conf
+  then BL="$m"; break; fi
+done
+if [ -n "$BL" ]; then
+  ok "$BL interdit par une ligne install ... /bin/false"
+  grep -qsE "^\s*blacklist\s+$BL" /etc/modprobe.d/*.conf \
+    && ok "$BL aussi blacklisté (chargement automatique)" \
+    || note "pas de ligne blacklist $BL (install suffit, mais l'énoncé \
+demandait les deux)"
+  lsmod | grep -q "^$BL " && ko "$BL est encore chargé (reboot ?)" \
+    || ok "$BL n'est pas chargé"
+  K=$(uname -r)
+  if command -v lsinitramfs >/dev/null 2>&1; then
+    lsinitramfs "/boot/initrd.img-$K" 2>/dev/null | grep -q 'etc/modprobe.d' \
+      && ok "l'initramfs embarque modprobe.d" \
+      || ko "l'initramfs ne contient pas modprobe.d : update-initramfs -u ?"
+  elif command -v lsinitrd >/dev/null 2>&1; then
+    lsinitrd 2>/dev/null | grep -q 'modprobe.d' \
+      && ok "l'initramfs (dracut) embarque modprobe.d" \
+      || note "modprobe.d non vu dans lsinitrd (dracut -f ?)"
+  fi
+else
+  ko "aucun module (joydev, mac_hid, pcspkr) interdit avec install /bin/false"
 fi
 
-# --- 4. apt-mark hold ne doit PAS être utilisé ---------------------------
-if apt-mark showhold 2>/dev/null | grep -qx 'outil-lab'; then
-  ko "outil-lab est aussi retenu par apt-mark hold : l'énoncé demande de \
-figer par épinglage, et d'expliquer la différence — pas de cumuler"
+# --- 4. rapport -----------------------------------------------------------
+if [ -f "$RAP/modules.md" ] && [ "$(wc -l < "$RAP/modules.md")" -ge 12 ]; then
+  ok "rapport modules.md présent"
+  grep -qi 'dkms' "$RAP/modules.md" && ok "note DKMS présente" \
+    || ko "le rapport ne parle pas de DKMS"
+  grep -qi 'virtio_scsi' "$RAP/modules.md" && ok "inventaire virtio présent" \
+    || ko "le rapport ne cite pas virtio_scsi"
 else
-  ok "outil-lab n'est pas retenu par apt-mark hold"
-fi
-
-# --- 5. une mise à niveau simulée ne bouge plus le paquet ---------------
-SIM=$(apt-get -s upgrade 2>/dev/null)
-if printf '%s' "$SIM" | grep -qE '^(Inst|Conf) outil-lab'; then
-  ko "apt-get -s upgrade propose toujours de toucher à outil-lab"
-else
-  ok "apt-get -s upgrade ne touche plus à outil-lab"
-fi
-if printf '%s' "$SIM" | grep -q 'will be DOWNGRADED'; then
-  ko "la simulation propose des rétrogradations : ton épinglage déborde \
-sur d'autres paquets"
-else
-  ok "aucune rétrogradation collatérale"
-fi
-
-# --- 6. le rapport -------------------------------------------------------
-if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 8 ]; then
-  ok "rapport figer.md rédigé"
-  grep -qi 'hold' "$RAP" \
-    && ok "le rapport parle de apt-mark hold" \
-    || ko "le rapport doit comparer l'épinglage et apt-mark hold"
-  grep -qiE 'madison|policy' "$RAP" \
-    && ok "le rapport cite la commande de contrôle des versions" \
-    || note "cite apt-cache madison ou apt-cache policy dans la procédure"
-else
-  ko "rapport absent ou trop court : ~/lab09/rapports/figer.md (8 lignes)"
+  ko "rapport $RAP/modules.md absent ou trop court"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

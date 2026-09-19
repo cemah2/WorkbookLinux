@@ -1,40 +1,61 @@
 #!/usr/bin/env bash
-# break_M22_02.sh — panne BF22.2 (le rollout ne finit jamais)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/M22_02/.
-# Suppose L22.2 terminé (Deployment factura-api avec readiness sur /pret).
+# break_M22_02.sh — panne BF22.2 (bind mount et UID)
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+BF=/opt/factura-docker/bf
+SAUV=/root/.breakfix-backup
+REF=/opt/factura-docker/api
+mkdir -p "$SAUV" "$BF"
 
-LAB_USER="${SUDO_USER:-mathieu}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-export KUBECONFIG="${KUBECONFIG:-$HOMEDIR/.kube/config}"
-[ -r "$KUBECONFIG" ] || export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-SAUV=/root/.breakfix-backup/M22_02
-mkdir -p "$SAUV"
+[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M22.sh" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
+  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L22.1" >&2
+  exit 1; }
 
-kubectl get deploy factura-api -n factura >/dev/null 2>&1 \
-  || { echo "Deployment factura-api absent : fais d'abord L22.2" >&2; exit 1; }
-kubectl get deploy factura-api -n factura \
-  -o jsonpath='{.spec.template.spec.containers[0].readinessProbe.httpGet.port}' \
-  | grep -q . || { echo "pas de readinessProbe httpGet sur l'API : L22.2 étape 3" >&2; exit 1; }
+# image de base commune aux Break & Fix (construite une seule fois)
+construire_base() {
+  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
+  mkdir -p "$BF/base"
+  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
+  cat > "$BF/base/Dockerfile" <<'DEOF'
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+ENTRYPOINT ["python3", "app.py"]
+DEOF
+  echo "construction de l'image factura-bf:base (une fois)…"
+  docker build -q -t factura-bf:base "$BF/base" >/dev/null
+}
 
-if [ ! -s "$SAUV/deploy-factura-api.yaml" ]; then
-  kubectl get deploy factura-api -n factura -o yaml > "$SAUV/deploy-factura-api.yaml"
+DATA=/srv/factura-docker/data
+mkdir -p "$DATA"
+construire_base
+
+# --- sauvegarde de l'état du répertoire et du journal existant ----------
+if [ ! -f "$SAUV/M22_02.data.stat" ]; then
+  stat -c '%u:%g %a' "$DATA" > "$SAUV/M22_02.data.stat"
 fi
+if [ -f "$DATA/visites.log" ] && [ ! -f "$SAUV/M22_02.visites.log" ]; then
+  mv "$DATA/visites.log" "$SAUV/M22_02.visites.log"
+fi
+rm -f "$DATA/visites.log"
 
-# --- la panne -----------------------------------------------------------
-# la readiness probe vise un port sur lequel rien n'écoute
-kubectl patch deploy factura-api -n factura --type=json -p '[
-  {"op":"replace",
-   "path":"/spec/template/spec/containers/0/readinessProbe/httpGet/port",
-   "value":8081}]' >/dev/null
-sleep 5
+# --- la « migration » a remis le répertoire dans son état d'origine -----
+chown root:root "$DATA"
+chmod 0755 "$DATA"
 
-cat <<'EOF'
+docker rm -f factura-migration >/dev/null 2>&1 || true
+docker run -d --name factura-migration --user 10001:10001 \
+  -e DATA_DIR=/data -v "$DATA":/data -p 8002:8000 \
+  --restart unless-stopped factura-bf:base >/dev/null
 
-Symptôme attendu : « kubectl rollout status deploy/factura-api -n factura »
-reste sur « Waiting for deployment "factura-api" rollout to finish: 1 out
-of 2 new replicas have been updated... ». Trois pods de l'API : deux
-anciens 1/1 et un nouveau 0/1 Running, sans redémarrage. Le site
-fonctionne. L'image n'a pas changé.
-EOF
+cat <<'EOF2'
+
+Symptôme attendu : http://127.0.0.1:8002/sante répond, mais
+http://127.0.0.1:8002/visites renvoie une erreur 500 et le journal du
+conteneur factura-migration parle de « Permission denied ».
+Le répertoire /srv/factura-docker/data existe, en 0755.
+EOF2

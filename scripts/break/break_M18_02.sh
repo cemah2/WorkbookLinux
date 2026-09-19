@@ -1,61 +1,68 @@
 #!/usr/bin/env bash
-# break_M18_02.sh — panne BF18.2 (bind mount et UID)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
+# break_M18_02.sh — panne BF18.2 (contexte SELinux cassé par un mv)
+# À lancer sur lab-rhel, avec sudo. Idempotent.
+# Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-BF=/opt/factura-docker/bf
-SAUV=/root/.breakfix-backup
-REF=/opt/factura-docker/api
-mkdir -p "$SAUV" "$BF"
 
-[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M18.sh" >&2; exit 1; }
-command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
-  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L18.1" >&2
+command -v getenforce >/dev/null 2>&1 || {
+  echo "SELinux absent : cette panne se joue sur lab-rhel (Rocky 9)" >&2
   exit 1; }
 
-# image de base commune aux Break & Fix (construite une seule fois)
-construire_base() {
-  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
-  mkdir -p "$BF/base"
-  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
-  cat > "$BF/base/Dockerfile" <<'DEOF'
-FROM python:3.12-slim-bookworm
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-ENTRYPOINT ["python3", "app.py"]
-DEOF
-  echo "construction de l'image factura-bf:base (une fois)…"
-  docker build -q -t factura-bf:base "$BF/base" >/dev/null
-}
+LAB_USER="${SUDO_USER:-mathieu}"
+LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
+SAUV=/root/.breakfix-backup
+mkdir -p "$SAUV"
 
-DATA=/srv/factura-docker/data
-mkdir -p "$DATA"
-construire_base
+DOCROOT=/usr/share/nginx/html
+[ -d "$DOCROOT" ] || DOCROOT=/var/www/html
+mkdir -p "$DOCROOT"
 
-# --- sauvegarde de l'état du répertoire et du journal existant ----------
-if [ ! -f "$SAUV/M18_02.data.stat" ]; then
-  stat -c '%u:%g %a' "$DATA" > "$SAUV/M18_02.data.stat"
+# --- la machine doit être dans l'état nominal --------------------------
+if [ "$(getenforce)" != Enforcing ]; then
+  echo "SELinux était en $(getenforce) : remise en Enforcing" >&2
+  echo "$(getenforce)" > "$SAUV/M18_02.selinux-mode"
+  setenforce 1
 fi
-if [ -f "$DATA/visites.log" ] && [ ! -f "$SAUV/M18_02.visites.log" ]; then
-  mv "$DATA/visites.log" "$SAUV/M18_02.visites.log"
-fi
-rm -f "$DATA/visites.log"
 
-# --- la « migration » a remis le répertoire dans son état d'origine -----
-chown root:root "$DATA"
-chmod 0755 "$DATA"
+systemctl is-active nginx >/dev/null 2>&1 || systemctl start nginx \
+  >/dev/null 2>&1 || true
 
-docker rm -f factura-migration >/dev/null 2>&1 || true
-docker run -d --name factura-migration --user 10001:10001 \
-  -e DATA_DIR=/data -v "$DATA":/data -p 8002:8000 \
-  --restart unless-stopped factura-bf:base >/dev/null
+# --- sauvegarde --------------------------------------------------------
+[ -f "$SAUV/M18_02.docroot" ] || echo "$DOCROOT" > "$SAUV/M18_02.docroot"
 
-cat <<'EOF2'
+# --- la panne : un fichier fabriqué dans /home puis déplacé ------------
+SRC="$LAB_HOME/rapport.html"
+cat > "$SRC" <<'EOF'
+<!doctype html><html lang="fr"><meta charset="utf-8">
+<title>Rapport trimestriel</title>
+<h1>Rapport trimestriel</h1>
+<p>Document déposé par l'équipe métier.</p>
+EOF
+chown "$LAB_USER": "$SRC"
+chmod 0644 "$SRC"
+# on force explicitement l'étiquette d'un fichier de home, au cas où
+# /home serait sur un système de fichiers séparé (où mv recopierait)
+chcon -t user_home_t "$SRC" 2>/dev/null || true
 
-Symptôme attendu : http://127.0.0.1:8002/sante répond, mais
-http://127.0.0.1:8002/visites renvoie une erreur 500 et le journal du
-conteneur factura-migration parle de « Permission denied ».
-Le répertoire /srv/factura-docker/data existe, en 0755.
-EOF2
+rm -f "$DOCROOT/rapport.html"
+mv "$SRC" "$DOCROOT/rapport.html"
+chown root:root "$DOCROOT/rapport.html"
+chmod 0644 "$DOCROOT/rapport.html"
+chcon -t user_home_t "$DOCROOT/rapport.html" 2>/dev/null || true
+
+# le reste du site doit être correct, pour que le contraste soit net
+restorecon -R "$DOCROOT" 2>/dev/null || true
+chcon -t user_home_t "$DOCROOT/rapport.html" 2>/dev/null || true
+
+systemctl reload nginx >/dev/null 2>&1 || true
+
+cat <<'EOF'
+
+Symptôme attendu : le site répond normalement, mais /rapport.html renvoie
+systématiquement 403 Forbidden, y compris en local
+(curl -I http://127.0.0.1/rapport.html).
+Le fichier existe, il est en -rw-r--r-- root:root, il est au même endroit
+que les pages qui fonctionnent, et le journal d'erreur nginx indique
+« Permission denied ».
+EOF

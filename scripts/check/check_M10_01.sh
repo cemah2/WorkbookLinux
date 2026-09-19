@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M10_01.sh — vérifie le lab L10.1 (deux disques mis en service)
+# check_M10_01.sh — vérifie le lab L10.1 (inventaire du parc)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,81 +7,85 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L10.1 =="
 
-ARCH=/srv/factura/archives
-JOUR=/srv/factura/journaux
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab10/rapports/inventaire.md"
+SCR="$HOMEDIR/lab10/bin/inventaire.sh"
 
-# --- 1. /srv/factura/archives : monté, ext4, durci ----------------------
-if findmnt -no TARGET "$ARCH" >/dev/null 2>&1; then
-  ok "$ARCH est monté"
-
-  FS=$(findmnt -no FSTYPE "$ARCH")
-  [ "$FS" = "ext4" ] && ok "$ARCH est en ext4" \
-    || ko "$ARCH est en $FS, ext4 était demandé"
-
-  OPTS=$(findmnt -no OPTIONS "$ARCH")
-  for o in noatime nodev nosuid noexec; do
-    case ",$OPTS," in
-      *",$o,"*) ok "option $o active sur $ARCH" ;;
-      *) ko "option $o absente sur $ARCH (findmnt -no OPTIONS $ARCH)" ;;
-    esac
-  done
-
-  # noexec réellement effectif ?
-  TMPEXE="$ARCH/.check-noexec"
-  if cp /bin/true "$TMPEXE" 2>/dev/null && chmod +x "$TMPEXE" 2>/dev/null; then
-    if "$TMPEXE" 2>/dev/null; then
-      ko "un binaire s'exécute depuis $ARCH : noexec n'est pas effectif"
-    else
-      ok "noexec est effectif (un binaire copié ne s'exécute pas)"
-    fi
-    rm -f "$TMPEXE"
+# --- 1. le script -------------------------------------------------------
+if [ -f "$SCR" ]; then
+  ok "$SCR existe"
+  [ -x "$SCR" ] && ok "script exécutable" \
+    || ko "script non exécutable (chmod +x)"
+  head -1 "$SCR" | grep -q '^#!' \
+    && ok "shebang présent" || ko "pas de shebang en première ligne"
+  SORTIE=$(bash "$SCR" 2>/dev/null)
+  if [ -n "$SORTIE" ]; then
+    ok "le script produit une sortie"
   else
-    note "impossible de tester noexec en écrivant dans $ARCH (droits ?)"
+    ko "le script n'écrit rien sur stdout"
   fi
 else
-  ko "$ARCH n'est pas monté (findmnt $ARCH)"
+  ko "$SCR introuvable"
+  SORTIE=""
 fi
 
-# --- 2. la ligne de fstab : par UUID, nofail, pass 0 --------------------
-LIGNE_A=$(awk -v m="$ARCH" '$0 !~ /^[[:space:]]*#/ && $2 == m {print}' \
-  /etc/fstab 2>/dev/null | tail -1)
-if [ -n "$LIGNE_A" ]; then
-  ok "une ligne de /etc/fstab couvre $ARCH"
-  case "$LIGNE_A" in
-    UUID=*) ok "le montage est référencé par UUID" ;;
-    /dev/*) ko "le montage est référencé par un nom /dev/... : utilise UUID=" ;;
-    *)      note "source inhabituelle : $(echo "$LIGNE_A" | awk '{print $1}')" ;;
-  esac
-  echo "$LIGNE_A" | awk '{print $4}' | grep -q 'nofail' \
-    && ok "l'option nofail est présente" \
-    || ko "il manque nofail : un disque absent bloquerait le démarrage"
-  PASSF=$(echo "$LIGNE_A" | awk '{print $6}')
-  [ "${PASSF:-0}" = "0" ] && ok "sixième champ à 0 (pas de fsck au démarrage)" \
-    || ko "sixième champ à ${PASSF} : mets 0 pour ce volume de données"
+# --- 2. le rapport ------------------------------------------------------
+if [ -s "$RAP" ]; then
+  ok "$RAP existe"
 else
-  ko "aucune ligne de /etc/fstab pour $ARCH : le montage ne survivra pas au reboot"
+  ko "rapport absent : ~/lab10/rapports/inventaire.md"
 fi
 
-# --- 3. /srv/factura/journaux en XFS -----------------------------------
-if findmnt -no TARGET "$JOUR" >/dev/null 2>&1; then
-  ok "$JOUR est monté"
-  FSJ=$(findmnt -no FSTYPE "$JOUR")
-  [ "$FSJ" = "xfs" ] && ok "$JOUR est en XFS" \
-    || ko "$JOUR est en $FSJ, XFS était demandé (mkfs.xfs)"
+TITRES="Paquets installés|Installés manuellement|États anormaux"
+TITRES="$TITRES|Hors dépôt officiel|Conffiles modifiés"
+MANQUE=""
+for t in "Paquets installés" "Installés manuellement" "États anormaux" \
+         "Hors dépôt officiel" "Conffiles modifiés"; do
+  grep -qF "$t" "$RAP" 2>/dev/null || MANQUE="$MANQUE « $t »"
+done
+if [ -z "$MANQUE" ]; then
+  ok "les cinq sections imposées sont présentes"
 else
-  ko "$JOUR n'est pas monté"
+  ko "section(s) manquante(s) dans le rapport :$MANQUE"
 fi
 
-awk -v m="$JOUR" '$0 !~ /^[[:space:]]*#/ && $2 == m' /etc/fstab 2>/dev/null \
-  | grep -q '^UUID=' \
-  && ok "$JOUR est référencé par UUID dans /etc/fstab" \
-  || ko "$JOUR n'a pas de ligne fstab par UUID"
-
-# --- 4. cohérence globale de fstab -------------------------------------
-if findmnt --verify >/dev/null 2>&1; then
-  ok "findmnt --verify ne signale aucune anomalie dans /etc/fstab"
+# --- 3. les chiffres sont-ils plausibles ? ------------------------------
+REEL=$(dpkg-query -f '${binary:Package}\n' -W 2>/dev/null | wc -l)
+if grep -qE "\b$REEL\b" "$RAP" 2>/dev/null; then
+  ok "le nombre de paquets du rapport ($REEL) correspond au système"
 else
-  ko "findmnt --verify signale une anomalie (lance-le avec --verbose)"
+  ko "le rapport ne contient pas le nombre réel de paquets ($REEL) — \
+compte avec dpkg-query -W, pas avec dpkg -l dont l'en-tête fait 5 lignes"
+fi
+
+# --- 4. états anormaux --------------------------------------------------
+ANORMAUX=$(dpkg-query -f '${db:Status-Abbrev} ${binary:Package}\n' -W \
+           2>/dev/null | grep -cv '^ii ')
+if [ "$ANORMAUX" -eq 0 ]; then
+  note "aucun paquet en état anormal sur cette machine : la section \
+« États anormaux » doit le dire explicitement"
+else
+  note "$ANORMAUX paquet(s) en état anormal : ils doivent figurer nommément"
+fi
+
+# --- 5. hors dépôt officiel ---------------------------------------------
+if command -v apt-cache >/dev/null 2>&1; then
+  HORS=$(apt-mark showmanual 2>/dev/null | while read -r p; do
+    apt-cache policy "$p" 2>/dev/null \
+      | awk -v P="$p" '/^ +\*\*\*/ {v=$2} /http|file:/ {t=1}
+                       END {if (!t) print P}'
+  done | wc -l)
+  note "paquets sans dépôt d'origine détectés côté check : $HORS"
+fi
+
+# --- 6. le rapport n'est pas une copie brute de dpkg -l ------------------
+if [ -s "$RAP" ] && grep -q 'Desired=Unknown/Install/Remove/Purge/Hold' \
+     "$RAP" 2>/dev/null; then
+  ko "le rapport contient l'en-tête brut de dpkg -l : c'est un rapport, \
+pas un copier-coller de sortie"
+else
+  ok "pas de copier-coller brut de dpkg -l"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

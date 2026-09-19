@@ -18,7 +18,8 @@ Hyperviseur **Proxmox VE 8** de l'apprenant. Réseau de lab dédié sur le bridg
 | `lab-db` | 9003 | Ubuntu Server 24.04 LTS | 2 / 2 Go / 30 Go | 10.10.10.12 | Base de données, disques supplémentaires pour LVM |
 | `lab-rhel` | 9004 | Rocky Linux 9 | 2 / 2 Go / 20 Go | 10.10.10.13 | Variantes RHEL (dnf, firewalld, SELinux) |
 | `lab-ops` | 9005 | Ubuntu Server 24.04 LTS | 2 / 4 Go / 40 Go | 10.10.10.14 | Docker, CI runner, monitoring, registre |
-| `lab-git` | 9006 | Ubuntu Server 24.04 LTS | 1 / 1 Go / 15 Go | 10.10.10.15 | Forge Gitea (binaire + SQLite) : dépôt du workbook, portfolio ; réutilisable par les modules 17 et 21 |
+| `lab-git` | 9006 | Ubuntu Server 24.04 LTS | 1 / 1 Go / 15 Go | 10.10.10.15 | Forge Gitea (binaire + SQLite) : dépôt du workbook, portfolio ; réutilisable par les modules 21 et 25 |
+| `lab-virt` | 9007 | Ubuntu Server 24.04 LTS | 4 (cpu=host, virtualisation imbriquée) / 6 Go / 40 Go | 10.10.10.16 | Virtualisation KVM/QEMU/libvirt (module 20) |
 
 * Réseau : `10.10.10.0/24`, passerelle `10.10.10.1`, DNS `10.10.10.1` (ou 9.9.9.9 en sortie).
 * Domaine de lab : `lab.local`. Noms courts résolus par `/etc/hosts` (module 11 fait mieux).

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # make-template.sh — crée le template cloud-init Ubuntu 24.04 (VMID 9000)
-# À lancer sur l'hôte Proxmox (root). Idempotent. Identique au module 20.
+# À lancer sur l'hôte Proxmox (root). Idempotent. Identique au module 24.
 set -euo pipefail
 VMID=${VMID:-9000}
 NAME=${NAME:-ubuntu-2404-tpl}

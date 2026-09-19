@@ -742,7 +742,7 @@ pourquoi la clé de la CA ne quitte jamais `lab-adm` : qui la possède peut
 
 **`subjectAltName` obligatoire** : depuis 2017, Chrome et `curl` ignorent le
 `CN`. Un certificat sans SAN est rejeté même s'il est signé correctement
-(c'est la question Q15.16 du module 15). L'IP dans le SAN sert au
+(c'est la question Q18.16 du module 18). L'IP dans le SAN sert au
 healthcheck si un jour la résolution de noms tombe.
 
 **`proxy_pass http://127.0.0.1:8000/`** avec la barre finale : nginx remplace
@@ -760,7 +760,7 @@ précisément pour permettre cette politique. Si les développeurs ajoutent un
 c'est une bonne chose.
 
 **Le `log_format` avec `rt=` et `urt=`** : c'est la différence entre « le
-site est lent » et « nginx répond en 3 ms, Gunicorn en 2,9 s ». Le module 16
+site est lent » et « nginx répond en 3 ms, Gunicorn en 2,9 s ». Le module 19
 t'a appris à chercher la couche lente ; ce format te la donne dans chaque
 ligne.
 :::
@@ -1179,7 +1179,7 @@ au prochain démarrage. `RandomizedDelaySec` évite que les deux machines
 frappent `lab-ops` à la même seconde.
 
 **`OnFailure=`** : la sauvegarde qui échoue en silence est le scénario
-classique du module 14. Ici, tout `exit ≠ 0` du script (grâce à `set -e` et
+classique du module 17. Ici, tout `exit ≠ 0` du script (grâce à `set -e` et
 au `trap ERR`) déclenche l'alerte. Le test à faire : `chmod 000
 /var/backups/factura` puis `systemctl start factura-backup` — l'alerte doit
 tomber dans `alertes.log`.
@@ -1429,7 +1429,7 @@ contient aucune logique d'alerte. Il mesure, il écrit, il dit « ça va » ou
 « ça ne va pas » par son code de sortie. C'est systemd qui décide quoi faire
 d'un échec, et la même unité d'alerte sert aux sauvegardes, au healthcheck,
 et demain à n'importe quel timer. Un mécanisme, pas un par script (c'est la
-leçon de L14.4).
+leçon de L17.4).
 
 **Anti-tempête dans l'unité d'alerte, pas dans le healthcheck** : le
 healthcheck ne sait pas qu'il échoue depuis 20 minutes, et ne doit pas le
@@ -1440,7 +1440,7 @@ pas 90.
 
 **Le textfile collector** : `node_exporter` expose déjà CPU, disque, réseau.
 Lui donner nos mesures métier (`factura_backup_age_seconds`) via un fichier
-`.prom` signifie qu'au module 22, Prometheus les récupérera **sans rien
+`.prom` signifie qu'au module 26, Prometheus les récupérera **sans rien
 changer** : les règles d'alerte s'écriront sur ces métriques. L'écriture
 atomique (`mktemp` + `mv`) évite que node_exporter lise un fichier à moitié
 écrit et exporte une erreur de parsing.
@@ -1637,7 +1637,7 @@ sudo lynis show details SSH-7408
 Suggestions traitées pour passer de 61 à 71 sur `lab-web` (à noter dans
 `audit.md`) : bannière SSH (`BANN-7126`), `umask 027` dans `/etc/login.defs`
 (`AUTH-9328`), `PASS_MAX_DAYS 365` (`AUTH-9286`), `auditd` installé avec les
-règles du module 15 (`ACCT-9628`), `sysstat` activé (`ACCT-9626`),
+règles du module 18 (`ACCT-9628`), `sysstat` activé (`ACCT-9626`),
 `/tmp` en tmpfs `nodev,nosuid,noexec` (`FILE-6310`), `apt-listbugs`/`debsums`
 (`PKGS-7370`), `AllowTcpForwarding no` (`SSH-7408`), `LogLevel VERBOSE`
 (`SSH-7408`), `kernel.sysrq = 0`. Volontairement laissées : partitions
@@ -1786,7 +1786,7 @@ au healthcheck, checklist « factures en error ». v1.3 après INC-A3 : ajout
 temporaires (commentaire + date + ticket, revue hebdomadaire).
 ```
 
-Le post-mortem suit le modèle du module 16 (Résumé, Impact, Chronologie,
+Le post-mortem suit le modèle du module 19 (Résumé, Impact, Chronologie,
 Détection, Cause racine, Ce qui a marché / manqué, Actions correctives).
 
 ::: pourquoi
@@ -1952,14 +1952,14 @@ ticket, et un rappel (`systemd-run --on-active=4h ufw delete ...`, ou une
 ligne dans le runbook) ; (2) la checklist « timeout » commence par `curl -v`
 pour séparer TCP de TLS, puis `ufw status numbered` ; (3) le healthcheck fait
 son travail : vérifier que quelqu'un lit `webhook.log`, ou mieux, y brancher
-un vrai canal au module 22.
+un vrai canal au module 26.
 
 ::: pourquoi
 Les trois incidents ont un point commun : le système était **vert** partout
 (`active (running)`, ports en écoute, certificats valides) et la panne était
 dans une **règle** — `pg_hba`, permissions Unix, pare-feu. C'est la forme
 la plus courante d'incident en production, et celle que la supervision de
-base voit le moins bien. La méthode du module 16 (quelle couche, depuis où,
+base voit le moins bien. La méthode du module 19 (quelle couche, depuis où,
 qu'est-ce qui a changé) est ce qui fait la différence entre 10 minutes et
 2 heures.
 :::

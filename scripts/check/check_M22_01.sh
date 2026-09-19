@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# check_M22_01.sh — vérifie le lab L22.1 (k3s, kubectl, registre, rollout, Helm)
-# À lancer sur lab-ops, en tant que mathieu (sans sudo).
+# check_M22_01.sh — vérifie le lab L22.1 (installation de Docker Engine)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8,89 +7,84 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L22.1 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab22"
-export KUBECONFIG="${KUBECONFIG:-$HOMEDIR/.kube/config}"
-k() { kubectl "$@" 2>/dev/null; }
-
-# --- 1. k3s et le nœud ---------------------------------------------------
-systemctl is-active --quiet k3s.service \
-  && ok "k3s.service actif" || ko "k3s.service inactif (systemctl status k3s)"
-if [ -r "$KUBECONFIG" ] && [ "$(stat -c %U "$KUBECONFIG")" = "$LAB_USER" ]; then
-  ok "kubeconfig $KUBECONFIG appartient à $LAB_USER"
-else
-  ko "kubeconfig absent ou pas à $LAB_USER (copie de /etc/rancher/k3s/k3s.yaml ?)"
-fi
-if k get nodes -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' \
-    | grep -q True; then
-  ok "nœud Ready via kubectl sans sudo"
-else
-  ko "kubectl get nodes ne renvoie pas un nœud Ready (droits du kubeconfig ?)"
-fi
-
-# --- 2. registre HTTP connu de containerd --------------------------------
-if sudo -n true 2>/dev/null; then
-  if sudo grep -rqs '10.10.10.14:5000' \
-      /var/lib/rancher/k3s/agent/etc/containerd/ 2>/dev/null; then
-    ok "containerd connaît le registre 10.10.10.14:5000"
+# --- 1. paquets et provenance ------------------------------------------
+if dpkg -s docker-ce >/dev/null 2>&1; then
+  ok "le paquet docker-ce est installé"
+  if apt-cache policy docker-ce 2>/dev/null | grep -q 'download.docker.com'; then
+    ok "docker-ce provient du dépôt download.docker.com"
   else
-    ko "registre absent de la config containerd (registries.yaml, restart k3s ?)"
+    ko "docker-ce ne vient pas de download.docker.com (apt-cache policy docker-ce)"
   fi
 else
-  note "sudo interactif : vérification containerd sautée"
+  ko "docker-ce n'est pas installé (dépôt officiel, pas docker.io ni snap)"
 fi
+dpkg -s docker.io >/dev/null 2>&1 \
+  && ko "le paquet docker.io d'Ubuntu est encore présent : retire-le" \
+  || ok "pas de paquet docker.io"
+snap list 2>/dev/null | grep -q '^docker ' \
+  && ko "le snap docker est présent : retire-le" \
+  || ok "pas de snap docker"
+for p in docker-compose-plugin docker-buildx-plugin containerd.io; do
+  dpkg -s "$p" >/dev/null 2>&1 && ok "$p installé" \
+    || ko "$p manquant (apt install $p)"
+done
 
-# --- 3. namespace et Secret ----------------------------------------------
-k get ns factura >/dev/null && ok "namespace factura" || ko "namespace factura absent"
-T=$(k get secret registre-lab -n factura -o jsonpath='{.type}')
-[ "$T" = "kubernetes.io/dockerconfigjson" ] \
-  && ok "Secret registre-lab de type dockerconfigjson" \
-  || ko "Secret registre-lab absent ou mauvais type (create secret docker-registry)"
+# --- 2. service ---------------------------------------------------------
+[ "$(systemctl is-active docker 2>/dev/null)" = active ] \
+  && ok "docker.service est actif" \
+  || ko "docker.service n'est pas actif (systemctl status docker)"
+[ "$(systemctl is-enabled docker 2>/dev/null)" = enabled ] \
+  && ok "docker.service démarre au boot" \
+  || ko "docker.service n'est pas enabled"
 
-# --- 4. Deployment factura-api -------------------------------------------
-IMG=$(k get deploy factura-api -n factura \
-      -o jsonpath='{.spec.template.spec.containers[0].image}')
-case "$IMG" in
-  10.10.10.14:5000/factura-api:1.0) ok "image $IMG" ;;
-  "") ko "Deployment factura-api absent dans factura" ;;
-  *)  ko "image attendue 10.10.10.14:5000/factura-api:1.0, trouvée $IMG (rollout undo ?)" ;;
-esac
-AV=$(k get deploy factura-api -n factura -o jsonpath='{.status.availableReplicas}')
-[ "${AV:-0}" -ge 2 ] && ok "2 réplicas disponibles" \
-  || ko "réplicas disponibles : ${AV:-0}/2 (kubectl describe pod)"
-k get pod -n factura -l app=factura-api \
-  -o jsonpath='{.items[0].spec.imagePullSecrets[*].name}' | grep -q registre-lab \
-  && ok "imagePullSecrets référence registre-lab" \
-  || ko "les pods ne référencent pas imagePullSecrets registre-lab"
-NREV=$(k get rs -n factura -l app=factura-api \
-       -o jsonpath='{.items[*].metadata.annotations.deployment\.kubernetes\.io/revision}' \
-       | wc -w)
-[ "$NREV" -ge 2 ] && ok "au moins 2 révisions (ReplicaSets) du Deployment" \
-  || ko "une seule révision : set image puis rollout undo attendus"
-
-# --- 5. Helm ---------------------------------------------------------------
-REV=$(helm list -n monitoring -o json 2>/dev/null \
-      | python3 -c 'import sys,json; r=[x for x in json.load(sys.stdin) if x["name"]=="ksm"]; print(r[0]["revision"] if r else 0)' 2>/dev/null)
-if [ "${REV:-0}" -ge 3 ]; then
-  ok "release Helm ksm en révision $REV"
-elif [ "${REV:-0}" -gt 0 ]; then
-  ko "release ksm en révision $REV : upgrade puis rollback attendus (>= 3)"
+# --- 3. daemon.json -----------------------------------------------------
+DJ=/etc/docker/daemon.json
+if [ -r "$DJ" ] && jq . "$DJ" >/dev/null 2>&1; then
+  ok "daemon.json existe et est du JSON valide"
+  [ "$(jq -r '."log-opts"."max-size" // empty' "$DJ")" = "10m" ] \
+    && ok "log-opts max-size=10m" \
+    || ko "log-opts.max-size doit valoir \"10m\" dans daemon.json"
+  [ "$(jq -r '."log-opts"."max-file" // empty' "$DJ")" = "3" ] \
+    && ok "log-opts max-file=3" \
+    || ko "log-opts.max-file doit valoir \"3\" (chaîne) dans daemon.json"
+  jq -e '."insecure-registries" | index("lab-ops.lab.local:5000")' "$DJ" \
+    >/dev/null 2>&1 \
+    && ok "lab-ops.lab.local:5000 déclaré en insecure-registries" \
+    || note "lab-ops.lab.local:5000 absent des insecure-registries \
+(normal si L22.5 est déjà fait en TLS)"
 else
-  ko "release Helm ksm absente du namespace monitoring"
+  ko "$DJ absent ou invalide (jq . $DJ)"
 fi
-k get pod -n monitoring -l app.kubernetes.io/name=kube-state-metrics \
-  -o jsonpath='{.items[0].metadata.annotations.prometheus\.io/scrape}' \
-  | grep -q true && ok "pod kube-state-metrics annoté prometheus.io/scrape" \
-  || ko "annotation prometheus.io/scrape absente (podAnnotations dans ksm-values.yaml)"
 
-# --- 6. rapport ------------------------------------------------------------
-if [ -s "$BASE/rapports/rollout.md" ] \
-   && grep -qi 'maxSurge' "$BASE/rapports/rollout.md"; then
-  ok "rapport rollout.md rédigé"
+# --- 4. accès sans sudo, plugins ----------------------------------------
+if docker info >/dev/null 2>&1; then
+  ok "docker info fonctionne pour $(id -un) sans sudo"
+  [ "$(docker info --format '{{.LoggingDriver}}')" = json-file ] \
+    && ok "driver de journalisation json-file" \
+    || ko "le driver de journalisation n'est pas json-file"
+  [ "$(docker info --format '{{.CgroupVersion}}')" = 2 ] \
+    && ok "cgroup v2" || ko "cgroup v1 détecté : inattendu sur Ubuntu 24.04"
 else
-  ko "~/lab22/rapports/rollout.md absent ou sans mention de maxSurge"
+  ko "docker info échoue : $(id -un) n'est pas dans le groupe docker, \
+ou la session n'a pas été rouverte"
 fi
+id -nG "${SUDO_USER:-$(id -un)}" | tr ' ' '\n' | grep -qx docker \
+  && ok "l'utilisateur est membre du groupe docker" \
+  || ko "l'utilisateur n'est pas dans le groupe docker (usermod -aG docker)"
+docker compose version >/dev/null 2>&1 \
+  && ok "docker compose (v2) répond" || ko "docker compose ne répond pas"
+docker buildx version >/dev/null 2>&1 \
+  && ok "docker buildx répond" || ko "docker buildx ne répond pas"
+
+# --- 5. rapport ---------------------------------------------------------
+R="$HOME/lab22/rapports/installation.md"
+if [ -s "$R" ] && grep -qiE 'root' "$R" && grep -qiE 'overlay2' "$R"; then
+  ok "rapport installation.md présent (groupe docker = root, overlay2)"
+else
+  ko "rapport $R absent ou incomplet (conclusion sur le groupe docker, \
+driver de stockage)"
+fi
+note "la variante rootless (kevin) et Podman ne sont pas vérifiées ici"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

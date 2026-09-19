@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# check_M12_05.sh — vérifie le lab L12.5 (clé de service restreinte)
-# À lancer SUR lab-web, avec sudo.
+# check_M12_05.sh — vérifie le lab L12.5 (capture, MTU, bande passante)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8,121 +7,74 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L12.5 =="
 
-[ "$(id -u)" -eq 0 ] || { \
-  ko "à lancer avec sudo (lecture de /home/sauvegarde/.ssh)"; \
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-
-AK=/home/sauvegarde/.ssh/authorized_keys
-SC=/usr/local/bin/lab12-recevoir
-
-# --- 1. le compte et ses droits -------------------------------------------
-getent passwd sauvegarde >/dev/null \
-  && ok "le compte sauvegarde existe" \
-  || ko "compte sauvegarde absent : relance setup_M12.sh sur lab-web"
-[ -d /srv/sauvegarde ] \
-  && ok "/srv/sauvegarde présent" \
-  || ko "/srv/sauvegarde absent"
-[ "$(stat -c %a /home/sauvegarde/.ssh 2>/dev/null)" = 700 ] \
-  && ok "/home/sauvegarde/.ssh en 700" \
-  || ko "/home/sauvegarde/.ssh doit être en 700"
-
-# --- 2. la ligne authorized_keys ------------------------------------------
-if [ -s "$AK" ]; then
-  ok "authorized_keys présent"
-  [ "$(stat -c %a "$AK")" = 600 ] \
-    && ok "authorized_keys en 600" \
-    || ko "authorized_keys en $(stat -c %a "$AK") : 600 attendu"
-  LIGNES=$(grep -c '^[^#[:space:]]' "$AK")
-  [ "$LIGNES" -eq 1 ] \
-    && ok "une seule clé autorisée" \
-    || ko "$LIGNES clés autorisées : une seule attendue pour ce compte"
-  OPTS=$(head -1 "$AK")
-  case "$OPTS" in
-    *restrict*) ok "option restrict présente" ;;
-    *) ko "option restrict absente (préférable à une liste de no-*)" ;;
-  esac
-  case "$OPTS" in
-    *'from="10.10.10.14"'*) ok 'option from="10.10.10.14" présente' ;;
-    *from=*) ko "from= présent mais pas limité à 10.10.10.14 : $OPTS" ;;
-    *) ko "option from= absente : la clé est utilisable depuis partout" ;;
-  esac
-  case "$OPTS" in
-    *command=*) ok "commande forcée présente" ;;
-    *) ko "option command= absente : la clé ouvre un shell complet" ;;
-  esac
-  case "$OPTS" in
-    ssh-ed25519*|ssh-rsa*) ko "les options doivent précéder la clé" ;;
-    *) : ;;
-  esac
-  ssh-keygen -lf "$AK" >/dev/null 2>&1 \
-    && ok "la ligne est une clé publique valide (une seule ligne)" \
-    || ko "ligne illisible par ssh-keygen : clé coupée en deux ?"
-else
-  ko "authorized_keys absent ou vide : $AK"
-fi
-
-# --- 3. le script de commande forcée --------------------------------------
-if [ -x "$SC" ]; then
-  ok "$SC présent et exécutable"
-  head -1 "$SC" | grep -q '^#!/usr/bin/env bash' \
-    && ok "shebang conforme" || ko "shebang attendu : #!/usr/bin/env bash"
-  grep -q 'SSH_ORIGINAL_COMMAND' "$SC" \
-    && ok "le script lit SSH_ORIGINAL_COMMAND" \
-    || ko "le script doit lire \$SSH_ORIGINAL_COMMAND"
-  if grep -qE '^[^#]*eval[[:space:]]+"?\$\{?SSH_ORIGINAL_COMMAND' "$SC"; then
-    ko "le script fait eval de la commande demandée : la restriction est vide"
-  else
-    ok "aucun eval de la commande demandée"
-  fi
-  # comportement réel : liste acceptée, reste refusé
-  if SSH_ORIGINAL_COMMAND=liste bash "$SC" >/dev/null 2>&1; then
-    ok "'liste' est acceptée"
-  else
-    ko "'liste' devrait fonctionner (SSH_ORIGINAL_COMMAND=liste)"
-  fi
-  SSH_ORIGINAL_COMMAND='rm -rf /srv/sauvegarde' bash "$SC" >/dev/null 2>&1
-  RC=$?
-  [ "$RC" -ne 0 ] \
-    && ok "une commande arbitraire est refusée (code $RC)" \
-    || ko "une commande arbitraire a été acceptée : la liste blanche manque"
-  [ -d /srv/sauvegarde ] \
-    && ok "/srv/sauvegarde a survécu au test de refus" \
-    || ko "/srv/sauvegarde a été supprimé : le script exécute ce qu'on demande"
-  SSH_ORIGINAL_COMMAND='depot ../../etc/passwd' bash "$SC" \
-    </dev/null >/dev/null 2>&1
-  [ $? -ne 0 ] \
-    && ok "un nom d'archive avec traversée de répertoire est refusé" \
-    || ko "le nom d'archive n'est pas validé (traversée ../ acceptée)"
-else
-  ko "script absent ou non exécutable : $SC"
-fi
-
-# --- 4. journalisation ----------------------------------------------------
-LOG=/var/log/lab12-recevoir.log
-if [ -f "$LOG" ]; then
-  ok "journal présent : $LOG"
-  grep -qiE 'refus|refuse' "$LOG" \
-    && ok "les refus sont journalisés" \
-    || ko "aucun refus journalisé : le script doit tracer les tentatives"
-else
-  ko "journal absent : $LOG"
-fi
-
-# --- 5. le rapport --------------------------------------------------------
-LAB_USER="${SUDO_USER:-mathieu}"
+LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab12/rapports/cle-service.md"
-if [ -s "$RAP" ]; then
-  ok "rapport présent : ~/lab12/rapports/cle-service.md"
-  MANQUE=""
-  for mot in restrict from= command= rotation certificat; do
-    grep -qi -- "$mot" "$RAP" || MANQUE="$MANQUE $mot"
-  done
-  [ -z "$MANQUE" ] \
-    && ok "le rapport couvre les cinq points imposés" \
-    || ko "il manque dans le rapport :$MANQUE"
+CAP="$HOMEDIR/lab12/captures/http.pcap"
+RCAP="$HOMEDIR/lab12/rapports/capture.md"
+RDEB="$HOMEDIR/lab12/rapports/debit.md"
+IFACE=$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')
+[ -n "$IFACE" ] || IFACE=ens18
+
+# --- 1. la capture produite par l'apprenant ---------------------------
+if [ -s "$CAP" ]; then
+  ok "capture http.pcap présente ($(stat -c '%s' "$CAP") octets)"
+  if command -v tcpdump >/dev/null 2>&1; then
+    N=$(tcpdump -nn -r "$CAP" 2>/dev/null | wc -l)
+    [ "$N" -ge 6 ] \
+      && ok "la capture contient $N paquets (échange complet)" \
+      || ko "seulement $N paquets : la capture a été arrêtée trop tôt"
+    tcpdump -nn -r "$CAP" 2>/dev/null | grep -q 'Flags \[S\]' \
+      && ok "un SYN figure dans la capture" \
+      || ko "aucun SYN : le filtre ou le moment de capture est à revoir"
+  fi
 else
-  ko "rapport manquant : ~/lab12/rapports/cle-service.md"
+  ko "capture absente : $CAP (tcpdump -w)"
+fi
+
+# --- 2. l'analyse de la capture d'incident ----------------------------
+if [ -s "$RCAP" ] && [ "$(grep -cv '^[[:space:]]*$' "$RCAP")" -ge 4 ]; then
+  ok "rapport capture.md rédigé"
+  if grep -qiE '\bRST\b|\[R' "$RCAP"; then
+    ok "le rapport identifie les RST de la capture d'incident"
+  else
+    ko "le rapport ne mentionne pas les RST : relis la capture avec \
+un filtre sur tcp-rst"
+  fi
+  grep -qE '8199|8099' "$RCAP" \
+    && ok "le port en jeu est identifié" \
+    || ko "le rapport ne nomme pas le port concerné"
+else
+  ko "rapport absent ou trop court : $RCAP (5 lignes de conclusion)"
+fi
+
+# --- 3. le rapport de débit -------------------------------------------
+if [ -s "$RDEB" ] && [ "$(grep -cv '^[[:space:]]*$' "$RDEB")" -ge 4 ]; then
+  ok "rapport debit.md rédigé"
+  grep -qiE 'retr' "$RDEB" \
+    && ok "la colonne Retr est reportée" \
+    || ko "le rapport ne reporte pas la colonne Retr (interprétation \
+attendue)"
+  grep -qiE 'bits/sec|mbit|gbit' "$RDEB" \
+    && ok "les débits mesurés sont reportés" \
+    || ko "aucun débit chiffré dans le rapport"
+else
+  ko "rapport absent ou trop court : $RDEB"
+fi
+
+# --- 4. le MTU est revenu à la normale --------------------------------
+MTU=$(cat "/sys/class/net/$IFACE/mtu" 2>/dev/null)
+if [ "${MTU:-0}" = 1500 ]; then
+  ok "MTU de $IFACE remis à 1500"
+else
+  ko "MTU de $IFACE = ${MTU:-?} : remets-le à 1500 (ip link set dev \
+$IFACE mtu 1500)"
+fi
+
+# --- 5. pas de serveur iperf3 oublié en écoute ------------------------
+if ss -tln 2>/dev/null | grep -q ':5201'; then
+  note "un serveur iperf3 écoute encore sur 5201 : pense à l'arrêter"
+else
+  ok "aucun serveur iperf3 résiduel"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

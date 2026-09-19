@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lab-status.sh — état des 6 VM du laboratoire vu depuis le nœud Proxmox :
+# lab-status.sh — état des 7 VM du laboratoire vu depuis le nœud Proxmox :
 # statut qm, agent QEMU, réponse ping, port SSH, présence de snap-clean.
 # À lancer en root sur le nœud Proxmox VE 8. Code retour 0 si tout est vert.
 #
@@ -60,6 +60,22 @@ if [ "$(cat /proc/sys/net/ipv4/ip_forward)" = "1" ]; then
   ok "ip_forward = 1"
 else
   ko "ip_forward = 0 : les VM ne sortiront pas"; PROBLEMS=$((PROBLEMS+1))
+fi
+# Virtualisation imbriquée pour lab-virt (module 20) : nested + cpu host.
+nested=$(cat /sys/module/kvm_intel/parameters/nested \
+         /sys/module/kvm_amd/parameters/nested 2>/dev/null | head -1)
+case "$nested" in
+  Y|1) ok "KVM nested=$nested (lab-virt pourra charger kvm)" ;;
+  *)   ko "KVM nested=${nested:-?} : lab-virt n'aura pas /dev/kvm (chapitre 0.3)"
+       PROBLEMS=$((PROBLEMS+1)) ;;
+esac
+if qm status "$LAB_VIRT_VMID" >/dev/null 2>&1; then
+  if qm config "$LAB_VIRT_VMID" | grep -q '^cpu: host'; then
+    ok "lab-virt en cpu: host"
+  else
+    ko "lab-virt sans cpu: host (qm set $LAB_VIRT_VMID --cpu host)"
+    PROBLEMS=$((PROBLEMS+1))
+  fi
 fi
 
 if [ "$QUIET" -eq 0 ]; then

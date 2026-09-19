@@ -1,81 +1,117 @@
 #!/usr/bin/env bash
-# check_M22_02.sh — vérifie le lab L22.2 (factura : postgres, API, front,
-# Ingress TLS, NetworkPolicy). À lancer sur lab-ops, en tant que mathieu.
+# check_M22_02.sh — vérifie le lab L22.2 (image factura-api:1.0 propre)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
+note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L22.2 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-export KUBECONFIG="${KUBECONFIG:-$HOMEDIR/.kube/config}"
-NS=factura
-k() { kubectl -n $NS "$@" 2>/dev/null; }
-jp() { k get "$1" "$2" -o jsonpath="$3"; }
+IMG=factura-api:1.0
+API="$HOME/lab22/api"
+insp() { docker image inspect "$IMG" --format "$1" 2>/dev/null; }
 
-# --- 1. PostgreSQL ---------------------------------------------------------
-R=$(jp statefulset postgres '{.status.readyReplicas}')
-[ "${R:-0}" -eq 1 ] && ok "StatefulSet postgres 1/1" \
-  || ko "StatefulSet postgres pas prêt (describe pod postgres-0, readiness pg_isready)"
-P=$(jp pvc donnees-postgres-0 '{.status.phase}')
-[ "$P" = Bound ] && ok "PVC donnees-postgres-0 Bound" \
-  || ko "PVC donnees-postgres-0 absent ou non Bound (volumeClaimTemplates ?)"
-jp statefulset postgres '{.spec.template.spec.containers[0].env[*].valueFrom.secretKeyRef.name}' \
-  | grep -q postgres-auth && ok "variables PostgreSQL tirées du Secret postgres-auth" \
-  || ko "POSTGRES_USER/PASSWORD ne viennent pas du Secret postgres-auth"
+docker info >/dev/null 2>&1 || { ko "Docker inaccessible (L22.1)"; \
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
 
-# --- 2. API ---------------------------------------------------------------
-A=$(jp deploy factura-api '{.status.availableReplicas}')
-[ "${A:-0}" -ge 2 ] && ok "Deployment factura-api : $A réplicas disponibles" \
-  || ko "factura-api : ${A:-0}/2 disponibles (describe pod : readiness /pret ?)"
-C=$(jp deploy factura-api '{.spec.template.spec.containers[0]}')
-printf '%s' "$C" | python3 -c '
-import sys, json
-c = json.load(sys.stdin)
-assert c["livenessProbe"]["httpGet"]["path"] == "/sante"
-assert c["readinessProbe"]["httpGet"]["path"] == "/pret"
-assert c["resources"]["limits"]["memory"]
-assert c["resources"]["requests"]["memory"]
-assert any(e.get("configMapRef", {}).get("name") == "factura-api-config"
-           for e in c.get("envFrom", []))
-' 2>/dev/null && ok "API : probes /sante et /pret, limites, envFrom ConfigMap" \
-  || ko "API : il manque liveness /sante, readiness /pret, resources ou envFrom"
-DB=$(jp configmap factura-api-config '{.data.DB_HOST}')
-case "$DB" in
-  postgres|postgres.factura|postgres.factura.svc|postgres.factura.svc.cluster.local)
-    ok "DB_HOST=$DB" ;;
-  *) ko "DB_HOST vaut « $DB », attendu le nom du Service postgres" ;;
+if docker image inspect "$IMG" >/dev/null 2>&1; then
+  ok "l'image $IMG existe"
+else
+  ko "image $IMG introuvable (docker build --build-arg APP_VERSION=1.0 \
+-t $IMG ~/lab22/api)"
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1
+fi
+
+# --- 1. métadonnées de l'image ------------------------------------------
+TAILLE=$(insp '{{.Size}}')
+if [ "$TAILLE" -lt $((150 * 1024 * 1024)) ]; then
+  ok "taille $((TAILLE / 1024 / 1024)) Mio (< 150)"
+else
+  ko "image trop grosse : $((TAILLE / 1024 / 1024)) Mio (base slim, \
+multi-stage, pas d'outils inutiles, --no-cache-dir)"
+fi
+U=$(insp '{{.Config.User}}')
+case "$U" in
+  ""|root|0|0:0) ko "l'image tourne en root (USER manquant ou trop tôt)" ;;
+  *) ok "utilisateur d'exécution : $U" ;;
 esac
+[ -n "$(insp '{{.Config.Healthcheck}}')" ] && \
+  [ "$(insp '{{.Config.Healthcheck}}')" != "<nil>" ] \
+  && ok "HEALTHCHECK présent" || ko "aucun HEALTHCHECK dans l'image"
+EP=$(insp '{{index .Config.Entrypoint 0}}')
+case "$EP" in
+  /bin/sh|sh|/bin/bash|bash|"") ko "ENTRYPOINT absent ou en forme shell \
+(inspect montre $EP) : forme exec attendue" ;;
+  *) ok "ENTRYPOINT en forme exec ($EP)" ;;
+esac
+insp '{{.Config.Env}}' | grep -qiE 'FACTURA_CLE_API|Factura-2024' \
+  && ko "un secret de l'ancien Dockerfile est encore dans ENV" \
+  || ok "aucun secret dans les variables d'environnement de l'image"
+[ "$(insp '{{index .Config.Labels "org.opencontainers.image.version"}}')" \
+  = "1.0" ] \
+  && ok "label org.opencontainers.image.version=1.0" \
+  || ko "label org.opencontainers.image.version absent ou différent de 1.0"
+BASE=$(insp '{{.Config.Env}}' | grep -o 'PYTHON_VERSION=[0-9.]*' | head -1)
+[ -n "$BASE" ] && note "base Python détectée : $BASE"
 
-# --- 3. front, Ingress, TLS ---------------------------------------------
-F=$(jp deploy front '{.status.availableReplicas}')
-[ "${F:-0}" -ge 1 ] && ok "Deployment front disponible" || ko "front indisponible"
-S=$(jp ingress factura '{.spec.tls[0].secretName}')
-[ "$S" = factura-tls ] && ok "Ingress factura avec tls -> factura-tls" \
-  || ko "Ingress factura sans bloc tls vers le Secret factura-tls"
-T=$(jp secret factura-tls '{.type}')
-[ "$T" = kubernetes.io/tls ] && ok "Secret factura-tls de type kubernetes.io/tls" \
-  || ko "Secret factura-tls absent (kubectl create secret tls)"
-B=$(jp ingress factura '{.spec.rules[0].http.paths[0].backend.service.name}')
-[ "$B" = front ] && ok "backend de l'Ingress = front" \
-  || ko "backend de l'Ingress : « $B », attendu front"
-CODE=$(curl -sk -m 10 -o /dev/null -w '%{http_code}' \
-        --resolve factura.lab.local:443:10.10.10.14 \
-        https://factura.lab.local/api/factures)
-[ "$CODE" = 200 ] && ok "https://factura.lab.local/api/factures -> 200" \
-  || ko "/api/factures renvoie $CODE (endpoints de factura-api ? proxy_pass ?)"
-CN=$(echo | openssl s_client -connect 10.10.10.14:443 \
-      -servername factura.lab.local 2>/dev/null \
-      | openssl x509 -noout -subject 2>/dev/null)
-printf '%s' "$CN" | grep -q 'factura.lab.local' \
-  && ok "certificat servi : $CN" \
-  || ko "Traefik ne sert pas le certificat factura.lab.local (TRAEFIK DEFAULT CERT ?)"
+# --- 2. contenu ---------------------------------------------------------
+if docker run --rm --entrypoint sh "$IMG" -c \
+  'ls /app/secret.txt /app/donnees /app/README.md 2>/dev/null' \
+  | grep -q .; then
+  ko "des fichiers parasites sont dans /app (secret.txt, donnees/, *.md) : \
+.dockerignore"
+else
+  ok "pas de fichier parasite dans /app"
+fi
+[ -s "$API/.dockerignore" ] && ok ".dockerignore présent dans ~/lab22/api" \
+  || ko "$API/.dockerignore manquant"
+grep -qiE '^FROM .*:latest|^FROM python:3$|^FROM python$' "$API/Dockerfile" \
+  2>/dev/null && ko "le Dockerfile utilise un tag flottant (latest / 3)" \
+  || ok "image de base épinglée dans le Dockerfile"
+grep -qE '^FROM .* AS ' "$API/Dockerfile" 2>/dev/null \
+  && ok "Dockerfile multi-stage" || ko "pas de multi-stage (FROM … AS …)"
 
-# --- 4. NetworkPolicy ------------------------------------------------------
-k get networkpolicy -o jsonpath='{.items[*].spec.podSelector.matchLabels.app}' \
-  | grep -qw postgres && ok "NetworkPolicy ciblant app=postgres" \
-  || ko "aucune NetworkPolicy avec podSelector app=postgres dans factura"
+# --- 3. comportement : démarrage, santé, arrêt propre -------------------
+docker rm -f chk18-02 >/dev/null 2>&1
+if docker run -d --name chk18-02 -p 127.0.0.1:18002:8000 "$IMG" \
+   >/dev/null 2>&1; then
+  for _ in $(seq 1 30); do
+    [ "$(docker inspect chk18-02 --format '{{.State.Health.Status}}' \
+      2>/dev/null)" = healthy ] && break
+    sleep 1
+  done
+  [ "$(docker inspect chk18-02 --format '{{.State.Health.Status}}')" \
+    = healthy ] && ok "le conteneur passe à healthy" \
+    || ko "le conteneur ne devient pas healthy en 30 s (docker inspect \
+--format '{{json .State.Health}}')"
+  curl -fsS --max-time 3 http://127.0.0.1:18002/sante >/dev/null 2>&1 \
+    && ok "/sante répond" || ko "/sante ne répond pas sur 18002"
+  UID_APP=$(curl -fsS --max-time 3 http://127.0.0.1:18002/ 2>/dev/null \
+    | jq -r .uid 2>/dev/null)
+  [ "$UID_APP" = 10001 ] && ok "l'API tourne avec l'UID 10001" \
+    || ko "l'API tourne avec l'UID ${UID_APP:-?} au lieu de 10001"
+  DEBUT=$(date +%s%N)
+  docker stop chk18-02 >/dev/null 2>&1
+  DUREE=$(( ($(date +%s%N) - DEBUT) / 1000000 ))
+  [ "$DUREE" -lt 2000 ] && ok "docker stop en ${DUREE} ms" \
+    || ko "docker stop a pris ${DUREE} ms : PID 1 sourd à SIGTERM"
+  [ "$(docker inspect chk18-02 --format '{{.State.ExitCode}}')" = 0 ] \
+    && ok "code de sortie 0 après stop" \
+    || ko "code de sortie $(docker inspect chk18-02 \
+--format '{{.State.ExitCode}}') après stop (attendu 0)"
+  docker rm -f chk18-02 >/dev/null 2>&1
+else
+  ko "impossible de lancer l'image (port 18002 pris ? docker logs)"
+fi
+
+# --- 4. rapports --------------------------------------------------------
+A="$HOME/lab22/rapports/audit-dockerfile.md"
+[ -s "$A" ] && [ "$(grep -c '^|' "$A")" -ge 10 ] \
+  && ok "audit-dockerfile.md présent avec un tableau d'au moins 8 lignes" \
+  || ko "$A absent ou tableau trop court (8 défauts minimum)"
+[ -s "$HOME/lab22/rapports/trivy-factura-api.txt" ] \
+  && ok "rapport Trivy enregistré" \
+  || ko "rapport ~/lab22/rapports/trivy-factura-api.txt absent"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

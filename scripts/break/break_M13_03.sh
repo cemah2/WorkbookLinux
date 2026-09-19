@@ -1,57 +1,50 @@
 #!/usr/bin/env bash
-# break_M13_03.sh — panne BF13.3 (les logs du service ont des trous)
+# break_M13_03.sh — panne BF13.3 (pare-feu qui jette le trafic de retour)
+# À lancer sur lab-adm, L13.1 en place (table inet filter, chaîne forward).
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-DROPD=/etc/systemd/journald.conf.d
-DROP="$DROPD/90-limite-debit.conf"
-UDROPD=/etc/systemd/system/factura-api.service.d
-UDROP="$UDROPD/10-debit.conf"
-mkdir -p "$SAUV" "$DROPD" "$UDROPD"
+mkdir -p "$SAUV"
 
-[ -d /run/systemd/system ] || {
-  echo "systemd ne pilote pas cette machine : panne inapplicable" >&2
-  exit 1; }
-[ -x /opt/factura/bin/factura-api.py ] || {
-  echo "factura-api absent : lance setup_M13.sh" >&2; exit 1; }
+if ! nft list chain inet filter forward >/dev/null 2>&1; then
+  echo "la chaîne inet filter forward n'existe pas : L13.1 doit être en place" >&2
+  exit 1
+fi
+[ -f "$SAUV/M13_03.ruleset.nft" ] || nft list ruleset > "$SAUV/M13_03.ruleset.nft"
 
-# --- 1. un limiteur de débit resserré « pour protéger le disque » -------
-[ -f "$DROP" ] && [ ! -f "$SAUV/M13_03.journald.conf" ] && \
-  cp -a "$DROP" "$SAUV/M13_03.journald.conf"
+handle_of() { # handle_of <motif exact de règle>
+  nft -a list chain inet filter forward | grep -F "$1" | head -1 \
+    | sed -n 's/.*# handle \([0-9]*\)$/\1/p'
+}
 
-cat > "$DROP" <<'EOF'
-# Durcissement appliqué après l'incident disque de mars.
-[Journal]
-RateLimitIntervalSec=30s
-RateLimitBurst=50
-EOF
-chmod 0644 "$DROP"
+# 1. la règle stateful disparaît
+h=$(handle_of 'ct state established,related accept')
+[ -n "$h" ] && nft delete rule inet filter forward handle "$h"
 
-# --- 2. l'application, elle, s'est mise à parler beaucoup ---------------
-# Une ligne par requête, et le trafic a été multiplié par cinquante.
-[ -f "$UDROP" ] && [ ! -f "$SAUV/M13_03.unit.conf" ] && \
-  cp -a "$UDROP" "$SAUV/M13_03.unit.conf"
+# 2. la règle de sortie ne laisse plus passer que les nouveaux flux
+h=$(handle_of 'iifname "br-lab" oifname "ens18" accept')
+if [ -n "$h" ]; then
+  nft replace rule inet filter forward handle "$h" \
+    iifname '"br-lab"' oifname '"ens18"' ct state new accept
+fi
 
-cat > "$UDROP" <<'EOF'
-[Service]
-Environment=FACTURA_PERIODE=0.01
-EOF
-chmod 0644 "$UDROP"
-
-systemctl daemon-reload
-systemctl restart systemd-journald
-systemctl restart factura-api.service >/dev/null 2>&1 || \
-  systemctl start factura-api.service >/dev/null 2>&1 || true
-
-# on laisse le limiteur frapper au moins une fois avant de rendre la main
-sleep 35
+# 3. "on a gardé le ping pour la supervision"
+if ! nft list chain inet filter forward | grep -q 'ip protocol icmp accept'; then
+  h=$(handle_of 'ct state invalid')
+  if [ -n "$h" ]; then
+    nft add rule inet filter forward position "$h" ip protocol icmp accept
+  else
+    nft insert rule inet filter forward ip protocol icmp accept
+  fi
+fi
 
 cat <<'EOF'
 
-Symptôme attendu : « journalctl -u factura-api -f » montre quelques
-lignes, puis plus rien pendant une trentaine de secondes, puis reprend.
-L'application tourne, « systemctl status factura-api » est vert, et le
-développeur affirme qu'elle écrit une ligne par requête.
+Symptôme attendu : depuis c1, curl http://10.10.10.11/ expire alors que
+ping 10.10.10.11 répond ; tcpdump -i ens18 sur lab-adm montre le SYN partir
+et le SYN-ACK revenir. Depuis lab-web, curl http://10.10.10.10:8080/ expire
+aussi, alors que tcpdump -i veth-c1 montre le SYN arriver dans c1.
+ip_forward vaut 1 et le masquerade est en place.
 EOF

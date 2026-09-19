@@ -1,80 +1,181 @@
 #!/usr/bin/env bash
-# setup_M20.sh — prépare ~/lab20 pour le module 20 (IaC : OpenTofu,
-# cloud-init, Proxmox). À lancer SANS sudo, en tant que mathieu, sur lab-adm.
-# Idempotent : ne réécrit jamais un fichier de travail déjà présent
-# (main.tf, .env, user-data enrichis...) ; les gabarits fournis portent le
-# suffixe .example ou sont posés uniquement s'ils manquent.
+# setup_M20.sh — prépare lab-virt pour le module 20 (KVM, QEMU, libvirt).
+# À lancer AVEC sudo sur lab-virt (10.10.10.16). Idempotent : relançable.
+#
+# Ce qu'il fait :
+#   1. vérifie /dev/kvm (virtualisation imbriquée) et s'arrête sinon
+#   2. installe la pile QEMU/libvirt/virtinst et les outils du module
+#   3. ajoute l'utilisateur aux groupes libvirt et kvm
+#   4. pool « default » (/var/lib/libvirt/images) et réseau « default »
+#   5. télécharge l'image cloud Ubuntu 24.04 -> ubuntu-24.04-base.qcow2
+#      (lecture seule) et y injecte qemu-guest-agent si virt-customize est là
+#   6. clé SSH pour l'utilisateur si absente
+#   7. ~/lab20/ : seed cloud-init d'exemple, gabarits XML, squelette de
+#      l'usine à VM (L20.5), répertoires de livrables
 set -euo pipefail
 
-[ "$(id -u)" -ne 0 ] || { echo "à lancer SANS sudo (en tant que mathieu)" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+LAB_USER="${SUDO_USER:-mathieu}"
+LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
+[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
 
-BASE="$HOME/lab20"
-PVE_IP=10.10.10.1
-OPS_IP=10.10.10.14
+BASE="$LAB_HOME/lab20"
+IMG_DIR=/var/lib/libvirt/images
+IMG_NAME=ubuntu-24.04-base.qcow2
+IMG_URL=https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+SUMS_URL=https://cloud-images.ubuntu.com/noble/current/SHA256SUMS
+. /etc/os-release
 
-echo "== Préparation du module 20 dans $BASE =="
+info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*"; }
+echo "== Préparation du module 20 sur $(hostname) =="
 
-install -d "$BASE" "$BASE/cloud-init" "$BASE/proxmox" "$BASE/bin" \
-  "$BASE/e02" "$BASE/e04/templates" "$BASE/e06" "$BASE/e13" \
-  "$BASE/01-premier" "$BASE/02-lab2" "$BASE/03-remote" \
-  "$BASE/04-modules/templates" "$BASE/04-modules/tests" \
-  "$BASE/modules/vm-ubuntu/templates" "$BASE/ansible" "$BASE/rapports"
+# ---------------------------------------------------------------------
+# 1. KVM disponible ?
+# ---------------------------------------------------------------------
+info "vérification de la virtualisation imbriquée"
+if ! grep -qE 'vmx|svm' /proc/cpuinfo; then
+  cat >&2 <<'EOF'
+Le CPU vu par cette VM n'a ni vmx ni svm : la virtualisation imbriquée
+n'est pas active. Sur le nœud Proxmox :
+  cat /sys/module/kvm_intel/parameters/nested      # Y attendu (AMD: kvm_amd -> 1)
+  echo "options kvm-intel nested=1" > /etc/modprobe.d/kvm-intel.conf
+  (AMD : "options kvm-amd nested=1" > /etc/modprobe.d/kvm-amd.conf) puis reboot
+  qm set 9007 --cpu host ; qm stop 9007 ; qm start 9007
+puis relance ce script.
+EOF
+  exit 1
+fi
+modprobe kvm_intel 2>/dev/null || modprobe kvm_amd 2>/dev/null || true
+if [ ! -c /dev/kvm ]; then
+  echo "/dev/kvm absent alors que le CPU annonce vmx/svm : lsmod | grep kvm, dmesg" >&2
+  exit 1
+fi
+echo "   /dev/kvm présent, CPU : $(grep -m1 -oE 'vmx|svm' /proc/cpuinfo)"
 
-# Pose un fichier seulement s'il est absent (ne touche pas au travail fait).
-poser() {   # poser <chemin>  (contenu sur stdin)
+# ---------------------------------------------------------------------
+# 2. Paquets
+# ---------------------------------------------------------------------
+case "$ID" in
+  ubuntu|debian)
+    info "paquets (apt)"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get install -y -q qemu-system-x86 qemu-utils libvirt-daemon-system \
+      libvirt-clients virtinst cloud-image-utils genisoimage guestfs-tools \
+      virt-top cpu-checker libosinfo-bin python3-libvirt python3-yaml jq \
+      cloud-init uuid-runtime
+    LV_GROUP=libvirt ; LV_UNIT=libvirtd
+    ;;
+  rocky|rhel|almalinux|centos)
+    info "paquets (dnf)"
+    dnf install -y -q qemu-kvm qemu-img libvirt libvirt-client virt-install \
+      guestfs-tools genisoimage virt-top libosinfo python3-libvirt \
+      python3-pyyaml jq cloud-init util-linux
+    LV_GROUP=libvirt ; LV_UNIT=virtqemud
+    ;;
+  *) echo "distribution non gérée : $ID" >&2; exit 1 ;;
+esac
+systemctl enable --now "$LV_UNIT" >/dev/null 2>&1 || true
+systemctl is-active --quiet libvirtd 2>/dev/null \
+  || systemctl is-active --quiet virtqemud 2>/dev/null \
+  || { echo "libvirt ne tourne pas : systemctl status $LV_UNIT" >&2; exit 1; }
+
+# ---------------------------------------------------------------------
+# 3. Groupes
+# ---------------------------------------------------------------------
+info "groupes $LV_GROUP et kvm pour $LAB_USER"
+for g in "$LV_GROUP" kvm; do
+  getent group "$g" >/dev/null && usermod -aG "$g" "$LAB_USER"
+done
+
+# ---------------------------------------------------------------------
+# 4. Pool et réseau default
+# ---------------------------------------------------------------------
+V="virsh -c qemu:///system"
+info "pool default ($IMG_DIR)"
+mkdir -p "$IMG_DIR"
+if ! $V pool-info default >/dev/null 2>&1; then
+  $V pool-define-as default dir --target "$IMG_DIR" >/dev/null
+fi
+$V pool-build default >/dev/null 2>&1 || true
+$V pool-info default | grep -q 'State: *running' || $V pool-start default >/dev/null
+$V pool-autostart default >/dev/null
+info "réseau default (virbr0, NAT)"
+if $V net-info default >/dev/null 2>&1; then
+  $V net-info default | grep -q 'Active: *yes' || $V net-start default >/dev/null
+  $V net-autostart default >/dev/null
+else
+  warn "réseau default absent : libvirt-daemon-system aurait dû le créer"
+fi
+
+# ---------------------------------------------------------------------
+# 5. Image cloud Ubuntu 24.04
+# ---------------------------------------------------------------------
+IMG="$IMG_DIR/$IMG_NAME"
+if [ ! -s "$IMG" ]; then
+  info "téléchargement de l'image cloud Ubuntu 24.04 (~600 Mo)"
+  curl -fL --progress-bar -o "$IMG.part" "$IMG_URL"
+  if SUMS=$(curl -fsSL "$SUMS_URL" 2>/dev/null); then
+    ATTENDU=$(printf '%s\n' "$SUMS" | awk '/noble-server-cloudimg-amd64.img$/{print $1}')
+    OBTENU=$(sha256sum "$IMG.part" | cut -d' ' -f1)
+    if [ -n "$ATTENDU" ] && [ "$ATTENDU" != "$OBTENU" ]; then
+      echo "somme SHA256 incorrecte, téléchargement rejeté" >&2; rm -f "$IMG.part"; exit 1
+    fi
+    echo "   SHA256 vérifiée"
+  else
+    warn "SHA256SUMS injoignable : image non vérifiée"
+  fi
+  mv "$IMG.part" "$IMG"
+fi
+qemu-img info "$IMG" | grep -q 'file format: qcow2' \
+  || { echo "$IMG n'est pas un qcow2 ?" >&2; exit 1; }
+
+if [ ! -f "$IMG_DIR/.base-customized" ] && command -v virt-customize >/dev/null; then
+  info "injection de qemu-guest-agent dans la base (virt-customize, 2 à 5 min)"
+  chmod 0644 "$IMG"
+  if LIBGUESTFS_BACKEND=direct timeout 900 virt-customize -a "$IMG" \
+       --install qemu-guest-agent \
+       --run-command 'systemctl enable qemu-guest-agent' >/dev/null 2>&1; then
+    touch "$IMG_DIR/.base-customized"
+    echo "   agent injecté"
+  else
+    warn "virt-customize a échoué : l'agent sera installé par cloud-init (packages:)"
+  fi
+fi
+chown root:root "$IMG" ; chmod 0444 "$IMG"
+$V pool-refresh default >/dev/null
+echo "   base : $($V vol-info --pool default "$IMG_NAME" | tr -s ' ' | paste -sd' ')"
+
+# ---------------------------------------------------------------------
+# 6. Clé SSH de l'utilisateur sur lab-virt
+# ---------------------------------------------------------------------
+if [ ! -s "$LAB_HOME/.ssh/id_ed25519.pub" ]; then
+  info "génération d'une clé SSH pour $LAB_USER"
+  su - "$LAB_USER" -c 'ssh-keygen -q -t ed25519 -N "" -f ~/.ssh/id_ed25519 -C mathieu@lab-virt'
+fi
+KEYS=$(cat "$LAB_HOME/.ssh/id_ed25519.pub" "$LAB_HOME/.ssh/authorized_keys" 2>/dev/null \
+       | grep -E '^(ssh|ecdsa)-' | sort -u)
+
+# ---------------------------------------------------------------------
+# 7. ~/lab20
+# ---------------------------------------------------------------------
+info "arborescence $BASE"
+install -d -o "$LAB_USER" -g "$LAB_USER" "$BASE" "$BASE/cloud-init" "$BASE/xml" \
+  "$BASE/bin" "$BASE/img" "$BASE/rapports" "$BASE/backups"
+
+poser() {   # poser <chemin>  (contenu sur stdin) : ne réécrit pas un fichier présent
   if [ -e "$1" ]; then cat >/dev/null; return 0; fi
-  cat > "$1"
+  cat > "$1"; chown "$LAB_USER:$LAB_USER" "$1"
 }
 
-# ---------------------------------------------------------------------
-# 1. Identifiants et hygiène git
-# ---------------------------------------------------------------------
-cat > "$BASE/.env.example" <<EOF
-# Copie en .env (chmod 600) et remplis. Charge avec :
-#   set -a; . ~/lab20/.env; set +a
-# --- Proxmox (provider bpg/proxmox lit ces deux variables) ---
-PROXMOX_VE_ENDPOINT=https://$PVE_IP:8006/
-PROXMOX_VE_API_TOKEN=terraform@pve!tofu=00000000-0000-0000-0000-000000000000
-PROXMOX_VE_INSECURE=true
-# nom du nœud tel que « hostname » le donne sur le nœud
-PVE_NODE=pve
-# --- Backend S3 (MinIO sur lab-ops, L20.3) ---
-AWS_ACCESS_KEY_ID=tofu
-AWS_SECRET_ACCESS_KEY=change-moi
-EOF
-
-poser "$BASE/.gitignore" <<'EOF'
-# secrets et état : jamais dans git
-.env
-*.tfstate
-*.tfstate.*
-*.tfvars
-!*.tfvars.example
-.terraform/
-plan.bin
-plan.txt
-backup-*.json
-crash.log
-# fichiers générés
-ansible/inventory.ini
-hosts.lab2
-EOF
-
-# ---------------------------------------------------------------------
-# 2. cloud-init : exemples de user-data
-# ---------------------------------------------------------------------
-KEY=""
-for f in "$HOME/.ssh/id_ed25519.pub" "$HOME/.ssh/id_rsa.pub"; do
-  [ -r "$f" ] && { KEY=$(head -n1 "$f"); break; }
-done
-[ -n "$KEY" ] || KEY="ssh-ed25519 AAAA... remplace-par-ta-cle mathieu@lab-adm"
-
-cat > "$BASE/cloud-init/minimal.yaml" <<EOF
+{
+  cat <<'EOF'
 #cloud-config
-# user-data minimal : identité + accès. Valider avec
-#   cloud-init schema --config-file minimal.yaml
-hostname: ci-minimal
-fqdn: ci-minimal.lab.local
+# user-data d'exemple (E20.6) : à copier dans cloud-init/<vm>/user-data
+# et à adapter (hostname, marqueur). Valider : cloud-init schema --config-file
+hostname: vm-01
+fqdn: vm-01.lab.local
 manage_etc_hosts: true
 users:
   - name: mathieu
@@ -83,314 +184,143 @@ users:
     sudo: "ALL=(ALL) NOPASSWD:ALL"
     lock_passwd: true
     ssh_authorized_keys:
-      - $KEY
-package_update: true
+EOF
+  printf '%s\n' "$KEYS" | sed 's/^/      - /'
+  cat <<'EOF'
 packages: [qemu-guest-agent]
+write_files:
+  - path: /etc/lab20-marker
+    permissions: "0644"
+    content: "vm-01\n"
 runcmd:
   - systemctl enable --now qemu-guest-agent
 EOF
+} | poser "$BASE/cloud-init/user-data.example"
 
-cat > "$BASE/cloud-init/vendor-agent.yaml" <<'EOF'
-#cloud-config
-# vendor-data : FUSIONNÉ avec le user-data (contrairement à --cicustom user=
-# qui remplace). Utile pour garantir l'agent sans toucher au user-data.
-#   qm set <vmid> --cicustom vendor=local:snippets/vendor-agent.yaml
-package_update: true
-packages: [qemu-guest-agent]
-runcmd:
-  - systemctl enable --now qemu-guest-agent
+printf 'instance-id: vm-01-%s\nlocal-hostname: vm-01\n' "$(uuidgen)" \
+  | poser "$BASE/cloud-init/meta-data.example"
+
+poser "$BASE/cloud-init/network-config.example" <<'EOF'
+# network-config v2 (Netplan) pour une VM sur le bridge br0 : pas de DHCP
+# sur 10.10.10.0/24. cloud-localds -N network-config seed.iso user-data meta-data
+version: 2
+ethernets:
+  id0:
+    match:
+      name: "en*"
+    dhcp4: false
+    addresses: [10.10.10.161/24]
+    routes:
+      - to: default
+        via: 10.10.10.1
+    nameservers:
+      addresses: [10.10.10.1]
+      search: [lab.local]
 EOF
 
-cat > "$BASE/cloud-init/README.md" <<'EOF'
-# cloud-init
-
-* `minimal.yaml` : point de départ de E20.7 (à enrichir dans `ci-test.yaml`)
-* `vendor-agent.yaml` : vendor-data qui garantit qemu-guest-agent
-* validation : `cloud-init schema --config-file <f>` puis
-  `python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' <f>`
-* copie sur le nœud : `scp <f> root@10.10.10.1:/var/lib/vz/snippets/`
+poser "$BASE/xml/net-isole.xml" <<'EOF'
+<network>
+  <name>isole</name>
+  <bridge name='virbr20' stp='on' delay='0'/>
+  <ip address='10.20.0.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='10.20.0.100' end='10.20.0.199'/>
+    </dhcp>
+  </ip>
+</network>
 EOF
 
-# ---------------------------------------------------------------------
-# 3. Script de fabrication du template (à exécuter SUR LE NŒUD)
-# ---------------------------------------------------------------------
-cat > "$BASE/proxmox/make-template.sh" <<'EOF'
+poser "$BASE/xml/net-lan.xml" <<'EOF'
+<network>
+  <name>lan</name>
+  <forward mode='bridge'/>
+  <bridge name='br0'/>
+</network>
+EOF
+
+poser "$BASE/xml/pool-lab20.xml" <<'EOF'
+<pool type='dir'>
+  <name>lab20</name>
+  <target>
+    <path>/srv/vm</path>
+  </target>
+</pool>
+EOF
+
+poser "$BASE/bin/usine-vm.sh" <<'EOF'
 #!/usr/bin/env bash
-# make-template.sh — fabrique le template cloud-init 9100 (Ubuntu 24.04)
-# À exécuter en root SUR LE NŒUD PROXMOX. Idempotent : ne refait rien si
-# 9100 est déjà un template.
-#   scp ~/lab20/proxmox/make-template.sh root@10.10.10.1:/root/
-#   scp ~/.ssh/id_ed25519.pub root@10.10.10.1:/root/keys/mathieu.pub
-#   ssh root@10.10.10.1 bash /root/make-template.sh
+# usine-vm.sh — une commande, une VM libvirt prête (image cloud + cloud-init)
+# Usage : usine-vm.sh --name NOM [--ram MO] [--vcpus N] [--key CLE.pub]
+#         [--net network=default|bridge=br0] [--ip A.B.C.D/24] [--disk GO]
+#         [--pool POOL]        crée (ou ne fait rien si la VM existe)
+#         usine-vm.sh --name NOM --delete     détruit VM, disque, seed
+# Squelette L20.5 : les parties marquées TODO sont à écrire.
 set -euo pipefail
+export LIBVIRT_DEFAULT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}"
 
-VMID=${VMID:-9100}
-NAME=${NAME:-ubuntu-2404-tpl}
-STORAGE=${STORAGE:-local-lvm}        # stockage des disques (raw sur LVM)
-BRIDGE=${BRIDGE:-vmbr1}
-KEYFILE=${KEYFILE:-/root/keys/mathieu.pub}
-IMG_URL=https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
-IMG=/root/noble-server-cloudimg-amd64.img
+NAME="" RAM=1024 VCPUS=1 KEY="$HOME/.ssh/id_ed25519.pub" NET="network=default"
+IP="" DISK=20 POOL=default DELETE=0
+BASE=ubuntu-24.04-base.qcow2 GW=10.10.10.1 DNS=10.10.10.1 DOMAIN=lab.local
+SEEDS="$HOME/lab20/cloud-init"
 
-[ "$(id -u)" -eq 0 ] || { echo "à lancer en root sur le nœud" >&2; exit 1; }
-[ -r "$KEYFILE" ] || { echo "clé publique $KEYFILE absente" >&2; exit 1; }
+log() { printf '%s %s\n' "$(date +%T)" "$*" >&2; }
+die() { log "ERREUR : $1"; exit "${2:-1}"; }
+usage() { sed -n '2,6p' "$0" >&2; exit "${1:-0}"; }
 
-if qm config "$VMID" 2>/dev/null | grep -q '^template: 1'; then
-  echo "VM $VMID est déjà un template, rien à faire"; exit 0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --name)   NAME=${2:?}; shift 2 ;;    --ram)    RAM=${2:?}; shift 2 ;;
+    --vcpus)  VCPUS=${2:?}; shift 2 ;;   --key)    KEY=${2:?}; shift 2 ;;
+    --net)    NET=${2:?}; shift 2 ;;     --ip)     IP=${2:?}; shift 2 ;;
+    --disk)   DISK=${2:?}; shift 2 ;;    --pool)   POOL=${2:?}; shift 2 ;;
+    --delete) DELETE=1; shift ;;         -h|--help) usage 0 ;;
+    *) log "option inconnue : $1"; usage 2 ;;
+  esac
+done
+[[ $NAME =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || die "nom invalide : '$NAME'" 2
+
+if [ "$DELETE" -eq 1 ]; then
+  # TODO : destroy si allumée, undefine, vol-delete des deux volumes,
+  #        suppression de $SEEDS/$NAME. Rien d'autre.
+  die "--delete : à écrire" 1
 fi
-if qm status "$VMID" >/dev/null 2>&1; then
-  echo "VM $VMID existe mais n'est pas un template : détruis-la d'abord" >&2
-  exit 1
-fi
 
-# 1. image cloud officielle (téléchargée une fois)
-[ -s "$IMG" ] || wget -q -O "$IMG" "$IMG_URL"
-
-# 2. l'image n'embarque pas qemu-guest-agent : on l'injecte hors ligne.
-#    Sans agent, « agent { enabled = true } » du provider attend 15 min.
-if ! command -v virt-customize >/dev/null; then
-  apt-get update -q && apt-get install -y -q libguestfs-tools
-fi
-virt-customize -q -a "$IMG" \
-  --install qemu-guest-agent \
-  --run-command 'systemctl enable qemu-guest-agent' \
-  --truncate /etc/machine-id            # sinon tous les clones ont le même id
-
-# 3. la VM : machine sérielle (les images cloud parlent sur ttyS0),
-#    CPU x86-64-v2-AES (jeu d'instructions moderne, migrable), agent activé
-qm create "$VMID" --name "$NAME" --memory 1024 --cores 1 \
-  --net0 "virtio,bridge=$BRIDGE" --scsihw virtio-scsi-single --ostype l26 \
-  --agent enabled=1 --cpu x86-64-v2-AES --serial0 socket --vga serial0
-qm disk import "$VMID" "$IMG" "$STORAGE"
-qm set "$VMID" --scsi0 "$STORAGE:vm-$VMID-disk-0,discard=on,iothread=1"
-qm set "$VMID" --ide2 "$STORAGE:cloudinit" --boot order=scsi0
-qm set "$VMID" --ciuser mathieu --sshkeys "$KEYFILE" \
-  --ipconfig0 ip=dhcp --ciupgrade 0
-qm disk resize "$VMID" scsi0 20G
-qm template "$VMID"
-echo "template $VMID ($NAME) prêt :"
-qm config "$VMID" | grep -E '^(template|agent|ide2|scsi0|serial0|cpu|ciuser):'
+# TODO idempotence : si la VM existe, afficher état + IP et sortir en 0.
+# TODO contrôles : clé lisible, --net valide, --ip avec bridge, base présente,
+#      pas de volume orphelin (code 3).
+# TODO seed : user-data (clé $KEY), meta-data (instance-id = uuidgen),
+#      network-config si --ip ; cloud-localds.
+# TODO volumes : vol-create-as (overlay sur $BASE) + vol-create-as/vol-upload
+#      du seed.
+# TODO virt-install --import (host-passthrough, virtio, discard=unmap, agent).
+# TODO attente IP (bail ou --ip) puis port 22, 180 s max, code 4 sinon.
+die "création : à écrire (voir L20.5)" 1
 EOF
-chmod 755 "$BASE/proxmox/make-template.sh"
+chmod +x "$BASE/bin/usine-vm.sh"
+
+poser "$BASE/README.md" <<'EOF'
+# lab20 — Virtualisation KVM / libvirt
+
+* `cloud-init/*.example` : seed de départ (E20.6) ; un sous-répertoire par VM
+* `xml/` : réseaux `isole`, `lan` (bridge br0) et pool `lab20` (/srv/vm)
+* `bin/usine-vm.sh` : squelette de l'usine à VM (L20.5)
+* `img/` : images d'exercice (E20.4, E20.5) ; `backups/` : L20.4 ; `rapports/`
+* base : /var/lib/libvirt/images/ubuntu-24.04-base.qcow2 (pool default, 0444)
+* plage LAN réservée aux VM imbriquées bridgées : 10.10.10.160-179
+EOF
+chown -R "$LAB_USER:$LAB_USER" "$BASE"
 
 # ---------------------------------------------------------------------
-# 4. Squelettes des exercices (providers local/random, sans Proxmox)
+# Bilan
 # ---------------------------------------------------------------------
-poser "$BASE/e02/versions.tf" <<'EOF'
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    local  = { source = "hashicorp/local", version = "~> 2.5" }
-    random = { source = "hashicorp/random", version = "~> 3.6" }
-  }
-}
-EOF
-
-poser "$BASE/e04/versions.tf" <<'EOF'
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    local = { source = "hashicorp/local", version = "~> 2.5" }
-  }
-}
-EOF
-poser "$BASE/e04/variables.tf" <<'EOF'
-# Utilisée par E20.4 (tofu console) et E20.5 (hosts.lab2)
-variable "vms" {
-  description = "VM du lab2 : nom => { vm_id, host (dernier octet) }"
-  type = map(object({
-    vm_id = number
-    host  = number
-  }))
-  default = {
-    lab2-adm  = { vm_id = 9101, host = 101 }
-    lab2-web  = { vm_id = 9102, host = 102 }
-    lab2-db   = { vm_id = 9103, host = 103 }
-    lab2-rhel = { vm_id = 9104, host = 104 }
-    lab2-ops  = { vm_id = 9105, host = 105 }
-  }
-}
-EOF
-
-poser "$BASE/e06/versions.tf" <<'EOF'
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    local = { source = "hashicorp/local", version = "~> 2.5" }
-  }
-}
-EOF
-
-poser "$BASE/e13/versions.tf" <<'EOF'
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    proxmox = { source = "bpg/proxmox", version = "~> 0.7" }
-  }
-}
-EOF
-
-poser "$BASE/01-premier/README.md" <<'EOF'
-# 01-premier
-
-Bac à sable libre : recopie ici ce que tu veux garder de e02/ à e06/.
-EOF
-
-# ---------------------------------------------------------------------
-# 5. Squelettes des labs
-# ---------------------------------------------------------------------
-poser "$BASE/02-lab2/versions.tf" <<'EOF'
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    proxmox = { source = "bpg/proxmox", version = "~> 0.7" }
-  }
-}
-EOF
-poser "$BASE/02-lab2/providers.tf" <<'EOF'
-# endpoint et token viennent de PROXMOX_VE_ENDPOINT / PROXMOX_VE_API_TOKEN
-provider "proxmox" {
-  insecure = true
-}
-EOF
-poser "$BASE/02-lab2/terraform.tfvars.example" <<'EOF'
-vms = {
-  lab2-adm  = { vm_id = 9101, host = 101 }
-  lab2-web  = { vm_id = 9102, host = 102 }
-  lab2-db   = { vm_id = 9103, host = 103, disk = 30 }
-  lab2-rhel = { vm_id = 9104, host = 104 }
-  lab2-ops  = { vm_id = 9105, host = 105, memory = 4096 }
-}
-EOF
-poser "$BASE/02-lab2/notes.md" <<'EOF'
-# Notes L20.2
-EOF
-
-poser "$BASE/03-remote/README.md" <<'EOF'
-# 03-remote
-
-Fichiers annexes de L20.3 : politique MinIO (`policy-tfstate.json`),
-commandes `mc`, sauvegardes d'état (`backup-*.json`, ignorées par git).
-EOF
-poser "$BASE/03-remote/policy-tfstate.json" <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:ListBucket", "s3:GetBucketLocation",
-                 "s3:GetBucketVersioning", "s3:ListBucketVersions"],
-      "Resource": ["arn:aws:s3:::tfstate"]
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject",
-                 "s3:GetObjectVersion", "s3:DeleteObjectVersion"],
-      "Resource": ["arn:aws:s3:::tfstate/*"]
-    }
-  ]
-}
-EOF
-
-poser "$BASE/04-modules/README.md" <<'EOF'
-# 04-modules
-
-Racine de L20.4 et D20 : même état distant que 02-lab2 (clé
-`lab2/terraform.tfstate`), ressources déplacées dans `module "vm"`.
-EOF
-
-# module vide (à remplir en L20.4)
-poser "$BASE/modules/vm-ubuntu/README.md" <<'EOF'
-# Module vm-ubuntu
-
-À remplir (L20.4) : variables.tf, main.tf, outputs.tf, versions.tf.
-EOF
-
-# ---------------------------------------------------------------------
-# 6. Ansible : gabarit d'inventaire et playbook de base fourni
-# ---------------------------------------------------------------------
-cat > "$BASE/ansible/inventory.ini.example" <<'EOF'
-# Gabarit : le vrai inventory.ini est généré par OpenTofu (L20.4)
-[lab2]
-lab2-adm ansible_host=10.10.10.101
-lab2-web ansible_host=10.10.10.102
-
-[docker]
-lab2-ops
-
-[lab2:vars]
-ansible_user=mathieu
-EOF
-
-cat > "$BASE/ansible/ansible.cfg" <<'EOF'
-[defaults]
-inventory = inventory.ini
-interpreter_python = auto_silent
-host_key_checking = False
-retry_files_enabled = False
-EOF
-
-poser "$BASE/ansible/base.yml" <<'EOF'
----
-# Configuration de base des VM lab2 (fournie par le setup ; D20 l'enrichit)
-- name: Base lab2
-  hosts: lab2
-  become: true
-  vars:
-    fuseau: Europe/Paris
-  tasks:
-    - name: Paquets de base
-      ansible.builtin.apt:
-        name: [htop, qemu-guest-agent]
-        state: present
-        update_cache: true
-        cache_valid_time: 3600
-
-    - name: Agent QEMU actif
-      ansible.builtin.service:
-        name: qemu-guest-agent
-        state: started
-        enabled: true
-
-    - name: Bannière
-      ansible.builtin.copy:
-        dest: /etc/motd
-        mode: "0644"
-        content: |
-          {{ inventory_hostname }} — VM lab2 gérée par OpenTofu + Ansible.
-          Toute modification manuelle sera perdue au prochain apply.
-
-    - name: Fuseau horaire (symlink, idempotent)
-      ansible.builtin.file:
-        src: "/usr/share/zoneinfo/{{ fuseau }}"
-        dest: /etc/localtime
-        state: link
-        force: true
-
-    - name: /etc/timezone cohérent
-      ansible.builtin.copy:
-        dest: /etc/timezone
-        content: "{{ fuseau }}\n"
-        mode: "0644"
-EOF
-
-# ---------------------------------------------------------------------
-# 7. Notes et permissions
-# ---------------------------------------------------------------------
-poser "$BASE/notes.md" <<'EOF'
-# Notes du module 20
-EOF
-[ -f "$BASE/.env" ] && chmod 600 "$BASE/.env"
-
-cat <<EOF
-
-== ~/lab20 prêt ==
-  .env.example         -> copie en .env (chmod 600) après E20.8
-  cloud-init/          -> minimal.yaml, vendor-agent.yaml
-  proxmox/make-template.sh -> à copier et lancer sur le nœud (E20.9)
-  e02 e04 e06 e13      -> exercices ; 02-lab2 03-remote 04-modules -> labs
-  modules/vm-ubuntu/   -> module à écrire (L20.4)
-  ansible/base.yml     -> playbook fourni (L20.4)
-Outils : $(command -v tofu >/dev/null && tofu version | head -1 || echo "tofu ABSENT (voir 20.1)") ;\
- $(command -v cloud-init >/dev/null && echo "cloud-init OK" || echo "cloud-init ABSENT")
-EOF
+echo
+echo "== lab-virt prêt pour le module 20 =="
+echo "   libvirt      : $($V version 2>/dev/null | awk '/Using library/{print $3,$4}')"
+echo "   QEMU         : $($V version 2>/dev/null | awk '/Running hypervisor/{print $3,$4}')"
+echo "   pool default : $($V pool-info default | awk '/State/{print $2}')"
+echo "   réseau       : $($V net-list --name | paste -sd' ')"
+echo "   base         : $IMG"
+echo "   groupes      : $(id -nG "$LAB_USER" | tr ' ' '\n' | grep -xE 'libvirt|kvm' | paste -sd' ')"
+echo
+echo "Reconnecte-toi (nouveaux groupes) puis :"
+echo "   echo 'export LIBVIRT_DEFAULT_URI=qemu:///system' >> ~/.bashrc"

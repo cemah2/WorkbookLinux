@@ -1,100 +1,91 @@
 #!/usr/bin/env bash
-# check_M21_04.sh — vérifie le lab L21.4 (pipelines Ansible et OpenTofu)
-# À lancer sur lab-ops, en tant que mathieu.
+# check_M21_04.sh — vérifie le lab L21.4 (purge d'un secret de l'historique)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
+has()  { grep "$@" >/dev/null; }   # comme grep -q, sans SIGPIPE (pipefail)
 echo "== Vérification L21.4 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab21"
-API=http://10.10.10.14:3000/api/v1
-TOKEN=$(tr -d '[:space:]' < "$BASE/.gitea-token" 2>/dev/null || true)
-REPO="$API/repos/mathieu/factura-infra"
-api() { curl -s -m 10 -H "Authorization: token $TOKEN" "$@"; }
-json() { python3 -c "import sys,json; d=json.load(sys.stdin); $1" 2>/dev/null; }
+D="$HOME/lab21/factura-infra"
+O="$HOME/lab21/remote/factura-infra.git"
+RAP="$HOME/lab21/rapports/incident-secret.md"
+SECRET='S3cr3t-Factura-2026'
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
-# --- 1. la tâche piège est corrigée ---------------------------------------
-PB=$(api "$REPO/raw/ansible/site.yml")
-printf '%s' "$PB" | python3 - <<'EOF' && ok "site.yml : la tâche nginx -t a changed_when: false" \
-  || ko "site.yml : la tâche « nginx -t » doit porter changed_when: false (et check_mode: false)"
-import sys, yaml
-p = yaml.safe_load(sys.stdin)
-t = [x for x in p[0]["tasks"] if "nginx -t" in str(x.get("ansible.builtin.command", ""))]
-assert t and t[0].get("changed_when") is False
-EOF
+for R in "$O" "$D"; do
+  if ! git -C "$R" rev-parse --git-dir >/dev/null 2>&1; then
+    ko "$R n'est pas un dépôt git"; continue
+  fi
+  nom=${R##*/}
+  if git -C "$R" log --all --format=%h -- .env 2>/dev/null | has .; then
+    ko "$nom : des commits touchent encore .env (git log --all -- .env)"
+  else ok "$nom : plus aucun commit ne touche .env"; fi
+  if git -C "$R" grep -q "$SECRET" $(git -C "$R" rev-list --all 2>/dev/null) \
+     2>/dev/null; then
+    ko "$nom : le mot de passe est encore lisible dans un objet de l'historique"
+  else ok "$nom : le secret n'apparaît dans aucune révision"; fi
+  if git -C "$R" for-each-ref refs/original refs/replace 2>/dev/null | has .
+  then ko "$nom : refs/original ou refs/replace subsistent (les anciens \
+objets restent joignables)"
+  else ok "$nom : pas de référence de secours vers l'ancien historique"; fi
+  # objets orphelins encore présents ?
+  if git -C "$R" cat-file -e 1557f83fa5280573d92393c3cc2ae285890be472 2>/dev/null
+  then ko "$nom : l'ancien commit 1557f83 est encore dans la base d'objets \
+(reflog expire + gc --prune=now)"
+  else ok "$nom : l'ancien commit 1557f83 a été physiquement supprimé"; fi
+done
 
-# --- 2. workflow ansible ----------------------------------------------------
-WA=$(api "$REPO/raw/.gitea/workflows/ansible.yaml")
-printf '%s' "$WA" | python3 - <<'EOF' && ok "ansible.yaml : lint, check (PR, --check --diff), apply (push main, needs lint, concurrency)" \
-  || ko "ansible.yaml : attendu jobs lint / check (pull_request, --check --diff) / apply (push sur main, needs, concurrency)"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); j = w["jobs"]
-assert "ansible-lint" in str(j["lint"]["steps"])
-c = j["check"]; a = j["apply"]
-assert "pull_request" in str(c.get("if", "")) and "--check" in str(c["steps"]) and "--diff" in str(c["steps"])
-assert "main" in str(a.get("if", "")) and "lint" in str(a["needs"]) and "concurrency" in a
-assert any("always()" in str(s.get("if", "")) for s in c["steps"])
-EOF
-printf '%s' "$WA" | grep -qE 'run:.*\$\{\{ *secrets\.' \
-  && ko "ansible.yaml : un secret est interpolé dans un run: (passe par env:)" \
-  || ok "ansible.yaml : secrets passés par env:"
-printf '%s' "$WA" | grep -qE 'ansible_become_pass(word)?=' \
-  && ko "ansible.yaml : le mot de passe become passe en ligne de commande (-e var=...)" \
-  || ok "ansible.yaml : mot de passe become hors de la ligne de commande"
+# le clone de travail suit bien le nouvel historique
+git -C "$D" fetch -q origin 2>/dev/null
+[ "$(git -C "$D" rev-parse main 2>/dev/null)" = \
+  "$(git -C "$D" rev-parse origin/main 2>/dev/null)" ] \
+  && ok "main et origin/main coïncident après réécriture" \
+  || ko "main et origin/main divergent : re-clone ou reset --hard origin/main"
 
-# --- 3. workflow tofu -----------------------------------------------------
-WT=$(api "$REPO/raw/.gitea/workflows/tofu.yaml")
-printf '%s' "$WT" | python3 - <<'EOF' && ok "tofu.yaml : plan (fmt, validate, plan -out, artefact) et apply gardé par workflow_dispatch + confirm + actor" \
-  || ko "tofu.yaml : attendu plan (fmt -check, validate, plan -out, upload-artifact) et apply (workflow_dispatch, inputs.confirm == 'apply', gitea.actor, runs-on lab-shell)"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); j = w["jobs"]
-on = w.get("on") or w.get(True)
-assert "confirm" in on["workflow_dispatch"]["inputs"]
-p = j["plan"]; a = j["apply"]
-sp = str(p["steps"])
-assert "fmt" in sp and "validate" in sp and "-out=" in sp and "upload-artifact" in sp
-cond = str(a.get("if", ""))
-assert "workflow_dispatch" in cond and "confirm" in cond and "actor" in cond
-assert a["runs-on"] == "lab-shell" and p["runs-on"] == "lab-shell"
-assert "download-artifact" in str(a["steps"]) and "plan.bin" in str(a["steps"])
-EOF
+git -C "$D" cat-file -e v1.0.0 2>/dev/null \
+  && ok "le tag v1.0.0 a survécu à la réécriture" \
+  || ko "le tag v1.0.0 a disparu"
 
-# --- 4. protection de main -----------------------------------------------
-BP=$(api "$REPO/branch_protections/main")
-if printf '%s' "$BP" | json 'assert d.get("branch_name")=="main"'; then
-  ok "main de factura-infra protégée"
-  printf '%s' "$BP" | json 'c=d["status_check_contexts"]; assert "ansible / lint" in c and "tofu / plan" in c' \
-    && ok "status checks « ansible / lint » et « tofu / plan » requis" \
-    || ko "status checks attendus : ansible / lint, tofu / plan"
-else
-  ko "aucune protection sur main de factura-infra"
-fi
+grep -qx '.env' "$D/.gitignore" 2>/dev/null \
+  && ok ".env reste ignoré" || ko ".env n'est plus dans .gitignore"
 
-# --- 5. runs (API tasks si disponible) -------------------------------------
-T=$(api "$REPO/actions/tasks?limit=100")
-if printf '%s' "$T" | json 'assert "workflow_runs" in d'; then
-  for job in check apply plan; do
-    printf '%s' "$T" | json "
-assert any(r.get('name')=='$job' and r.get('status')=='success' for r in d['workflow_runs'])" \
-      && ok "un job $job en succès" || ko "aucun job $job réussi"
-  done
-else
-  note "API actions/tasks indisponible : vérifie à la main check (PR), apply (main), plan"
-fi
+# --- hook pre-commit ------------------------------------------------------
+HP=$(git -C "$D" config core.hooksPath 2>/dev/null)
+if [ -n "$HP" ]; then HOOK="$D/$HP/pre-commit"; else HOOK="$D/.git/hooks/pre-commit"; fi
+[ "${HP:0:1}" = / ] && HOOK="$HP/pre-commit"
+if [ -x "$HOOK" ]; then
+  ok "hook pre-commit en place ($HOOK)"
+  git clone -q "$D" "$TMP/t" 2>/dev/null
+  mkdir -p "$TMP/t/$(dirname "${HP:-.git/hooks}")"
+  if [ -n "$HP" ] && [ "${HP:0:1}" != / ]; then
+    cp -r "$D/$HP" "$TMP/t/$HP" 2>/dev/null
+  else
+    cp "$HOOK" "$TMP/t/.git/hooks/pre-commit"
+  fi
+  git -C "$TMP/t" config user.name t; git -C "$TMP/t" config user.email t@t
+  [ -n "$HP" ] && git -C "$TMP/t" config core.hooksPath "$HP"
+  printf 'DB_PASSWORD=Encore-Un-S3cret\nAWS_SECRET_ACCESS_KEY=abc\n' \
+    > "$TMP/t/conf.env"
+  git -C "$TMP/t" add -f conf.env
+  if git -C "$TMP/t" -c commit.gpgsign=false commit -q -m "test" >/dev/null 2>&1
+  then ko "le hook laisse passer un fichier contenant DB_PASSWORD="
+  else ok "le hook bloque un commit contenant un secret"; fi
+  git -C "$TMP/t" reset -q; rm -f "$TMP/t/conf.env"
+  printf 'x=1\n' > "$TMP/t/ok.txt"; git -C "$TMP/t" add ok.txt
+  if git -C "$TMP/t" -c commit.gpgsign=false commit -q -m "test ok" \
+       >/dev/null 2>&1
+  then ok "le hook laisse passer un commit sain"
+  else ko "le hook bloque aussi un commit sans secret"; fi
+else ko "pas de hook pre-commit exécutable"; fi
 
-# --- 6. lab-web a reçu le changement --------------------------------------
-WC=$(ssh -o BatchMode=yes -o ConnectTimeout=5 mathieu@10.10.10.11 \
-      'grep -E "^\s*worker_connections" /etc/nginx/nginx.conf' 2>/dev/null | tr -d '\t;')
-if [ -n "$WC" ]; then
-  [ "${WC##* }" != "768" ] && ok "nginx.conf sur lab-web : $WC (appliqué par le pipeline)" \
-    || note "worker_connections vaut encore 768 : la PR de l'étape 4 est-elle mergée ?"
-else
-  note "lab-web non joignable en ssh mathieu@ : vérification nginx.conf sautée"
-fi
+if [ -f "$RAP" ]; then
+  ok "rapport d'incident présent"
+  grep -qiE 'rotation|révoqu|revoqu|changé|change' "$RAP" \
+    && ok "le rapport parle de rotation du secret" \
+    || ko "le rapport doit expliquer que le secret est révoqué/tourné"
+else ko "rapport ~/lab21/rapports/incident-secret.md absent"; fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

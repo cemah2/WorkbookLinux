@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# check_M13_03.sh — vérifie le lab L13.3 (rotation des journaux factura)
+# check_M13_03.sh — vérifie le lab L13.3 (VXLAN, WireGuard, mesures)
+# À lancer sur lab-web (VXLAN) et sur lab-adm (WireGuard + rapport).
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,113 +8,76 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L13.3 =="
 
-CONF=/etc/logrotate.d/factura
-LOGD=/var/log/factura
+HOSTN=$(hostname -s)
 LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab13/rotation.md"
-priv() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
+RAP="$HOMEDIR/lab13/rapports/overlay.md"
 
-command -v logrotate >/dev/null 2>&1 || {
-  ko "logrotate n'est pas installé"; echo "Résultat : $PASS réussis, \
-$FAIL échoués"; exit 1; }
+case "$HOSTN" in
+  lab-web|lab-db)
+    [ "$HOSTN" = lab-web ] && PEER=192.168.42.12 || PEER=192.168.42.11
+    D=$(ip -d link show vxlan0 2>/dev/null)
+    if [ -n "$D" ]; then
+      ok "vxlan0 existe"
+      echo "$D" | grep -q 'vxlan id 42' && ok "VNI 42" || ko "VNI différent de 42"
+      echo "$D" | grep -q 'dstport 4789' && ok "port 4789" || ko "port UDP ≠ 4789"
+      echo "$D" | grep -q 'mtu 1450' && ok "MTU 1450" \
+        || ko "MTU de vxlan0 ≠ 1450 (ip -d link show vxlan0)"
+      ip addr show dev vxlan0 | grep -q '192\.168\.42\.' \
+        && ok "adresse 192.168.42.x posée" || ko "pas d'adresse 192.168.42.x"
+      ping -c1 -W2 "$PEER" >/dev/null 2>&1 \
+        && ok "le pair $PEER répond à travers le VXLAN" \
+        || ko "$PEER ne répond pas via vxlan0 (pair monté ? remote ?)"
+      ping -M do -s 1422 -c1 -W2 "$PEER" >/dev/null 2>&1 \
+        && ok "un paquet de 1450 o passe sans fragmentation" \
+        || ko "ping -M do -s 1422 échoue : MTU incohérent quelque part"
+    else
+      ko "vxlan0 absent (ip link add vxlan0 type vxlan ...)"
+    fi
+    grep -qs 'vxlan' /etc/netplan/*.yaml \
+      && ok "un bloc tunnels: vxlan existe dans Netplan" \
+      || ko "VXLAN non persistant (Netplan tunnels: mode vxlan)"
+    ip link show vxlan1 >/dev/null 2>&1 \
+      && ko "vxlan1 (multicast) est encore là : à supprimer" \
+      || ok "vxlan1 nettoyé"
+    tc qdisc show dev ens18 2>/dev/null | grep -q netem \
+      && ko "un netem traîne encore sur ens18 (tc qdisc del dev ens18 root)" \
+      || ok "pas de netem résiduel sur ens18"
+    ;;
+  lab-adm|lab-ops)
+    [ "$HOSTN" = lab-adm ] && PEER=10.99.0.2 || PEER=10.99.0.1
+    if ip link show wg0 >/dev/null 2>&1; then
+      ok "wg0 existe"
+      W=$(sudo wg show wg0 2>/dev/null)
+      echo "$W" | grep -q 'latest handshake' \
+        && ok "poignée de main WireGuard effectuée" \
+        || ko "aucun handshake (clés ? Endpoint ? port 51820 ?)"
+      ping -c1 -W2 "$PEER" >/dev/null 2>&1 \
+        && ok "le pair $PEER répond via wg0" || ko "$PEER injoignable via wg0"
+      systemctl is-enabled -q wg-quick@wg0 2>/dev/null \
+        && ok "wg-quick@wg0 activé au démarrage" \
+        || ko "wg-quick@wg0 n'est pas enable"
+      [ "$(stat -c %a /etc/wireguard/wg0.conf 2>/dev/null)" = 600 ] \
+        && ok "wg0.conf en 0600" || ko "wg0.conf doit être en 0600 (clé privée)"
+    else
+      ko "wg0 absent (wg-quick up wg0)"
+    fi
+    ;;
+  *) note "hôte $HOSTN : rien à vérifier ici" ;;
+esac
 
-# --- 1. le fichier de configuration --------------------------------------
-if [ -f "$CONF" ]; then
-  ok "$CONF existe"
-  MODE=$(stat -c %a "$CONF"); PROP=$(stat -c %U:%G "$CONF")
-  case "$MODE" in
-    644|444) ok "mode $MODE : logrotate ne l'ignorera pas" ;;
-    *) ko "mode $MODE : logrotate ignore tout fichier accessible en \
-écriture au groupe ou aux autres (attendu 0644)" ;;
-  esac
-  [ "$PROP" = "root:root" ] && ok "propriétaire root:root" \
-    || ko "propriétaire $PROP au lieu de root:root"
+# --- rapport (lab-adm ou lab-web) ------------------------------------------
+if [ -f "$RAP" ]; then
+  n=$(grep -ciE 'bits?/s|Gbit|Mbit' "$RAP")
+  [ "$n" -ge 4 ] && ok "$n lignes de mesures de débit dans overlay.md" \
+    || ko "moins de 4 mesures de débit dans $RAP"
+  grep -qi 'retr' "$RAP" && ok "la colonne Retr est reportée" \
+    || ko "le rapport ne mentionne pas Retr"
+  grep -qiE 'flannel|calico|cilium' "$RAP" \
+    && ok "le lien avec les CNI est fait" \
+    || ko "conclusion sans lien avec flannel/Calico/Cilium"
 else
-  ko "$CONF manquant"
-fi
-
-# --- 2. les directives exigées -------------------------------------------
-if [ -f "$CONF" ]; then
-  besoin() { grep -qE "^\s*$1" "$CONF" \
-    && ok "directive $1 présente" || ko "directive $1 absente de $CONF"; }
-  besoin 'daily'
-  besoin 'rotate 14'
-  besoin 'delaycompress'
-  besoin 'notifempty'
-  besoin 'missingok'
-  besoin 'create 0640 factura adm'
-  besoin 'su '
-  besoin 'size'
-  besoin 'postrotate'
-  besoin 'sharedscripts'
-  grep -qE '^\s*dateext' "$CONF" \
-    && ok "dateext présent (bloc acces.log)" \
-    || ko "dateext manquant : acces.log doit être suffixé par une date"
-  grep -qE '^\s*weekly' "$CONF" \
-    && ok "un bloc hebdomadaire existe (acces.log)" \
-    || ko "aucun bloc weekly : acces.log doit tourner chaque semaine"
-  grep -qE 'copytruncate' "$CONF" \
-    && ko "copytruncate est utilisé : ce n'est pas le choix attendu ici" \
-    || ok "pas de copytruncate"
-  grep -qE 'kill.*[0-9]{3,}' "$CONF" \
-    && ko "un PID en dur apparaît dans postrotate (utilise systemctl kill)" \
-    || ok "aucun PID codé en dur dans postrotate"
-fi
-
-# --- 3. le dry run ne signale rien ---------------------------------------
-SORTIE=$(priv logrotate -d /etc/logrotate.conf 2>&1)
-if [ -n "$SORTIE" ]; then
-  echo "$SORTIE" | grep -qi 'ignoring.*factura' \
-    && ko "logrotate ignore encore la configuration factura" \
-    || ok "logrotate ne rejette pas la configuration factura"
-  echo "$SORTIE" | grep -qiE '^error:' \
-    && ko "logrotate -d remonte une erreur : $(echo "$SORTIE" \
-| grep -iE '^error:' | head -1)" \
-    || ok "logrotate -d ne remonte aucune erreur"
-  echo "$SORTIE" | grep -q 'considering log /var/log/factura/app.log' \
-    && ok "app.log est bien pris en charge" \
-    || ko "app.log n'apparaît pas dans la sortie de logrotate -d"
-else
-  ko "logrotate -d n'a rien produit (droits insuffisants : relance avec \
-sudo)"
-fi
-
-# --- 4. la rotation a réellement eu lieu ---------------------------------
-priv test -f "$LOGD/app.log.1" \
-  && ok "$LOGD/app.log.1 existe" \
-  || ko "aucune génération app.log.1 (force une rotation : \
-sudo logrotate -f /etc/logrotate.conf)"
-priv test -f "$LOGD/app.log.2.gz" \
-  && ok "$LOGD/app.log.2.gz existe (delaycompress fonctionne)" \
-  || ko "pas de app.log.2.gz : delaycompress compresse au tour SUIVANT, \
-il faut donc deux rotations"
-priv test -f "$LOGD/app.log.1.gz" \
-  && ko "app.log.1.gz existe : delaycompress n'est pas appliqué" \
-  || ok "app.log.1 n'est pas compressé, conforme à delaycompress"
-
-if priv test -f "$LOGD/app.log"; then
-  D=$(priv stat -c %U:%G:%a "$LOGD/app.log")
-  [ "$D" = "factura:adm:640" ] \
-    && ok "app.log recréé en factura:adm 0640" \
-    || ko "app.log est en $D, on attend factura:adm:640 (directive create)"
-fi
-
-# --- 5. état et rapport ---------------------------------------------------
-for E in /var/lib/logrotate/status /var/lib/logrotate.status; do
-  priv test -f "$E" || continue
-  priv grep -q '/var/log/factura/app.log' "$E" \
-    && ok "l'état de rotation connaît app.log ($E)" \
-    || ko "app.log absent de l'état $E"
-done
-
-if [ -s "$RAP" ]; then
-  ok "$RAP existe"
-  grep -qi 'copytruncate' "$RAP" \
-    && ok "le rapport justifie le choix face à copytruncate" \
-    || ko "le rapport ne parle pas de copytruncate"
-else
-  ko "$RAP manquant"
+  note "rapport $RAP absent sur cet hôte"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

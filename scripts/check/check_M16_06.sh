@@ -1,233 +1,123 @@
 #!/usr/bin/env bash
-# check_M16_06.sh — vérifie le défi D16 (examen blanc : 5 pannes en 90 min)
-# Contrôle les huit axes de panne du module + les livrables. À lancer en
-# root pour que tous les contrôles soient possibles.
+# check_M16_06.sh — vérifie le défi D16 (poste de pilotage)
 set -uo pipefail
-PASS=0; FAIL=0; AXES=0
+PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-axe()  { AXES=$((AXES+1)); printf '\n-- axe %d : %s\n' "$AXES" "$1"; }
+echo "== Vérification D16 =="
 
-echo "== Vérification D16 — examen blanc =="
-[ "$(id -u)" -eq 0 ] || note "lance-moi en root (sudo) pour tout contrôler"
-
+SANTE=/opt/factura/bin/sante.sh
+CSV=/var/log/factura/metriques.csv
 LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab16"
-DATA=/srv/vitrine/data
-URL="${URL:-http://127.0.0.1:8080}"
-SAINS=0
+DOC="$HOMEDIR/lab16/pilotage.md"
+priv() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 
-v() { systemctl show vitrine-api -p "$1" --value 2>/dev/null; }
-
-# --- axe 1 : fuite mémoire ----------------------------------------------
-axe "mémoire (BF16.1)"
-ENVV=$(v Environment)
-if printf '%s' "$ENVV" | grep -qE 'VITRINE_FUITE=[1-9]'; then
-  ko "VITRINE_FUITE est encore positionné : la fuite tourne toujours"
-else
-  ok "aucune fuite injectée dans l'environnement du service"
-  SAINS=$((SAINS+1))
-fi
-MP=$(v MainPID)
-if [ -n "$MP" ] && [ "$MP" != 0 ] && [ -r "/proc/$MP/status" ]; then
-  RSS=$(awk '/^VmRSS:/ {print int($2/1024)}' "/proc/$MP/status")
-  [ "${RSS:-0}" -lt 200 ] \
-    && ok "RSS du frontal : ${RSS} Mo" \
-    || ko "RSS du frontal : ${RSS} Mo — anormalement haut"
-fi
-dmesg -T 2>/dev/null | tail -200 | grep -qi 'out of memory' \
-  && note "trace OOM encore visible dans dmesg (normal si l'incident a eu lieu)"
-
-# --- axe 2 : descripteurs -----------------------------------------------
-axe "descripteurs de fichiers (BF16.2)"
-NOF=$(v LimitNOFILE)
-if [ -n "$NOF" ] && [ "$NOF" != infinity ] && [ "$NOF" -lt 1024 ] \
-   2>/dev/null; then
-  ko "LimitNOFILE=$NOF : limite trop basse, l'incident reviendra"
-else
-  ok "LimitNOFILE=$NOF"
-  SAINS=$((SAINS+1))
-fi
-if printf '%s' "$ENVV" | grep -qE 'VITRINE_FD=[1-9]'; then
-  ko "VITRINE_FD force encore l'application à garder des descripteurs"
-elif [ -n "${MP:-}" ] && [ "$MP" != 0 ] && [ -d "/proc/$MP/fd" ]; then
-  NFD=$(ls -1 "/proc/$MP/fd" 2>/dev/null | wc -l)
-  [ "$NFD" -lt 100 ] \
-    && ok "$NFD descripteurs ouverts par le frontal" \
-    || ko "$NFD descripteurs ouverts : la fuite de descripteurs continue"
-fi
-
-# --- axe 3 : espace disque ----------------------------------------------
-axe "espace disque (BF16.3)"
-if mountpoint -q "$DATA" 2>/dev/null; then
-  USE=$(df --output=pcent "$DATA" | tail -1 | tr -dc '0-9')
-  IUSE=$(df -i --output=ipcent "$DATA" | tail -1 | tr -dc '0-9')
-  if [ "${USE:-100}" -lt 90 ] && [ "${IUSE:-100}" -lt 90 ]; then
-    ok "occupation ${USE}%, inodes ${IUSE}%"
-    SAINS=$((SAINS+1))
-  else
-    ko "occupation ${USE}%, inodes ${IUSE}% — volume toujours saturé"
-  fi
-  if [ "$(id -u)" -eq 0 ] && command -v lsof >/dev/null 2>&1; then
-    RET=$(lsof +L1 2>/dev/null | awk -v d="$DATA" '$0 ~ d {s+=$8} END \
-      {printf "%d", s/1048576}')
-    [ "${RET:-0}" -lt 50 ] \
-      && ok "aucun fichier supprimé ne retient d'espace" \
-      || ko "${RET} Mo retenus par un fichier supprimé encore ouvert"
-  fi
-else
-  ko "$DATA n'est pas monté"
-fi
-
-# --- axe 4 : CPU ---------------------------------------------------------
-axe "CPU (BF16.4)"
-if pgrep -f vitrine-reindex >/dev/null 2>&1; then
-  ko "le processus vitrine-reindex tourne toujours"
-elif systemctl is-enabled vitrine-reindex.service >/dev/null 2>&1; then
-  ko "vitrine-reindex.service est encore activé : il repartira au boot"
-else
-  ok "aucune boucle de calcul résiduelle"
-  SAINS=$((SAINS+1))
-fi
-CH=$(cut -d' ' -f1 /proc/loadavg)
-CPUS=$(nproc)
-if awk -v c="$CH" -v n="$CPUS" 'BEGIN {exit !(c < n)}'; then
-  ok "charge $CH pour $CPUS vCPU"
-else
-  ko "charge $CH pour $CPUS vCPU : quelque chose consomme encore"
-fi
-
-# --- axe 5 : ports éphémères / conntrack --------------------------------
-axe "réseau : ports éphémères (BF16.5)"
-read -r LO HI < <(sysctl -n net.ipv4.ip_local_port_range 2>/dev/null \
-  | tr '\t' ' ')
-LARG=$(( ${HI:-0} - ${LO:-0} ))
-if [ "$LARG" -ge 10000 ]; then
-  ok "plage de ports éphémères : $LO-$HI ($LARG ports)"
-  SAINS=$((SAINS+1))
-else
-  ko "plage de ports éphémères réduite à $LARG ports ($LO-$HI)"
-fi
-if [ -f /proc/sys/net/netfilter/nf_conntrack_max ]; then
-  CTM=$(cat /proc/sys/net/netfilter/nf_conntrack_max)
-  [ "$CTM" -ge 32768 ] \
-    && ok "nf_conntrack_max=$CTM" \
-    || ko "nf_conntrack_max=$CTM : table de suivi trop petite"
-fi
-
-# --- axe 6 : résolution de noms -----------------------------------------
-axe "résolution de noms (BF16.6)"
-T0=$(date +%s%N)
-getent hosts api-interne.lab.local >/dev/null 2>&1
-T1=$(date +%s%N)
-D=$(( (T1 - T0) / 1000000 ))
-if [ "$D" -lt 500 ]; then
-  ok "api-interne.lab.local résolu en ${D} ms"
-  SAINS=$((SAINS+1))
-else
-  ko "résolution en ${D} ms : un serveur de noms ne répond pas"
-fi
-grep -q '^nameserver 127.0.0.77' /etc/resolv.conf 2>/dev/null \
-  && ko "le résolveur muet est toujours en tête de /etc/resolv.conf" \
-  || ok "/etc/resolv.conf ne pointe plus vers le résolveur muet"
-systemctl is-active dns-cache-local.service >/dev/null 2>&1 \
-  && note "dns-cache-local.service tourne encore (acceptable s'il n'est \
-plus dans resolv.conf, mais pourquoi le garder ?)"
-
-# --- axe 7 : montage en écriture ----------------------------------------
-axe "système de fichiers en écriture (BF16.7)"
-OPT=$(findmnt -n -o OPTIONS --target "$DATA" 2>/dev/null)
-case "$OPT" in
-  ro,*|*,ro|*,ro,*) ko "$DATA est monté en lecture seule" ;;
-  "") ko "$DATA n'est pas monté" ;;
-  *) ok "$DATA est monté en écriture"; SAINS=$((SAINS+1)) ;;
+# --- 1. journalisation ----------------------------------------------------
+[ -d /var/log/journal ] && ok "journal persistant" \
+  || ko "/var/log/journal absent"
+CFG=$(systemd-analyze cat-config systemd/journald.conf 2>/dev/null)
+MAX=$(echo "$CFG" | grep -E '^\s*SystemMaxUse=' | tail -1 | cut -d= -f2)
+case "$MAX" in
+  500M|500m|512M) ok "SystemMaxUse=$MAX" ;;
+  "") ko "SystemMaxUse non défini : le journal n'a pas de plafond explicite" ;;
+  *) ko "SystemMaxUse=$MAX, le cahier des charges demande 500M" ;;
 esac
-DEV=$(findmnt -n -o SOURCE --target "$DATA" 2>/dev/null)
-if [ -n "$DEV" ] && [ -b "$DEV" ]; then
-  RO=$(blockdev --getro "$DEV" 2>/dev/null || echo 0)
-  [ "$RO" = 0 ] \
-    && ok "le périphérique $DEV est accessible en écriture" \
-    || ko "le périphérique $DEV est encore marqué read-only au niveau bloc"
-fi
+echo "$CFG" | grep -qE '^\s*MaxRetentionSec=(30day|2592000|1month)' \
+  && ok "MaxRetentionSec limite la rétention à 30 jours" \
+  || ko "MaxRetentionSec=30day manquant"
 
-# --- axe 8 : stabilité du service ---------------------------------------
-axe "stabilité du service (BF16.8)"
-RMAX=$(v RuntimeMaxUSec)
-case "$RMAX" in
-  infinity|"")
-     ok "aucun RuntimeMaxSec posé sur l'unité"; SAINS=$((SAINS+1)) ;;
-  *) ko "RuntimeMaxSec=$RMAX : systemd tue le service périodiquement" ;;
-esac
-NR=$(v NRestarts)
-ETAT=$(systemctl is-active vitrine-api 2>/dev/null)
-SINCE=$(systemctl show vitrine-api -p ActiveEnterTimestampMonotonic --value \
-  2>/dev/null)
-UPS=$(( ${SINCE:-0} / 1000000 ))
-if [ "$ETAT" = active ] && [ "$UPS" -ge 60 ]; then
-  ok "vitrine-api actif et stable (démarré il y a plus de 60 s)"
+if priv test -s /var/log/factura/metier.log; then
+  ok "/var/log/factura/metier.log est alimenté (facilité local6)"
 else
-  ko "vitrine-api : état « $ETAT », dernier démarrage il y a ${UPS}s"
+  ko "/var/log/factura/metier.log vide ou absent (règle rsyslog local6)"
 fi
-note "compteur de redémarrages systemd : ${NR:-?}"
+grep -rqs 'local6' /etc/rsyslog.d/ \
+  && ok "une règle rsyslog traite la facilité local6" \
+  || ko "aucune règle rsyslog sur local6 dans /etc/rsyslog.d/"
+priv grep -qs 'local6' /var/log/syslog 2>/dev/null \
+  && ko "des messages local6 sont encore dans /var/log/syslog" \
+  || ok "les messages local6 ne polluent plus /var/log/syslog"
+grep -rqs 'factura-bruyant' /etc/rsyslog.d/ \
+  && ok "une règle rsyslog traite factura-bruyant" \
+  || ko "aucune règle rsyslog ne filtre factura-bruyant"
 
-# --- fonctionnel ---------------------------------------------------------
-axe "vérification fonctionnelle bout en bout"
-if command -v curl >/dev/null 2>&1; then
-  for R in /sante /produits /commande; do
-    T=$(curl -s -o /tmp/d16.$$ -w '%{time_total} %{http_code}' \
-        --max-time 15 "$URL$R" 2>/dev/null || echo "99 000")
-    SEC=${T% *}; CODE=${T#* }
-    MS=$(printf '%.0f' "$(echo "$SEC * 1000" | bc -l 2>/dev/null || \
-         echo 99000)")
-    if [ "$CODE" = 200 ] && [ "$MS" -lt 200 ]; then
-      ok "$R : HTTP $CODE en ${MS} ms"
-    else
-      ko "$R : HTTP $CODE en ${MS} ms (attendu 200 en moins de 200 ms)"
-    fi
+# --- 2. rotation ----------------------------------------------------------
+SORTIE=$(priv logrotate -d /etc/logrotate.conf 2>&1)
+echo "$SORTIE" | grep -qiE '^error:' \
+  && ko "logrotate -d remonte une erreur sur la configuration de la machine" \
+  || ok "logrotate -d : aucune erreur sur toute la configuration"
+echo "$SORTIE" | grep -qi 'ignoring' \
+  && ko "logrotate ignore encore au moins un fichier : $(echo "$SORTIE" \
+| grep -i ignoring | head -1)" \
+  || ok "logrotate n'ignore aucun fichier de configuration"
+echo "$SORTIE" | grep -q "$CSV" \
+  && ok "metriques.csv est géré par logrotate" \
+  || ko "$CSV n'est pas pris en charge par logrotate"
+grep -rqsE '^\s*size\s' /etc/logrotate.d/ \
+  && ok "au moins une règle est déclenchée par la taille" \
+  || ko "aucune règle basée sur size"
+
+# --- 3. le script de santé -------------------------------------------------
+if [ -x "$SANTE" ]; then
+  ok "$SANTE existe et est exécutable"
+  head -1 "$SANTE" | grep -q '^#!/usr/bin/env bash' \
+    && ok "shebang conforme" || ko "shebang attendu #!/usr/bin/env bash"
+  grep -q 'set -euo pipefail' "$SANTE" \
+    && ok "set -euo pipefail" || ko "set -euo pipefail manquant"
+
+  SORTIE=$(priv "$SANTE" 2>/dev/null); RC=$?
+  case "$RC" in
+    0|1|2) ok "code retour $RC conforme (0/1/2)" ;;
+    *) ko "code retour $RC hors contrat (attendu 0, 1 ou 2)" ;;
+  esac
+  for SEC in charge cpu 'm[ée]moire' inode journal VERDICT; do
+    echo "$SORTIE" | grep -qiE "$SEC" \
+      && ok "section « $SEC » présente" \
+      || ko "section « $SEC » absente du rapport"
   done
-  rm -f /tmp/d16.$$
-fi
-FAILED=$(systemctl --failed --no-legend 2>/dev/null | wc -l)
-[ "$FAILED" -eq 0 ] \
-  && ok "aucune unité en échec" \
-  || ko "$FAILED unité(s) en échec (systemctl --failed)"
+  echo "$SORTIE" | grep -qiE 'us[^a-z]|sy[^a-z]|wa[^a-z]|st[^a-z]' \
+    && ok "la répartition CPU us/sy/wa/st est affichée" \
+    || ko "la répartition CPU us/sy/wa/st n'apparaît pas"
+  echo "$SORTIE" | grep -qiE 'inode' \
+    && ok "l'usage des inodes est affiché" \
+    || ko "l'usage des inodes manque (le piège du /var plein à 40 %)"
+  echo "$SORTIE" | grep -qiE 'failed|en [ée]chec' \
+    && ok "les unités en échec sont listées" \
+    || note "aucune unité en échec à afficher, section peut-être vide"
 
-# --- livrables -----------------------------------------------------------
-axe "livrables de l'examen"
-J="$BASE/rapports/examen.md"
-S="$BASE/rapports/examen-synthese.md"
-LIV=0
-if [ -s "$J" ] && [ "$(grep -cE '[0-2][0-9][:h][0-5][0-9]' "$J")" -ge 10 ]; then
-  ok "journal de bord tenu et horodaté"; LIV=$((LIV+1))
+  # robustesse : le script ne doit pas mourir sans iostat
+  if PATH=/usr/bin:/bin priv env PATH=/usr/bin:/bin "$SANTE" \
+       >/dev/null 2>&1; then
+    ok "le script s'exécute encore dans un PATH réduit"
+  else
+    RC2=$?
+    [ "$RC2" -le 2 ] \
+      && ok "le script dégrade proprement (code $RC2)" \
+      || ko "le script casse quand un outil optionnel manque (code $RC2)"
+  fi
 else
-  ko "journal $J absent ou sans horodatage continu (10 marques minimum)"
+  ko "$SANTE manquant ou non exécutable"
 fi
-if [ -s "$S" ] && [ "$(grep -c '[^[:space:]]' "$S")" -ge 25 ]; then
-  ok "synthèse des pannes présente"; LIV=$((LIV+1))
-else
-  ko "synthèse $S absente ou trop courte (5 lignes par panne)"
-fi
-if [ "$(ls -1d "$BASE"/preuves/*/ 2>/dev/null | wc -l)" -ge 1 ]; then
-  ok "preuves collectées"; LIV=$((LIV+1))
-else
-  ko "aucune collecte de preuves dans $BASE/preuves/"
-fi
-grep -qiE 'cause|parce que' "$S" 2>/dev/null \
-  && ok "la synthèse expose des causes racines" \
-  || ko "la synthèse n'expose pas de cause racine"
 
-# --- verdict -------------------------------------------------------------
-SCORE=$(( SAINS * 10 + LIV * 5 ))
-[ "$FAILED" -eq 0 ] && SCORE=$((SCORE + 5))
-echo
-echo "== Verdict =="
-echo "  axes de panne sains : $SAINS / 8"
-echo "  livrables présents  : $LIV / 3"
-echo "  score indicatif     : $SCORE / 100"
-echo "  (le barème complet du §16.8 demande une relecture humaine du"
-echo "   journal de bord : continuité, une modification à la fois,"
-echo "   vérification après chaque correctif)"
+# --- 4. le document -------------------------------------------------------
+if [ -s "$DOC" ]; then
+  ok "$DOC existe"
+  L=$(grep -cve '^\s*$' "$DOC")
+  [ "$L" -ge 25 ] && ok "$L lignes utiles" \
+    || ko "seulement $L lignes utiles (on en attend 25)"
+  grep -qiE 'seuil' "$DOC" && ok "les seuils sont justifiés" \
+    || ko "aucune justification de seuil"
+  grep -qiE 'astreinte|nuit' "$DOC" \
+    && ok "le document tranche sur ce qui réveille la nuit" \
+    || ko "le document ne dit pas quelles alertes justifient une astreinte"
+  [ "$(grep -ciE 'alerte|alert' "$DOC")" -ge 3 ] \
+    && ok "au moins trois alertes sont décrites" \
+    || ko "moins de trois alertes décrites"
+else
+  ko "$DOC manquant"
+fi
+
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

@@ -1,74 +1,48 @@
 #!/usr/bin/env bash
-# break_M10_03.sh — panne BF10.3 (snapshot LVM débordé, sauvegarde vide)
+# break_M10_03.sh — panne BF10.3 (un paquet retenu bloque la mise à jour)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-VG=vg_data
-LV=lv_pgdata
-SNAP=snap_pg
-DEST=/srv/sauvegardes
-mkdir -p "$SAUV" "$DEST"
+LAB_USER="${SUDO_USER:-mathieu}"
+LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
+PAQ="$LAB_HOME/lab10/paquets/outil-lab_1.0.0_all.deb"
+mkdir -p "$SAUV"
 
-# --- prérequis ----------------------------------------------------------
-command -v lvs >/dev/null 2>&1 || {
-  echo "lvm2 n'est pas installé : sudo apt install -y lvm2" >&2; exit 1; }
+[ -f "$PAQ" ] || {
+  echo "$PAQ absent : lance d'abord setup_M10.sh" >&2; exit 1; }
 
-if ! lvs "$VG/$LV" >/dev/null 2>&1; then
-  cat >&2 <<EOF
-Le volume $VG/$LV n'existe pas.
-Cette panne se pose sur la pile LVM construite au lab L10.2 : fais-le
-d'abord (pvcreate / vgcreate / lvcreate / mkfs / mount sur
-/srv/factura/db), puis relance ce script.
+# --- on mémorise l'état des retenues avant de toucher à quoi que ce soit
+if [ ! -f "$SAUV/M10_03.holds" ]; then
+  apt-mark showhold > "$SAUV/M10_03.holds" 2>/dev/null || true
+fi
+
+# --- 1. la version ancienne est en place --------------------------------
+DEBIAN_FRONTEND=noninteractive \
+  dpkg -i --force-confdef --force-confold "$PAQ" >/dev/null 2>&1 || true
+
+# --- 2. deux verrous posés à deux endroits différents -------------------
+# a) le marqueur dpkg, visible avec apt-mark showhold
+apt-mark hold outil-lab >/dev/null
+
+# b) un fichier d'épinglage oublié par un prédécesseur, qui interdit
+#    toute version supérieure à 1.0.0. Les deux produisent le même
+#    symptôme, mais un seul se voit avec apt-mark.
+cat > /etc/apt/preferences.d/80-outil-lab-gel.pref <<'EOF'
+# Gel temporaire suite a l'incident INC-1187 — a retirer apres validation
+Package: outil-lab
+Pin: version 1.0.0
+Pin-Priority: 1001
 EOF
-  exit 1
-fi
+chmod 0644 /etc/apt/preferences.d/80-outil-lab-gel.pref
 
-MNT=$(lvs --noheadings -o lv_path "$VG/$LV" | tr -d ' ')
-CIBLE=$(findmnt -nro TARGET -S "$(readlink -f "$MNT")" 2>/dev/null | head -1)
-if [ -z "$CIBLE" ]; then
-  echo "$VG/$LV n'est monté nulle part : monte-le d'abord." >&2
-  exit 1
-fi
-
-# --- trace de l'état avant ---------------------------------------------
-[ -f "$SAUV/M10_03.lvs" ] || lvs -o +devices > "$SAUV/M10_03.lvs" 2>/dev/null
-
-# --- on repart d'un état propre ----------------------------------------
-umount /mnt/snap 2>/dev/null || true
-lvs "$VG/$SNAP" >/dev/null 2>&1 && lvremove -y "$VG/$SNAP" >/dev/null 2>&1 || true
-
-# --- le snapshot volontairement sous-dimensionné -----------------------
-# 32 Mio : quelques dizaines de mégaoctets d'écritures sur l'origine
-# suffisent à saturer la zone de copie sur écriture.
-lvcreate -s -L 32M -n "$SNAP" "$MNT" >/dev/null
-
-# --- on fait déborder : écritures massives sur l'ORIGINE ---------------
-# Chaque écriture force la recopie de l'ancien chunk dans le snapshot.
-mkdir -p "$CIBLE/lot-nocturne"
-for i in $(seq 1 12); do
-  dd if=/dev/urandom of="$CIBLE/lot-nocturne/lot-$i.dat" \
-     bs=1M count=8 status=none 2>/dev/null || true
-  sync
-  dd if=/dev/urandom of="$CIBLE/lot-nocturne/lot-$i.dat" \
-     bs=1M count=8 status=none 2>/dev/null || true
-  sync
-done
-rm -rf "$CIBLE/lot-nocturne"
-sync
-sleep 2
-
-# --- l'archive « produite » par la sauvegarde nocturne -----------------
-ARCH="$DEST/factura-db-$(date -d 'yesterday' +%F).tar.gz"
-tar czf "$ARCH" -T /dev/null 2>/dev/null || : > "$ARCH"
-touch -d 'yesterday 02:31' "$ARCH" 2>/dev/null || true
+apt-get update >/dev/null 2>&1 || true
 
 cat <<'EOF'
 
-Symptôme attendu : l'archive de la nuit dans /srv/sauvegardes ne fait que
-quelques kilo-octets. Et
-« sudo mount /dev/vg_data/snap_pg /mnt/snap » échoue sur
-« can't read superblock on /dev/mapper/vg_data-snap_pg ».
-La base, elle, fonctionne parfaitement : /srv/factura/db répond normalement.
+Symptôme attendu : le dépôt publie outil-lab 1.2.0, « apt list
+--upgradable » ne le propose pas, et « sudo apt upgrade » se termine
+sans rien faire pour ce paquet. « sudo apt install -y
+outil-lab=1.2.0 » s'arrête sur un E: au lieu d'installer.
 EOF

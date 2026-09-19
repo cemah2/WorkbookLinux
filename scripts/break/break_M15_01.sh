@@ -1,49 +1,36 @@
 #!/usr/bin/env bash
-# break_M15_01.sh — panne BF15.1 (blocage invisible de « ufw status »)
-# À lancer sur lab-db, avec sudo. Idempotent.
-# Sauvegarde dans /root/.breakfix-backup/.
+# break_M15_01.sh — panne BF15.1 (à lancer sur lab-web, après L15.1)
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-
-command -v ufw >/dev/null 2>&1 || {
-  echo "ufw n'est pas installé : apt install ufw" >&2; exit 1; }
-
+SITE=/etc/nginx/sites-available/factura-demo
 SAUV=/root/.breakfix-backup
-BEFORE=/etc/ufw/before.rules
 mkdir -p "$SAUV"
+[ -f "$SITE" ] || { echo "$SITE absent : fais L15.1 d'abord" >&2; exit 1; }
+[ -f "$SAUV/M15_01.factura-demo" ] || cp -a "$SITE" "$SAUV/M15_01.factura-demo"
 
-# --- sauvegarde de l'état avant de casser ------------------------------
-[ -f "$SAUV/M15_01.before.rules" ] || cp -a "$BEFORE" \
-  "$SAUV/M15_01.before.rules"
-ufw status verbose > "$SAUV/M15_01.ufw-status.txt" 2>/dev/null || true
-
-# --- on s'assure que la politique « correcte » est bien en place -------
-# (sinon le symptôme n'a pas de sens : la règle ALLOW doit exister)
-ufw allow from 10.10.10.10 to any port 22 proto tcp   >/dev/null
-ufw allow from 10.10.10.0/24 to any port 22 proto tcp >/dev/null
-ufw allow from 10.10.10.11 to any port 5432 proto tcp >/dev/null
-ufw default deny incoming  >/dev/null
-ufw default allow outgoing >/dev/null
-yes | ufw enable >/dev/null 2>&1 || true
-
-# --- la panne : une règle DROP dans une chaîne que ufw status ignore ---
-MARQUE='# lab15-maintenance'
-if ! grep -q "$MARQUE" "$BEFORE"; then
-  REGLE="-A ufw-before-input -p tcp --dport 5432 -j DROP $MARQUE"
-  if grep -q '^-A ufw-before-input -i lo -j ACCEPT' "$BEFORE"; then
-    sed -i "/^-A ufw-before-input -i lo -j ACCEPT/a $REGLE" "$BEFORE"
-  else
-    sed -i "0,/^COMMIT/s//$REGLE\nCOMMIT/" "$BEFORE"
-  fi
+if ! grep -q 'cache statique 2026-09' "$SITE"; then
+  python3 - "$SITE" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+# « nettoyage » de la syntaxe : le ^~ disparaît
+s = re.sub(r'location\s+\^~\s+/api/', 'location /api/', s)
+# cache des fichiers statiques, inséré avant la première location
+bloc = ('    # cache statique 2026-09 : 7 jours sur les assets\n'
+        '    location ~* \\.(json|js|css|png|svg|ico)$ {\n'
+        '        expires 7d;\n'
+        '        add_header Cache-Control "public";\n'
+        '    }\n')
+i = s.find('    location')
+s = s[:i] + bloc + s[i:] if i >= 0 else s + bloc
+open(p, 'w').write(s)
+PY
 fi
+nginx -t >/dev/null 2>&1 && systemctl reload nginx
 
-ufw reload >/dev/null 2>&1 || true
+cat <<'EOF2'
 
-cat <<'EOF'
-
-Symptôme attendu : depuis lab-web, toute connexion vers 10.10.10.12:5432
-reste sans réponse puis expire (« connection timed out »).
-Sur lab-db, « sudo ufw status numbered » affiche pourtant bien la règle
-5432/tcp ALLOW IN 10.10.10.11, le service écoute sur 0.0.0.0:5432, SSH
-fonctionne et le ping passe.
-EOF
+Symptôme attendu : la page https://factura-demo.lab.local/ s'affiche mais
+indique « ERREUR : HTTP 404 sur /api/invoices.json ». /api/health répond
+200, les deux instances mini-api sont actives, nginx -t est correct.
+EOF2

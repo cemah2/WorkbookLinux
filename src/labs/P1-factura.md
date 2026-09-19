@@ -4,7 +4,7 @@
 
 ::: objectif
 Ce projet fil rouge fait travailler ensemble tout ce que tu as appris dans les
-modules 1 à 16 : comptes et permissions, FHS, systemd, paquets, LVM, réseau,
+modules 1 à 19 : comptes et permissions, FHS, systemd, paquets, LVM, réseau,
 SSH, journaux, timers, sécurité et diagnostic. À la fin, tu sais :
 
 * héberger une application multi-services (frontal, API, worker, base, file)
@@ -20,7 +20,7 @@ SSH, journaux, timers, sécurité et diagnostic. À la fin, tu sais :
   que tu l'auras fait sans eux.
 
 Temps estimé : 20 à 30 h, à étaler sur deux ou trois semaines.
-Prérequis : modules 01 à 16. Aucun outil des modules 17 et suivants (Docker,
+Prérequis : modules 01 à 19. Aucun outil des modules 21 et suivants (Docker,
 Ansible, CI) n'est autorisé : le but est de comprendre ce qu'ils remplacent.
 :::
 
@@ -679,7 +679,7 @@ bash ~/workbook/scripts/projects/P1/check_PA_07.sh
 ### **PA.8** — Supervision et alerting par timers
 
 ::: contexte
-Pas encore de Prometheus (module 22). Mais la direction veut savoir **avant les
+Pas encore de Prometheus (module 26). Mais la direction veut savoir **avant les
 utilisateurs** que Factura est tombée, et savoir si la sauvegarde de la nuit a
 eu lieu. Tu fais de la supervision avec ce que tu as : un script, un timer,
 `node_exporter`, et un webhook local qui joue le rôle de Slack.
@@ -880,7 +880,7 @@ t'ont appris.
   du symptôme à la remise en service, journal des commandes tapées, puis
   post-mortem `~/P1/incidents/INC-A<n>-<slug>.md` avec les sections
   Résumé, Impact, Chronologie, Cause racine, Correctif, Prévention (le
-  modèle du module 16).
+  modèle du module 19).
 * Après les trois incidents : au moins une modification du runbook par
   incident (une commande qui manquait, un seuil, une vérification à ajouter).
   Marque-les dans un `## Historique` en fin de document.
@@ -896,7 +896,7 @@ t'ont appris.
   d'abord, explications ensuite, jamais l'inverse.
 * Pour chaque symptôme, la checklist commence toujours par la même question :
   **quelle couche** (réseau, TLS, nginx, API, worker, données) et **depuis
-  où** (lab-adm, lab-web local, lab-ops). Le module 16 t'a donné la méthode
+  où** (lab-adm, lab-web local, lab-ops). Le module 19 t'a donné la méthode
   ; ici tu l'écris pour quelqu'un d'autre.
 * `script -a ~/P1/incidents/INC-A1.typescript` enregistre ta session : tu auras
   la chronologie exacte pour le post-mortem.

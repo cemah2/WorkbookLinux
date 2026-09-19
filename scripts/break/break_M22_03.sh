@@ -1,35 +1,54 @@
 #!/usr/bin/env bash
-# break_M22_03.sh — panne BF22.3 (l'API redémarre en boucle)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/M22_03/.
-# Suppose L22.2 terminé (Deployment factura-api avec resources).
+# break_M22_03.sh — panne BF22.3 (port publié mais filtré)
+# Idempotent. Sauvegarde les règles iptables dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+BF=/opt/factura-docker/bf
+SAUV=/root/.breakfix-backup
+REF=/opt/factura-docker/api
+mkdir -p "$SAUV" "$BF"
 
-LAB_USER="${SUDO_USER:-mathieu}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-export KUBECONFIG="${KUBECONFIG:-$HOMEDIR/.kube/config}"
-[ -r "$KUBECONFIG" ] || export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-SAUV=/root/.breakfix-backup/M22_03
-mkdir -p "$SAUV"
+[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M22.sh" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
+  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L22.1" >&2
+  exit 1; }
 
-kubectl get deploy factura-api -n factura >/dev/null 2>&1 \
-  || { echo "Deployment factura-api absent : fais d'abord L22.2" >&2; exit 1; }
+# image de base commune aux Break & Fix (construite une seule fois)
+construire_base() {
+  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
+  mkdir -p "$BF/base"
+  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
+  cat > "$BF/base/Dockerfile" <<'DEOF'
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+ENTRYPOINT ["python3", "app.py"]
+DEOF
+  echo "construction de l'image factura-bf:base (une fois)…"
+  docker build -q -t factura-bf:base "$BF/base" >/dev/null
+}
 
-if [ ! -s "$SAUV/deploy-factura-api.yaml" ]; then
-  kubectl get deploy factura-api -n factura -o yaml > "$SAUV/deploy-factura-api.yaml"
-fi
+construire_base
+command -v iptables >/dev/null 2>&1 || { echo "iptables absent" >&2; exit 1; }
 
-# --- la panne -----------------------------------------------------------
-# limite mémoire bien en dessous du besoin réel de l'interpréteur Python
-# (la request est abaissée aussi, sinon l'API server refuse limits < requests)
-kubectl set resources deploy/factura-api -n factura -c api \
-  --requests=memory=16Mi --limits=memory=20Mi >/dev/null
-sleep 5
+docker rm -f factura-public >/dev/null 2>&1 || true
+docker run -d --name factura-public -p 8003:8000 --restart unless-stopped \
+  factura-bf:base >/dev/null
+sleep 1
+IP=$(docker inspect factura-public \
+  --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
 
-cat <<'EOF'
+[ -f "$SAUV/M22_03.iptables" ] || iptables-save > "$SAUV/M22_03.iptables"
 
-Symptôme attendu : les pods de l'API passent en CrashLoopBackOff, la
-colonne RESTARTS grimpe. « kubectl logs --previous » montre un démarrage
-normal (ligne msg="demarrage") puis plus rien : aucune erreur applicative.
-Le développeur jure que l'image 1.0 est celle de la semaine dernière.
-EOF
+# une règle « temporaire » oubliée par un collègue
+iptables -C DOCKER-USER -d "$IP" -p tcp --dport 8000 -j DROP 2>/dev/null \
+  || iptables -I DOCKER-USER -d "$IP" -p tcp --dport 8000 -j DROP
+
+cat <<'EOF2'
+
+Symptôme attendu : sur lab-ops, curl http://127.0.0.1:8003/sante répond,
+« docker ps » montre 0.0.0.0:8003->8000/tcp et ss -tlnp voit le port.
+Depuis lab-adm, curl -m 5 http://10.10.10.14:8003/sante expire.
+EOF2

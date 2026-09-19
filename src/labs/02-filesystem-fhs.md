@@ -29,7 +29,7 @@
 
 Temps estimé : 5 h
 Prérequis : module 01 (shell, quoting, redirections). Les permissions et les ACL
-sont traitées au module 03, LVM et `/etc/fstab` au module 10 : ici on regarde ce
+sont traitées au module 03, LVM et `/etc/fstab` au module 11 : ici on regarde ce
 qui est déjà monté, on ne partitionne pas.
 :::
 
@@ -77,7 +77,7 @@ Le script monte deux images disque en boucle, via
 `mount -o loop /var/lib/lab02/appdata.img /srv/appdata` et son équivalent pour
 `/var/log/factura`. Ces montages ne survivent pas au redémarrage : relance le
 script de setup après un reboot. Ne touche pas à `/etc/fstab` dans ce module,
-c'est le sujet du module 10.
+c'est le sujet du module 11.
 :::
 
 ---

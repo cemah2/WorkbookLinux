@@ -1,78 +1,56 @@
 #!/usr/bin/env bash
-# break_M13_02.sh — panne BF13.2 (le journal systemd a mangé 4 Go)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
-#
-# Le volume est écrit par journald lui-même : des fichiers .journal
-# fabriqués à la main seraient ignorés par journalctl --disk-usage, et
-# l'exercice n'aurait aucun sens.
+# break_M13_02.sh — panne BF13.2 (table conntrack saturée)
+# À lancer sur lab-adm, L13.1 en place. Idempotent.
+# Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-DROPD=/etc/systemd/journald.conf.d
-DROP="$DROPD/99-debug-heritage.conf"
-CIBLE_GO="${TAILLE_GO:-4}"
-mkdir -p "$SAUV" "$DROPD"
+mkdir -p "$SAUV"
+modprobe nf_conntrack 2>/dev/null || true
 
-[ -d /run/systemd/system ] || {
-  echo "systemd ne pilote pas cette machine : panne inapplicable" >&2
-  exit 1; }
-
-LIBRE_GO=$(df -BG --output=avail /var | awk 'NR==2 {gsub("G","");print $1}')
-if [ "$LIBRE_GO" -lt $((CIBLE_GO + 4)) ]; then
-  echo "Il faut au moins $((CIBLE_GO + 4)) Go libres sur /var " \
-       "(actuellement ${LIBRE_GO} Go)." >&2
-  echo "Relance avec TAILLE_GO=1 sudo bash break_M13_02.sh" >&2
-  exit 1
+# conntrack n'est actif dans le netns que si une règle "ct" existe :
+# celles de L13.1 suffisent, sinon on pose un compteur anodin.
+if ! nft list ruleset 2>/dev/null | grep -q 'ct state'; then
+  nft add table inet monitoring 2>/dev/null || true
+  nft add chain inet monitoring output \
+    '{ type filter hook output priority 0; }' 2>/dev/null || true
+  nft add rule inet monitoring output ct state new counter 2>/dev/null || true
 fi
 
-# --- 1. la configuration « d'un prédécesseur pressé » -------------------
-[ -f "$DROP" ] && [ ! -f "$SAUV/M13_02.journald.conf" ] && \
-  cp -a "$DROP" "$SAUV/M13_02.journald.conf"
+if [ ! -f "$SAUV/M13_02.sysctl" ]; then
+  {
+    printf 'net.netfilter.nf_conntrack_max=%s\n' \
+      "$(sysctl -n net.netfilter.nf_conntrack_max)"
+    printf 'net.netfilter.nf_conntrack_udp_timeout=%s\n' \
+      "$(sysctl -n net.netfilter.nf_conntrack_udp_timeout)"
+  } > "$SAUV/M13_02.sysctl"
+fi
 
-cat > "$DROP" <<'EOF'
-# Ajouté pour une session de debug (ticket INC-3901). À retirer.
-[Journal]
-Storage=persistent
-SystemMaxUse=8G
-SystemMaxFileSize=256M
-RateLimitIntervalSec=0
-RateLimitBurst=0
+cat > /etc/sysctl.d/99-conntrack.conf <<'EOF'
+# réglages "recommandés" trouvés sur un forum
+net.netfilter.nf_conntrack_udp_timeout = 3600
+net.netfilter.nf_conntrack_max = 128
 EOF
-chmod 0644 "$DROP"
+sysctl -qw net.netfilter.nf_conntrack_udp_timeout=3600
+sysctl -qw net.netfilter.nf_conntrack_max=128
 
-mkdir -p /var/log/journal
-systemd-tmpfiles --create --prefix /var/log/journal >/dev/null 2>&1 || true
-systemctl restart systemd-journald
-journalctl --flush >/dev/null 2>&1 || true
-
-# --- 2. on remplit réellement le journal --------------------------------
-echo "écriture de ${CIBLE_GO} Go dans le journal (plusieurs minutes)..." >&2
-python3 - "$CIBLE_GO" <<'PYEOF' | systemd-cat -t factura-debug -p info
-import base64
-import os
-import sys
-
-cible = int(sys.argv[1]) * 1024 * 1024 * 1024
-ecrit = 0
-# Des données incompressibles : journald compresse les champs volumineux,
-# du texte répétitif ne consommerait presque rien sur disque.
-while ecrit < cible:
-    bloc = base64.b64encode(os.urandom(3000)).decode()
-    ligne = "trace debug INC-3901 payload=%s\n" % bloc
-    sys.stdout.write(ligne)
-    ecrit += len(ligne)
-    if ecrit % (200 * 1024 * 1024) < len(ligne):
-        sys.stdout.flush()
-PYEOF
-
-sync
-journalctl --rotate >/dev/null 2>&1 || true
-sleep 2
+# on remplit : 200 datagrammes UDP vers des ports morts de la passerelle,
+# chacun crée une entrée UNREPLIED qui vivra une heure
+python3 - <<'EOF'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+for p in range(31000, 31200):
+    try:
+        s.sendto(b"x", ("10.10.10.1", p))
+    except OSError:
+        pass
+EOF
 
 cat <<'EOF'
 
-Symptôme attendu : « df -h /var » affiche moins de 1 Go libre, et
-« du -sh /var/log/* » désigne /var/log/journal comme premier consommateur.
-Aucun fichier .log n'est anormalement gros.
+Symptôme attendu : depuis lab-web, curl http://10.10.10.10:8080/ réussit
+parfois et expire souvent ; ouvrir une NOUVELLE session SSH sur lab-adm
+échoue une fois sur deux, les sessions déjà ouvertes fonctionnent ; depuis c1,
+curl http://10.10.10.11/ se comporte de même. La charge CPU est nulle.
 EOF

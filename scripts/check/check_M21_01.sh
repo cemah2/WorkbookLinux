@@ -1,94 +1,86 @@
 #!/usr/bin/env bash
-# check_M21_01.sh — vérifie le lab L21.1 (forge, runner, premier pipeline)
-# À lancer sur lab-ops, en tant que mathieu.
+# check_M21_01.sh — vérifie le lab L21.1 (intégration de feature/tls-letsencrypt)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
+has()  { grep "$@" >/dev/null; }   # comme grep -q, sans SIGPIPE (pipefail)
 echo "== Vérification L21.1 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab21"
-API=http://10.10.10.14:3000/api/v1
-TOKEN=$(tr -d '[:space:]' < "$BASE/.gitea-token" 2>/dev/null || true)
-REPO="$API/repos/mathieu/factura"
-api() { curl -s -m 10 -H "Authorization: token $TOKEN" "$@"; }
-json() { python3 -c "import sys,json; d=json.load(sys.stdin); $1" 2>/dev/null; }
-
-# --- 1. la forge répond -------------------------------------------------
-curl -fs -m 5 http://10.10.10.14:3000/api/healthz >/dev/null \
-  && ok "Gitea répond sur :3000" \
-  || ko "Gitea ne répond pas (docker compose -f ~/lab21/forge/compose.yaml ps)"
-[ -n "$TOKEN" ] && ok "jeton d'API présent" || ko "~/lab21/.gitea-token absent"
-
-# --- 2. le runner --------------------------------------------------------
-if [ -s "$BASE/forge/runner/data/.runner" ]; then
-  ok "runner enregistré (.runner présent)"
-else
-  ko "runner non enregistré : docker compose logs runner"
+D="$HOME/lab21/factura-infra"
+TPL=ansible/roles/nginx/templates/factura.conf.j2
+if ! git -C "$D" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  ko "$D n'est pas un dépôt git : relance setup_M21.sh"
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1
 fi
-docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -q '^act-runner Up' \
-  && ok "conteneur act-runner en marche" \
-  || ko "conteneur act-runner absent ou en échec (docker ps)"
-CFG="$BASE/forge/runner/config.yaml"
-python3 - "$CFG" <<'EOF' && ok "config.yaml : capacity 2 et cache activé" \
-  || ko "config.yaml : attendu runner.capacity: 2 et cache.enabled: true"
-import sys, yaml
-c = yaml.safe_load(open(sys.argv[1]))
-sys.exit(0 if c["runner"]["capacity"] == 2 and c["cache"]["enabled"] else 1)
-EOF
+cd "$D" || exit 1
+g() { git "$@" 2>/dev/null; }
 
-# --- 3. protection de main -----------------------------------------------
-BP=$(api "$REPO/branch_protections/main")
-if printf '%s' "$BP" | json 'assert d.get("branch_name")=="main"'; then
-  ok "branche main protégée"
-  printf '%s' "$BP" | json 'assert d["required_approvals"]>=1' \
-    && ok "au moins une approbation requise" \
-    || ko "required_approvals doit valoir 1 ou plus"
-  printf '%s' "$BP" | json 'assert "ci / lint" in d["status_check_contexts"]' \
-    && ok "status check « ci / lint » requis" \
-    || ko "le status check « ci / lint » n'est pas requis (nom exact : ci / lint)"
-else
-  ko "aucune protection sur main (Paramètres → Branches)"
-fi
+# --- état du dépôt -------------------------------------------------------
+if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ] || [ -f .git/MERGE_HEAD ]
+then ko "un rebase ou un merge est encore en cours (git status)"
+else ok "aucune opération en cours"; fi
 
-# --- 4. le workflow ------------------------------------------------------
-WF=$(api "$REPO/raw/.gitea/workflows/ci.yaml")
-if [ -n "$WF" ] && ! printf '%s' "$WF" | grep -q '"message"'; then
-  ok ".gitea/workflows/ci.yaml présent sur main"
-  printf '%s' "$WF" | python3 - <<'EOF' && ok "ci.yaml : jobs lint et test, artefact publié même en échec, timeout" \
-    || ko "ci.yaml : attendu jobs lint + test, upload-artifact avec if: always(), timeout-minutes"
-import sys, yaml
-w = yaml.safe_load(sys.stdin)
-j = w["jobs"]
-assert "lint" in j and "test" in j
-assert all("timeout-minutes" in j[k] for k in ("lint", "test"))
-steps = j["test"]["steps"]
-assert any("upload-artifact" in str(s.get("uses", "")) and "always()" in str(s.get("if", ""))
-           for s in steps)
-assert any("cache@" in str(s.get("uses", "")) for s in steps)
-EOF
-else
-  ko "ci.yaml introuvable sur main (poussé ? bon chemin .gitea/workflows/ ?)"
-fi
-YL=$(api "$REPO/raw/.yamllint")
-printf '%s' "$YL" | grep -q 'truthy' && ok ".yamllint présent (règle truthy)" \
-  || ko ".yamllint absent ou sans règle truthy"
+[ "$(g branch --show-current)" = main ] \
+  && ok "tu es sur main" || ko "reviens sur main (git switch main)"
 
-# --- 5. le résultat des tests (par l'API des tâches, si disponible) -------
-T=$(api "$REPO/actions/tasks?limit=50")
-if printf '%s' "$T" | json 'assert "workflow_runs" in d'; then
-  printf '%s' "$T" | json '
-runs=d["workflow_runs"]
-assert any(r.get("name")=="lint" and r.get("status")=="success" for r in runs)
-assert any(r.get("name")=="test" and r.get("status")=="success" for r in runs)' \
-    && ok "un run avec lint et test en succès" \
-    || ko "pas de jobs lint et test réussis (corrige smoke.sh et app.py, pas les tests)"
-else
-  note "API actions/tasks indisponible : vérifie à la main un run vert de ci"
-fi
+if g status --porcelain | has '^[MADRU]'; then
+  ko "des modifications sont encore en attente (git status)"
+else ok "index et working tree propres"; fi
+
+# --- contenu attendu sur main --------------------------------------------
+if g show main:$TPL | has 'listen 443 ssl'; then
+  ok "main écoute en 443 (le travail d'alice est intégré)"
+else ko "main ne contient pas « listen 443 ssl » : la feature n'est pas intégrée"; fi
+
+if g show main:$TPL | has 'Strict-Transport-Security'; then
+  ok "main garde l'en-tête HSTS (le conflit a été résolu sans perdre main)"
+else ko "l'en-tête HSTS a disparu : le conflit a été résolu en écrasant main"; fi
+
+if g show main:$TPL | has -E '^(<<<<<<<|=======|>>>>>>>)'; then
+  ko "des marqueurs de conflit sont commités dans $TPL"
+else ok "aucun marqueur de conflit dans le template"; fi
+
+g show main:ansible/roles/nginx/tasks_certbot.yml | has certbot.timer \
+  && ok "tasks_certbot.yml (renouvellement) est sur main" \
+  || ko "ansible/roles/nginx/tasks_certbot.yml manque ou est incomplet sur main"
+
+# --- historique propre ----------------------------------------------------
+if g log --format=%s main | has -xE 'wip|fix typo'; then
+  ko "les commits « wip » / « fix typo » sont dans main : squash attendu"
+else ok "les commits wip / fix typo ont été fusionnés (rebase -i)"; fi
+
+n=$(g log --format=%s main | grep -c '^feat(nginx): écoute en 443')
+[ "$n" -eq 1 ] && ok "un seul commit « écoute en 443 » dans main" \
+               || ko "le commit « écoute en 443 » apparaît $n fois (attendu 1)"
+
+if g log --merges --format=%s main | has -i 'tls'; then
+  ok "un commit de merge --no-ff mentionne la branche tls"
+else ko "pas de merge commit pour la feature (merge --no-ff attendu)"; fi
+
+# --- tag et distant ------------------------------------------------------
+if [ "$(g cat-file -t v1.1.0)" = tag ]; then
+  ok "v1.1.0 est un tag annoté"
+else ko "v1.1.0 absent ou léger (git tag -a v1.1.0 -m ...)"; fi
+
+g merge-base --is-ancestor v1.1.0 main \
+  && ok "v1.1.0 pointe dans l'historique de main" \
+  || ko "v1.1.0 ne désigne pas un commit de main"
+
+g fetch -q origin 2>/dev/null
+[ "$(g rev-parse main)" = "$(g rev-parse origin/main)" ] \
+  && ok "origin/main est à jour (push fait)" \
+  || ko "origin/main diffère de main (git push)"
+
+g ls-remote --tags origin 2>/dev/null | has 'refs/tags/v1.1.0$' \
+  && ok "le tag v1.1.0 est sur origin" \
+  || ko "le tag n'est pas poussé (git push origin v1.1.0)"
+
+if g ls-remote --heads origin | has 'feature/tls-letsencrypt'; then
+  note "la branche feature/tls-letsencrypt existe encore sur origin \
+(git push origin --delete ... une fois fusionnée)"
+else ok "la branche feature a été supprimée sur origin"; fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

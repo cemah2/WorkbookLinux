@@ -877,7 +877,7 @@ sudo tail -50 /var/log/auth.log
 Cas « ça marche en clé mais pas en mot de passe » : `passwd -l` ou
 `PasswordAuthentication no` côté SSH — l'authentification par clé ne consulte pas
 le champ mot de passe. Cas inverse « ça marche en mot de passe mais pas en clé » :
-droits de `~/.ssh` (relève du module 12). Cas « authentification OK mais session
+droits de `~/.ssh` (relève du module 14). Cas « authentification OK mais session
 qui se ferme aussitôt » : shell `nologin`/`false`, ou home inexistant.
 
 ::: pourquoi

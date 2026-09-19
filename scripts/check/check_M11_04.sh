@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M11_04.sh — vérifie le lab L11.4 (sockets, états TCP, sysctl)
+# check_M11_04.sh — vérifie le lab L11.4 (croissance du disque + swap)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,76 +7,73 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L11.4 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab11/rapports/sockets.md"
-
-# --- 1. le rapport d'inventaire ---------------------------------------
-if [ -s "$RAP" ] && [ "$(grep -c '|' "$RAP")" -ge 4 ]; then
-  ok "rapport sockets.md présent et tabulé"
+# --- 1. la racine a bien grandi ----------------------------------------
+GO=$(df -BG --output=size / 2>/dev/null | tail -1 | tr -dc '0-9')
+if [ "${GO:-0}" -ge 45 ]; then
+  ok "/ fait ${GO} Go (>= 45 Go attendus)"
 else
-  ko "rapport absent ou sans tableau : $RAP (4 colonnes attendues)"
+  ko "/ ne fait que ${GO:-?} Go : la chaîne growpart -> pvresize -> lvextend \
+-> resize2fs n'est pas allée jusqu'au bout (df -h /, puis pvs et vgs)"
 fi
 
-# le rapport doit refléter la réalité : au moins un port réellement
-# en écoute doit y figurer
-REEL=$(ss -H -tln 2>/dev/null | awk '{print $4}' | sed 's/.*://' |
-       sort -un | head -5)
-trouve=0
-for p in $REEL; do
-  grep -q ":$p\b" "$RAP" 2>/dev/null && trouve=$((trouve+1))
-done
-if [ "$trouve" -ge 1 ]; then
-  ok "le rapport cite des ports réellement en écoute ($trouve)"
+# --- 2. la chaîne a bien été poussée couche par couche -----------------
+if command -v pvs >/dev/null 2>&1; then
+  SRC=$(findmnt -no SOURCE / 2>/dev/null)
+  case "$SRC" in
+    /dev/mapper/*|/dev/*-*)
+      ok "/ est sur un volume logique ($SRC)"
+      VGFREE=$(vgs --noheadings --units g --nosuffix -o vg_free 2>/dev/null \
+        | head -1 | tr -d ' ' | cut -d. -f1)
+      [ "${VGFREE:-0}" -le 2 ] \
+        && ok "le groupe de volumes est consommé (${VGFREE:-0} Go libres)" \
+        || note "il reste ${VGFREE} Go libres dans le VG : \
+lvextend -l +100%FREE n'a pas tout pris"
+      ;;
+    *) note "/ n'est pas sur LVM ($SRC) : adapte la procédure à ta VM" ;;
+  esac
+fi
+
+# --- 3. le swap est actif et de la bonne taille ------------------------
+SWKB=$(awk 'NR>1 {s+=$3} END {print s+0}' /proc/swaps 2>/dev/null)
+SWMO=$(( SWKB / 1024 ))
+if [ "$SWMO" -ge 1900 ]; then
+  ok "swap actif : ${SWMO} Mio"
 else
-  ko "aucun port en écoute de la machine ne figure au rapport"
+  ko "swap actif : ${SWMO} Mio (2 Gio attendus) — mkswap puis swapon, \
+vérifie avec swapon --show"
 fi
 
-grep -qiE 'expos|127\.0\.0\.1|0\.0\.0\.0' "$RAP" 2>/dev/null \
-  && ok "l'exposition des sockets est renseignée" \
-  || ko "le rapport ne distingue pas les sockets exposés des sockets locaux"
-
-# --- 2. l'API doit être joignable via le reverse proxy ----------------
-if command -v curl >/dev/null 2>&1; then
-  CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-         http://127.0.0.1/api/health 2>/dev/null)
-  if [ "$CODE" = 200 ]; then
-    ok "http://<lab-web>/api/ répond 200 via le reverse proxy"
-  else
-    ko "/api/ ne répond pas (code $CODE) : vérifie proxy_pass et nginx -t"
-  fi
-fi
-
-# --- 3. le service applicatif tourne toujours -------------------------
-if ss -tln 2>/dev/null | grep -q ':8099'; then
-  ok "factura-api écoute toujours sur 8099"
+# --- 4. le swap est permanent ------------------------------------------
+if awk '$0 !~ /^[[:space:]]*#/ && $3 == "swap"' /etc/fstab 2>/dev/null \
+     | grep -q .; then
+  ok "une ligne swap est présente dans /etc/fstab"
 else
-  ko "rien n'écoute sur 8099 : le service a été cassé ou arrêté"
+  ko "aucune ligne swap dans /etc/fstab : le swap disparaîtra au redémarrage \
+(/swapfile none swap sw 0 0)"
 fi
 
-# --- 4. somaxconn persistant ------------------------------------------
-VAL=$(sysctl -n net.core.somaxconn 2>/dev/null)
-if [ -n "$VAL" ] && [ "$VAL" -ge 8192 ] 2>/dev/null; then
-  ok "net.core.somaxconn = $VAL en mémoire"
-else
-  ko "net.core.somaxconn = ${VAL:-?} : la valeur demandée (>= 8192) n'est \
-pas appliquée"
+if [ -f /swapfile ]; then
+  DROITS=$(stat -c %a /swapfile)
+  [ "$DROITS" = "600" ] && ok "/swapfile est en mode 600" \
+    || ko "/swapfile est en mode $DROITS : swapon exige 600 (chmod 600)"
 fi
 
-if grep -rqs 'somaxconn' /etc/sysctl.d/ /etc/sysctl.conf 2>/dev/null; then
-  ok "somaxconn déclaré de façon persistante (/etc/sysctl.d/)"
+# --- 5. swappiness -----------------------------------------------------
+SW=$(cat /proc/sys/vm/swappiness 2>/dev/null)
+[ "${SW:-60}" = "10" ] && ok "vm.swappiness vaut 10" \
+  || ko "vm.swappiness vaut ${SW:-?} au lieu de 10"
+
+if grep -rqs 'swappiness' /etc/sysctl.d/ /etc/sysctl.conf 2>/dev/null; then
+  ok "vm.swappiness est fixé de façon persistante"
 else
-  ko "aucun fichier de /etc/sysctl.d/ ne fixe somaxconn : ce sera perdu \
-au redémarrage"
+  ko "vm.swappiness n'est écrit nulle part dans /etc/sysctl.d/ : la valeur \
+sera perdue au redémarrage"
 fi
 
-# --- 5. le rapport mentionne les états TCP observés -------------------
-if grep -qiE 'time.?wait' "$RAP" 2>/dev/null ||
-   grep -qiE 'close.?wait' "$RAP" 2>/dev/null; then
-  ok "les états TCP observés sont commentés"
-else
-  note "le rapport ne mentionne ni TIME-WAIT ni CLOSE-WAIT (étapes 5 et 6)"
-fi
+# --- 6. fstab cohérent --------------------------------------------------
+findmnt --verify >/dev/null 2>&1 \
+  && ok "findmnt --verify ne signale aucune anomalie" \
+  || ko "findmnt --verify signale une anomalie dans /etc/fstab"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

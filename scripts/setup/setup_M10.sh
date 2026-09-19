@@ -1,366 +1,480 @@
 #!/usr/bin/env bash
 # setup_M10.sh — prépare le terrain du module 10
-#                (stockage, partitions, systèmes de fichiers, LVM)
+#                (paquets, dépôts, clés, épinglage, compilation)
 # À lancer avec sudo. Idempotent : relançable sans effet de bord.
 #
-# Ce script NE crée AUCUNE partition, AUCUN PV, AUCUN LV, AUCUN système de
-# fichiers sur les disques de travail : les construire est le travail du
-# module. Il se contente de :
-#   - vérifier la présence des paquets nécessaires ;
-#   - déterminer QUELS périphériques serviront de terrain de jeu, et en
-#     fabriquer deux (fichiers-images + loop devices) s'il n'y en a pas ;
-#   - poser l'arborescence /srv/factura, le jeu de données et les scripts.
+# Ce script NE configure AUCUN dépôt dans /etc/apt ni /etc/yum.repos.d :
+# écrire le fichier de source, importer la clé et régler l'épinglage sont
+# le travail du module. Il fabrique seulement la matière première :
 #
-# Modes :
-#   setup_M10.sh              préparation standard (sur lab-db)
-#   setup_M10.sh --nfs        serveur NFS du lab L10.5 (sur lab-adm)
-#   setup_M10.sh --etat       n'affiche que l'état courant, ne modifie rien
-#   setup_M10.sh --detacher   détache les loop devices simulés (nettoyage)
+#   * une paire de clés GPG « Depot Lab Interne »  (/root/.lab10/gnupg)
+#   * quatre paquets .deb (ou .rpm sous Rocky) construits localement
+#   * un dépôt signé, servi en file:// et en http://  (/srv/depot-lab)
+#   * une archive de sources à compiler              (~/lab10/sources)
+#
+# Il fonctionne sans accès internet une fois les paquets d'outillage
+# installés (voir §10.1).
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-MODE="${1:-}"
-
 LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6 || true)"
-# --etat et --detacher n'ont pas besoin du compte de l'apprenant.
-case "${1:-}" in
-  --etat|--detacher|--nfs) : ;;
-  *) [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; } ;;
-esac
+LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
+[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
 
-BASE="${LAB_HOME:-/root}/lab10"
-BIN=/opt/factura/bin
-LOGD=/var/log/factura
-IMGD=/var/lib/lab10
-ENVF=/etc/lab10.env
-TAILLE_IMG=5G
+BASE="$LAB_HOME/lab10"
+DEPOT=/srv/depot-lab
+ETAT=/root/.lab10
+GNUPGHOME="$ETAT/gnupg"
+export GNUPGHOME
+KEY_UID="Depot Lab Interne <depot@lab.local>"
 
-# Candidats « vrais disques » du lab, dans l'ordre de préférence.
-CANDIDATS=(/dev/sdb /dev/sdc /dev/vdb /dev/vdc)
+. /etc/os-release
+DISTRO="${ID:-inconnu}"
+
+echo "== Préparation du module 10 =="
+echo "   utilisateur : $LAB_USER"
+echo "   distribution: $DISTRO ${VERSION_ID:-}"
+echo "   dépôt local : $DEPOT"
+
+mkdir -p "$ETAT" "$DEPOT" "$BASE"/{rapports,sources,bin,paquets}
+chmod 0700 "$ETAT"
 
 # ---------------------------------------------------------------------
-# Utilitaires
+# 1. Clé GPG du dépôt interne (commune aux deux distributions)
 # ---------------------------------------------------------------------
-titre() { printf '\n== %s ==\n' "$1"; }
-info()  { printf '   %s\n' "$1"; }
+command -v gpg >/dev/null 2>&1 || {
+  echo "gpg est requis (voir §10.1)" >&2; exit 1; }
 
-# Un disque est utilisable par le module s'il existe, s'il n'a aucune
-# partition montée, s'il ne porte pas de PV LVM actif et s'il ne fait pas
-# partie d'un tableau RAID. On ne veut surtout pas proposer le disque
-# système comme terrain de jeu.
-disque_libre() {
-  local d="$1"
-  [ -b "$d" ] || return 1
-  # une seule partition montée quelque part suffit à le disqualifier
-  lsblk -nro MOUNTPOINT "$d" 2>/dev/null | grep -q . && return 1
-  # membre d'un RAID en cours d'assemblage ?
-  grep -q "$(basename "$d")" /proc/mdstat 2>/dev/null && return 1
-  # PV LVM déjà déclaré ?
-  if command -v pvs >/dev/null 2>&1; then
-    pvs --noheadings -o pv_name 2>/dev/null | grep -qE "^\s*${d}[0-9]*\s*$" \
-      && return 1
+if [ ! -d "$GNUPGHOME" ]; then
+  mkdir -p "$GNUPGHOME"; chmod 0700 "$GNUPGHOME"
+  cat > "$ETAT/key.batch" <<EOF
+%no-protection
+Key-Type: RSA
+Key-Length: 3072
+Name-Real: Depot Lab Interne
+Name-Email: depot@lab.local
+Expire-Date: 0
+%commit
+EOF
+  gpg --batch --quiet --gen-key "$ETAT/key.batch"
+  rm -f "$ETAT/key.batch"
+fi
+
+KEYID="$(gpg --list-keys --with-colons "$KEY_UID" \
+         | awk -F: '/^pub:/ {print $5; exit}')"
+[ -n "$KEYID" ] || { echo "clé GPG introuvable" >&2; exit 1; }
+echo "   clé du dépôt: $KEYID"
+
+# Deux formats publiés, comme le font les vrais dépôts tiers :
+#   .asc  armuré  (Docker, HashiCorp, PostgreSQL…)
+#   .gpg  binaire (ce que produit `gpg --dearmor`)
+gpg --batch --yes --armor --export "$KEYID" > "$DEPOT/depot-lab.asc"
+gpg --batch --yes --export "$KEYID"          > "$ETAT/depot-lab.gpg"
+cp -a "$ETAT/depot-lab.gpg" "$BASE/depot-lab.gpg"
+
+# ---------------------------------------------------------------------
+# 2a. Branche Debian/Ubuntu
+# ---------------------------------------------------------------------
+construire_deb() {
+  # construire_deb <version> <depends> <postinst_exigeant>
+  local ver="$1" dep="${2:-}" exigeant="${3:-non}"
+  local nom="outil-lab" d
+  if [ -n "$dep" ]; then nom="agent-lab"; fi
+  d="$ETAT/build/${nom}-${ver}"
+  rm -rf "$d"
+  mkdir -p "$d/DEBIAN" "$d/usr/bin" "$d/etc/$nom" \
+           "$d/usr/share/doc/$nom"
+
+  {
+    printf 'Package: %s\n' "$nom"
+    printf 'Version: %s\n' "$ver"
+    printf 'Section: utils\nPriority: optional\nArchitecture: all\n'
+    if [ -n "$dep" ]; then printf 'Depends: %s\n' "$dep"; fi
+    printf 'Maintainer: Equipe Socle <depot@lab.local>\n'
+    printf 'Description: Outillage interne du lab (module 10)\n'
+    printf ' Paquet construit localement pour les exercices sur la\n'
+    printf ' gestion des paquets. Ne fait rien d utile en production.\n'
+  } > "$d/DEBIAN/control"
+
+  printf '/etc/%s/%s.conf\n' "$nom" "${nom%%-*}" > "$d/DEBIAN/conffiles"
+
+  printf '#!/bin/sh\necho "%s version %s"\n' "$nom" "$ver" \
+    > "$d/usr/bin/$nom"
+  chmod 0755 "$d/usr/bin/$nom"
+
+  {
+    printf '# %s — configuration locale\n' "$nom"
+    printf '# Modifie ce fichier : c est un conffile dpkg.\n'
+    printf 'niveau_journal=info\n'
+    printf 'version_paquet=%s\n' "$ver"
+    case "$ver" in
+      1.2.0) printf 'cache_secondes=30\n' ;;
+      1.3.0) printf 'cache_secondes=60\nmode_strict=oui\n' ;;
+    esac
+  } > "$d/etc/$nom/${nom%%-*}.conf"
+
+  if [ "$exigeant" = oui ]; then
+    cat > "$d/DEBIAN/postinst" <<'POSTEOF'
+#!/bin/sh
+set -e
+if [ ! -f /etc/outil-lab/licence.key ]; then
+  echo "outil-lab: /etc/outil-lab/licence.key manquant" >&2
+  exit 1
+fi
+exit 0
+POSTEOF
+    chmod 0755 "$d/DEBIAN/postinst"
   fi
-  return 0
+
+  mkdir -p "$ETAT/debs"
+  dpkg-deb --build --root-owner-group "$d" \
+    "$ETAT/debs/${nom}_${ver}_all.deb" >/dev/null
 }
 
-# Renvoie le loop device associé à une image, ou rien.
-loop_de() {
-  losetup -j "$1" 2>/dev/null | cut -d: -f1 | head -1
+publier_depot_deb() {
+  cd "$DEPOT"
+  dpkg-scanpackages --multiversion pool /dev/null > Packages 2>/dev/null
+  gzip -9 -kf Packages
+  python3 - "$DEPOT" <<'PYEOF'
+import email.utils, hashlib, os, sys, time
+d = sys.argv[1]
+fichiers = ["Packages", "Packages.gz"]
+l = ["Origin: LabInterne", "Label: LabInterne", "Suite: stable",
+     "Codename: stable", "Architectures: amd64 all",
+     "Date: " + email.utils.formatdate(time.time(), usegmt=True)]
+for algo, entete in (("md5", "MD5Sum"), ("sha256", "SHA256")):
+    l.append(entete + ":")
+    for f in fichiers:
+        p = os.path.join(d, f)
+        h = hashlib.new(algo, open(p, "rb").read()).hexdigest()
+        l.append(" %s %d %s" % (h, os.path.getsize(p), f))
+open(os.path.join(d, "Release"), "w").write("\n".join(l) + "\n")
+PYEOF
+  gpg --batch --yes --quiet --default-key "$KEYID" \
+      --clearsign -o InRelease Release
+  gpg --batch --yes --quiet --default-key "$KEYID" \
+      --detach-sign --armor -o Release.gpg Release
+  cd - >/dev/null
 }
 
-# ---------------------------------------------------------------------
-# Mode --etat
-# ---------------------------------------------------------------------
-if [ "$MODE" = "--etat" ]; then
-  titre "État du module 10"
-  [ -f "$ENVF" ] && { info "$ENVF :"; sed 's/^/     /' "$ENVF"; } \
-                 || info "$ENVF absent (setup jamais lancé)"
-  info "loop devices :"
-  losetup -a 2>/dev/null | sed 's/^/     /' || info "     aucun"
-  info "périphériques bloc :"
-  lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS | sed 's/^/     /'
-  exit 0
-fi
-
-# ---------------------------------------------------------------------
-# Mode --detacher
-# ---------------------------------------------------------------------
-if [ "$MODE" = "--detacher" ]; then
-  titre "Détachement des disques simulés"
-  for img in "$IMGD"/sdb.img "$IMGD"/sdc.img; do
-    [ -f "$img" ] || continue
-    ld="$(loop_de "$img")"
-    if [ -n "$ld" ]; then
-      losetup -d "$ld" 2>/dev/null && info "$ld détaché ($img)" \
-        || info "$ld occupé : démonte d'abord ce qui l'utilise"
-    fi
+preparer_ubuntu() {
+  for outil in dpkg-deb dpkg-scanpackages python3; do
+    command -v "$outil" >/dev/null 2>&1 || {
+      echo "$outil est requis : sudo apt install -y dpkg-dev python3" >&2
+      exit 1; }
   done
-  info "les images restent dans $IMGD (supprime-les à la main si besoin)"
-  exit 0
-fi
 
-# ---------------------------------------------------------------------
-# Mode --nfs : serveur NFS pour L10.5, à lancer sur lab-adm
-# ---------------------------------------------------------------------
-if [ "$MODE" = "--nfs" ]; then
-  titre "Serveur NFS du lab L10.5"
-  if ! command -v exportfs >/dev/null 2>&1; then
-    echo "nfs-kernel-server n'est pas installé." >&2
-    echo "  sudo apt install -y nfs-kernel-server" >&2
-    echo "  (Rocky : sudo dnf install -y nfs-utils)" >&2
-    exit 1
-  fi
-  EXP=/srv/exports/archives
-  mkdir -p "$EXP"
-  for i in 1 2 3; do
-    [ -f "$EXP/facture-2026-0$i.txt" ] || \
-      printf 'facture %s\nmontant 1%s42,00 EUR\n' "$i" "$i" \
-        > "$EXP/facture-2026-0$i.txt"
-  done
-  chown -R nobody:nogroup "$EXP" 2>/dev/null || chown -R nobody:nobody "$EXP"
-  chmod -R 0755 /srv/exports
+  rm -rf "$DEPOT/pool" "$ETAT/debs"; mkdir -p "$DEPOT/pool" "$ETAT/debs"
+  construire_deb 1.0.0
+  construire_deb 1.2.0
+  construire_deb 1.3.0 "" oui
+  construire_deb 2.0.0 "libmetric3 (>= 3.2)"
 
-  LIGNE="$EXP 10.10.10.0/24(ro,sync,no_subtree_check)"
-  if ! grep -qF "$EXP" /etc/exports 2>/dev/null; then
-    echo "$LIGNE" >> /etc/exports
-    info "export ajouté dans /etc/exports"
-  else
-    info "export déjà présent dans /etc/exports"
-  fi
-  exportfs -ra
-  [ -d /run/systemd/system ] && systemctl restart nfs-server 2>/dev/null || true
-  exportfs -v
-  cat <<EOF
+  # Le dépôt ne publie que 1.0.0 et 1.2.0 : la version candidate est donc
+  # 1.2.0, et l'épinglage de L10.3 a quelque chose à arbitrer.
+  # outil-lab 1.3.0 (postinst exigeant) et agent-lab 2.0.0 (dépendance
+  # introuvable) restent hors dépôt, dans ~/lab10/paquets : ils servent
+  # aux exercices dpkg -i et aux Break & Fix.
+  cp -a "$ETAT/debs/outil-lab_1.0.0_all.deb" \
+        "$ETAT/debs/outil-lab_1.2.0_all.deb" "$DEPOT/pool/"
+  publier_depot_deb
 
-Le partage est prêt. Depuis lab-db :
-  showmount -e 10.10.10.10
-  sudo mount -t nfs4 -o ro,hard 10.10.10.10:$EXP /mnt/archives-adm
-EOF
-  exit 0
-fi
-
-# ---------------------------------------------------------------------
-# 1. Paquets
-# ---------------------------------------------------------------------
-titre "Préparation du module 10"
-info "utilisateur : $LAB_USER"
-
-MANQUE=()
-for c in lsblk blkid parted sgdisk pvcreate vgcreate lvcreate mkfs.ext4 \
-         mkfs.xfs mdadm cryptsetup growpart iostat fio mount.nfs4 fuser; do
-  command -v "$c" >/dev/null 2>&1 || MANQUE+=("$c")
-done
-if [ "${#MANQUE[@]}" -gt 0 ]; then
-  info "commandes absentes : ${MANQUE[*]}"
-  info "installe-les (voir §10.1) :"
-  info "  sudo apt install -y lvm2 xfsprogs btrfs-progs mdadm cryptsetup-bin \\"
-  info "    gdisk parted nfs-common sysstat fio cloud-guest-utils quota"
-  info "le setup continue : les labs concernés attendront."
-else
-  info "tous les outils attendus sont présents"
-fi
-
-# ---------------------------------------------------------------------
-# 2. Choix des deux disques de travail
-# ---------------------------------------------------------------------
-titre "Disques de travail"
-
-TROUVES=()
-for d in "${CANDIDATS[@]}"; do
-  disque_libre "$d" && TROUVES+=("$d")
-  [ "${#TROUVES[@]}" -ge 2 ] && break
-done
-
-SIMULE=0
-if [ "${#TROUVES[@]}" -ge 2 ]; then
-  DISQUE1="${TROUVES[0]}"
-  DISQUE2="${TROUVES[1]}"
-  info "disques réels détectés : $DISQUE1 et $DISQUE2"
-  info "taille : $(lsblk -dno SIZE "$DISQUE1") / $(lsblk -dno SIZE "$DISQUE2")"
-else
-  SIMULE=1
-  cat <<'EOF'
-
-   ATTENTION — AUCUN DISQUE SUPPLÉMENTAIRE LIBRE N'A ÉTÉ TROUVÉ.
-
-   Cette machine n'a pas (ou plus) deux disques vierges utilisables.
-   Le setup fabrique donc DEUX DISQUES SIMULÉS : deux fichiers-images de
-   5 Go attachés en « loop device ». Ils se comportent comme de vrais
-   périphériques bloc : partitionnement, LVM, RAID, LUKS et montage
-   fonctionnent normalement.
-
-   Trois différences à connaître :
-     - les noms sont /dev/loopN, pas /dev/sdb et /dev/sdc ;
-     - les performances mesurées (E10.18, E10.19) n'ont aucun sens :
-       tu mesures le disque qui héberge les images ;
-     - après un redémarrage, les loop devices doivent être rattachés.
-       Le service « lab10-loop.service » installé ci-dessous s'en charge.
-
-EOF
-  mkdir -p "$IMGD"
-  for n in sdb sdc; do
-    img="$IMGD/$n.img"
-    [ -f "$img" ] || { truncate -s "$TAILLE_IMG" "$img"; info "image créée : $img"; }
-    chmod 600 "$img"
-    if [ -z "$(loop_de "$img")" ]; then
-      losetup -fP "$img"
-    fi
-  done
-  DISQUE1="$(loop_de "$IMGD/sdb.img")"
-  DISQUE2="$(loop_de "$IMGD/sdc.img")"
-  [ -n "$DISQUE1" ] && [ -n "$DISQUE2" ] || {
-    echo "échec de l'attachement des images en loop device" >&2
-    echo "vérifie que le module noyau 'loop' est disponible" >&2
-    exit 1; }
-  info "disques simulés : $DISQUE1 ($IMGD/sdb.img)"
-  info "                  $DISQUE2 ($IMGD/sdc.img)"
-
-  # --- rattachement automatique au démarrage --------------------------
-  cat > /usr/local/sbin/lab10-loop-attach.sh <<'ATT'
-#!/usr/bin/env bash
-# Rattache les images du module 10 en loop device au démarrage.
-set -euo pipefail
-IMGD=/var/lib/lab10
-for n in sdb sdc; do
-  img="$IMGD/$n.img"
-  [ -f "$img" ] || continue
-  losetup -j "$img" | grep -q . || losetup -fP "$img"
-done
-ATT
-  chmod 0755 /usr/local/sbin/lab10-loop-attach.sh
-
-  if [ -d /run/systemd/system ]; then
-    cat > /etc/systemd/system/lab10-loop.service <<'UNIT'
+  # Le même dépôt servi en HTTP, pour travailler signed-by sur une URL
+  # réaliste. Aucun paquet à installer : python3 suffit.
+  cat > /etc/systemd/system/depot-lab.service <<'EOF'
 [Unit]
-Description=Lab 10 - rattache les disques simules en loop device
-DefaultDependencies=no
-After=local-fs-pre.target systemd-udevd.service
-Before=local-fs.target lvm2-activation-early.service
+Description=Depot de paquets interne du lab (module 10)
+After=network.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/sbin/lab10-loop-attach.sh
+Type=exec
+ExecStart=/usr/bin/python3 -m http.server 8099 --directory /srv/depot-lab \
+          --bind 0.0.0.0
+Restart=on-failure
+DynamicUser=yes
 
 [Install]
-WantedBy=local-fs.target
-UNIT
-    systemctl daemon-reload
-    systemctl enable lab10-loop.service >/dev/null 2>&1 || true
-    info "service lab10-loop.service activé (rattachement au démarrage)"
-  fi
-fi
-
-# ---------------------------------------------------------------------
-# 3. /etc/lab10.env
-# ---------------------------------------------------------------------
-cat > "$ENVF" <<EOF
-# Généré par setup_M10.sh — ne pas éditer à la main.
-# Les deux disques de travail du module 10.
-DISQUE1=$DISQUE1
-DISQUE2=$DISQUE2
-# 1 = disques simulés par fichiers-images + loop devices
-LAB10_SIMULE=$SIMULE
+WantedBy=multi-user.target
 EOF
-chmod 0644 "$ENVF"
-info "$ENVF écrit"
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable --now depot-lab.service >/dev/null 2>&1 || \
+      echo "  note : depot-lab.service n'a pas démarré, file:// reste OK"
+  fi
+}
 
 # ---------------------------------------------------------------------
-# 4. Compte de service, arborescence, jeu de données
+# 2b. Branche RHEL/Rocky
 # ---------------------------------------------------------------------
-titre "Arborescence et jeu de données"
+construire_rpm() {
+  local ver="$1" nom="${2:-outil-lab}" dep="${3:-}"
+  local top="$ETAT/rpmbuild"
+  mkdir -p "$top"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+  cat > "$top/SPECS/${nom}-${ver}.spec" <<EOF
+Name:           $nom
+Version:        $ver
+Release:        1%{?dist}
+Summary:        Outillage interne du lab (module 10)
+License:        MIT
+BuildArch:      noarch
+$( [ -n "$dep" ] && printf 'Requires:       %s\n' "$dep" )
 
-groupadd -f factura
-if ! getent passwd factura >/dev/null; then
-  useradd -r -g factura -d /srv/factura -s /usr/sbin/nologin factura
+%description
+Paquet construit localement pour les exercices sur la gestion des
+paquets. Ne fait rien d'utile en production.
+
+%install
+mkdir -p %{buildroot}/usr/bin %{buildroot}/etc/$nom
+printf '#!/bin/sh\necho "$nom version $ver"\n' \\
+  > %{buildroot}/usr/bin/$nom
+chmod 0755 %{buildroot}/usr/bin/$nom
+printf '# $nom - configuration locale\nniveau_journal=info\nversion_paquet=$ver\n' \\
+  > %{buildroot}/etc/$nom/${nom%%-*}.conf
+
+%files
+/usr/bin/$nom
+%config(noreplace) /etc/$nom/${nom%%-*}.conf
+
+%changelog
+* Mon Jan 01 2024 Equipe Socle <depot@lab.local> - $ver-1
+- Version $ver
+EOF
+  rpmbuild --quiet --define "_topdir $top" \
+    -bb "$top/SPECS/${nom}-${ver}.spec" >/dev/null
+  mkdir -p "$ETAT/rpms"
+  cp -f "$top"/RPMS/noarch/${nom}-${ver}-1*.rpm "$ETAT/rpms/"
+}
+
+preparer_rocky() {
+  for outil in rpmbuild createrepo_c rpmsign; do
+    command -v "$outil" >/dev/null 2>&1 || {
+      echo "$outil est requis :" >&2
+      echo "  sudo dnf install -y rpm-build rpm-sign createrepo_c" >&2
+      exit 1; }
+  done
+
+  rm -rf "$DEPOT/pool" "$ETAT/rpms"; mkdir -p "$DEPOT/pool" "$ETAT/rpms"
+  construire_rpm 1.0.0
+  construire_rpm 1.2.0
+  construire_rpm 2.0.0 agent-lab "libmetric3 >= 3.2"
+
+  cat > /root/.rpmmacros <<EOF
+%_gpg_name $KEY_UID
+%_gpg_path $GNUPGHOME
+%_signature gpg
+EOF
+  rpmsign --addsign "$ETAT"/rpms/*.rpm >/dev/null 2>&1 || \
+    echo "  note : signature des RPM impossible, gpgcheck=0 sera requis"
+
+  # Même logique que sous Ubuntu : agent-lab, qui exige une dépendance
+  # introuvable, reste hors dépôt pour les exercices rpm -i.
+  cp -a "$ETAT"/rpms/outil-lab-*.rpm "$DEPOT/pool/"
+
+  cp -a "$DEPOT/depot-lab.asc" "$DEPOT/RPM-GPG-KEY-lab"
+  createrepo_c --quiet --update "$DEPOT"
+  gpg --batch --yes --quiet --default-key "$KEYID" \
+      --detach-sign --armor "$DEPOT/repodata/repomd.xml"
+
+  if command -v firewall-cmd >/dev/null 2>&1 \
+     && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --add-port=8099/tcp --permanent >/dev/null
+    firewall-cmd --reload >/dev/null
+  fi
+  cat > /etc/systemd/system/depot-lab.service <<'EOF'
+[Unit]
+Description=Depot de paquets interne du lab (module 10)
+After=network.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/python3 -m http.server 8099 --directory /srv/depot-lab \
+          --bind 0.0.0.0
+Restart=on-failure
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now depot-lab.service >/dev/null 2>&1 || true
+}
+
+case "$DISTRO" in
+  ubuntu|debian) preparer_ubuntu ;;
+  rocky|rhel|almalinux|centos) preparer_rocky ;;
+  *) echo "distribution $DISTRO non gérée par ce script" >&2; exit 1 ;;
+esac
+
+chmod -R a+rX "$DEPOT"
+
+# ---------------------------------------------------------------------
+# 3. Archive de sources à compiler (E9.x, L10.4)
+# ---------------------------------------------------------------------
+SRC="$ETAT/build/horodate-1.4"
+rm -rf "$SRC"; mkdir -p "$SRC"
+
+cat > "$SRC/horodate.c" <<'CEOF'
+/* horodate — affiche l'horodatage courant au format choisi.
+ * Programme jouet du module 10 : sert uniquement à illustrer la
+ * compilation depuis les sources et le rôle de --prefix.
+ */
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+#ifndef HORODATE_VERSION
+#define HORODATE_VERSION "1.4"
+#endif
+
+int main(int argc, char **argv)
+{
+    char tampon[128];
+    const char *format = "%Y-%m-%d %H:%M:%S";
+    time_t maintenant = time(NULL);
+
+    if (argc > 1 && strcmp(argv[1], "--version") == 0) {
+        printf("horodate %s\n", HORODATE_VERSION);
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "--iso") == 0)
+        format = "%Y-%m-%dT%H:%M:%S%z";
+
+    strftime(tampon, sizeof tampon, format, localtime(&maintenant));
+    printf("%s\n", tampon);
+    return 0;
+}
+CEOF
+
+cat > "$SRC/configure" <<'CFGEOF'
+#!/bin/sh
+# configure — version minimaliste écrite à la main. Les vrais scripts
+# autoconf font la même chose : ils testent l'environnement puis
+# produisent le Makefile à partir de Makefile.in.
+set -e
+prefix=/usr/local
+bindir=
+CC=${CC:-cc}
+
+for arg in "$@"; do
+  case "$arg" in
+    --prefix=*) prefix="${arg#*=}" ;;
+    --bindir=*) bindir="${arg#*=}" ;;
+    --help)
+      echo "Usage: ./configure [--prefix=DIR] [--bindir=DIR]"
+      echo "  --prefix  racine d'installation (defaut: /usr/local)"
+      exit 0 ;;
+    *) echo "configure: option inconnue: $arg" >&2; exit 1 ;;
+  esac
+done
+: "${bindir:=$prefix/bin}"
+
+printf 'checking for a C compiler... '
+if ! command -v "$CC" >/dev/null 2>&1; then
+  echo "none"
+  echo "configure: error: no acceptable C compiler found in \$PATH" >&2
+  exit 1
 fi
+echo "$CC"
 
-mkdir -p /srv/factura/db /srv/factura/archives /srv/factura/journaux \
-         /srv/sauvegardes "$BIN" "$LOGD" \
-         "$BASE/rapports" "$BASE/sauvegardes"
-chown -R factura:factura /srv/factura "$LOGD"
-chmod 0755 /srv/factura /srv/sauvegardes
+printf 'checking for time.h... '
+echo '#include <time.h>' | "$CC" -E - >/dev/null 2>&1 \
+  && echo yes || { echo no; exit 1; }
+
+sed -e "s|@prefix@|$prefix|g" \
+    -e "s|@bindir@|$bindir|g" \
+    -e "s|@CC@|$CC|g" Makefile.in > Makefile
+
+echo "configure: creating Makefile"
+echo "  prefix = $prefix"
+echo "  bindir = $bindir"
+CFGEOF
+chmod 0755 "$SRC/configure"
+
+cat > "$SRC/Makefile.in" <<'MKEOF'
+prefix  = @prefix@
+bindir  = @bindir@
+CC      = @CC@
+CFLAGS  = -O2 -Wall
+DESTDIR =
+
+all: horodate
+
+horodate: horodate.c
+	$(CC) $(CFLAGS) -o horodate horodate.c
+
+install: horodate
+	install -d $(DESTDIR)$(bindir)
+	install -m 0755 horodate $(DESTDIR)$(bindir)/horodate
+
+uninstall:
+	rm -f $(DESTDIR)$(bindir)/horodate
+
+clean:
+	rm -f horodate
+
+.PHONY: all install uninstall clean
+MKEOF
+
+cat > "$SRC/README" <<'RDEOF'
+horodate 1.4
+============
+
+Construction :
+
+    ./configure --prefix=/usr/local
+    make
+    sudo make install
+
+Le Makefile respecte DESTDIR : « make install DESTDIR=/tmp/racine »
+installe dans une racine factice sans toucher au système. C'est ce que
+font tous les outils d'empaquetage.
+RDEOF
+
+tar -czf "$BASE/sources/horodate-1.4.tar.gz" \
+    -C "$ETAT/build" horodate-1.4
+
+# ---------------------------------------------------------------------
+# 4. Copie locale des paquets, pour les exercices dpkg -i / rpm -i
+# ---------------------------------------------------------------------
+for d in "$ETAT/debs" "$ETAT/rpms"; do
+  [ -d "$d" ] && cp -a "$d"/* "$BASE/paquets/"
+done
+true
 chown -R "$LAB_USER":"$LAB_USER" "$BASE"
 
-# Jeu de données à sauvegarder / migrer. Volontairement modeste : le
-# module manipule des volumes, pas des téraoctets.
-if [ ! -f /srv/factura/db/comptes.dat ]; then
-  {
-    echo "# factura — plan comptable simplifié"
-    for i in $(seq 1 400); do
-      printf '%06d;CLI%04d;%d,%02d\n' "$i" $((i % 97)) $((i * 13)) $((i % 100))
-    done
-  } > /srv/factura/db/comptes.dat
-  head -c 2M /dev/urandom > /srv/factura/db/index.bin
-  : > /srv/factura/db/journal.wal
-  chown -R factura:factura /srv/factura/db
-  info "jeu de données créé dans /srv/factura/db"
-else
-  info "jeu de données déjà présent"
-fi
-
 # ---------------------------------------------------------------------
-# 5. Générateur d'écritures (L10.2, L10.3)
+# 5. Avertissements d'outillage
 # ---------------------------------------------------------------------
-cat > "$BIN/factura-ecritures.sh" <<'GEN'
-#!/usr/bin/env bash
-# factura-ecritures.sh — simule une application qui écrit en continu.
-#
-#   factura-ecritures.sh <repertoire> [debit_ko_par_seconde]
-#
-# Écrit dans <repertoire>/journal.wal et fait tourner un lot de fichiers
-# de travail. S'arrête proprement sur SIGINT/SIGTERM. Ne remplit jamais
-# le volume : il recycle ses fichiers au-delà de 200 Mio écrits.
-set -uo pipefail
+case "$DISTRO" in
+  ubuntu|debian)
+    for p in gcc make aptitude apt-file unattended-upgrades; do
+      dpkg -s "$p" >/dev/null 2>&1 || \
+        echo "  note : $p n'est pas installé (voir §10.1)"
+    done ;;
+  *)
+    for p in gcc make dnf-automatic; do
+      rpm -q "$p" >/dev/null 2>&1 || \
+        echo "  note : $p n'est pas installé (voir §10.1)"
+    done ;;
+esac
 
-CIBLE="${1:-/srv/factura/db}"
-DEBIT="${2:-256}"          # Ko/s
-
-[ -d "$CIBLE" ] || { echo "répertoire introuvable : $CIBLE" >&2; exit 1; }
-
-ARRET=0
-trap 'ARRET=1' INT TERM
-
-echo "écritures en cours dans $CIBLE (${DEBIT} Ko/s) — Ctrl-C pour arrêter"
-N=0
-while [ "$ARRET" -eq 0 ]; do
-  N=$((N + 1))
-  printf '%s transaction %06d\n' "$(date '+%F %T')" "$N" >> "$CIBLE/journal.wal"
-  dd if=/dev/urandom of="$CIBLE/travail-$((N % 20)).tmp" \
-     bs=1K count="$DEBIT" status=none 2>/dev/null || true
-  # on garde le journal sous les 50 Mio
-  if [ "$(stat -c %s "$CIBLE/journal.wal" 2>/dev/null || echo 0)" -gt 52428800 ]
-  then
-    : > "$CIBLE/journal.wal"
-  fi
-  sleep 1
-done
-echo "arrêt propre après $N transactions"
-GEN
-chmod 0755 "$BIN/factura-ecritures.sh"
-info "$BIN/factura-ecritures.sh installé"
-
-# ---------------------------------------------------------------------
-# 6. Résumé
-# ---------------------------------------------------------------------
-titre "Prêt"
 cat <<EOF
-   Disques de travail du module :
-     DISQUE1 = $DISQUE1
-     DISQUE2 = $DISQUE2
-$([ "$SIMULE" -eq 1 ] && echo "   (SIMULÉS par fichiers-images — voir l'avertissement ci-dessus)")
 
-   Charge-les dans ton shell avant chaque séance :
-     . /etc/lab10.env
-     echo "\$DISQUE1 \$DISQUE2"
+Prêt. Points d'entrée :
+  $DEPOT/                    dépôt interne signé (pool/, Release, InRelease)
+  $DEPOT/depot-lab.asc       clé publique du dépôt, format armuré
+  http://127.0.0.1:8099/     le même dépôt servi en HTTP
+  $BASE/paquets/             les paquets seuls, pour dpkg -i / rpm -i
+  $BASE/sources/horodate-1.4.tar.gz   sources à compiler
+  $BASE/rapports/            tes livrables
 
-   Générateur d'écritures (labs L10.2 et L10.3) :
-     sudo $BIN/factura-ecritures.sh /srv/factura/db &
+Ce que le script n'a PAS fait, et qui est le travail du module :
+  * déclarer le dépôt dans /etc/apt/sources.list.d (ou /etc/yum.repos.d)
+  * installer la clé dans /etc/apt/keyrings (ou rpm --import)
+  * écrire le moindre fichier d'épinglage
 
-   État à tout moment :
-     sudo bash \$0 --etat
-
-   Snapshot Proxmox avant de commencer : qm snapshot 9003 avant-lab10
+Vérification rapide :
+  ls $DEPOT/pool/
+  gpg --show-keys $DEPOT/depot-lab.asc
 EOF

@@ -1,189 +1,124 @@
 #!/usr/bin/env bash
-# check_M15_01.sh — vérifie le lab L15.1 (politique de pare-feu)
-# À lancer sur CHAQUE VM concernée : le rôle est déduit de l'adresse IP.
+# check_M15_01.sh — vérifie le lab L15.1 (vhost nginx complet) sur lab-web
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
+echo "== Vérification L15.1 =="
 
-IPS=$(hostname -I 2>/dev/null || ip -4 -o addr show \
-      | awk '{print $4}' | cut -d/ -f1)
-case " $IPS " in
-  *10.10.10.10*) ROLE=adm  ;;
-  *10.10.10.11*) ROLE=web  ;;
-  *10.10.10.12*) ROLE=db   ;;
-  *10.10.10.13*) ROLE=rhel ;;
-  *10.10.10.14*) ROLE=ops  ;;
-  *) ROLE=inconnu ;;
-esac
-echo "== Vérification L15.1 (rôle détecté : $ROLE) =="
-[ "$ROLE" = inconnu ] && note "IP hors plan d'adressage : contrôles \
-génériques seulement"
+H=factura-demo.lab.local
+SUDO=""; sudo -n true 2>/dev/null && SUDO="sudo -n"
+C() { curl -s --max-time 10 "$@"; }
+code() { C -o /dev/null -w '%{http_code}' "$@"; }
 
-# =====================================================================
-# Machines firewalld (Rocky)
-# =====================================================================
-if command -v firewall-cmd >/dev/null 2>&1 && [ "$ROLE" = rhel ]; then
-  if firewall-cmd --state >/dev/null 2>&1; then
-    ok "firewalld est en fonctionnement"
-  else
-    ko "firewalld n'est pas démarré (systemctl enable --now firewalld)"
-    echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1
-  fi
+# --- 0. nginx et activation --------------------------------------------
+if $SUDO nginx -t >/dev/null 2>&1; then ok "nginx -t : configuration valide"
+else ko "nginx -t échoue (lis le message : fichier et ligne)"; fi
+[ -e /etc/nginx/sites-enabled/factura-demo ] \
+  && ok "site factura-demo activé" \
+  || ko "sites-enabled/factura-demo absent (ln -s depuis sites-available)"
+[ -e /etc/nginx/sites-enabled/default ] \
+  && ko "le site default est encore activé" || ok "site default désactivé"
 
-  [ "$(systemctl is-enabled firewalld 2>/dev/null)" = enabled ] \
-    && ok "firewalld démarre au boot" \
-    || ko "firewalld n'est pas enabled : la politique ne survivra pas \
-au redémarrage"
-
-  PUB=$(firewall-cmd --zone=public --list-all 2>/dev/null)
-  grep -q 'services:.*http\b'  <<<"$PUB" \
-    && ok "http ouvert dans la zone public"  \
-    || ko "http absent de la zone public (--add-service=http)"
-  grep -q 'services:.*https'   <<<"$PUB" \
-    && ok "https ouvert dans la zone public" \
-    || ko "https absent de la zone public (--add-service=https)"
-  grep -q 'services:.*\bssh\b' <<<"$PUB" \
-    && ko "ssh est encore ouvert dans public : il ne doit l'être que \
-pour lab-adm" \
-    || ok "ssh n'est pas ouvert à tous dans la zone public"
-
-  ZSRC=$(firewall-cmd --get-active-zones 2>/dev/null)
-  grep -q '10.10.10.10' <<<"$ZSRC" \
-    && ok "10.10.10.10 est rattachée à une zone dédiée" \
-    || ko "aucune zone n'a la source 10.10.10.10 \
-(--zone=internal --add-source=10.10.10.10/32)"
-
-  ZADM=$(awk '/^[a-z]/{z=$1} /10\.10\.10\.10/{print z}' <<<"$ZSRC" \
-         | head -1)
-  if [ -n "$ZADM" ]; then
-    firewall-cmd --zone="$ZADM" --list-all 2>/dev/null \
-      | grep -qE 'services:.*\bssh\b|port="22"' \
-      && ok "la zone $ZADM autorise SSH" \
-      || ko "la zone $ZADM ne contient pas ssh : lab-adm ne pourra pas \
-se connecter"
-  fi
-
-  # permanent == runtime : la politique survivra-t-elle au reload ?
-  R=$(firewall-cmd --list-all 2>/dev/null | grep -E 'services:|ports:')
-  P=$(firewall-cmd --permanent --list-all 2>/dev/null \
-      | grep -E 'services:|ports:')
-  [ "$R" = "$P" ] \
-    && ok "runtime et permanent sont identiques (survit au reboot)" \
-    || ko "runtime et permanent divergent : il manque --permanent ou \
---runtime-to-permanent"
-
-  echo "Résultat : $PASS réussis, $FAIL échoués"
-  [ "$FAIL" -eq 0 ]; exit
-fi
-
-# =====================================================================
-# Machines ufw (Ubuntu)
-# =====================================================================
-command -v ufw >/dev/null 2>&1 || {
-  ko "ufw n'est pas installé (apt install ufw)"
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-
-ST=$(sudo -n ufw status verbose 2>/dev/null || ufw status verbose 2>/dev/null)
-NUM=$(sudo -n ufw status numbered 2>/dev/null || ufw status numbered \
-      2>/dev/null)
-[ -n "$ST" ] || { ko "impossible de lire l'état de ufw (relance avec sudo)"
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-
-grep -q '^Status: active' <<<"$ST" \
-  && ok "ufw est actif" \
-  || ko "ufw est inactif (ufw enable — pense à autoriser SSH AVANT)"
-
-grep -q 'deny (incoming)' <<<"$ST" \
-  && ok "politique par défaut : deny incoming" \
-  || ko "la politique entrante n'est pas deny (ufw default deny incoming)"
-
-grep -q 'allow (outgoing)' <<<"$ST" \
-  && ok "politique par défaut : allow outgoing" \
-  || note "sortie non autorisée par défaut : assure-toi que DNS, NTP et \
-les mises à jour passent"
-
-regle() {   # regle <motif-port> <motif-source> <libellé>
-  if grep -E "$1" <<<"$NUM" | grep -qE "$2"; then
-    ok "$3"
-  else
-    ko "$3 — absent de « ufw status numbered »"
-  fi
-}
-
-case "$ROLE" in
-  web)
-    regle '(80|443|Nginx)' 'Anywhere' "80/443 ouverts depuis n'importe où"
-    regle '22'  '10\.10\.10\.10' "SSH autorisé depuis lab-adm"
-    grep -E '^\[.*22/tcp' <<<"$NUM" | grep -q 'Anywhere' \
-      && ko "SSH est ouvert à tous : il ne doit l'être que depuis \
-10.10.10.10" \
-      || ok "SSH n'est pas ouvert à tous"
-    grep -qiE '5432|3306' <<<"$NUM" \
-      && ko "un port de base de données est ouvert sur le frontal web" \
-      || ok "aucun port de base de données ouvert"
-    ;;
-  db)
-    regle '5432' '10\.10\.10\.11' "5432 autorisé depuis lab-web uniquement"
-    regle '22'   '10\.10\.10\.10' "SSH autorisé depuis lab-adm"
-    grep -E '^\[.*5432' <<<"$NUM" | grep -q 'Anywhere' \
-      && ko "5432 est ouvert à tous : supprime cette règle \
-(ufw delete <n>)" \
-      || ok "5432 n'est pas ouvert à tous"
-    grep -qE '^\[.*(80|443)/tcp.*Anywhere' <<<"$NUM" \
-      && ko "un port web est ouvert sur la base de données" \
-      || ok "aucun port web ouvert sur la base"
-    ;;
-  adm)
-    regle '22' '10\.10\.10\.0/24' "SSH autorisé depuis le réseau du lab"
-    n=$(grep -c '^\[' <<<"$NUM")
-    [ "${n:-0}" -le 4 ] \
-      && ok "surface réduite : $n règle(s) seulement" \
-      || ko "$n règles sur le bastion : l'énoncé n'en demande qu'une"
-    ;;
-  *)
-    grep -q '^\[' <<<"$NUM" \
-      && ok "des règles utilisateur existent" \
-      || ko "aucune règle utilisateur définie"
-    ;;
-esac
-
-# --- l'ordre des règles : aucun DENY avant un ALLOW sur le même port ---
-premier_deny=$(grep -nE '^\[.*(DENY|REJECT) IN' <<<"$NUM" \
-               | head -1 | cut -d: -f1)
-premier_allow=$(grep -nE '^\[.*ALLOW IN' <<<"$NUM" | head -1 | cut -d: -f1)
-if [ -n "$premier_deny" ] && [ -n "$premier_allow" ] \
-   && [ "$premier_deny" -lt "$premier_allow" ]; then
-  ko "une règle DENY précède la première règle ALLOW : vérifie l'ordre \
-(ufw insert 1 ...)"
+# --- base d'URL : https si 443 écoute, sinon http ------------------------
+if ss -Hltn 'sport = :443' | grep -q 443; then
+  B="https://$H"; R=(-k --resolve "$H:443:127.0.0.1")
 else
-  ok "aucune règle de refus ne précède les autorisations"
+  B="http://$H"; R=(--resolve "$H:80:127.0.0.1")
 fi
+note "test sur $B"
 
-# --- ce que voit le noyau, pas seulement ufw --------------------------
-if command -v nft >/dev/null 2>&1; then
-  RS=$(sudo -n nft list ruleset 2>/dev/null)
-  if [ -n "$RS" ]; then
-    grep -q 'ufw' <<<"$RS" \
-      && ok "les règles ufw sont bien chargées dans le noyau" \
-      || ko "aucune chaîne ufw dans nft list ruleset : ufw n'applique rien"
-  else
-    note "nft list ruleset illisible sans sudo : contrôle noyau ignoré"
-  fi
-fi
+# --- 1. front SPA --------------------------------------------------------
+[ "$(code "${R[@]}" "$B/")" = 200 ] && ok "/ répond 200" \
+  || ko "/ ne répond pas 200 (root, index, try_files ?)"
+[ "$(code "${R[@]}" "$B/route/inconnue")" = 200 ] \
+  && ok "URI inconnue -> index.html (SPA)" \
+  || ko "URI inconnue ne renvoie pas index.html (try_files ... /index.html)"
+SRV="$(C "${R[@]}" -D - -o /dev/null "$B/" | grep -i '^server:' | tr -d '\r')"
+grep -qiE '^server: nginx\s*$' <<<"$SRV" && ok "server_tokens off" \
+  || ko "en-tête Server expose la version : $SRV (server_tokens off)"
 
-# --- la matrice de flux ------------------------------------------------
-LAB_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
-MAT="$LAB_HOME/lab15/matrice-flux.md"
-if [ -f "$MAT" ]; then
-  n=$(grep -cE '10\.10\.10\.[0-9]+' "$MAT")
-  [ "${n:-0}" -ge 6 ] \
-    && ok "matrice de flux présente ($n lignes de test)" \
-    || ko "la matrice ne documente que $n flux, l'énoncé en demande 6"
+# --- 2. static : cache et gzip -----------------------------------------
+HD="$(C "${R[@]}" --compressed -D - -o /dev/null "$B/static/gros.txt")"
+grep -qi 'content-encoding: gzip' <<<"$HD" && ok "gzip actif sur /static" \
+  || ko "pas de gzip sur /static/gros.txt (gzip on ; gzip_types text/plain)"
+grep -qiE 'cache-control: .*max-age=2592000' <<<"$HD" \
+  && ok "cache 30 jours sur /static" \
+  || ko "Cache-Control max-age=2592000 absent sur /static (expires 30d)"
+
+# --- 3. docs protégées -------------------------------------------------
+[ "$(code "${R[@]}" "$B/docs/")" = 401 ] && ok "/docs/ exige une auth (401)" \
+  || ko "/docs/ ne répond pas 401 (auth_basic, auth_basic_user_file)"
+
+# --- 4. upstream : deux instances, en-têtes ------------------------------
+INST="$(for _ in 1 2 3 4 5 6; do C "${R[@]}" "$B/api/whoami" | jq -r .instance 2>/dev/null; done | sort -u | wc -l)"
+[ "$INST" -ge 2 ] && ok "les deux instances répondent derrière /api/" \
+  || ko "une seule instance vue sur 6 requêtes (upstream à deux server ?)"
+W="$(C "${R[@]}" "$B/api/whoami")"
+grep -q '"X-Forwarded-For"' <<<"$W" && ok "X-Forwarded-For transmis" \
+  || ko "X-Forwarded-For absent côté backend (proxy_set_header)"
+grep -q "\"Host\": \"$H\"" <<<"$W" && ok "Host transmis = $H" \
+  || ko "Host reçu par le backend n'est pas $H (proxy_set_header Host \$host)"
+grep -q '"http_version": "HTTP/1.1"' <<<"$W" \
+  && ok "HTTP/1.1 vers l'upstream" \
+  || ko "l'upstream reçoit du HTTP/1.0 (proxy_http_version 1.1 + keepalive)"
+
+# --- 5. limit_req ------------------------------------------------------
+N429="$(for _ in $(seq 12); do code "${R[@]}" "$B/api/login"; echo; done | grep -c '^429$')"
+[ "$N429" -ge 3 ] && ok "limit_req sur /api/login : $N429 x 429 sur 12" \
+  || ko "pas (assez) de 429 sur /api/login : $N429 (limit_req, limit_req_status 429)"
+
+# --- 6. allow/deny -----------------------------------------------------
+[ "$(code "${R[@]}" "$B/api/metrics")" = 403 ] \
+  && ok "/api/metrics refusé depuis 127.0.0.1 (403)" \
+  || ko "/api/metrics accessible depuis 127.0.0.1 (allow 10.10.10.14; deny all)"
+
+# --- 7. stream ---------------------------------------------------------
+L="$(C "${R[@]}" -N --max-time 3 "$B/api/stream" 2>/dev/null | wc -l)"
+[ "$L" -ge 1 ] && [ "$L" -le 8 ] \
+  && ok "/api/stream arrive au fil de l'eau ($L lignes en 3 s)" \
+  || ko "/api/stream est mis en tampon ($L lignes en 3 s ; proxy_buffering off)"
+
+# --- 8. taille de corps ------------------------------------------------
+T3="$(mktemp)"; head -c 3145728 /dev/zero > "$T3"
+T1="$(mktemp)"; head -c 1048576 /dev/zero > "$T1"
+[ "$(code "${R[@]}" -X POST --data-binary @"$T3" "$B/api/upload")" = 413 ] \
+  && ok "POST 3 Mo -> 413" || ko "POST 3 Mo n'est pas refusé en 413 (client_max_body_size 2m)"
+[ "$(code "${R[@]}" -X POST --data-binary @"$T1" "$B/api/upload")" = 200 ] \
+  && ok "POST 1 Mo -> 200" || ko "POST 1 Mo refusé (client_max_body_size trop bas)"
+rm -f "$T3" "$T1"
+
+# --- 9. journal --------------------------------------------------------
+LOG=/var/log/nginx/factura.access.log
+if $SUDO test -s "$LOG" 2>/dev/null; then
+  LAST="$($SUDO tail -1 "$LOG")"
+  grep -q 'rt=' <<<"$LAST" && grep -q 'ua=' <<<"$LAST" \
+    && ok "log_format avec rt= et ua=" \
+    || ko "$LOG ne contient pas rt=/ua= (log_format factura)"
 else
-  note "~/lab15/matrice-flux.md absent (à produire depuis lab-adm)"
+  ko "$LOG absent ou vide (access_log dédié au vhost)"
 fi
+
+# --- 10. maintenance ---------------------------------------------------
+if [ -n "$SUDO" ]; then
+  $SUDO touch /srv/www/maintenance.on
+  M="$(code "${R[@]}" "$B/")"; HM="$(code "${R[@]}" "$B/api/health")"
+  $SUDO rm -f /srv/www/maintenance.on
+  [ "$M" = 503 ] && ok "maintenance.on -> 503 sur /" \
+    || ko "maintenance.on ne bascule pas / en 503 (obtenu $M)"
+  [ "$HM" = 200 ] && ok "/api/health reste 200 en maintenance" \
+    || ko "/api/health est touché par la maintenance (obtenu $HM)"
+  [ "$(code "${R[@]}" "$B/")" = 200 ] && ok "retour à la normale sans reload" \
+    || ko "le site ne revient pas après suppression du fichier"
+else
+  note "sudo indisponible : test de maintenance sauté"
+fi
+
+# --- 11. rapport -------------------------------------------------------
+RAP="$HOME/lab15/rapports/web-412.md"
+[ -f "$RAP" ] && [ "$(wc -l < "$RAP")" -ge 20 ] \
+  && ok "rapport web-412.md présent" || ko "rapport $RAP absent ou trop court"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

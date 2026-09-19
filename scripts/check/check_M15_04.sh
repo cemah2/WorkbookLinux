@@ -1,129 +1,76 @@
 #!/usr/bin/env bash
-# check_M15_04.sh — vérifie le lab L15.4 (mini-PKI, HTTPS, surveillance)
-# À lancer depuis lab-adm : le contrôle porte sur le service distant.
+# check_M15_04.sh — vérifie le lab L15.4 (sauvegardes, restauration, PITR) sur lab-db
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L15.4 =="
+Q() { sudo -n -u postgres psql -Atqc "$1" 2>/dev/null; }
+QD() { sudo -n -u postgres psql -d "$1" -Atqc "$2" 2>/dev/null; }
 
-LAB_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
-PKI="$LAB_HOME/lab15/pki"
-CIBLE=${CIBLE:-app.lab.local}
-IP=${IP:-10.10.10.11}
+# --- script et timer ---------------------------------------------------
+S=/usr/local/sbin/pg-sauvegarde.sh
+[ -x "$S" ] && ok "script $S exécutable" || ko "script $S absent ou non exécutable"
+[ -x "$S" ] && head -5 "$S" | grep -q 'set -euo pipefail' && ok "set -euo pipefail" \
+  || ko "le script n'a pas set -euo pipefail"
+[ "$(systemctl is-enabled pg-sauvegarde.timer 2>/dev/null)" = enabled ] \
+  && ok "pg-sauvegarde.timer activé" || ko "pg-sauvegarde.timer non enabled"
+[ "$(systemctl is-active pg-sauvegarde.timer 2>/dev/null)" = active ] \
+  && ok "pg-sauvegarde.timer actif" || ko "pg-sauvegarde.timer inactif"
+systemctl show -p User --value pg-sauvegarde.service 2>/dev/null | grep -q '^postgres$' \
+  && ok "service sous User=postgres" || ko "pg-sauvegarde.service ne tourne pas sous postgres"
+systemctl show -p Type --value pg-sauvegarde.service 2>/dev/null | grep -q '^oneshot$' \
+  && ok "Type=oneshot" || ko "pg-sauvegarde.service n'est pas Type=oneshot"
+systemctl cat pg-sauvegarde.timer 2>/dev/null | grep -qi 'Persistent=yes' \
+  && ok "Persistent=yes" || ko "Persistent=yes absent du timer"
 
-# --- 1. la PKI locale --------------------------------------------------
-if [ -f "$PKI/ca.crt" ] && [ -f "$PKI/ca.key" ]; then
-  ok "la CA existe dans $PKI"
-  M=$(stat -c '%a' "$PKI/ca.key")
-  [ "$M" = 600 ] || [ "$M" = 400 ] \
-    && ok "la clé de la CA est en $M" \
-    || ko "la clé de la CA est en $M : personne d'autre que son \
-propriétaire ne doit pouvoir la lire (chmod 600)"
-  openssl x509 -in "$PKI/ca.crt" -noout -checkend 0 >/dev/null 2>&1 \
-    && ok "le certificat de la CA est valide" \
-    || ko "le certificat de la CA est expiré"
+# --- dernière sauvegarde -----------------------------------------------
+LAST="$(sudo -n ls -d /var/backups/postgresql/*/ 2>/dev/null | tail -1)"
+if [ -n "$LAST" ]; then
+  ok "répertoire de sauvegarde : $LAST"
+  sudo -n test -s "$LAST/globals.sql" && ok "globals.sql non vide" || ko "globals.sql absent ou vide"
+  sudo -n test -s "$LAST/factura_demo.dump" && ok "factura_demo.dump non vide" \
+    || ko "factura_demo.dump absent ou vide"
+  if sudo -n test -f "$LAST/SHA256SUMS" || sudo -n ls "$LAST"/*.sha256 >/dev/null 2>&1; then
+    if sudo -n bash -c "cd '$LAST' && { [ -f SHA256SUMS ] && sha256sum -c --quiet SHA256SUMS || cat *.sha256 | sha256sum -c --quiet; }" >/dev/null 2>&1
+    then ok "sommes SHA256 valides"; else ko "sommes SHA256 invalides ou illisibles"; fi
+  else ko "aucun fichier .sha256 / SHA256SUMS"; fi
+  AGE=$(( $(date +%s) - $(sudo -n stat -c %Y "$LAST") ))
+  [ "$AGE" -lt 93600 ] && ok "sauvegarde de moins de 26 h" || ko "sauvegarde trop ancienne"
 else
-  ko "pas de CA dans $PKI (étape 1)"
+  ko "aucune sauvegarde dans /var/backups/postgresql (lance le service)"
 fi
 
-if [ -f "$PKI/app.crt" ]; then
-  openssl verify -CAfile "$PKI/ca.crt" "$PKI/app.crt" >/dev/null 2>&1 \
-    && ok "le certificat serveur est bien signé par la CA" \
-    || ko "openssl verify échoue : le certificat n'est pas signé par \
-cette CA"
-  SAN=$(openssl x509 -in "$PKI/app.crt" -noout -ext subjectAltName \
-        2>/dev/null)
-  grep -q "DNS:$CIBLE" <<<"$SAN" \
-    && ok "le SAN contient DNS:$CIBLE" \
-    || ko "le SAN ne couvre pas $CIBLE : les clients modernes ignorent \
-le CN (voir Q15.16)"
-  grep -q "IP Address:$IP" <<<"$SAN" \
-    && ok "le SAN contient IP:$IP" \
-    || note "le SAN ne contient pas l'IP : https://$IP échouera"
-  # clé et certificat appariés
-  if [ -f "$PKI/app.key" ]; then
-    A=$(openssl x509 -in "$PKI/app.crt" -noout -modulus | openssl sha256)
-    B=$(openssl rsa -in "$PKI/app.key" -noout -modulus 2>/dev/null \
-        | openssl sha256)
-    [ "$A" = "$B" ] \
-      && ok "la clé privée correspond au certificat" \
-      || ko "la clé et le certificat ne correspondent pas"
-  fi
+# --- restauration testée -----------------------------------------------
+if [ "$(Q "SELECT 1 FROM pg_database WHERE datname='factura_restore'")" = 1 ]; then
+  ok "base factura_restore présente"
+  A="$(QD factura_demo 'SELECT count(*) FROM invoices')"; B="$(QD factura_restore 'SELECT count(*) FROM invoices')"
+  [ -n "$B" ] && [ "$A" = "$B" ] && ok "invoices : $A lignes des deux côtés" \
+    || ko "invoices : $A (source) vs ${B:-absent} (restaurée)"
 else
-  ko "pas de certificat serveur dans $PKI (étape 2)"
+  ko "base factura_restore absente (pg_restore dans une base neuve)"
 fi
 
-# --- 2. la confiance côté client --------------------------------------
-if [ -f /usr/local/share/ca-certificates/lab-local-ca.crt ] \
-   || [ -f /etc/pki/ca-trust/source/anchors/lab-local-ca.crt ]; then
-  ok "le CA du lab est déposé dans le magasin système"
-else
-  ko "le CA n'est pas dans le magasin système (update-ca-certificates)"
-fi
-getent hosts "$CIBLE" >/dev/null 2>&1 \
-  && ok "$CIBLE se résout" \
-  || ko "$CIBLE ne se résout pas (ajoute-le à /etc/hosts)"
+# --- archivage et base physique -----------------------------------------
+[ "$(Q 'SHOW archive_mode')" = on ] && ok "archive_mode = on" || ko "archive_mode n'est pas on (restart)"
+AC="$(Q 'SELECT archived_count FROM pg_stat_archiver')"; FC="$(Q 'SELECT failed_count FROM pg_stat_archiver')"
+[ "${AC:-0}" -gt 0 ] && ok "$AC segment(s) archivé(s)" || ko "aucun segment archivé (pg_switch_wal ?)"
+[ "${FC:-1}" = 0 ] && ok "aucun échec d'archivage" || ko "failed_count = $FC (archive_command)"
+[ "$(sudo -n ls /srv/pg-archive/wal 2>/dev/null | wc -l)" -gt 0 ] \
+  && ok "segments présents dans /srv/pg-archive/wal" || ko "/srv/pg-archive/wal vide"
+sudo -n ls /srv/pg-archive/base/base.tar.gz >/dev/null 2>&1 \
+  && ok "pg_basebackup présent (base.tar.gz)" || ko "pas de base.tar.gz dans /srv/pg-archive/base"
 
-# --- 3. le service distant --------------------------------------------
-H=$(curl -sI --max-time 6 "https://$CIBLE/" 2>/dev/null)
-if [ -n "$H" ]; then
-  ok "curl https://$CIBLE aboutit SANS -k (la chaîne est validée)"
-else
-  ko "curl https://$CIBLE échoue : $(curl -sI --max-time 6 \
-"https://$CIBLE/" 2>&1 | head -1)"
-fi
-
-grep -qi '^strict-transport-security' <<<"$H" \
-  && ok "l'en-tête HSTS est présent" \
-  || ko "pas d'en-tête Strict-Transport-Security"
-
-MA=$(grep -io 'max-age=[0-9]*' <<<"$H" | head -1 | cut -d= -f2)
-[ "${MA:-0}" -ge 63072000 ] \
-  && ok "max-age = $MA (>= 2 ans)" \
-  || ko "max-age = ${MA:-absent}, l'énoncé demande au moins 63072000"
-
-# redirection 80 -> 443
-R=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 6 \
-    "http://$CIBLE/" 2>/dev/null)
-grep -qE '^30[18] https://' <<<"$R" \
-  && ok "HTTP redirige en permanence vers HTTPS ($R)" \
-  || ko "pas de redirection 301 de 80 vers 443 (obtenu : $R)"
-
-# --- 4. ce que sert réellement le serveur ------------------------------
-S=$(openssl s_client -connect "$IP:443" -servername "$CIBLE" \
-    </dev/null 2>/dev/null)
-grep -q 'Verify return code: 0 (ok)' <<<"$S" \
-  && ok "openssl s_client : Verify return code 0 (ok)" \
-  || ko "openssl s_client ne valide pas la chaîne : \
-$(grep 'Verify return code' <<<"$S" | head -1)"
-
-PROTO=$(grep -oE 'TLSv1\.[0-9]' <<<"$S" | head -1)
-case "$PROTO" in
-  TLSv1.2|TLSv1.3) ok "protocole négocié : $PROTO" ;;
-  *) ko "protocole négocié : ${PROTO:-inconnu} — TLS 1.0/1.1 sont à \
-proscrire" ;;
-esac
-
-printf '%s' "$S" | openssl x509 -noout -checkend 2592000 >/dev/null 2>&1 \
-  && ok "le certificat servi n'expire pas dans les 30 jours" \
-  || ko "le certificat servi expire sous 30 jours (ou est déjà expiré)"
-
-# --- 5. le script de surveillance --------------------------------------
-V="$LAB_HOME/lab15/bin/verif-certs.sh"
-if [ -x "$V" ]; then
-  ok "$V existe et est exécutable"
-  OUT=$("$V" "$CIBLE:443" 2>/dev/null); RC=$?
-  grep -qE '[0-9]+' <<<"$OUT" \
-    && ok "le script produit une sortie exploitable" \
-    || ko "le script ne renvoie rien d'utilisable"
-  [ "$RC" -le 2 ] \
-    && ok "code retour $RC conforme au contrat (0/1/2)" \
-    || ko "code retour $RC hors contrat"
-else
-  ko "~/lab15/bin/verif-certs.sh absent ou non exécutable (étape 8)"
-fi
+# --- rapport -----------------------------------------------------------
+RAP="$HOME/lab15/rapports/restauration.md"
+if [ -f "$RAP" ]; then
+  grep -qi 'pg_restore' "$RAP" && grep -qE '[0-9]+ ?(s|sec|min|m)\b' "$RAP" \
+    && ok "restauration.md avec procédure et temps mesuré" \
+    || ko "restauration.md sans pg_restore ou sans temps mesuré"
+  grep -qiE 'recovery_target_time|PITR' "$RAP" && ok "PITR documenté" \
+    || ko "PITR absent de restauration.md"
+else ko "rapport $RAP absent"; fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

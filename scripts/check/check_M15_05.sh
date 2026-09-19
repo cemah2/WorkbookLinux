@@ -1,159 +1,51 @@
 #!/usr/bin/env bash
-# check_M15_05.sh — vérifie le lab L15.5 (durcissement et audit)
+# check_M15_05.sh — vérifie le lab L15.5 (Redis sécurisé et dimensionné) sur lab-db
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L15.5 =="
+CONF="$(sudo -n cat /etc/redis/redis.conf 2>/dev/null | grep -Ev '^\s*#|^\s*$')"
+[ -n "$CONF" ] || { ko "impossible de lire /etc/redis/redis.conf (sudo)"; exit 1; }
+cfg() { grep -E "^$1\s" <<<"$CONF" | tail -1 | awk '{$1=""; print substr($0,2)}'; }
 
-LAB_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
-B="$LAB_HOME/lab15"
+U=redis-server.service
+[ "$(systemctl is-active $U 2>/dev/null)" = active ] && ok "$U actif" || ko "$U inactif"
+ss -Hltn 'sport = :6379' | grep -q '10.10.10.12:6379' && ok "écoute sur 10.10.10.12" \
+  || ko "pas d'écoute sur 10.10.10.12 (bind, puis restart)"
+ss -Hltn 'sport = :6379' | grep -q '127.0.0.1:6379' && ok "écoute sur 127.0.0.1" \
+  || ko "pas d'écoute sur 127.0.0.1"
+ss -Hltn 'sport = :6379' | grep -q '0.0.0.0:6379' && ko "écoute sur 0.0.0.0" || ok "pas d'écoute sur 0.0.0.0"
+[ "$(cfg protected-mode)" = yes ] && ok "protected-mode yes" || ko "protected-mode n'est pas yes"
 
-# --- 1. les deux états des lieux ---------------------------------------
-for f in etat-initial.md etat-final.md; do
-  if [ -s "$B/$f" ]; then
-    n=$(wc -l < "$B/$f")
-    [ "$n" -ge 20 ] \
-      && ok "$f présent ($n lignes)" \
-      || ko "$f trop court ($n lignes) : l'énoncé demande 7 rubriques"
-  else
-    ko "~/lab15/$f absent"
-  fi
-done
+redis-cli PING 2>&1 | grep -q NOAUTH && ok "PING sans authentification refusé" \
+  || ko "PING sans authentification accepté (user default off ou requirepass)"
+grep -qE '^user default off' <<<"$CONF" && ok "user default désactivé" \
+  || ko "user default n'est pas off (ACL)"
+FA="$(grep -E '^user factura on' <<<"$CONF")"
+[ -n "$FA" ] && ok "utilisateur ACL factura défini" || ko "utilisateur ACL factura absent"
+grep -q -- '-@dangerous' <<<"$FA" && ok "factura sans commandes dangereuses" \
+  || ko "factura n'a pas -@dangerous"
+grep -qE '~(sess|factura|user):' <<<"$FA" && ok "factura limité à ses préfixes de clés" \
+  || ko "factura n'est pas limité par motif de clés (~sess:* ...)"
+grep -qE '^user (admin|ops)[a-z0-9_-]* on' <<<"$CONF" && ok "un utilisateur d'administration existe" \
+  || note "pas d'utilisateur admin/ops : comment administres-tu Redis ?"
 
-# --- 2. sysctl ---------------------------------------------------------
-attendu="net.ipv4.conf.all.rp_filter=1
-net.ipv4.conf.all.accept_redirects=0
-net.ipv4.conf.all.send_redirects=0
-net.ipv4.conf.all.accept_source_route=0
-net.ipv4.tcp_syncookies=1
-kernel.kptr_restrict=2
-kernel.dmesg_restrict=1
-kernel.randomize_va_space=2"
-ecarts=0; detail=""
-while IFS='=' read -r cle val; do
-  lu=$(sysctl -n "$cle" 2>/dev/null) || continue
-  if [ "$lu" != "$val" ]; then
-    ecarts=$((ecarts+1)); detail="$detail $cle=$lu(att.$val)"
-  fi
-done <<< "$attendu"
-[ "$ecarts" -eq 0 ] \
-  && ok "les 8 sysctl de sécurité sont aux valeurs attendues" \
-  || ko "$ecarts écart(s) :$detail"
-
-ls /etc/sysctl.d/*.conf >/dev/null 2>&1 \
-  && grep -qrs 'kptr_restrict' /etc/sysctl.d/ \
-  && ok "les valeurs sont persistées dans /etc/sysctl.d/" \
-  || ko "rien dans /etc/sysctl.d/ : un sysctl -w ne survit pas au reboot"
-
-# --- 3. /tmp -----------------------------------------------------------
-OPTS=$(findmnt -no OPTIONS /tmp 2>/dev/null)
-if [ -n "$OPTS" ]; then
-  for o in noexec nosuid nodev; do
-    grep -q "$o" <<<"$OPTS" \
-      && ok "/tmp est monté $o" \
-      || ko "/tmp n'a pas l'option $o (options : $OPTS)"
-  done
-  # preuve par l'usage
-  T=$(mktemp /tmp/chk15.XXXX)
-  printf '#!/bin/sh\necho ok\n' > "$T"; chmod +x "$T"
-  if "$T" >/dev/null 2>&1; then
-    ko "un script de /tmp s'exécute encore : noexec n'est pas effectif"
-  else
-    ok "l'exécution depuis /tmp est bien refusée"
-  fi
-  rm -f "$T"
-else
-  ko "/tmp n'est pas un point de montage distinct : impossible d'y poser \
-noexec (fstab ou tmp.mount)"
-fi
-
-# --- 4. modules noyau --------------------------------------------------
-BLK=$(cat /etc/modprobe.d/*.conf 2>/dev/null)
-manque=""
-for m in usb-storage firewire-core cramfs dccp sctp; do
-  grep -qE "^\s*(install\s+$m\s+/bin/(true|false)|blacklist\s+$m)" \
-    <<<"$BLK" || manque="$manque $m"
-done
-[ -z "$manque" ] \
-  && ok "les cinq modules sont neutralisés" \
-  || ko "modules non traités :$manque"
-grep -qE '^\s*install\s+usb-storage' <<<"$BLK" \
-  && ok "la forme « install ... /bin/true » est utilisée (plus solide que \
-blacklist)" \
-  || note "« blacklist » n'empêche que le chargement automatique : \
-préfère « install <mod> /bin/true »"
-
-# --- 5. comptes et mots de passe ---------------------------------------
-U=$(awk '/^UMASK/{print $2}' /etc/login.defs 2>/dev/null)
-[ "$U" = 027 ] || [ "$U" = 077 ] \
-  && ok "UMASK = $U dans /etc/login.defs" \
-  || ko "UMASK = ${U:-absent}, l'énoncé demande 027"
-M=$(awk '/^PASS_MAX_DAYS/{print $2}' /etc/login.defs 2>/dev/null)
-[ "${M:-99999}" -le 365 ] \
-  && ok "PASS_MAX_DAYS = $M" \
-  || ko "PASS_MAX_DAYS = ${M:-absent}, attendu 365 au plus"
-W=$(awk '/^PASS_WARN_AGE/{print $2}' /etc/login.defs 2>/dev/null)
-[ "${W:-0}" -ge 14 ] \
-  && ok "PASS_WARN_AGE = $W" \
-  || ko "PASS_WARN_AGE = ${W:-absent}, attendu 14"
-grep -qE '^\s*minlen\s*=\s*(1[2-9]|[2-9][0-9])' \
-  /etc/security/pwquality.conf 2>/dev/null \
-  && ok "longueur minimale de mot de passe >= 12" \
-  || ko "minlen non configuré dans /etc/security/pwquality.conf"
-
-# --- 6. bannière -------------------------------------------------------
-[ -s /etc/issue.net ] \
-  && ok "/etc/issue.net contient une bannière" \
-  || ko "/etc/issue.net vide : pas de bannière légale"
-
-# --- 7. mises à jour automatiques --------------------------------------
-if command -v apt-get >/dev/null 2>&1; then
-  grep -rqs 'Unattended-Upgrade "1"' /etc/apt/apt.conf.d/ \
-    && ok "unattended-upgrades est activé" \
-    || ko "les mises à jour automatiques ne sont pas activées"
-else
-  systemctl is-enabled dnf-automatic.timer >/dev/null 2>&1 \
-    && ok "dnf-automatic.timer est activé" \
-    || ko "dnf-automatic.timer n'est pas activé"
-fi
-
-# --- 8. auditd ---------------------------------------------------------
-if command -v auditctl >/dev/null 2>&1; then
-  R=$(auditctl -l 2>/dev/null)
-  for cible in /etc/passwd /etc/shadow /etc/sudoers; do
-    grep -q "$cible" <<<"$R" \
-      && ok "règle auditd active sur $cible" \
-      || ko "aucune règle auditd chargée sur $cible (augenrules --load)"
-  done
-  grep -qs 'passwd' /etc/audit/rules.d/*.rules 2>/dev/null \
-    && ok "les règles sont persistées dans /etc/audit/rules.d/" \
-    || ko "règles non persistées : un auditctl -w disparaît au reboot"
-else
-  ko "auditd n'est pas installé"
-fi
-
-# --- 9. surface d'écoute ----------------------------------------------
-if command -v ss >/dev/null 2>&1; then
-  n=$(ss -tulnH 2>/dev/null | grep -vcE '127\.0\.0\.1|\[::1\]')
-  [ "${n:-99}" -le 4 ] \
-    && ok "surface d'écoute réduite : $n socket(s) exposé(s)" \
-    || ko "$n sockets exposés hors boucle locale : l'étape 4 demande de \
-justifier ou de restreindre chacun"
-fi
-
-# --- 10. lynis ---------------------------------------------------------
-if [ -f /var/log/lynis-report.dat ]; then
-  H=$(awk -F= '/^hardening_index=/{print $2}' /var/log/lynis-report.dat \
-      | tail -1)
-  ok "lynis a tourné, indice de durcissement : ${H:-?}"
-  [ -f "$B/lynis-avant.dat" ] \
-    && ok "le rapport d'origine est archivé pour l'avant/après" \
-    || note "archive le rapport initial pour documenter la progression"
-else
-  ko "aucun rapport lynis (/var/log/lynis-report.dat)"
-fi
+MM="$(cfg maxmemory)"; POL="$(cfg maxmemory-policy)"
+[ "$MM" = 128mb ] && ok "maxmemory 128mb" || ko "maxmemory vaut « $MM », attendu 128mb"
+[ -n "$POL" ] && [ "$POL" != noeviction ] && ok "maxmemory-policy $POL" \
+  || ko "maxmemory-policy absente ou noeviction (choisis pour sessions + file)"
+[ "$(cfg appendonly)" = yes ] && ok "appendonly yes" || ko "appendonly n'est pas yes"
+[ "$(cfg appendfsync)" = everysec ] && ok "appendfsync everysec" || ko "appendfsync n'est pas everysec"
+sudo -n ls /var/lib/redis/appendonlydir/ >/dev/null 2>&1 && ok "appendonlydir/ présent" \
+  || ko "/var/lib/redis/appendonlydir absent (l'AOF n'est pas actif à chaud)"
+sudo -n ls /var/backups/redis/dump-*.rdb >/dev/null 2>&1 && ok "copie de dump.rdb présente" \
+  || ko "aucune copie dump-*.rdb dans /var/backups/redis"
+[ -f "$HOME/lab15/conf/lab-db/redis.conf.diff" ] && ok "redis.conf.diff présent" \
+  || ko "~/lab15/conf/lab-db/redis.conf.diff absent"
+[ -f "$HOME/lab15/rapports/redis.md" ] && [ "$(wc -l < "$HOME/lab15/rapports/redis.md")" -ge 20 ] \
+  && ok "rapport redis.md présent" || ko "rapport redis.md absent ou trop court"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

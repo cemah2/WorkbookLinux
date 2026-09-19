@@ -1,797 +1,551 @@
 #!/usr/bin/env bash
-# setup_M21.sh — prépare le terrain du module 21 (CI/CD)
-# À lancer avec sudo. Détecte l'hôte :
-#   lab-ops (10.10.10.14) : Docker, forge Gitea + PostgreSQL + registre +
-#                            act_runner, dépôts factura et factura-infra,
-#                            clés de déploiement, jeton d'API.
-#   lab-web (10.10.10.11) : Docker, nginx, utilisateur deploy, /srv/factura.
-# Idempotent : relançable. Les dépôts ~/lab21/factura et factura-infra ne
-# sont PAS réinitialisés s'ils existent déjà (travail de l'apprenant).
+# setup_M21.sh — prépare le terrain du module 21 (Git pour l'ops)
+# Se lance sans sudo (ou avec : le contenu reste la propriété de l'apprenant).
+# Idempotent : relançable sans effet de bord... sauf que le dépôt
+# ~/lab21/factura-infra est REMIS À ZÉRO à chaque exécution (l'historique
+# doit être identique pour tout le monde : mêmes SHA, mêmes sorties).
+# ~/lab21/rapports/ n'est jamais touché.
 set -euo pipefail
 
-[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-LAB_USER="${SUDO_USER:-mathieu}"
+if [ "$(id -u)" -eq 0 ]; then
+  LAB_USER="${SUDO_USER:-root}"
+else
+  LAB_USER="$(id -un)"
+fi
 LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
 
-OPS_IP=10.10.10.14
-WEB_IP=10.10.10.11
-GITEA_URL="http://$OPS_IP:3000"
-REG="$OPS_IP:5000"
-REG_USER=mathieu
-REG_PASS='Factura-Reg-2026'
-GITEA_PASS='Factura2026!'
 BASE="$LAB_HOME/lab21"
+DEPOT="$BASE/factura-infra"
+REMOTE="$BASE/remote/factura-infra.git"
+COLLEGUE="$BASE/collegue/factura-infra"
 
-mode="${1:-auto}"
-if [ "$mode" = auto ]; then
-  if ip -4 addr | grep -q "$OPS_IP/"; then mode=ops
-  elif ip -4 addr | grep -q "$WEB_IP/"; then mode=web
-  else
-    case "$(hostname -s)" in
-      lab-ops) mode=ops ;; lab-web) mode=web ;;
-      *) echo "hôte non reconnu : lance avec --ops ou --web" >&2; exit 1 ;;
-    esac
-  fi
-fi
-mode="${mode#--}"
+command -v git >/dev/null 2>&1 || { echo "git manquant : apt install git" >&2; \
+  exit 1; }
 
-# ---------------------------------------------------------------------
-# Commun : Docker + registre non sécurisé
-# ---------------------------------------------------------------------
-installer_docker() {
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -q
-  apt-get install -y -q docker.io docker-compose-v2 curl git jq \
-    python3-yaml "$@"
-  systemctl enable --now docker
-}
-
-daemon_json() {
-  python3 - <<EOF
-import json, os
-p = "/etc/docker/daemon.json"
-d = {}
-if os.path.exists(p):
-    try:
-        d = json.load(open(p))
-    except Exception:
-        d = {}
-lst = d.setdefault("insecure-registries", [])
-if "$REG" not in lst:
-    lst.append("$REG")
-    json.dump(d, open(p, "w"), indent=2)
-    print("changed")
-EOF
-}
-
-docker_login_fichier() {   # $1 = home, $2 = owner
-  install -d -m 700 -o "$2" -g "$2" "$1/.docker"
-  local auth
-  auth=$(printf '%s:%s' "$REG_USER" "$REG_PASS" | base64 -w0)
-  python3 - "$1/.docker/config.json" "$auth" <<'EOF'
-import json, os, sys
-p, auth = sys.argv[1:]
-d = {}
-if os.path.exists(p):
-    try:
-        d = json.load(open(p))
-    except Exception:
-        d = {}
-d.setdefault("auths", {})["10.10.10.14:5000"] = {"auth": auth}
-json.dump(d, open(p, "w"), indent=2)
-EOF
-  chown "$2:$2" "$1/.docker/config.json"; chmod 600 "$1/.docker/config.json"
-}
-
-# =====================================================================
-# lab-web
-# =====================================================================
-if [ "$mode" = web ]; then
-  echo "== Préparation du module 21 sur lab-web =="
-  installer_docker nginx
-  if [ "$(daemon_json)" = changed ]; then systemctl restart docker; fi
-  id deploy >/dev/null 2>&1 || useradd -m -s /bin/bash -G docker deploy
-  usermod -aG docker deploy
-  install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
-  install -d -m 755 -o deploy -g deploy /srv/factura /srv/factura-bg
-  docker_login_fichier /home/deploy deploy
-  cat <<EOF
-
-lab-web prêt :
-  - Docker + nginx installés, registre $REG déclaré non sécurisé
-  - utilisateur deploy (groupe docker), /srv/factura et /srv/factura-bg
-  - docker login vers $REG fait pour deploy
-À toi : clés dans /home/deploy/.ssh/authorized_keys (E21.12, L21.2, L21.3),
-/usr/local/bin/factura-deploy, compose.yaml, nginx.
-EOF
-  exit 0
-fi
-
-# =====================================================================
-# lab-ops
-# =====================================================================
-echo "== Préparation du module 21 sur lab-ops =="
+echo "== Préparation du module 21 =="
 echo "   utilisateur : $LAB_USER"
 echo "   base        : $BASE"
 
-installer_docker apache2-utils shellcheck yamllint openssh-client
-usermod -aG docker "$LAB_USER"
-if [ "$(daemon_json)" = changed ]; then systemctl restart docker; fi
-
-install -d -o "$LAB_USER" -g "$LAB_USER" \
-  "$BASE" "$BASE/forge" "$BASE/forge/runner" "$BASE/forge/runner/data" \
-  "$BASE/forge/registry" "$BASE/forge/registry/auth" "$BASE/keys" \
-  "$BASE/rapports" "$BASE/rapports/equivalents"
-
 # ---------------------------------------------------------------------
-# 1. Forge : compose
+# 0. Déterminisme : aucune config globale/système ne doit influencer
+#    l'historique généré (signature, autocrlf, hooks templates...).
 # ---------------------------------------------------------------------
-[ -s "$BASE/forge/registry/auth/htpasswd" ] \
-  || htpasswd -Bbn "$REG_USER" "$REG_PASS" > "$BASE/forge/registry/auth/htpasswd"
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+export GIT_TEMPLATE_DIR=""
+export TZ=Europe/Paris
 
-cat > "$BASE/forge/compose.yaml" <<EOF
-# Forge du lab : Gitea + PostgreSQL + registre OCI + act_runner
-# Le runner est dans le profil "runner" : il a besoin d'un jeton
-# d'enregistrement généré une fois Gitea démarré (voir .env).
-services:
-  gitea:
-    image: docker.gitea.com/gitea:1.24
-    container_name: gitea
-    restart: unless-stopped
-    environment:
-      USER_UID: "1000"
-      USER_GID: "1000"
-      GITEA__database__DB_TYPE: postgres
-      GITEA__database__HOST: db:5432
-      GITEA__database__NAME: gitea
-      GITEA__database__USER: gitea
-      GITEA__database__PASSWD: gitea
-      GITEA__server__ROOT_URL: $GITEA_URL/
-      GITEA__server__DOMAIN: $OPS_IP
-      GITEA__server__SSH_DOMAIN: $OPS_IP
-      GITEA__server__SSH_PORT: "2222"
-      GITEA__server__HTTP_PORT: "3000"
-      GITEA__security__INSTALL_LOCK: "true"
-      GITEA__service__DISABLE_REGISTRATION: "true"
-      GITEA__actions__ENABLED: "true"
-      GITEA__actions__DEFAULT_ACTIONS_URL: github
-      GITEA__log__LEVEL: Info
-    volumes:
-      - ./gitea:/data
-      - /etc/localtime:/etc/localtime:ro
-    ports:
-      - "3000:3000"
-      - "2222:22"
-    depends_on:
-      - db
-
-  db:
-    image: postgres:16
-    container_name: gitea-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: gitea
-      POSTGRES_PASSWORD: gitea
-      POSTGRES_DB: gitea
-    volumes:
-      - ./postgres:/var/lib/postgresql/data
-
-  registry:
-    image: registry:2
-    container_name: registry
-    restart: unless-stopped
-    environment:
-      REGISTRY_AUTH: htpasswd
-      REGISTRY_AUTH_HTPASSWD_REALM: factura-registry
-      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
-      REGISTRY_STORAGE_DELETE_ENABLED: "true"
-    volumes:
-      - ./registry/data:/var/lib/registry
-      - ./registry/auth:/auth:ro
-    ports:
-      - "5000:5000"
-
-  runner:
-    image: docker.gitea.com/act_runner:latest
-    container_name: act-runner
-    restart: unless-stopped
-    profiles: ["runner"]
-    # network_mode host : les conteneurs de jobs (créés via le socket de
-    # l'hôte, hors de ce réseau compose) joignent le runner et Gitea par
-    # l'IP de lab-ops. Le nom "gitea" n'existe pas pour eux.
-    network_mode: host
-    environment:
-      CONFIG_FILE: /config.yaml
-      GITEA_INSTANCE_URL: $GITEA_URL
-      GITEA_RUNNER_REGISTRATION_TOKEN: \${RUNNER_TOKEN}
-      GITEA_RUNNER_NAME: runner-ops
-      GITEA_RUNNER_LABELS: >-
-        ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest
-    volumes:
-      - ./runner/config.yaml:/config.yaml:ro
-      - ./runner/data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
-EOF
-
-cat > "$BASE/forge/runner/config.yaml" <<EOF
-# Configuration act_runner (format act_runner generate-config)
-log:
-  level: info
-
-runner:
-  file: .runner
-  capacity: 1
-  envs: {}
-  env_file: .env
-  timeout: 3h
-  shutdown_timeout: 0s
-  insecure: false
-  fetch_timeout: 5s
-  fetch_interval: 2s
-  labels:
-    - "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
-
-cache:
-  enabled: false
-  dir: ""
-  host: "$OPS_IP"
-  port: 4000
-  external_server: ""
-
-container:
-  network: ""
-  privileged: false
-  options:
-  workdir_parent:
-  valid_volumes: []
-  # "" : le socket Docker est monté dans chaque job ; "-" : jamais
-  docker_host: ""
-  force_pull: true
-  force_rebuild: false
-
-host:
-  workdir_parent:
-EOF
-
-cd "$BASE/forge"
-[ -f .env ] || printf 'RUNNER_TOKEN=\n' > .env
-chmod 600 .env
-docker compose up -d gitea db registry
-
-echo "   attente de Gitea..."
-for i in $(seq 1 60); do
-  curl -fs "$GITEA_URL/api/healthz" >/dev/null 2>&1 && break
-  sleep 2
-  [ "$i" -eq 60 ] && { echo "Gitea ne répond pas" >&2; exit 1; }
-done
-sleep 3
-
-# ---------------------------------------------------------------------
-# 2. Compte, jeton d'API, jeton runner
-# ---------------------------------------------------------------------
-gitea_cli() { docker exec -u git gitea gitea "$@"; }
-
-if ! gitea_cli admin user list 2>/dev/null | awk '{print $2}' | grep -qx "$LAB_USER"; then
-  gitea_cli admin user create --admin --username "$LAB_USER" \
-    --password "$GITEA_PASS" --email "$LAB_USER@lab.local" \
-    --must-change-password=false
-fi
-
-TOKEN_FILE="$BASE/.gitea-token"
-if [ ! -s "$TOKEN_FILE" ]; then
-  gitea_cli admin user generate-access-token --username "$LAB_USER" \
-    --token-name "lab21-$(date +%s)" --scopes all --raw > "$TOKEN_FILE"
-fi
-chown "$LAB_USER:$LAB_USER" "$TOKEN_FILE"; chmod 600 "$TOKEN_FILE"
-TOKEN=$(tr -d '[:space:]' < "$TOKEN_FILE")
-API="$GITEA_URL/api/v1"
-api() { curl -s -H "Authorization: token $TOKEN" \
-          -H 'Content-Type: application/json' "$@"; }
-
-if [ ! -s "$BASE/forge/runner/data/.runner" ]; then
-  RT=$(gitea_cli actions generate-runner-token | tr -d '[:space:]')
-  sed -i "s/^RUNNER_TOKEN=.*/RUNNER_TOKEN=$RT/" .env
-fi
-docker compose --profile runner up -d runner
-
-# ---------------------------------------------------------------------
-# 3. Clés, credential helper, docker login
-# ---------------------------------------------------------------------
-for k in deploy bg ansible; do
-  [ -f "$BASE/keys/$k" ] || sudo -u "$LAB_USER" ssh-keygen -q -t ed25519 \
-    -N '' -C "$k@lab-ops" -f "$BASE/keys/$k"
-done
-printf 'http://%s:%s@%s\n' "$LAB_USER" "$TOKEN" "$OPS_IP" \
-  > "$BASE/.git-credentials"
-chown "$LAB_USER:$LAB_USER" "$BASE/.git-credentials"
-chmod 600 "$BASE/.git-credentials"
-docker_login_fichier "$LAB_HOME" "$LAB_USER"
-
-# ---------------------------------------------------------------------
-# 4. Dépôts Gitea
-# ---------------------------------------------------------------------
-for r in factura factura-infra; do
-  api -o /dev/null -w '' -X POST "$API/user/repos" \
-    -d "{\"name\":\"$r\",\"default_branch\":\"main\",\"private\":false,\
-\"description\":\"module 21\"}" || true
-done
-
-git_u() { sudo -u "$LAB_USER" git "$@"; }
-
-publier_depot() {   # $1 = répertoire, $2 = nom du dépôt
-  local d=$1 r=$2
-  chown -R "$LAB_USER:$LAB_USER" "$d"
-  if [ ! -d "$d/.git" ]; then
-    git_u -C "$d" init -q -b main
-    git_u -C "$d" config user.name "$LAB_USER"
-    git_u -C "$d" config user.email "$LAB_USER@lab.local"
-    git_u -C "$d" config credential.helper "store --file $BASE/.git-credentials"
-    git_u -C "$d" remote add origin "$GITEA_URL/$LAB_USER/$r.git"
-    git_u -C "$d" add -A
-    git_u -C "$d" commit -q -m "feat: version initiale de $r"
-    git_u -C "$d" push -q -u origin main
-  fi
+# commit_as <auteur> <date ISO> <message...>
+commit_as() {
+  local nom=$1 date=$2; shift 2
+  GIT_AUTHOR_NAME=$nom GIT_AUTHOR_EMAIL="$nom@lab.local" \
+  GIT_AUTHOR_DATE="$date" \
+  GIT_COMMITTER_NAME=$nom GIT_COMMITTER_EMAIL="$nom@lab.local" \
+  GIT_COMMITTER_DATE="$date" \
+  git commit -q "$@"
+}
+# tag_as <auteur> <date> <args de git tag...>
+tag_as() {
+  local nom=$1 date=$2; shift 2
+  GIT_COMMITTER_NAME=$nom GIT_COMMITTER_EMAIL="$nom@lab.local" \
+  GIT_COMMITTER_DATE="$date" git tag "$@"
+}
+# merge_as <auteur> <date> <args de git merge...>
+merge_as() {
+  local nom=$1 date=$2; shift 2
+  GIT_AUTHOR_NAME=$nom GIT_AUTHOR_EMAIL="$nom@lab.local" \
+  GIT_AUTHOR_DATE="$date" \
+  GIT_COMMITTER_NAME=$nom GIT_COMMITTER_EMAIL="$nom@lab.local" \
+  GIT_COMMITTER_DATE="$date" git merge -q "$@"
 }
 
-# ---- factura : application Flask ------------------------------------
-APP="$BASE/factura"
-if [ ! -d "$APP/.git" ]; then
-  install -d -o "$LAB_USER" -g "$LAB_USER" "$APP" "$APP/scripts" "$APP/deploy"
+# ---------------------------------------------------------------------
+# 1. Arborescence
+# ---------------------------------------------------------------------
+mkdir -p "$BASE"/{rapports,remote,collegue}
+rm -rf "$DEPOT" "$REMOTE" "$COLLEGUE" "$BASE/.build"
+mkdir -p "$BASE/.build"
+cd "$BASE/.build"
+git init -q -b main
+git config user.name mathieu
+git config user.email mathieu@lab.local
+git config core.autocrlf false
 
-  cat > "$APP/README.md" <<'EOF'
-# factura
+# ---------------------------------------------------------------------
+# 2. Historique de factura-infra
+# ---------------------------------------------------------------------
 
-Micro-service de démonstration du module 21 (Flask + gunicorn).
-
-* `GET /` : bannière
-* `GET /health` : JSON `{"status":"ok","version":...,"color":...}`
-* `GET /version` : le SHA injecté au build (`APP_VERSION`), en texte brut
-* `GET /factures/<id>` : une facture fictive, 404 si `id <= 0`
-
-Tests : `pip install -r requirements-dev.txt && pytest -q`
-Image : `docker build --build-arg APP_VERSION=$(git rev-parse --short=12 HEAD) .`
-EOF
-
-  cat > "$APP/app.py" <<'EOF'
-"""factura — micro-service de démonstration (module 21)."""
-import os
-
-from flask import Flask, abort, jsonify
-
-app = Flask(__name__)
-VERSION = os.environ.get("APP_VERSION", "dev")
-COLOR = os.environ.get("APP_COLOR", "none")
-
-
-@app.get("/")
-def index():
-    return f"factura {VERSION} ({COLOR})\n"
-
-
-@app.get("/health")
-def health():
-    return jsonify(status="ok", version=VERSION, color=COLOR)
-
-
-@app.get("/version")
-def version():
-    return VERSION + "\n"
-
-
-@app.get("/factures/<int:num>")
-def facture(num):
-    # BUG livré volontairement : 0 doit renvoyer 404 (voir test_app.py)
-    if num < 0:
-        abort(404)
-    return jsonify(id=num, montant=round(num * 12.5, 2), devise="EUR")
-EOF
-
-  cat > "$APP/test_app.py" <<'EOF'
-import pytest
-
-from app import app
-
-
-@pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    with app.test_client() as c:
-        yield c
-
-
-def test_index(client):
-    r = client.get("/")
-    assert r.status_code == 200
-    assert b"factura" in r.data
-
-
-def test_health(client):
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.get_json()["status"] == "ok"
-
-
-def test_version(client):
-    r = client.get("/version")
-    assert r.status_code == 200
-    assert r.data.strip() != b""
-
-
-def test_facture(client):
-    r = client.get("/factures/4")
-    assert r.status_code == 200
-    assert r.get_json()["montant"] == 50.0
-
-
-def test_facture_zero(client):
-    assert client.get("/factures/0").status_code == 404
-EOF
-
-  cat > "$APP/requirements.txt" <<'EOF'
-flask==3.0.3
-gunicorn==23.0.0
-EOF
-  cat > "$APP/requirements-dev.txt" <<'EOF'
--r requirements.txt
-pytest==8.3.3
-EOF
-
-  cat > "$APP/Dockerfile" <<'EOF'
-FROM python:3.12-slim
-
-ARG APP_VERSION=dev
-ENV APP_VERSION=$APP_VERSION \
-    PYTHONUNBUFFERED=1
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && useradd --system --uid 10001 --no-create-home app
-COPY app.py .
-
-USER app
-EXPOSE 8000
-HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "app:app"]
-EOF
-
-  cat > "$APP/compose.yaml" <<'EOF'
-# Développement local : docker compose up --build
-services:
-  app:
-    build:
-      context: .
-      args:
-        APP_VERSION: local
-    ports:
-      - "8000:8000"
-    environment:
-      APP_COLOR: local
-EOF
-
-  cat > "$APP/deploy/compose.yaml" <<'EOF'
-# Modèle pour /srv/factura/compose.yaml sur lab-web (L21.2).
-# TAG vient de /srv/factura/.env, écrit par factura-deploy.
-services:
-  app:
-    image: 10.10.10.14:5000/factura:${TAG:?TAG obligatoire}
-    ports:
-      - "8080:8000"
-    restart: unless-stopped
-    environment:
-      APP_COLOR: single
-EOF
-
-  cat > "$APP/deploy/factura-deploy.sh" <<'EOF'
-#!/usr/bin/env bash
-# Squelette de /usr/local/bin/factura-deploy (lab-web) — à compléter en L21.2.
-# Commande forcée : SSH_ORIGINAL_COMMAND contient "deploy <tag>",
-# "rollback" ou "status".
-set -euo pipefail
-cd /srv/factura
-read -r action tag _ <<<"${SSH_ORIGINAL_COMMAND:-}"
-case "${action:-}" in
-  deploy)   echo "TODO: valider '$tag', sauvegarder .env, pull, up" ;;
-  rollback) echo "TODO: restaurer .env.prev, pull, up" ;;
-  status)   cat .env ;;
-  *)        echo "commande refusée" >&2; exit 2 ;;
-esac
-EOF
-  chmod 755 "$APP/deploy/factura-deploy.sh"
-
-  cat > "$APP/scripts/smoke.sh" <<'EOF'
-#!/usr/bin/env bash
-# smoke.sh <url> <version attendue> — vérifie que /version répond avec le tag
-set -euo pipefail
-URL=${1:?url}; ATTENDU=${2:?version}
-for i in $(seq 1 10); do
-  v=$(curl -fsS $URL/version || true)
-  if [ "$v" = "$ATTENDU" ]; then echo "OK $v"; exit 0; fi
-  sleep 3
-done
-echo "version servie '$v', attendue '$ATTENDU'" >&2
-exit 1
-EOF
-  chmod 755 "$APP/scripts/smoke.sh"
-
-  cat > "$APP/.gitignore" <<'EOF'
-__pycache__/
-*.pyc
-.pytest_cache/
-rapport-tests.xml
-EOF
-  cat > "$APP/.dockerignore" <<'EOF'
-.git
-__pycache__
-.pytest_cache
-test_app.py
-deploy
-scripts
-EOF
-fi
-publier_depot "$APP" factura
-
-# ---- factura-infra : Ansible + OpenTofu ------------------------------
-INF="$BASE/factura-infra"
-if [ ! -d "$INF/.git" ]; then
-  install -d -o "$LAB_USER" -g "$LAB_USER" "$INF" "$INF/ansible" \
-    "$INF/ansible/templates" "$INF/tofu"
-
-  cat > "$INF/README.md" <<'EOF'
+# --- c1 : init --------------------------------------------------------
+cat > README.md <<'EOF'
 # factura-infra
 
-* `ansible/` : configuration de lab-web (nginx blue/green, deploy, Docker)
-* `tofu/` : génération de l'inventaire du lab (OpenTofu, provider local)
+Infrastructure as code de l'application **factura** (lab.local).
 
-Pipelines : voir L21.4 du module 21.
+* `ansible/`   : inventaire, playbooks, rôles
+* `terraform/` : VM Proxmox et réseau de lab
+* `bin/`       : scripts d'exploitation (healthcheck, déploiement)
+* `docs/`      : runbook
 EOF
-
-  cat > "$INF/ansible/ansible.cfg" <<'EOF'
-[defaults]
-inventory = inventory.ini
-interpreter_python = auto_silent
-host_key_checking = True
-retry_files_enabled = False
-EOF
-
-  cat > "$INF/ansible/inventory.ini" <<'EOF'
-[web]
-lab-web ansible_host=10.10.10.11 ansible_user=mathieu
-EOF
-
-  cat > "$INF/ansible/site.yml" <<'EOF'
----
-- name: Frontal factura blue/green sur lab-web
-  hosts: web
-  become: true
-  vars:
-    registry: "10.10.10.14:5000"
-    nginx_worker_connections: 768
-    factura_colors:
-      blue: 8081
-      green: 8082
-
-  handlers:
-    - name: Redémarrer docker
-      ansible.builtin.service:
-        name: docker
-        state: restarted
-
-    - name: Recharger nginx
-      ansible.builtin.service:
-        name: nginx
-        state: reloaded
-
-  tasks:
-    - name: Paquets
-      ansible.builtin.apt:
-        name:
-          - nginx
-          - docker.io
-          - docker-compose-v2
-        state: present
-        update_cache: true
-        cache_valid_time: 3600
-
-    - name: Utilisateur deploy
-      ansible.builtin.user:
-        name: deploy
-        groups: docker
-        append: true
-        shell: /bin/bash
-
-    - name: Registre non sécurisé
-      ansible.builtin.template:
-        src: templates/daemon.json.j2
-        dest: /etc/docker/daemon.json
-        owner: root
-        group: root
-        mode: "0644"
-      notify: Redémarrer docker
-
-    - name: Répertoires de déploiement
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.owner }}"
-        mode: "0755"
-      loop:
-        - {path: /srv/factura, owner: deploy}
-        - {path: /srv/factura-bg, owner: deploy}
-        - {path: /etc/nginx/factura, owner: root}
-
-    - name: Upstreams blue et green
-      ansible.builtin.template:
-        src: templates/upstream.conf.j2
-        dest: "/etc/nginx/factura/{{ item.key }}.conf"
-        owner: root
-        group: root
-        mode: "0644"
-      loop: "{{ factura_colors | dict2items }}"
-      notify: Recharger nginx
-
-    - name: Symlink d'aiguillage présent ?
-      ansible.builtin.stat:
-        path: /etc/nginx/conf.d/factura-upstream.conf
-      register: aiguillage
-
-    - name: Aiguillage initial sur blue
-      ansible.builtin.file:
-        src: /etc/nginx/factura/blue.conf
-        dest: /etc/nginx/conf.d/factura-upstream.conf
-        state: link
-      when: not aiguillage.stat.exists
-      notify: Recharger nginx
-
-    - name: Site factura
-      ansible.builtin.template:
-        src: templates/factura-site.conf.j2
-        dest: /etc/nginx/sites-available/factura.conf
-        owner: root
-        group: root
-        mode: "0644"
-      notify: Recharger nginx
-
-    - name: Site factura activé
-      ansible.builtin.file:
-        src: /etc/nginx/sites-available/factura.conf
-        dest: /etc/nginx/sites-enabled/factura.conf
-        state: link
-      notify: Recharger nginx
-
-    - name: Site default désactivé
-      ansible.builtin.file:
-        path: /etc/nginx/sites-enabled/default
-        state: absent
-      notify: Recharger nginx
-
-    - name: Taille du pool de connexions nginx
-      ansible.builtin.lineinfile:
-        path: /etc/nginx/nginx.conf
-        regexp: '^\s*worker_connections'
-        line: "\tworker_connections {{ nginx_worker_connections }};"
-      notify: Recharger nginx
-
-    - name: Vérifier la configuration nginx
-      ansible.builtin.command: nginx -t
-EOF
-
-  cat > "$INF/ansible/templates/daemon.json.j2" <<'EOF'
-{
-  "insecure-registries": ["{{ registry }}"]
-}
-EOF
-  cat > "$INF/ansible/templates/upstream.conf.j2" <<'EOF'
-# {{ item.key }} — géré par Ansible (factura-infra)
-upstream factura_live { server 127.0.0.1:{{ item.value }}; }
-EOF
-  cat > "$INF/ansible/templates/factura-site.conf.j2" <<'EOF'
-# géré par Ansible (factura-infra)
-map $upstream_addr $factura_color {
-    "~:8081" blue;
-    "~:8082" green;
-    default  unknown;
-}
-server {
-    listen 80 default_server;
-    server_name _;
-    location / {
-        proxy_pass http://factura_live;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        add_header X-Factura-Color $factura_color always;
-    }
-}
-EOF
-
-  cat > "$INF/.yamllint" <<'EOF'
-extends: default
-rules:
-  line-length:
-    max: 100
-  truthy:
-    allowed-values: ["true", "false", "on"]
-  document-start: disable
-EOF
-
-  cat > "$INF/tofu/versions.tf" <<'EOF'
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.5"
-    }
-  }
-}
-EOF
-  cat > "$INF/tofu/main.tf" <<'EOF'
-variable "hosts" {
-  description = "Machines du lab : nom => IP"
-  type        = map(string)
-  default = {
-    lab-adm = "10.10.10.10"
-    lab-web = "10.10.10.11"
-    lab-db  = "10.10.10.12"
-    lab-ops = "10.10.10.14"
-  }
-}
-
-resource "local_file" "inventaire" {
-  filename        = "${path.module}/generated/inventaire.ini"
-  file_permission = "0644"
-  content = join("\n", concat(
-    ["[lab]"],
-    [for n, ip in var.hosts : "${n} ansible_host=${ip}"],
-    [""]
-  ))
-}
-
-output "hosts" {
-  value = keys(var.hosts)
-}
-EOF
-  cat > "$INF/tofu/.gitignore" <<'EOF'
+cat > .gitignore <<'EOF'
+# Terraform
 .terraform/
 *.tfstate
 *.tfstate.backup
-plan.bin
-plan.txt
-generated/
+
+# Ansible
+*.retry
+
+# éditeurs
+*.swp
 EOF
+git add -A
+commit_as mathieu "2026-06-01T09:12:00+02:00" \
+  -m "chore: initialise le dépôt factura-infra"
+
+# --- c2 : inventaire --------------------------------------------------
+mkdir -p ansible/playbooks ansible/roles/nginx/templates
+cat > ansible/inventory.ini <<'EOF'
+[adm]
+lab-adm  ansible_host=10.10.10.10
+
+[web]
+lab-web  ansible_host=10.10.10.11
+
+[db]
+lab-db   ansible_host=10.10.10.12
+
+[rhel]
+lab-rhel ansible_host=10.10.10.13
+
+[ops]
+lab-ops  ansible_host=10.10.10.14
+
+[lab:children]
+adm
+web
+db
+rhel
+ops
+EOF
+git add -A
+commit_as mathieu "2026-06-02T10:03:00+02:00" \
+  -m "feat(ansible): inventaire statique du lab"
+
+# --- c3 : playbook + rôle nginx (alice) --------------------------------
+cat > ansible/playbooks/web.yml <<'EOF'
+---
+- name: Frontal web factura
+  hosts: web
+  become: true
+  roles:
+    - nginx
+EOF
+cat > ansible/roles/nginx/templates/factura.conf.j2 <<'EOF'
+# {{ ansible_managed }}
+events {
+    worker_connections 1024;
+}
+
+http {
+    server {
+        listen 80;
+        server_name factura.lab.local;
+        root /srv/factura/public;
+
+        location /api/ {
+            proxy_pass http://127.0.0.1:8080/;
+        }
+    }
+}
+EOF
+git add -A
+commit_as alice "2026-06-03T14:41:00+02:00" \
+  -m "feat(ansible): playbook web.yml et rôle nginx"
+
+# --- c4 : healthcheck (mathieu) ---------------------------------------
+mkdir -p bin
+cat > bin/healthcheck.sh <<'EOF'
+#!/usr/bin/env bash
+# healthcheck.sh — vérifie la cohérence du dépôt avant déploiement
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+rc=0
+[ -f ansible/inventory.ini ] || { echo "manquant : ansible/inventory.ini"; rc=1; }
+[ -f ansible/playbooks/web.yml ] || { echo "manquant : ansible/playbooks/web.yml"; rc=1; }
+grep -q 'server_name factura.lab.local' \
+  ansible/roles/nginx/templates/factura.conf.j2 \
+  || { echo "server_name absent du template nginx"; rc=1; }
+
+[ "$rc" -eq 0 ] && echo "healthcheck OK"
+exit "$rc"
+EOF
+chmod 755 bin/healthcheck.sh
+git add -A
+commit_as mathieu "2026-06-04T09:30:00+02:00" \
+  -m "feat(bin): healthcheck.sh, contrôle de cohérence du dépôt"
+
+# --- c5 : terraform (bob) ---------------------------------------------
+mkdir -p terraform
+cat > terraform/main.tf <<'EOF'
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "~> 0.60"
+    }
+  }
+}
+
+provider "proxmox" {
+  endpoint = var.pve_endpoint
+  insecure = true
+}
+
+resource "proxmox_virtual_environment_vm" "lab_web" {
+  name      = "lab-web"
+  node_name = var.pve_node
+  vm_id     = 9002
+}
+EOF
+cat > terraform/variables.tf <<'EOF'
+variable "pve_endpoint" {
+  type    = string
+  default = "https://192.168.1.50:8006/"
+}
+
+variable "pve_node" {
+  type    = string
+  default = "pve"
+}
+EOF
+git add -A
+commit_as bob "2026-06-05T16:20:00+02:00" \
+  -m "feat(terraform): main.tf et variables.tf pour Proxmox"
+
+# --- c6 : fix nginx (alice) -------------------------------------------
+sed -i 's/worker_connections 1024;/worker_connections 4096;/' \
+  ansible/roles/nginx/templates/factura.conf.j2
+git add -A
+commit_as alice "2026-06-08T11:05:00+02:00" \
+  -m "fix(nginx): worker_connections 1024 -> 4096"
+
+# --- c7 : le secret commité par erreur (bob) --------------------------
+cat > .env <<'EOF'
+# conf locale de bob — NE PAS COMMITER
+DB_HOST=10.10.10.12
+DB_USER=factura
+DB_PASSWORD=S3cr3t-Factura-2026!
+API_KEY=AKIAIOSFODNN7EXAMPLE
+EOF
+git add -A
+commit_as bob "2026-06-09T08:47:00+02:00" \
+  -m "chore: ajoute la conf locale de dev"
+
+# --- c8 : "retire" le secret (bob) ------------------------------------
+git rm -q .env
+printf '\n# conf locale\n.env\n' >> .gitignore
+git add -A
+commit_as bob "2026-06-09T09:02:00+02:00" \
+  -m "fix: retire .env du dépôt et l'ignore"
+tag_as bob "2026-06-09T09:05:00+02:00" v0.9.0
+
+# --- branche feature/inventaire-dynamique (alice), 2 commits ----------
+git switch -q -c feature/inventaire-dynamique
+cat > ansible/ansible.cfg <<'EOF'
+[defaults]
+inventory = inventory.ini
+host_key_checking = False
+retry_files_enabled = False
+interpreter_python = auto_silent
+EOF
+git add -A
+commit_as alice "2026-06-10T10:15:00+02:00" \
+  -m "feat(ansible): ansible.cfg avec inventaire par défaut"
+cat >> ansible/inventory.ini <<'EOF'
+
+[lab:vars]
+ansible_user=mathieu
+ansible_python_interpreter=/usr/bin/python3
+EOF
+git add -A
+commit_as alice "2026-06-11T15:48:00+02:00" \
+  -m "feat(ansible): variables de groupe lab"
+
+# --- c9 sur main : runbook (mathieu) ----------------------------------
+git switch -q main
+mkdir -p docs
+cat > docs/runbook.md <<'EOF'
+# Runbook factura
+
+## Mise en production
+
+1. `bin/healthcheck.sh` doit répondre `healthcheck OK`.
+2. `ansible-playbook -i ansible/inventory.ini ansible/playbooks/web.yml`
+3. Vérifier `curl -I http://factura.lab.local/`.
+EOF
+git add -A
+commit_as mathieu "2026-06-10T17:30:00+02:00" \
+  -m "docs: runbook de mise en production"
+
+# --- merge --no-ff (mathieu) ------------------------------------------
+merge_as mathieu "2026-06-12T09:00:00+02:00" --no-ff \
+  -m "Merge branch 'feature/inventaire-dynamique'" \
+  feature/inventaire-dynamique
+git branch -q -d feature/inventaire-dynamique
+
+# --- c10 : deploy.sh (mathieu) ----------------------------------------
+cat > bin/deploy.sh <<'EOF'
+#!/usr/bin/env bash
+# deploy.sh — pousse la configuration vers un hôte du lab
+set -euo pipefail
+HOTE=${1:?usage: deploy.sh <hote>}
+SRC="$(dirname "$0")/../ansible/"
+DEST="/srv/factura-conf/"
+
+rsync -a --delete "$SRC" "mathieu@$HOTE:$DEST"
+ssh "mathieu@$HOTE" sudo systemctl reload nginx
+echo "déployé sur $HOTE"
+EOF
+chmod 755 bin/deploy.sh
+git add -A
+commit_as mathieu "2026-06-15T14:10:00+02:00" \
+  -m "feat(bin): deploy.sh, déploiement par rsync"
+tag_as mathieu "2026-06-15T14:15:00+02:00" -a v1.0.0 \
+  -m "Version 1.0.0 — première mise en production"
+
+# --- branche hotfix/ansible-timeout (bob), depuis v1.0.0 --------------
+git switch -q -c hotfix/ansible-timeout
+printf 'timeout = 30\nforks = 10\n' >> ansible/ansible.cfg
+git add -A
+commit_as bob "2026-06-19T18:22:00+02:00" \
+  -m "fix(ansible): timeout SSH 30 s et 10 forks"
+git switch -q main
+
+# --- c11 : LE commit qui casse le healthcheck (bob) -------------------
+cat > bin/healthcheck.sh <<'EOF'
+#!/usr/bin/env bash
+# healthcheck.sh — vérifie la cohérence du dépôt avant déploiement
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+rc=0
+verif_fichier() {
+  [ -f "$1" ] || { echo "manquant : $1"; rc=1; }
+}
+verif_motif() {
+  grep -q "$1" "$2" || { echo "motif absent : $1 ($2)"; rc=1; }
+}
+
+for f in ansible/inventory.ini ansible/ansible.cfg \
+         ansible/playbooks/web.yaml bin/deploy.sh; do
+  verif_fichier "$f"
+done
+verif_motif 'server_name factura.lab.local' \
+  ansible/roles/nginx/templates/factura.conf.j2
+
+[ "$rc" -eq 0 ] && echo "healthcheck OK"
+exit "$rc"
+EOF
+git add -A
+commit_as bob "2026-06-18T10:40:00+02:00" \
+  -m "refactor(healthcheck): factorise les vérifications"
+
+# --- c12 : terraform réseau (bob) -------------------------------------
+cat > terraform/network.tf <<'EOF'
+resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
+  node_name = var.pve_node
+  name      = "vmbr1"
+  comment   = "réseau de lab 10.10.10.0/24"
+}
+EOF
+git add -A
+commit_as bob "2026-06-20T11:00:00+02:00" \
+  -m "feat(terraform): bridge vmbr1 du réseau de lab"
+
+# --- c13 : changelog (alice) ------------------------------------------
+cat > CHANGELOG.md <<'EOF'
+# Changelog
+
+## 1.0.0 — 2026-06-15
+
+* première mise en production
+* déploiement par `bin/deploy.sh`
+EOF
+git add -A
+commit_as alice "2026-06-22T09:25:00+02:00" \
+  -m "docs: changelog 1.0.0"
+
+# --- c14 : fix deploy (mathieu) ---------------------------------------
+cat > bin/deploy.sh <<'EOF'
+#!/usr/bin/env bash
+# deploy.sh — pousse la configuration vers un hôte du lab
+set -euo pipefail
+HOTE=${1:?usage: deploy.sh <hote> [--vraiment]}
+SRC="$(dirname "$0")/../ansible/"
+DEST="/srv/factura-conf/"
+
+opts=(-a --delete)
+[ "${2:-}" = "--vraiment" ] || opts+=(--dry-run -v)
+
+rsync "${opts[@]}" "$SRC" "mathieu@$HOTE:$DEST"
+if [ "${2:-}" = "--vraiment" ]; then
+  ssh "mathieu@$HOTE" sudo systemctl reload nginx
+  echo "déployé sur $HOTE"
+else
+  echo "simulation terminée ; relance avec --vraiment pour déployer"
 fi
-publier_depot "$INF" factura-infra
+EOF
+git add -A
+commit_as mathieu "2026-06-25T16:05:00+02:00" \
+  -m "fix(deploy): rsync --delete en simulation par défaut"
+
+# --- c15 : .gitattributes (mathieu) -----------------------------------
+cat > .gitattributes <<'EOF'
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.tar.gz binary
+EOF
+git add -A
+commit_as mathieu "2026-06-26T09:10:00+02:00" \
+  -m "chore: .gitattributes, fins de ligne LF et binaires"
+
+# --- c16 : HSTS (alice) — touche la zone que feature/tls modifiera ----
+python3 - <<'PY'
+p='ansible/roles/nginx/templates/factura.conf.j2'
+s=open(p).read()
+s=s.replace('''        root /srv/factura/public;
+''','''        root /srv/factura/public;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options nosniff;
+''')
+open(p,'w').write(s)
+PY
+git add -A
+commit_as alice "2026-06-29T13:37:00+02:00" \
+  -m "feat(nginx): en-têtes de sécurité HSTS et nosniff"
+
+# --- c17 : rollback dans le runbook (mathieu) -------------------------
+cat >> docs/runbook.md <<'EOF'
+
+## Rollback
+
+1. `git switch --detach <tag précédent>`
+2. `bin/deploy.sh lab-web --vraiment`
+3. Ouvrir un ticket post-mortem.
+EOF
+git add -A
+commit_as mathieu "2026-07-01T10:00:00+02:00" \
+  -m "docs(runbook): procédure de rollback"
+
+# --- branche feature/tls-letsencrypt (alice) depuis c14 ---------------
+git switch -q -c feature/tls-letsencrypt "main~3"
+python3 - <<'PY'
+p='ansible/roles/nginx/templates/factura.conf.j2'
+s=open(p).read()
+s=s.replace('''        listen 80;
+        server_name factura.lab.local;
+        root /srv/factura/public;
+''','''        listen 443 ssl;
+        server_name factura.lab.local;
+        root /srv/factura/public;
+        ssl_certificate     /etc/letsencrypt/live/factura/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/factura/privkey.pem;
+''')
+open(p,'w').write(s)
+PY
+git add -A
+commit_as alice "2026-07-02T09:15:00+02:00" \
+  -m "feat(nginx): écoute en 443 avec certificat Let's Encrypt"
+cat > ansible/roles/nginx/tasks_certbot.yml <<'EOF'
+---
+- name: Installe certbot
+  ansible.builtin.apt:
+    name: certbot
+    state: present
+EOF
+git add -A
+commit_as alice "2026-07-02T11:40:00+02:00" -m "wip"
+sed -i 's/Installe certbot/Installe certbot (paquet Ubuntu)/' \
+  ansible/roles/nginx/tasks_certbot.yml
+git add -A
+commit_as alice "2026-07-02T11:52:00+02:00" -m "fix typo"
+cat >> ansible/roles/nginx/tasks_certbot.yml <<'EOF'
+
+- name: Active le renouvellement automatique
+  ansible.builtin.systemd:
+    name: certbot.timer
+    enabled: true
+    state: started
+EOF
+git add -A
+commit_as alice "2026-07-03T10:05:00+02:00" \
+  -m "feat(nginx): renouvellement automatique par certbot.timer"
+git switch -q main
 
 # ---------------------------------------------------------------------
-# 5. Données pour E21.15 (journal de déploiements fictif)
+# 3. Dépôt distant (bare) + clone de travail + clone « collègue »
 # ---------------------------------------------------------------------
-if [ ! -s "$BASE/rapports/deploiements.log" ]; then
-  first=$(git_u -C "$APP" rev-parse --short=12 HEAD)
-  {
-    echo "# date;sha;resultat  (journal fictif fourni par le setup)"
-    for j in 20 17 15 12 9 8 6 3 1; do
-      d=$(date -d "$j days ago 10:$((RANDOM % 60)):00" -Is)
-      res=ok; [ "$j" -eq 9 ] && res=ko
-      echo "$d;$first;$res"
-    done
-  } > "$BASE/rapports/deploiements.log"
+cd "$BASE"
+git clone -q --bare "$BASE/.build" "$REMOTE"
+git -C "$REMOTE" symbolic-ref HEAD refs/heads/main
+rm -rf "$BASE/.build"
+
+git clone -q "$REMOTE" "$DEPOT"
+cd "$DEPOT"
+git config user.name mathieu
+git config user.email mathieu@lab.local
+git switch -q -c feature/tls-letsencrypt origin/feature/tls-letsencrypt
+git switch -q -c hotfix/ansible-timeout origin/hotfix/ansible-timeout
+git switch -q main
+
+# le collègue (alice) pousse un commit que le clone local n'a pas encore
+git clone -q "$REMOTE" "$COLLEGUE"
+cd "$COLLEGUE"
+git config user.name alice
+git config user.email alice@lab.local
+printf '\nVoir aussi `docs/runbook.md` avant toute mise en production.\n' \
+  >> README.md
+git add -A
+commit_as alice "2026-07-03T16:20:00+02:00" \
+  -m "docs(readme): renvoi vers le runbook"
+git push -q origin main
+
+# ---------------------------------------------------------------------
+# 4. Bruit non suivi dans le clone de travail (exercices .gitignore)
+# ---------------------------------------------------------------------
+cd "$DEPOT"
+mkdir -p terraform/.terraform/providers/registry.terraform.io/bpg/proxmox
+printf 'lock\n' > terraform/.terraform/providers/lock.json
+printf '{"version": 4}\n' > terraform/terraform.tfstate
+printf 'lab-web\n' > ansible/playbooks/web.retry
+mkdir -p logs
+: > logs/.gitkeep
+printf '2026-07-03 deploy lab-web ok\n' > logs/deploy.log
+printf 'brouillon\n' > ansible/notes-perso.txt
+printf 'swap\n' > .README.md.swp
+
+# ---------------------------------------------------------------------
+# 5. Propriétaire final
+# ---------------------------------------------------------------------
+if [ "$(id -u)" -eq 0 ] && [ "$LAB_USER" != root ]; then
+  chown -R "$LAB_USER":"$LAB_USER" "$BASE"
 fi
 
-chown -R "$LAB_USER:$LAB_USER" "$BASE"
-# les données Gitea/PostgreSQL/registre appartiennent aux conteneurs
-chown -R 1000:1000 "$BASE/forge/gitea" 2>/dev/null || true
+for outil in git-filter-repo shellcheck yamllint; do
+  command -v "$outil" >/dev/null 2>&1 || \
+    echo "  note : $outil n'est pas installé (voir §21.1)"
+done
 
 cat <<EOF
 
-== lab-ops prêt ==
-  Gitea      : $GITEA_URL  ($LAB_USER / $GITEA_PASS)
-  API        : jeton dans $BASE/.gitea-token
-  Registre   : $REG  ($REG_USER / $REG_PASS), docker login fait
-  Runner     : docker compose -f $BASE/forge/compose.yaml ps
-  Dépôts     : $GITEA_URL/$LAB_USER/factura, .../factura-infra
-  Clés       : $BASE/keys/{deploy,bg,ansible}
-Pense à « newgrp docker » (ou reconnecte-toi) pour utiliser docker sans sudo.
+Prêt. Points d'entrée :
+  $DEPOT            dépôt de travail (branche main, 1 commit en retard)
+  $REMOTE   « origin » : dépôt bare local
+  $COLLEGUE  clone d'alice, pour simuler un collègue
+  $BASE/rapports/                 tes livrables (jamais effacé)
+
+Branches : main, feature/tls-letsencrypt, hotfix/ansible-timeout
+Tags     : v0.9.0 (léger), v1.0.0 (annoté)
 EOF

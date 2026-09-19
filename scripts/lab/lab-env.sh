@@ -39,7 +39,7 @@ LAB_DIR="${LAB_DIR:-/root/lab}"
 LAB_USER="${LAB_USER:-mathieu}"
 LAB_SSHKEYS="${LAB_SSHKEYS:-/root/lab/lab-keys.pub}"   # clés publiques
 
-# --- Les 6 VM : "vmid nom ip template cores ram_mo disque_go" ------------
+# --- Les 7 VM : "vmid nom ip template cores ram_mo disque_go" ------------
 # L'ordre est celui de la table du §1 des conventions.
 LAB_VMS=(
   "9001 lab-adm  10.10.10.10 ubuntu 2 2048 20"
@@ -48,11 +48,17 @@ LAB_VMS=(
   "9004 lab-rhel 10.10.10.13 rocky  2 2048 20"
   "9005 lab-ops  10.10.10.14 ubuntu 2 4096 40"
   "9006 lab-git  10.10.10.15 ubuntu 1 1024 15"
+  "9007 lab-virt 10.10.10.16 ubuntu 4 6144 40"
 )
 
 # Disques additionnels de lab-db (taille en Go), non formatés.
 LAB_DB_VMID=9003
 LAB_DB_EXTRA_DISKS=(5 5)
+
+# lab-virt (module 20) : CPU « host » pour la virtualisation imbriquée.
+# Le paramètre nested du module KVM du nœud reste à activer à la main
+# (chapitre 0.3) ; lab-status.sh le vérifie.
+LAB_VIRT_VMID=9007
 
 # Nom du snapshot de référence.
 LAB_SNAP="${LAB_SNAP:-snap-clean}"

@@ -1,47 +1,73 @@
 #!/usr/bin/env bash
-# break_M09_01.sh — panne BF9.1 (base dpkg en état incohérent)
+# break_M09_01.sh — panne BF9.1 (/boot plein : mise à jour du noyau impossible)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-PAQ="$LAB_HOME/lab09/paquets/outil-lab_1.3.0_all.deb"
 mkdir -p "$SAUV"
+LISTE="$SAUV/M09_01.files"
 
-[ -f "$PAQ" ] || {
-  echo "$PAQ absent : lance d'abord setup_M09.sh" >&2; exit 1; }
-
-# --- 1. outil-lab 1.3.0 : son postinst exige un fichier de licence -----
-# On s'assure qu'il n'existe pas, puis on installe : dpkg dépose les
-# fichiers (unpack) mais échoue à la configuration.
-rm -f /etc/outil-lab/licence.key
-DEBIAN_FRONTEND=noninteractive \
-  dpkg -i --force-confdef --force-confold "$PAQ" >/dev/null 2>&1 || true
-
-# --- 2. journal dpkg non rejoué ---------------------------------------
-# Une entrée numérique dans /var/lib/dpkg/updates fait croire à apt
-# qu'une transaction dpkg a été interrompue : il refuse de travailler.
-mkdir -p /var/lib/dpkg/updates
-if [ ! -f "$SAUV/M09_01.marqueur" ]; then
-  : > "$SAUV/M09_01.marqueur"
+# /boot doit être une partition séparée : on ne remplit jamais la racine.
+if ! findmnt -n /boot >/dev/null 2>&1; then
+  echo "/boot n'est pas une partition séparée sur cette VM : scénario" >&2
+  echo "inapplicable (l'installation guidée Ubuntu avec LVM en crée une)." >&2
+  exit 1
 fi
-# Le fichier est laissé vide à dessein : apt ne regarde que le nom
-# (une suite de chiffres), et un contenu invalide rendrait dpkg-query
-# lui-même inutilisable — ce n'est pas la panne recherchée.
-: > /var/lib/dpkg/updates/0042
+command -v fallocate >/dev/null 2>&1 || { echo "fallocate requis" >&2; exit 1; }
 
-# --- 3. verrou orphelin ------------------------------------------------
-# Un /var/lib/dpkg/lock-frontend laissé par un apt tué au mauvais moment
-# n'est PAS le problème ici (le verrou est libéré à la mort du process),
-# mais on ajoute le symptôme classique : un cache d'archives partiel.
-mkdir -p /var/cache/apt/archives/partial
-: > /var/cache/apt/archives/partial/outil-lab_1.3.0_all.deb.FAILED
+K="$(uname -r)"
+# Deux versions « fantômes », plus anciennes que la courante, sans paquet.
+V1="6.8.0-31-generic"; V2="6.8.0-35-generic"
+for v in "$V1" "$V2"; do
+  [ "$v" = "$K" ] && { echo "version fantôme = noyau courant ?!" >&2; exit 1; }
+done
 
-cat <<'EOF'
+# Déjà cassé ? on ne refait pas le remplissage (idempotence).
+if [ -s "$LISTE" ] && [ "$(df --output=avail -B1M /boot | tail -1)" -lt 16 ]
+then
+  :
+else
+  : > "$LISTE"
+  # Espace à consommer : tout sauf ~6 Mo.
+  AVAIL=$(df --output=avail -B1 /boot | tail -1 | tr -d ' ')
+  RESTE=$((6 * 1024 * 1024))
+  if [ "$AVAIL" -le $((RESTE + 40 * 1024 * 1024)) ]; then
+    echo "/boot est déjà presque plein : rien à faire" >&2; exit 1
+  fi
+  ACONS=$((AVAIL - RESTE))
+  PETIT=$((14 * 1024 * 1024))       # vmlinuz factice
+  MAP=$((8 * 1024 * 1024))          # System.map factice
+  # ce qui reste, réparti sur les deux initrd factices
+  INITRD=$(( (ACONS - 2 * (PETIT + MAP)) / 2 ))
+  for v in "$V1" "$V2"; do
+    for f in "vmlinuz-$v:$PETIT" "System.map-$v:$MAP" \
+             "initrd.img-$v:$INITRD"; do
+      n="${f%%:*}"; s="${f##*:}"
+      fallocate -l "$s" "/boot/$n" 2>/dev/null || \
+        dd if=/dev/zero of="/boot/$n" bs=1M count=$((s/1024/1024)) \
+           status=none 2>/dev/null || true
+      echo "/boot/$n" >> "$LISTE"
+    done
+    printf '# fake config\n' > "/boot/config-$v"; echo "/boot/config-$v" >> "$LISTE"
+  done
+  sync
+fi
 
-Symptôme attendu : « sudo apt install <n'importe quoi> » refuse de
-démarrer avec un message d'erreur unique, sans rien installer.
-« dpkg -l outil-lab » n'affiche pas ii dans la première colonne.
-EOF
+# Le symptôme : la régénération de l'initrd échoue (sans rien abîmer :
+# mkinitramfs écrit dans .new et efface en cas d'échec).
+if command -v update-initramfs >/dev/null 2>&1; then
+  update-initramfs -u -k "$K" >/dev/null 2>&1 || true
+  # au cas où un .new aurait survécu
+  rm -f "/boot/initrd.img-$K.new"
+fi
+
+cat <<'EOF2'
+
+Symptôme attendu : « sudo apt upgrade » comme « sudo update-initramfs -u »
+échouent sur « No space left on device » puis
+« update-initramfs: failed for /boot/initrd.img-... with 1 ».
+df -h / montre pourtant beaucoup d'espace libre.
+Sauvegarde : la liste de ce qui a été ajouté est dans
+/root/.breakfix-backup/M09_01.files (à ne lire qu'après avoir trouvé).
+EOF2

@@ -1,79 +1,75 @@
 #!/usr/bin/env bash
-# break_M19_03.sh — panne BF19.3 : « le vault ne s'ouvre plus »
-# Rechiffre inventory/group_vars/all/vault.yml avec un autre mot de passe et
-# retire vault_password_file d'ansible.cfg. Laisse un mail dans ~/lab19/casse.
+# break_M19_03.sh — panne BF19.3 (disque plein : fichier supprimé encore
+#                   ouvert par un processus)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-BASE="$LAB_HOME/lab19"
-VAULT="$BASE/inventory/group_vars/all/vault.yml"
-CFG="$BASE/ansible.cfg"
-VP="$BASE/.vault_pass"
 SAUV=/root/.breakfix-backup
-mkdir -p "$SAUV" "$BASE/casse"
-[ -f "$VAULT" ] && [ -f "$VP" ] && [ -f "$CFG" ] \
-  || { echo "projet ~/lab19 incomplet : lance setup_M19.sh" >&2; exit 1; }
+DATA=/srv/vitrine/data
+GARDE=/usr/local/sbin/vitrine-rotation
+mkdir -p "$SAUV"
 
-as_user() { sudo -u "$LAB_USER" -H env PATH="$LAB_HOME/.local/bin:$PATH" "$@"; }
-JULIEN_PASS='Julien-Temp-2026!'
-TMPJ=$(mktemp); printf '%s\n' "$JULIEN_PASS" > "$TMPJ"; chmod 644 "$TMPJ"
-trap 'rm -f "$TMPJ"' EXIT
+mountpoint -q "$DATA" || {
+  echo "$DATA n'est pas monté : lance setup_M19.sh" >&2; exit 1; }
 
-# état sain ? -> sauvegarde ; déjà cassé ? -> on repart de la sauvegarde
-if as_user ansible-vault view --vault-password-file "$VP" "$VAULT" \
-     >/dev/null 2>&1; then
-  cp -a "$VAULT" "$SAUV/M19_03_vault.yml"
-  cp -a "$CFG" "$SAUV/M19_03_ansible.cfg"
-elif [ -f "$SAUV/M19_03_vault.yml" ]; then
-  cp -a "$SAUV/M19_03_vault.yml" "$VAULT"
-  cp -a "$SAUV/M19_03_ansible.cfg" "$CFG"
-else
-  echo "vault.yml ne se déchiffre pas et aucune sauvegarde : relance" \
-       "setup_M19.sh" >&2; exit 1
+# --- déjà cassé ? on ne rejoue pas --------------------------------------
+if pgrep -f "$GARDE" >/dev/null 2>&1; then
+  cat <<'EOF'
+
+Symptôme attendu : toute écriture échoue avec « OSError: [Errno 28] No
+space left on device ». « df -h /srv/vitrine/data » affiche 100 %, alors
+que « du -xsh /srv/vitrine/data » ne trouve que quelques Mo.
+EOF
+  exit 0
 fi
 
-# 1. rechiffrage avec le mot de passe perso de Julien
-as_user ansible-vault rekey --vault-password-file "$VP" \
-  --new-vault-password-file "$TMPJ" "$VAULT" >/dev/null
-# 2. « nettoyage » d'ansible.cfg : plus de fichier de mot de passe
-sed -i 's/^vault_password_file/# vault_password_file/' "$CFG"
+if [ ! -f "$SAUV/M19_03.etat" ]; then
+  df -h "$DATA" > "$SAUV/M19_03.etat"
+fi
 
-# 3. le mail
-cat > "$BASE/casse/mail-julien.txt" <<'EOF'
-De      : julien@lab.local
-À       : ops@lab.local
-Objet   : vault - pense-bête avant mes congés
-Date    : vendredi, 17:52
+# --- le processus qui retient l'espace ----------------------------------
+cat > "$GARDE" <<'PYEOF'
+#!/usr/bin/env python3
+"""vitrine-rotation — agent d'archivage des journaux de vitrine.
 
-Salut,
+Ouvre son fichier de travail, l'utilise, puis le retire du répertoire
+(il continue de s'en servir par son descripteur). Version 1.4.
+"""
+import os
+import sys
+import time
 
-j'ai dû tester baseline.yml depuis mon portable perso où je n'ai pas le
-.vault_pass de l'équipe (et je ne voulais pas le copier dessus). J'ai donc
-rechiffré inventory/group_vars/all/vault.yml avec un mot de passe à moi le
-temps du test, et j'ai enlevé la ligne vault_password_file d'ansible.cfg qui
-me générait une erreur sur le portable.
+CIBLE = sys.argv[1] if len(sys.argv) > 1 else "/srv/vitrine/data"
+chemin = os.path.join(CIBLE, "rotation-en-cours.tmp")
+f = open(chemin, "wb")
+bloc = b"a" * (1024 * 1024)
+try:
+    while True:
+        f.write(bloc)
+        f.flush()
+except OSError:
+    pass
+try:
+    os.unlink(chemin)
+except OSError:
+    pass
+while True:
+    time.sleep(3600)
+PYEOF
+chmod 0755 "$GARDE"
 
-Je remets tout en ordre lundi en rentrant. Si vous en avez besoin avant, mon
-mot de passe temporaire est : Julien-Temp-2026!
-(ne le notez nulle part, je le change à mon retour)
+setsid nohup "$GARDE" "$DATA" >/dev/null 2>&1 < /dev/null &
+sleep 4
 
-Bon week-end,
-Julien
-EOF
-chown -R "$LAB_USER":"$LAB_USER" "$BASE/casse" "$VAULT" "$CFG"
+if [ -d /run/systemd/system ]; then
+  systemctl restart vitrine-api.service >/dev/null 2>&1 || true
+fi
 
 cat <<'EOF'
 
-Symptôme attendu : dans ~/lab19, n'importe quelle commande Ansible, même
-ansible all -m ansible.builtin.ping, s'arrête avant de toucher un hôte :
-  ERROR! Attempting to decrypt but no vault secrets found
-Après un premier bricolage dans ansible.cfg, le message devient :
-  ERROR! Decryption failed (no vault secrets were found that could decrypt)
-Un mail de Julien traîne dans ~/lab19/casse/. Objectif : retrouver l'accès,
-rechiffrer avec le mot de passe de l'équipe (~/lab19/.vault_pass), remettre
-ansible.cfg en état.
+Symptôme attendu : toute écriture échoue avec « OSError: [Errno 28] No
+space left on device ». « df -h /srv/vitrine/data » affiche 100 %, alors
+que « du -xsh /srv/vitrine/data » ne trouve que quelques Mo.
+Pour reproduire : curl -s http://127.0.0.1:8080/commande
 EOF

@@ -4,7 +4,7 @@
 
 ::: objectif
 Ce projet fil rouge reprend la plateforme Factura du projet A et la refait
-**avec les outils des modules 17 à 22** : Git, Docker et Compose, Ansible,
+**avec les outils des modules 21 à 26** : Git, Docker et Compose, Ansible,
 OpenTofu, Gitea Actions, k3s et la pile Prometheus/Grafana/Loki. À la fin, tu
 sais :
 
@@ -28,7 +28,7 @@ sais :
   choix Compose ou k3s pour une PME.
 
 Temps estimé : 30 à 40 h, sur trois à quatre semaines.
-Prérequis : projet A terminé (ou au moins lu), modules 17 à 22 faits.
+Prérequis : projet A terminé (ou au moins lu), modules 21 à 26 faits.
 :::
 
 ### Le contexte
@@ -77,7 +77,7 @@ du mono-repo et tu ne la modifies **pas**, sauf les `Dockerfile`, le
   corriges le code (rôle, template, HCL) et tu rejoues. Le check de PB.5
   vérifie l'idempotence : une modification manuelle se voit.
 * **`lab-ops` reste ta machine d'outillage** (Gitea, runner, registre,
-  supervision, sauvegardes) : elle a été configurée aux modules 21 et 22 et
+  supervision, sauvegardes) : elle a été configurée aux modules 25 et 26 et
   tu la complètes par des playbooks (inventaire `ops.ini`).
 * Chaque jalon a un **livrable dans le dépôt** et se valide par
   `check_PB_YY.sh` (dans `~/workbook/scripts/projects/P2/`), lancé depuis
@@ -108,7 +108,7 @@ que le lab de base. Si ton Proxmox est juste, détruis le staging
 (`tofu destroy` dans le workspace `staging`) avant PB.10 : c'est précisément
 ce que l'infrastructure as code permet.
 
-Prérequis à vérifier avant de commencer (tout vient des modules 20 à 22) :
+Prérequis à vérifier avant de commencer (tout vient des modules 24 à 26) :
 
 1. **Proxmox** : template cloud-init Ubuntu 24.04 **VMID 9000** sur `vmbr1`
    (`tools/make-template.sh` le recrée), stockage `local` acceptant les
@@ -116,7 +116,7 @@ Prérequis à vérifier avant de commencer (tout vient des modules 20 à 22) :
    `Datastore.AllocateSpace`, `Datastore.AllocateTemplate`, `SDN.Use` sur
    `/`, et une clé SSH de `mathieu@lab-adm` acceptée par `root@10.10.10.1`
    (le provider envoie les snippets par SSH).
-2. **Gitea** sur `lab-ops:3000` (module 21) : compte `mathieu`, le registre
+2. **Gitea** sur `lab-ops:3000` (module 25) : compte `mathieu`, le registre
    de paquets intégré activé (`http://lab-ops.lab.local:3000/v2/`), un
    **act_runner en mode hôte** enregistré avec le label `ops-host`
    (c'est-à-dire `ops-host:host` dans `runner.labels`), lancé par une unité
@@ -126,7 +126,7 @@ Prérequis à vérifier avant de commencer (tout vient des modules 20 à 22) :
    lancer `ansible-playbook` et `docker push` sans conteneur.
 3. **Supervision** : `lab-ops` a de la place sur les ports 9090, 9093, 3001,
    3100, 9115 (Prometheus, Alertmanager, Grafana, Loki, blackbox). Gitea
-   garde le 3000. Si le module 22 a laissé une pile dans
+   garde le 3000. Si le module 26 a laissé une pile dans
    `/opt/observabilite`, arrête-la : PB.8 en déploie une nouvelle, par
    Ansible, dans `/opt/factura-monitoring`.
 
@@ -500,7 +500,7 @@ idempotence, `validate`), 12, 13, 14, 15 (ce que les rôles reproduisent).
   suffisant ici) : `journal` scrape avec `json: false` et `relabel` sur
   `__journal__systemd_unit` ; `docker_sd_configs` avec `host:
   unix:///var/run/docker.sock` et un relabel de
-  `__meta_docker_container_name`. Le module 22 a la variante Alloy.
+  `__meta_docker_container_name`. Le module 26 a la variante Alloy.
 * `unattended-upgrades` : le paquet est installé par défaut sur Ubuntu
   Server ; c'est `/etc/apt/apt.conf.d/20auto-upgrades` qui l'active.
 * Quand un rôle n'est pas idempotent, c'est presque toujours un `command`

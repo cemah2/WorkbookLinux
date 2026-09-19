@@ -4,10 +4,10 @@
 # À lancer en root sur le nœud Proxmox VE 8.
 #
 # Usage :
-#   bash lab-reset.sh                 # rollback des 6 VM sur snap-clean
+#   bash lab-reset.sh                 # rollback des 7 VM sur snap-clean
 #   bash lab-reset.sh lab-db          # une seule VM (nom ou VMID)
 #   bash lab-reset.sh lab-db lab-web  # plusieurs
-#   bash lab-reset.sh --snap avant-lab10 lab-db   # autre snapshot
+#   bash lab-reset.sh --snap avant-lab11 lab-db   # autre snapshot
 #   bash lab-reset.sh --list lab-db   # liste les snapshots d'une VM
 set -euo pipefail
 

@@ -1,73 +1,64 @@
 #!/usr/bin/env bash
-# break_M19_01.sh — panne BF19.1 : le playbook « qu'il faut lancer deux fois »
-# Dépose ~/lab19/casse/prepa-deploy.yml, écrit par un collègue en congé.
+# break_M19_01.sh — panne BF19.1 (fuite mémoire jusqu'à l'OOM killer)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-CASSE="$LAB_HOME/lab19/casse"
 SAUV=/root/.breakfix-backup
-mkdir -p "$SAUV" "$CASSE/files"
+DROPD=/etc/systemd/system/vitrine-api.service.d
+DROP="$DROPD/90-m16-01.conf"
+mkdir -p "$SAUV" "$DROPD"
 
-[ -f "$CASSE/prepa-deploy.yml" ] \
-  && cp -a "$CASSE/prepa-deploy.yml" "$SAUV/M19_01_prepa-deploy.yml"
+[ -x /opt/vitrine/bin/vitrine-api.py ] || {
+  echo "/opt/vitrine/bin/vitrine-api.py absent : lance setup_M19.sh" >&2
+  exit 1; }
 
-cat > "$CASSE/prepa-deploy.yml" <<'EOF'
----
-# prepa-deploy.yml — prépare les frontaux pour l'appli vitrine (Julien)
-# Testé sur mon poste, ça marche.
-- name: Preparation des frontaux
-  hosts: web
-  become: true
-  tasks:
-    - name: nginx
-      ansible.builtin.apt:
-        name: nginx
-        state: present
-        update_cache: true
+# --- sauvegarde de l'état avant de casser -------------------------------
+if [ ! -f "$SAUV/M19_01.etat" ]; then
+  {
+    echo "drop-ins presents avant la panne :"
+    ls -1 "$DROPD" 2>/dev/null || true
+    echo "MemoryMax avant : \
+$(systemctl show vitrine-api -p MemoryMax --value 2>/dev/null)"
+  } > "$SAUV/M19_01.etat"
+fi
 
-    - name: compte deploy
-      ansible.builtin.shell: useradd -m -s /bin/bash deploy
+# Les garde-fous mémoire éventuellement posés en L19.2 sont mis de côté :
+# sinon la fuite serait contenue et le symptôme n'apparaîtrait pas.
+for f in "$DROPD"/*.conf; do
+  [ -e "$f" ] || continue
+  case "$f" in
+    *90-m16-01.conf) continue ;;
+  esac
+  if grep -qs 'MemoryMax\|MemoryHigh' "$f"; then
+    mv "$f" "$SAUV/M19_01.$(basename "$f").mis-de-cote"
+  fi
+done
 
-    - name: dossier de release
-      ansible.builtin.shell: mkdir /srv/deploy
-
-    - name: droits sur le dossier
-      ansible.builtin.shell: chown deploy:deploy /srv/deploy && chmod 750 /srv/deploy
-
-    - name: sudo pour deploy
-      ansible.builtin.shell: echo 'deploy ALL=(ALL) NOPASSWD: /bin/systemctl reload nginx' >> /etc/sudoers.d/deploy
-
-    - name: page de maintenance
-      ansible.builtin.copy:
-        src: maintenance.html
-        dest: /var/www/html/maintenance.html
-
-    - name: redemarrer nginx
-      ansible.builtin.shell: systemctl restart nginx
+# --- la panne -----------------------------------------------------------
+# 12 Mo par seconde, jamais rendus. Sur une VM à 2 Go, l'OOM killer
+# intervient en deux à trois minutes, puis le cycle recommence.
+cat > "$DROP" <<'EOF'
+[Service]
+Environment=VITRINE_FUITE=12
+MemoryMax=infinity
+MemoryHigh=infinity
+Restart=always
+RestartSec=3s
 EOF
+chmod 0644 "$DROP"
 
-cat > "$CASSE/files/maintenance.html" <<'EOF'
-<!doctype html>
-<html><head><meta charset="utf-8"><title>Maintenance</title></head>
-<body><h1>Vitrine en maintenance</h1><p>Retour dans quelques minutes.</p>
-</body></html>
-EOF
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  systemctl reset-failed vitrine-api.service >/dev/null 2>&1 || true
+  systemctl restart vitrine-api.service >/dev/null 2>&1 || true
+fi
 
-chown -R "$LAB_USER":"$LAB_USER" "$CASSE"
+cat <<'EOF'
 
-cat <<EOF
-
-Symptôme attendu : ~/lab19/casse/prepa-deploy.yml, laissé par Julien,
-« marche » selon lui. Première exécution (cd ~/lab19 &&
-ansible-playbook casse/prepa-deploy.yml) : lab-rhel échoue dès la première
-tâche, lab-web finit changed=7. Deuxième exécution : lab-web échoue à son
-tour (useradd: user 'deploy' already exists, puis mkdir: cannot create
-directory). Une fois ces deux tâches commentées, tout est changed à chaque
-passage et /etc/sudoers.d/deploy s'allonge d'une ligne identique par run.
-Objectif : le même playbook, même intentions, changed=0 en seconde passe
-sur lab-web ET lab-rhel, nginx redémarré seulement si sa conf change.
+Symptôme attendu : le site répond, puis se met à ramer, puis renvoie une
+erreur pendant quelques secondes, puis refonctionne. Le cycle se répète
+toutes les deux à trois minutes et les utilisateurs perdent leur panier.
+« systemctl status vitrine-api » reste sur active (running), mais la date
+du « since » rajeunit sans arrêt.
 EOF

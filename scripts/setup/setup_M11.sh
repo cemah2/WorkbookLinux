@@ -1,278 +1,486 @@
 #!/usr/bin/env bash
-# setup_M11.sh — prépare le terrain du module 11 (réseau et diagnostic)
-# À lancer avec sudo sur lab-adm ET sur lab-web. Idempotent.
+# setup_M11.sh — prépare le terrain du module 11
+#                (stockage, partitions, systèmes de fichiers, LVM)
+# À lancer avec sudo. Idempotent : relançable sans effet de bord.
+#
+# Ce script NE crée AUCUNE partition, AUCUN PV, AUCUN LV, AUCUN système de
+# fichiers sur les disques de travail : les construire est le travail du
+# module. Il se contente de :
+#   - vérifier la présence des paquets nécessaires ;
+#   - déterminer QUELS périphériques serviront de terrain de jeu, et en
+#     fabriquer deux (fichiers-images + loop devices) s'il n'y en a pas ;
+#   - poser l'arborescence /srv/factura, le jeu de données et les scripts.
+#
+# Modes :
+#   setup_M11.sh              préparation standard (sur lab-db)
+#   setup_M11.sh --raid5      idem + une 3e image loop de 5 Go (E11.22)
+#   setup_M11.sh --nfs        serveur NFS du lab L11.5 (sur lab-adm)
+#   setup_M11.sh --etat       n'affiche que l'état courant, ne modifie rien
+#   setup_M11.sh --detacher   détache les loop devices simulés (nettoyage)
+#
+# Le script regarde aussi le NOM D'HÔTE :
+#   lab-ops : installe/vérifie nfs-kernel-server + targetcli-fb, prépare
+#             /srv/nfs et /var/lib/iscsi (labs L11.7 et L11.8), puis s'arrête ;
+#   lab-db  : vérifie en plus nfs-common et open-iscsi.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
+MODE="${1:-}"
+HOTE="$(hostname -s 2>/dev/null || hostname)"
+
 LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
+LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6 || true)"
+# --etat et --detacher n'ont pas besoin du compte de l'apprenant.
+case "${1:-}" in
+  --etat|--detacher|--nfs|--raid5|"") : ;;
+  *) echo "mode inconnu : $1 (voir l'en-tête du script)" >&2; exit 1 ;;
+esac
+case "${1:-}" in
+  --etat|--detacher|--nfs) : ;;
+  *) [ "$HOTE" = "lab-ops" ] || [ -n "$LAB_HOME" ] \
+       || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; } ;;
+esac
 
-BASE="$LAB_HOME/lab11"
-HOSTN="$(hostname -s)"
-SAUV=/root/.m11-backup
-mkdir -p "$SAUV"
+BASE="${LAB_HOME:-/root}/lab11"
+BIN=/opt/factura/bin
+LOGD=/var/log/factura
+IMGD=/var/lib/lab11
+ENVF=/etc/lab11.env
+TAILLE_IMG=5G
 
-# interface portant la route par défaut (ens18 sur les VM du lab)
-IFACE="$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')"
-[ -n "$IFACE" ] || IFACE="$(ip -o -4 -br a show up scope global \
-                            | awk '{print $1; exit}')"
-[ -n "$IFACE" ] || IFACE=ens18
-
-echo "== Préparation du module 11 =="
-echo "   hôte        : $HOSTN"
-echo "   utilisateur : $LAB_USER"
-echo "   interface   : $IFACE"
+# Candidats « vrais disques » du lab, dans l'ordre de préférence.
+CANDIDATS=(/dev/sdb /dev/sdc /dev/vdb /dev/vdc)
 
 # ---------------------------------------------------------------------
-# 1. Sauvegardes de ce que les labs et les pannes vont modifier
+# Utilitaires
 # ---------------------------------------------------------------------
-for f in /etc/hosts /etc/nsswitch.conf; do
-  b="$SAUV/$(basename "$f").orig"
-  [ -f "$b" ] || cp -a "$f" "$b"
-done
-if [ -d /etc/netplan ] && [ ! -d "$SAUV/netplan.orig" ]; then
-  cp -a /etc/netplan "$SAUV/netplan.orig"
-fi
-# nature de /etc/resolv.conf avant que BF11.2 n'y touche
-[ -f "$SAUV/resolv.conf.state" ] || {
-  if [ -L /etc/resolv.conf ]; then
-    printf 'symlink %s\n' "$(readlink /etc/resolv.conf)" \
-      > "$SAUV/resolv.conf.state"
-  else
-    printf 'file\n' > "$SAUV/resolv.conf.state"
-    cp -a /etc/resolv.conf "$SAUV/resolv.conf.orig"
+titre() { printf '\n== %s ==\n' "$1"; }
+info()  { printf '   %s\n' "$1"; }
+
+# Un disque est utilisable par le module s'il existe, s'il n'a aucune
+# partition montée, s'il ne porte pas de PV LVM actif et s'il ne fait pas
+# partie d'un tableau RAID. On ne veut surtout pas proposer le disque
+# système comme terrain de jeu.
+disque_libre() {
+  local d="$1"
+  [ -b "$d" ] || return 1
+  # une seule partition montée quelque part suffit à le disqualifier
+  lsblk -nro MOUNTPOINT "$d" 2>/dev/null | grep -q . && return 1
+  # membre d'un RAID en cours d'assemblage ?
+  grep -q "$(basename "$d")" /proc/mdstat 2>/dev/null && return 1
+  # PV LVM déjà déclaré ?
+  if command -v pvs >/dev/null 2>&1; then
+    pvs --noheadings -o pv_name 2>/dev/null | grep -qE "^\s*${d}[0-9]*\s*$" \
+      && return 1
   fi
+  return 0
+}
+
+# Renvoie le loop device associé à une image, ou rien.
+loop_de() {
+  losetup -j "$1" 2>/dev/null | cut -d: -f1 | head -1
 }
 
 # ---------------------------------------------------------------------
-# 2. Bac à sable de l'apprenant
+# Mode --etat
 # ---------------------------------------------------------------------
-mkdir -p "$BASE"/{bin,rapports,captures}
+if [ "$MODE" = "--etat" ]; then
+  titre "État du module 11"
+  [ -f "$ENVF" ] && { info "$ENVF :"; sed 's/^/     /' "$ENVF"; } \
+                 || info "$ENVF absent (setup jamais lancé)"
+  info "loop devices :"
+  losetup -a 2>/dev/null | sed 's/^/     /' || info "     aucun"
+  info "périphériques bloc :"
+  lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS | sed 's/^/     /'
+  exit 0
+fi
 
-cat > "$BASE/bin/mauvais-serveur.py" <<'EOF'
-#!/usr/bin/env python3
-"""Serveur volontairement bogué : il accepte les connexions et ne les
-ferme jamais. Sert à produire des sockets en CLOSE-WAIT (L11.4)."""
-import socket
-import sys
+# ---------------------------------------------------------------------
+# Mode --detacher
+# ---------------------------------------------------------------------
+if [ "$MODE" = "--detacher" ]; then
+  titre "Détachement des disques simulés"
+  for img in "$IMGD"/sdb.img "$IMGD"/sdc.img "$IMGD"/sdd.img; do
+    [ -f "$img" ] || continue
+    ld="$(loop_de "$img")"
+    if [ -n "$ld" ]; then
+      losetup -d "$ld" 2>/dev/null && info "$ld détaché ($img)" \
+        || info "$ld occupé : démonte d'abord ce qui l'utilise"
+    fi
+  done
+  info "les images restent dans $IMGD (supprime-les à la main si besoin)"
+  exit 0
+fi
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8100
-srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-srv.bind(("127.0.0.1", PORT))
-srv.listen(64)
-print(f"mauvais-serveur : 127.0.0.1:{PORT} — jamais de close()", flush=True)
+# ---------------------------------------------------------------------
+# Mode --nfs : serveur NFS pour L11.5, à lancer sur lab-adm
+# ---------------------------------------------------------------------
+if [ "$MODE" = "--nfs" ]; then
+  titre "Serveur NFS du lab L11.5"
+  if ! command -v exportfs >/dev/null 2>&1; then
+    echo "nfs-kernel-server n'est pas installé." >&2
+    echo "  sudo apt install -y nfs-kernel-server" >&2
+    echo "  (Rocky : sudo dnf install -y nfs-utils)" >&2
+    exit 1
+  fi
+  EXP=/srv/exports/archives
+  mkdir -p "$EXP"
+  for i in 1 2 3; do
+    [ -f "$EXP/facture-2026-0$i.txt" ] || \
+      printf 'facture %s\nmontant 1%s42,00 EUR\n' "$i" "$i" \
+        > "$EXP/facture-2026-0$i.txt"
+  done
+  chown -R nobody:nogroup "$EXP" 2>/dev/null || chown -R nobody:nobody "$EXP"
+  chmod -R 0755 /srv/exports
 
-gardes = []          # on garde les descripteurs ouverts : c'est le bug
-while True:
-    conn, _ = srv.accept()
-    gardes.append(conn)
-    print(f"connexion acceptee, {len(gardes)} descripteurs retenus",
-          flush=True)
+  LIGNE="$EXP 10.10.10.0/24(ro,sync,no_subtree_check)"
+  if ! grep -qF "$EXP" /etc/exports 2>/dev/null; then
+    echo "$LIGNE" >> /etc/exports
+    info "export ajouté dans /etc/exports"
+  else
+    info "export déjà présent dans /etc/exports"
+  fi
+  exportfs -ra
+  [ -d /run/systemd/system ] && systemctl restart nfs-server 2>/dev/null || true
+  exportfs -v
+  cat <<EOF
+
+Le partage est prêt. Depuis lab-db :
+  showmount -e 10.10.10.10
+  sudo mount -t nfs4 -o ro,hard 10.10.10.10:$EXP /mnt/archives-adm
 EOF
-chmod 755 "$BASE/bin/mauvais-serveur.py"
+  exit 0
+fi
 
-cat > "$BASE/rapports/plan-adressage.md" <<'EOF'
-# Plan d'adressage — L11.1
+# ---------------------------------------------------------------------
+# 0. lab-ops : serveur NFS (L11.7) et cible iSCSI (L11.8)
+# ---------------------------------------------------------------------
+# Installation conditionnelle : on n'installe pas un serveur NFS ni une
+# cible iSCSI sur lab-db, ni LVM/mdadm sur lab-ops. Le script s'arrête ici
+# sur lab-ops : les exports et la cible sont le travail des labs.
+if [ "$HOTE" = "lab-ops" ]; then
+  titre "Préparation de lab-ops (serveur NFS + cible iSCSI)"
+  A_INSTALLER=()
+  command -v exportfs  >/dev/null 2>&1 || A_INSTALLER+=(nfs-kernel-server)
+  command -v targetcli >/dev/null 2>&1 || A_INSTALLER+=(targetcli-fb)
+  if [ "${#A_INSTALLER[@]}" -gt 0 ]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      info "installation : ${A_INSTALLER[*]}"
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+        "${A_INSTALLER[@]}" >/dev/null
+    else
+      info "paquets absents : ${A_INSTALLER[*]}"
+      info "  Rocky : sudo dnf install -y nfs-utils targetcli"
+    fi
+  else
+    info "nfs-kernel-server et targetcli-fb sont présents"
+  fi
+  mkdir -p /srv/nfs /var/lib/iscsi
+  chmod 0755 /srv/nfs
+  chmod 0700 /var/lib/iscsi
+  if [ -d /run/systemd/system ]; then
+    systemctl enable --now nfs-server.service >/dev/null 2>&1 \
+      && info "nfs-server.service actif" \
+      || info "nfs-server.service : à démarrer à la main"
+    systemctl enable --now rtslib-fb-targetctl.service >/dev/null 2>&1 \
+      && info "rtslib-fb-targetctl.service actif" \
+      || info "rtslib-fb-targetctl.service : à démarrer à la main"
+  fi
+  cat <<'EOF'
 
-<!-- À compléter : quatre sous-réseaux de 10.10.10.0/24, placement des VM,
-     proposition de DMZ, et les trois sorties de `ip route get`. -->
+   lab-ops est prêt. Rien n'est exporté ni publié : c'est le travail des
+   labs L11.7 (/etc/exports, exportfs -ra) et L11.8 (targetcli).
+     - répertoire des exports NFS  : /srv/nfs
+     - répertoire des backstores   : /var/lib/iscsi
+   Si ufw est actif, pense à ouvrir 2049/tcp et 3260/tcp depuis 10.10.10.0/24.
 EOF
+  exit 0
+fi
 
-for f in zone-lab-local.md sockets.md capture.md debit.md; do
-  [ -e "$BASE/rapports/$f" ] || : > "$BASE/rapports/$f"
+# ---------------------------------------------------------------------
+# 1. Paquets
+# ---------------------------------------------------------------------
+titre "Préparation du module 11"
+info "utilisateur : $LAB_USER"
+
+MANQUE=()
+OUTILS=(lsblk blkid parted sgdisk pvcreate vgcreate lvcreate mkfs.ext4
+        mkfs.xfs xfs_quota mdadm cryptsetup growpart iostat fio fuser)
+# lab-db est aussi client NFS (L11.5, L11.7) et initiateur iSCSI (L11.8)
+[ "$HOTE" = "lab-db" ] && OUTILS+=(mount.nfs4 showmount iscsiadm)
+for c in "${OUTILS[@]}"; do
+  command -v "$c" >/dev/null 2>&1 || MANQUE+=("$c")
+done
+if [ "${#MANQUE[@]}" -gt 0 ]; then
+  info "commandes absentes : ${MANQUE[*]}"
+  info "installe-les (voir §11.1) :"
+  info "  sudo apt install -y lvm2 xfsprogs btrfs-progs mdadm cryptsetup-bin \\"
+  info "    gdisk parted nfs-common open-iscsi sysstat fio \\"
+  info "    cloud-guest-utils quota"
+  info "le setup continue : les labs concernés attendront."
+else
+  info "tous les outils attendus sont présents"
+fi
+
+# ---------------------------------------------------------------------
+# 2. Choix des deux disques de travail
+# ---------------------------------------------------------------------
+titre "Disques de travail"
+
+TROUVES=()
+for d in "${CANDIDATS[@]}"; do
+  disque_libre "$d" && TROUVES+=("$d")
+  [ "${#TROUVES[@]}" -ge 2 ] && break
 done
 
-chown -R "$LAB_USER":"$LAB_USER" "$BASE"
+SIMULE=0
+if [ "${#TROUVES[@]}" -ge 2 ]; then
+  DISQUE1="${TROUVES[0]}"
+  DISQUE2="${TROUVES[1]}"
+  info "disques réels détectés : $DISQUE1 et $DISQUE2"
+  info "taille : $(lsblk -dno SIZE "$DISQUE1") / $(lsblk -dno SIZE "$DISQUE2")"
+else
+  SIMULE=1
+  cat <<'EOF'
 
-# ---------------------------------------------------------------------
-# 3. Le service applicatif factura-api (cible de L11.4 et BF11.3)
-# ---------------------------------------------------------------------
-install -d -m 0755 /opt/factura/bin
-cat > /opt/factura/bin/factura-api.py <<'EOF'
-#!/usr/bin/env python3
-"""API de lab. Adresse et port pris dans l'environnement, ce qui permet
-de les modifier par un drop-in systemd (voir BF11.3)."""
-import json
-import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
+   ATTENTION — AUCUN DISQUE SUPPLÉMENTAIRE LIBRE N'A ÉTÉ TROUVÉ.
 
-BIND = os.environ.get("FACTURA_BIND", "0.0.0.0")
-PORT = int(os.environ.get("FACTURA_PORT", "8099"))
+   Cette machine n'a pas (ou plus) deux disques vierges utilisables.
+   Le setup fabrique donc DEUX DISQUES SIMULÉS : deux fichiers-images de
+   5 Go attachés en « loop device ». Ils se comportent comme de vrais
+   périphériques bloc : partitionnement, LVM, RAID, LUKS et montage
+   fonctionnent normalement.
 
+   Trois différences à connaître :
+     - les noms sont /dev/loopN, pas /dev/sdb et /dev/sdc ;
+     - les performances mesurées (E11.18, E11.19) n'ont aucun sens :
+       tu mesures le disque qui héberge les images ;
+     - après un redémarrage, les loop devices doivent être rattachés.
+       Le service « lab11-loop.service » installé ci-dessous s'en charge.
 
-class H(BaseHTTPRequestHandler):
-    def do_GET(self):
-        corps = json.dumps({"status": "ok", "bind": BIND,
-                            "path": self.path}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(corps)))
-        self.end_headers()
-        self.wfile.write(corps)
-
-    do_HEAD = do_GET
-
-    def log_message(self, *a):
-        pass
-
-
-HTTPServer((BIND, PORT), H).serve_forever()
 EOF
-chmod 755 /opt/factura/bin/factura-api.py
+  mkdir -p "$IMGD"
+  for n in sdb sdc; do
+    img="$IMGD/$n.img"
+    [ -f "$img" ] || { truncate -s "$TAILLE_IMG" "$img"; info "image créée : $img"; }
+    chmod 600 "$img"
+    if [ -z "$(loop_de "$img")" ]; then
+      losetup -fP "$img"
+    fi
+  done
+  DISQUE1="$(loop_de "$IMGD/sdb.img")"
+  DISQUE2="$(loop_de "$IMGD/sdc.img")"
+  [ -n "$DISQUE1" ] && [ -n "$DISQUE2" ] || {
+    echo "échec de l'attachement des images en loop device" >&2
+    echo "vérifie que le module noyau 'loop' est disponible" >&2
+    exit 1; }
+  info "disques simulés : $DISQUE1 ($IMGD/sdb.img)"
+  info "                  $DISQUE2 ($IMGD/sdc.img)"
 
-getent passwd factura >/dev/null || \
-  useradd -r -s /usr/sbin/nologin -d /opt/factura factura
+  # --- rattachement automatique au démarrage --------------------------
+  cat > /usr/local/sbin/lab11-loop-attach.sh <<'ATT'
+#!/usr/bin/env bash
+# Rattache les images du module 11 en loop device au démarrage.
+set -euo pipefail
+IMGD=/var/lib/lab11
+for n in sdb sdc; do
+  img="$IMGD/$n.img"
+  [ -f "$img" ] || continue
+  losetup -j "$img" | grep -q . || losetup -fP "$img"
+done
+ATT
+  chmod 0755 /usr/local/sbin/lab11-loop-attach.sh
 
-cat > /etc/systemd/system/factura-api.service <<'EOF'
+  if [ -d /run/systemd/system ]; then
+    cat > /etc/systemd/system/lab11-loop.service <<'UNIT'
 [Unit]
-Description=Factura API (lab11)
-After=network-online.target
-Wants=network-online.target
+Description=Lab 10 - rattache les disques simules en loop device
+DefaultDependencies=no
+After=local-fs-pre.target systemd-udevd.service
+Before=local-fs.target lvm2-activation-early.service
 
 [Service]
-Type=exec
-User=factura
-Group=factura
-Environment=FACTURA_BIND=0.0.0.0
-Environment=FACTURA_PORT=8099
-ExecStart=/opt/factura/bin/factura-api.py
-Restart=on-failure
-RestartSec=2s
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/lab11-loop-attach.sh
 
 [Install]
-WantedBy=multi-user.target
-EOF
-chmod 0644 /etc/systemd/system/factura-api.service
-
-# un passage de break_M11_03.sh ne doit pas survivre au setup
-rm -f /etc/systemd/system/factura-api.service.d/override.conf
-rmdir --ignore-fail-on-non-empty \
-  /etc/systemd/system/factura-api.service.d 2>/dev/null || true
-
-if [ -d /run/systemd/system ]; then
-  systemctl daemon-reload
-  systemctl enable --now factura-api.service >/dev/null 2>&1 || \
-    echo "  note : factura-api n'a pas démarré (python3 absent ?)"
+WantedBy=local-fs.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable lab11-loop.service >/dev/null 2>&1 || true
+    info "service lab11-loop.service activé (rattachement au démarrage)"
+  fi
 fi
 
 # ---------------------------------------------------------------------
-# 4. Serveur DNS du lab — uniquement sur lab-adm
+# 2b. Troisième disque pour le RAID5 (E11.22), toujours simulé
 # ---------------------------------------------------------------------
-if [ "$HOSTN" = lab-adm ] && command -v dnsmasq >/dev/null 2>&1; then
-  cat > /etc/dnsmasq.d/lab.conf <<'EOF'
-# zone de lab lab.local — module 11
-# bind-interfaces + listen-address : cohabitation avec le stub
-# systemd-resolved qui occupe deja 127.0.0.53:53
-bind-interfaces
-listen-address=10.10.10.10
-no-dhcp-interface=
-domain=lab.local
-local=/lab.local/
-expand-hosts
-domain-needed
-bogus-priv
-local-ttl=300
-
-address=/lab-adm.lab.local/10.10.10.10
-address=/lab-web.lab.local/10.10.10.11
-address=/lab-db.lab.local/10.10.10.12
-address=/lab-rhel.lab.local/10.10.10.13
-address=/lab-ops.lab.local/10.10.10.14
-
-cname=www.lab.local,lab-web.lab.local
-cname=shop.lab.local,lab-web.lab.local
-mx-host=lab.local,lab-adm.lab.local,10
-txt-record=lab.local,"v=spf1 ip4:10.10.10.0/24 -all"
-srv-host=_http._tcp.lab.local,lab-web.lab.local,80,10,10
-
-ptr-record=10.10.10.10.in-addr.arpa,lab-adm.lab.local
-ptr-record=11.10.10.10.in-addr.arpa,lab-web.lab.local
-ptr-record=12.10.10.10.in-addr.arpa,lab-db.lab.local
-
-server=9.9.9.9
-EOF
-  systemctl enable dnsmasq >/dev/null 2>&1 || true
-  systemctl restart dnsmasq >/dev/null 2>&1 || \
-    echo "  note : dnsmasq n'a pas démarré (conflit sur le port 53 ?)"
-fi
-
-# ---------------------------------------------------------------------
-# 5. Frontal web — uniquement sur lab-web
-# ---------------------------------------------------------------------
-if [ "$HOSTN" = lab-web ] && command -v nginx >/dev/null 2>&1; then
-  install -d -m 0755 /var/www/lab
-  cat > /var/www/lab/index.html <<'EOF'
-<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<title>lab-web</title></head>
-<body><h1>lab-web — vhost par defaut</h1></body></html>
-EOF
-  # un fichier volumineux pour les tests de MTU et de debit (L11.5)
-  [ -f /var/www/lab/gros.bin ] || \
-    head -c 20971520 /dev/urandom > /var/www/lab/gros.bin
-
-  cat > /etc/nginx/sites-available/lab-web <<'EOF'
-server {
-    listen 80 default_server;
-    server_name www.lab.local lab-web.lab.local _;
-    root /var/www/lab;
-    index index.html;
-}
-EOF
-  ln -sf /etc/nginx/sites-available/lab-web \
-         /etc/nginx/sites-enabled/lab-web
-  rm -f /etc/nginx/sites-enabled/default
-  nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || \
-    { systemctl enable --now nginx >/dev/null 2>&1 || true; }
-fi
-
-# ---------------------------------------------------------------------
-# 6. Capture d'incident à analyser (L11.5 étape 3)
-#    Générée pour de vrai : 5 tentatives TCP vers un port fermé.
-#    On ne fabrique pas un pcap à la main, on en capture un.
-# ---------------------------------------------------------------------
-install -d -m 0755 /srv/captures
-PCAP=/srv/captures/incident.pcap
-if [ ! -s "$PCAP" ] && command -v tcpdump >/dev/null 2>&1; then
-  CIBLE=10.10.10.11
-  ping -c1 -W1 "$CIBLE" >/dev/null 2>&1 || CIBLE=127.0.0.1
-  IF_CAP="$IFACE"
-  [ "$CIBLE" = 127.0.0.1 ] && IF_CAP=lo
-  tcpdump -i "$IF_CAP" -nn -w "$PCAP" \
-    "host $CIBLE and tcp port 8199" >/dev/null 2>&1 &
-  TPID=$!
-  sleep 2
-  for _ in 1 2 3 4 5; do
-    timeout 2 bash -c "</dev/tcp/$CIBLE/8199" 2>/dev/null || true
-    sleep 0.3
-  done
-  sleep 1
-  kill "$TPID" 2>/dev/null || true
-  wait "$TPID" 2>/dev/null || true
-  chmod 0644 "$PCAP" 2>/dev/null || true
-  [ -s "$PCAP" ] || echo "  note : capture incident.pcap vide (tcpdump ?)"
-fi
-
-# ---------------------------------------------------------------------
-# 7. Contrôle de l'outillage
-# ---------------------------------------------------------------------
-MANQUE=""
-for p in ip ss dig curl nc tcpdump ping traceroute lsof iperf3; do
-  command -v "$p" >/dev/null 2>&1 || MANQUE="$MANQUE $p"
+# Même quand sdb et sdc sont réels, la VM n'a pas de 3e disque : on en
+# fabrique un en loop device. Il est conservé d'une exécution à l'autre.
+DISQUE3=""
+if [ "$MODE" = "--raid5" ] || [ -f "$IMGD/sdd.img" ]; then
+  titre "Troisième disque (RAID5)"
+  mkdir -p "$IMGD"
+  img="$IMGD/sdd.img"
+  [ -f "$img" ] || { truncate -s "$TAILLE_IMG" "$img"; info "image créée : $img"; }
+  chmod 600 "$img"
+  [ -n "$(loop_de "$img")" ] || losetup -fP "$img"
+  DISQUE3="$(loop_de "$img")"
+  [ -n "$DISQUE3" ] || { echo "échec de l'attachement de $img" >&2; exit 1; }
+  info "disque simulé : $DISQUE3 ($img) — partition : ${DISQUE3}p1"
+  # rattachement au démarrage : le script d'attache traite aussi sdd.img
+  if [ -f /usr/local/sbin/lab11-loop-attach.sh ]; then
+    sed -i 's/^for n in sdb sdc; do$/for n in sdb sdc sdd; do/' \
+      /usr/local/sbin/lab11-loop-attach.sh
+  else
+    cat > /usr/local/sbin/lab11-loop-attach.sh <<'ATT'
+#!/usr/bin/env bash
+# Rattache les images du module 11 en loop device au démarrage.
+set -euo pipefail
+IMGD=/var/lib/lab11
+for n in sdb sdc sdd; do
+  img="$IMGD/$n.img"
+  [ -f "$img" ] || continue
+  losetup -j "$img" | grep -q . || losetup -fP "$img"
 done
-[ -z "$MANQUE" ] || echo "  note : outils absents ->$MANQUE (voir §11.1)"
+ATT
+    chmod 0755 /usr/local/sbin/lab11-loop-attach.sh
+    if [ -d /run/systemd/system ]; then
+      cat > /etc/systemd/system/lab11-loop.service <<'UNIT'
+[Unit]
+Description=Lab 11 - rattache les disques simules en loop device
+DefaultDependencies=no
+After=local-fs-pre.target systemd-udevd.service
+Before=local-fs.target lvm2-activation-early.service
 
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/lab11-loop-attach.sh
+
+[Install]
+WantedBy=local-fs.target
+UNIT
+      systemctl daemon-reload
+      systemctl enable lab11-loop.service >/dev/null 2>&1 || true
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------
+# 3. /etc/lab11.env
+# ---------------------------------------------------------------------
+cat > "$ENVF" <<EOF
+# Généré par setup_M11.sh — ne pas éditer à la main.
+# Les deux disques de travail du module 11.
+DISQUE1=$DISQUE1
+DISQUE2=$DISQUE2
+# Troisième disque (RAID5, E11.22), toujours un loop device ; vide sinon.
+DISQUE3=$DISQUE3
+# 1 = disques simulés par fichiers-images + loop devices
+LAB10_SIMULE=$SIMULE
+EOF
+chmod 0644 "$ENVF"
+info "$ENVF écrit"
+
+# ---------------------------------------------------------------------
+# 4. Compte de service, arborescence, jeu de données
+# ---------------------------------------------------------------------
+titre "Arborescence et jeu de données"
+
+groupadd -f factura
+if ! getent passwd factura >/dev/null; then
+  useradd -r -g factura -d /srv/factura -s /usr/sbin/nologin factura
+fi
+
+mkdir -p /srv/factura/db /srv/factura/archives /srv/factura/journaux \
+         /srv/sauvegardes "$BIN" "$LOGD" \
+         "$BASE/rapports" "$BASE/sauvegardes"
+chown -R factura:factura /srv/factura "$LOGD"
+chmod 0755 /srv/factura /srv/sauvegardes
+chown -R "$LAB_USER":"$LAB_USER" "$BASE"
+
+# Jeu de données à sauvegarder / migrer. Volontairement modeste : le
+# module manipule des volumes, pas des téraoctets.
+if [ ! -f /srv/factura/db/comptes.dat ]; then
+  {
+    echo "# factura — plan comptable simplifié"
+    for i in $(seq 1 400); do
+      printf '%06d;CLI%04d;%d,%02d\n' "$i" $((i % 97)) $((i * 13)) $((i % 100))
+    done
+  } > /srv/factura/db/comptes.dat
+  head -c 2M /dev/urandom > /srv/factura/db/index.bin
+  : > /srv/factura/db/journal.wal
+  chown -R factura:factura /srv/factura/db
+  info "jeu de données créé dans /srv/factura/db"
+else
+  info "jeu de données déjà présent"
+fi
+
+# ---------------------------------------------------------------------
+# 5. Générateur d'écritures (L11.2, L11.3)
+# ---------------------------------------------------------------------
+cat > "$BIN/factura-ecritures.sh" <<'GEN'
+#!/usr/bin/env bash
+# factura-ecritures.sh — simule une application qui écrit en continu.
+#
+#   factura-ecritures.sh <repertoire> [debit_ko_par_seconde]
+#
+# Écrit dans <repertoire>/journal.wal et fait tourner un lot de fichiers
+# de travail. S'arrête proprement sur SIGINT/SIGTERM. Ne remplit jamais
+# le volume : il recycle ses fichiers au-delà de 200 Mio écrits.
+set -uo pipefail
+
+CIBLE="${1:-/srv/factura/db}"
+DEBIT="${2:-256}"          # Ko/s
+
+[ -d "$CIBLE" ] || { echo "répertoire introuvable : $CIBLE" >&2; exit 1; }
+
+ARRET=0
+trap 'ARRET=1' INT TERM
+
+echo "écritures en cours dans $CIBLE (${DEBIT} Ko/s) — Ctrl-C pour arrêter"
+N=0
+while [ "$ARRET" -eq 0 ]; do
+  N=$((N + 1))
+  printf '%s transaction %06d\n' "$(date '+%F %T')" "$N" >> "$CIBLE/journal.wal"
+  dd if=/dev/urandom of="$CIBLE/travail-$((N % 20)).tmp" \
+     bs=1K count="$DEBIT" status=none 2>/dev/null || true
+  # on garde le journal sous les 50 Mio
+  if [ "$(stat -c %s "$CIBLE/journal.wal" 2>/dev/null || echo 0)" -gt 52428800 ]
+  then
+    : > "$CIBLE/journal.wal"
+  fi
+  sleep 1
+done
+echo "arrêt propre après $N transactions"
+GEN
+chmod 0755 "$BIN/factura-ecritures.sh"
+info "$BIN/factura-ecritures.sh installé"
+
+# ---------------------------------------------------------------------
+# 6. Résumé
+# ---------------------------------------------------------------------
+titre "Prêt"
 cat <<EOF
+   Disques de travail du module :
+     DISQUE1 = $DISQUE1
+     DISQUE2 = $DISQUE2
+$([ -n "$DISQUE3" ] && echo "     DISQUE3 = $DISQUE3  (RAID5, simulé)" \
+   || echo "     (3e disque pour le RAID5 : sudo bash \$0 --raid5)")
+$([ "$SIMULE" -eq 1 ] && echo "   (SIMULÉS par fichiers-images — voir l'avertissement ci-dessus)")
 
-Prêt sur $HOSTN. Points d'entrée :
-  $BASE/rapports/           tes livrables
-  $BASE/bin/mauvais-serveur.py   provoque des CLOSE-WAIT (L11.4)
-  /opt/factura/bin/factura-api.py + factura-api.service   port 8099
-  /srv/captures/incident.pcap    capture à analyser (L11.5)
-  /etc/dnsmasq.d/lab.conf        zone lab.local (lab-adm uniquement)
-  /etc/nginx/sites-available/lab-web   vhost (lab-web uniquement)
+   Charge-les dans ton shell avant chaque séance :
+     . /etc/lab11.env
+     echo "\$DISQUE1 \$DISQUE2"
 
-Sauvegardes : $SAUV/
+   Générateur d'écritures (labs L11.2 et L11.3) :
+     sudo $BIN/factura-ecritures.sh /srv/factura/db &
+
+   État à tout moment :
+     sudo bash \$0 --etat
+
+   Snapshot Proxmox avant de commencer : qm snapshot 9003 avant-lab11
 EOF

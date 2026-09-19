@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M10_03.sh — vérifie le lab L10.3 (sauvegarde cohérente par snapshot)
+# check_M10_03.sh — vérifie le lab L10.3 (figer une version)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,82 +7,79 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L10.3 =="
 
-VG=vg_data
-DEST=/srv/sauvegardes
-SCRIPT=/opt/factura/bin/sauvegarde-snapshot.sh
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab10/rapports/figer.md"
 
-# --- 1. une archive produite depuis le snapshot ------------------------
-ARCHIVE=$(ls -1t "$DEST"/factura-db-*.tar.gz 2>/dev/null | head -1)
-if [ -n "$ARCHIVE" ] && [ -s "$ARCHIVE" ]; then
-  ok "archive trouvée : $(basename "$ARCHIVE") ($(du -h "$ARCHIVE" | cut -f1))"
-  if tar tzf "$ARCHIVE" 2>/dev/null | grep -q 'comptes.dat'; then
-    ok "l'archive contient comptes.dat"
-  else
-    ko "l'archive ne contient pas comptes.dat : as-tu archivé le snapshot \
-monté sur /mnt/snap, et non un répertoire vide ?"
-  fi
-  NB=$(tar tzf "$ARCHIVE" 2>/dev/null | wc -l)
-  [ "$NB" -ge 3 ] && ok "l'archive contient $NB entrées" \
-    || ko "l'archive ne contient que $NB entrée(s) : elle est probablement vide"
+POL=$(apt-cache policy outil-lab 2>/dev/null)
+INST=$(printf '%s' "$POL" | awk '/Installed:/ {print $2}')
+CAND=$(printf '%s' "$POL" | awk '/Candidate:/ {print $2}')
+
+# --- 1. la version en place ---------------------------------------------
+[ "$INST" = "1.0.0" ] \
+  && ok "outil-lab installé en 1.0.0" \
+  || ko "version installée : ${INST:-aucune} — on attend 1.0.0 \
+(apt install --allow-downgrades outil-lab=1.0.0)"
+
+# --- 2. la version candidate --------------------------------------------
+[ "$CAND" = "1.0.0" ] \
+  && ok "version candidate ramenée à 1.0.0" \
+  || ko "version candidate : ${CAND:-aucune} — tant qu'elle vaut 1.2.0, \
+le prochain apt upgrade remontera le paquet"
+
+# --- 3. l'épinglage existe et est lisible --------------------------------
+PREF=$(grep -rls 'outil-lab' /etc/apt/preferences.d/ /etc/apt/preferences \
+       2>/dev/null | head -1)
+if [ -n "$PREF" ]; then
+  ok "fichier d'épinglage trouvé : $PREF"
+  grep -qiE '^Pin-Priority:[[:space:]]*(100[0-9]|[2-9][0-9]{3})' "$PREF" \
+    && ok "priorité supérieure à 1000 (autorise la rétrogradation)" \
+    || ko "la priorité de $PREF ne dépasse pas 1000 : apt refusera de \
+redescendre une version déjà installée"
+  grep -qiE '^Pin:[[:space:]]*version' "$PREF" \
+    && ok "épinglage sur une version explicite" \
+    || note "l'épinglage ne porte pas sur « Pin: version ... »"
+  grep -qiE '^Package:[[:space:]]*\*[[:space:]]*$' "$PREF" \
+    && ko "« Package: * » : cet épinglage s'applique à TOUT le système" \
+    || ok "l'épinglage ne vise que outil-lab"
 else
-  ko "aucune archive factura-db-*.tar.gz dans $DEST"
+  ko "aucun fichier d'épinglage ne mentionne outil-lab dans \
+/etc/apt/preferences.d/"
 fi
 
-# --- 2. plus aucun snapshot résiduel -----------------------------------
-if command -v lvs >/dev/null 2>&1; then
-  RESTE=$(lvs --noheadings -o lv_name -S 'origin!=""' 2>/dev/null | tr -d ' ')
-  if [ -z "$RESTE" ]; then
-    ok "aucun snapshot LVM résiduel"
-  else
-    ko "snapshot(s) encore présent(s) : $RESTE — un snapshot est temporaire, \
-il se supprime après usage (lvremove)"
-  fi
+# --- 4. apt-mark hold ne doit PAS être utilisé ---------------------------
+if apt-mark showhold 2>/dev/null | grep -qx 'outil-lab'; then
+  ko "outil-lab est aussi retenu par apt-mark hold : l'énoncé demande de \
+figer par épinglage, et d'expliquer la différence — pas de cumuler"
 else
-  note "lvm2 absent : contrôle des snapshots impossible"
+  ok "outil-lab n'est pas retenu par apt-mark hold"
 fi
 
-# --- 3. comptes.dat est revenu sur l'origine ---------------------------
-if [ -s /srv/factura/db/comptes.dat ]; then
-  ok "comptes.dat est présent sur le volume d'origine (fusion réussie)"
+# --- 5. une mise à niveau simulée ne bouge plus le paquet ---------------
+SIM=$(apt-get -s upgrade 2>/dev/null)
+if printf '%s' "$SIM" | grep -qE '^(Inst|Conf) outil-lab'; then
+  ko "apt-get -s upgrade propose toujours de toucher à outil-lab"
 else
-  ko "comptes.dat manque dans /srv/factura/db : la fusion du snapshot \
-(lvconvert --merge puis désactivation/activation du LV) n'a pas abouti"
+  ok "apt-get -s upgrade ne touche plus à outil-lab"
+fi
+if printf '%s' "$SIM" | grep -q 'will be DOWNGRADED'; then
+  ko "la simulation propose des rétrogradations : ton épinglage déborde \
+sur d'autres paquets"
+else
+  ok "aucune rétrogradation collatérale"
 fi
 
-# --- 4. le script de sauvegarde ----------------------------------------
-if [ -x "$SCRIPT" ]; then
-  ok "$SCRIPT existe et est exécutable"
-  head -1 "$SCRIPT" | grep -q '^#!/usr/bin/env bash' \
-    && ok "shebang conforme (#!/usr/bin/env bash)" \
-    || ko "shebang attendu : #!/usr/bin/env bash"
-  grep -q 'set -euo pipefail' "$SCRIPT" \
-    && ok "set -euo pipefail présent" \
-    || ko "set -euo pipefail manquant"
-  grep -qE '^\s*trap\b' "$SCRIPT" \
-    && ok "un trap de nettoyage est installé" \
-    || ko "aucun trap : un échec en cours de route laissera un snapshot monté"
-  grep -qE 'lvremove' "$SCRIPT" \
-    && ok "le script supprime bien le snapshot" \
-    || ko "le script n'appelle jamais lvremove"
-  grep -qiE 'existe|already|deja|déjà' "$SCRIPT" \
-    && ok "le script gère le cas « snapshot déjà présent »" \
-    || note "vérifie que le script refuse de démarrer si le snapshot existe déjà"
+# --- 6. le rapport -------------------------------------------------------
+if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 8 ]; then
+  ok "rapport figer.md rédigé"
+  grep -qi 'hold' "$RAP" \
+    && ok "le rapport parle de apt-mark hold" \
+    || ko "le rapport doit comparer l'épinglage et apt-mark hold"
+  grep -qiE 'madison|policy' "$RAP" \
+    && ok "le rapport cite la commande de contrôle des versions" \
+    || note "cite apt-cache madison ou apt-cache policy dans la procédure"
 else
-  ko "$SCRIPT absent ou non exécutable"
-fi
-
-# --- 5. le script est rejouable ----------------------------------------
-if [ -x "$SCRIPT" ] && [ "$(id -u)" -eq 0 ] && command -v lvs >/dev/null 2>&1; then
-  if "$SCRIPT" >/dev/null 2>&1 && "$SCRIPT" >/dev/null 2>&1; then
-    RESTE2=$(lvs --noheadings -o lv_name -S 'origin!=""' 2>/dev/null | tr -d ' ')
-    [ -z "$RESTE2" ] \
-      && ok "deux exécutions consécutives : aucun résidu" \
-      || ko "après deux exécutions, il reste : $RESTE2"
-  else
-    ko "le script échoue à la première ou à la seconde exécution"
-  fi
-else
-  note "contrôle de rejouabilité sauté (lance le check avec sudo)"
+  ko "rapport absent ou trop court : ~/lab10/rapports/figer.md (8 lignes)"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

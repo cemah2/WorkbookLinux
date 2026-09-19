@@ -1,7 +1,7 @@
 # Chapitre 0 — Mise en place du laboratoire
 
 Ce chapitre ne t'apprend pas Linux. Il te donne un laboratoire reproductible,
-une méthode de travail et les réflexes qui te serviront pendant les 23 modules
+une méthode de travail et les réflexes qui te serviront pendant les 27 modules
 et les 3 projets. Compte une demi-journée pour tout monter, et fais-le
 sérieusement : chaque module suppose que ces six VM existent, avec ces noms,
 ces IP et ce snapshot `snap-clean`.
@@ -54,7 +54,7 @@ Chaque item porte un identifiant unique, le même dans les deux PDF :
 | `BF<mod>.<n>` / `D<mod>` | `BF7.1`, `D7` | break & fix / défi |
 
 Cite-les tels quels dans ton carnet, tes commits et tes questions à un
-collègue : « je bloque sur L10.3 étape 4 » est plus utile que « le truc LVM ».
+collègue : « je bloque sur L11.3 étape 4 » est plus utile que « le truc LVM ».
 
 ### Les scripts
 
@@ -85,19 +85,21 @@ fusionne les semaines 9-10 et 15-16.
 | 2 | 03 permissions, 04 utilisateurs et sudo | 10 | premier Break & Fix |
 | 3 | 05 traitement de texte, 06 vim et archives | 11 | rapport `access.log` |
 | 4 | 07 scripting bash | 7 | dépôt Git perso créé |
-| 5 | 08 processus et systemd, 09 paquets | 12 | un service maison durci |
-| 6 | 10 stockage et LVM | 8 | disque de VM agrandi à chaud |
-| 7 | 11 réseau, 12 SSH | 13 | bastion + `~/.ssh/config` |
-| 8 | 13 logs et supervision, 14 planification | 11 | logs centralisés |
-| 9 | 15 sécurité | 8 | pare-feu multi-machines |
-| 10 | 16 dépannage et incident | 10 | premier post-mortem |
-| 11 | P1 « Factura » à la main | 10 | app déployée, documentée |
-| 12 | 17 Git, 18 Docker et Compose | 12 | image publiée sur registre |
-| 13 | 19 Ansible, 20 OpenTofu / cloud-init | 14 | VM créée par le code |
-| 14 | 21 CI/CD Gitea Actions, 22 k3s + observabilité | 14 | pipeline vert |
-| 15 | 23 Python pour l'ops | 8 | outil packagé sous timer |
-| 16 | P2 « Factura » industrialisée | 12 | `git push` → prod |
-| 17 | P3 une semaine d'astreinte | 10 | 5 incidents résolus |
+| 5 | 08 processus et systemd, 09 noyau et démarrage | 13 | un service maison durci |
+| 6 | 10 paquets, 11 stockage et LVM | 13 | disque de VM agrandi à chaud |
+| 7 | 12 réseau, 13 réseau avancé | 14 | deux netns qui se parlent via VXLAN |
+| 8 | 14 SSH, 15 services applicatifs | 13 | bastion + PostgreSQL sauvegardé |
+| 9 | 16 logs et supervision, 17 planification | 11 | logs centralisés |
+| 10 | 18 sécurité | 8 | pare-feu multi-machines |
+| 11 | 19 dépannage et incident | 10 | premier post-mortem |
+| 12 | P1 « Factura » à la main | 10 | app déployée, documentée |
+| 13 | 20 virtualisation KVM, 21 Git | 12 | VM libvirt clonée par script |
+| 14 | 22 Docker et Compose | 8 | image publiée sur registre |
+| 15 | 23 Ansible, 24 OpenTofu / cloud-init | 14 | VM créée par le code |
+| 16 | 25 CI/CD Gitea Actions, 26 k3s + observabilité | 14 | pipeline vert |
+| 17 | 27 Python pour l'ops | 8 | outil packagé sous timer |
+| 18 | P2 « Factura » industrialisée | 12 | `git push` → prod |
+| 19 | P3 une semaine d'astreinte | 10 | 5 incidents résolus |
 
 Les heures sont celles des `Temps estimé` des modules. Si tu débordes de
 30 %, c'est normal. Si tu débordes de 100 %, tu ne respectes pas la règle
@@ -134,11 +136,30 @@ SUSE se déduisent de ces deux-là en quelques minutes.
 | `lab-rhel` (Rocky 9) | 9004 / 10.10.10.13 | 2 vCPU, 2 Go, 20 Go | dnf, firewalld, SELinux |
 | `lab-ops` (Ubuntu 24.04) | 9005 / 10.10.10.14 | 2 vCPU, 4 Go, 40 Go | Docker, CI, monitoring |
 | `lab-git` (Ubuntu 24.04) | 9006 / 10.10.10.15 | 1 vCPU, 1 Go, 15 Go | forge Gitea, portfolio |
+| `lab-virt` (Ubuntu 24.04) | 9007 / 10.10.10.16 | 4 vCPU `host`, 6 Go, 40 Go | KVM/QEMU/libvirt imbriqués (module 20) |
 
-Total : 11 vCPU (surallocation acceptable), 13 Go de RAM, 155 Go de disque.
+Total : 15 vCPU (surallocation acceptable), 19 Go de RAM, 195 Go de disque.
 Un nœud avec 16 Go de RAM et un SSD suffit ; les VM n'ont pas besoin de
-tourner toutes en même temps avant le module 11 — sauf `lab-git`, qui
-héberge ton dépôt (§0.8) et reste allumée en permanence.
+tourner toutes en même temps avant le module 12 — sauf `lab-git`, qui
+héberge ton dépôt (§0.8) et reste allumée en permanence. `lab-virt` ne sert
+qu'au module 20 : laisse-la éteinte le reste du temps (elle seule pèse 6 Go).
+
+`lab-virt` est un hyperviseur **dans** l'hyperviseur : elle a besoin de la
+**virtualisation imbriquée**. Deux réglages sur le nœud, à faire une fois :
+
+```bash
+# 1. le module KVM du nœud doit l'autoriser (Intel ; AMD : kvm_amd / kvm-amd)
+cat /sys/module/kvm_intel/parameters/nested        # Y attendu (AMD : 1)
+echo "options kvm-intel nested=1" > /etc/modprobe.d/kvm-intel.conf
+modprobe -r kvm_intel && modprobe kvm_intel   # VM arrêtées, sinon reboot
+cat /sys/module/kvm_intel/parameters/nested        # Y
+# 2. la VM doit voir le vrai CPU (drapeau vmx/svm), pas un modèle générique
+qm set 9007 --cpu host --cores 4 --memory 6144
+```
+
+`lab-create.sh` applique le `--cpu host` tout seul ; le paramètre `nested`
+du module reste à ta charge. Vérification dans la VM : `ls -l /dev/kvm` et
+`kvm-ok` (paquet `cpu-checker`).
 
 ```
                        Internet
@@ -153,12 +174,13 @@ héberge ton dépôt (§0.8) et reste allumée en permanence.
                     |   :2222 --DNAT--> lab-adm:22            |
                     +-----------------+-----------------------+
                                       | vmbr1  10.10.10.0/24
-     +-----------+-----------+--------+-+---------+-----------+-----------+
-     |           |           |          |         |           |
-  lab-adm     lab-web     lab-db     lab-rhel   lab-ops     lab-git
- .10 (9001)  .11 (9002)  .12 (9003) .13 (9004) .14 (9005)  .15 (9006)
- bastion     nginx/app   PostgreSQL Rocky 9    Docker/CI   Gitea
- Ansible                 sdb, sdc   SELinux    k3s/Grafana workbook
+   +----------+----------+----------+-+--------+----------+----------+
+   |          |          |          |          |          |          |
+ lab-adm    lab-web    lab-db     lab-rhel   lab-ops    lab-git    lab-virt
+ .10(9001)  .11(9002)  .12(9003)  .13(9004)  .14(9005)  .15(9006)  .16(9007)
+ bastion    nginx/app  PostgreSQL Rocky 9    Docker/CI  Gitea      KVM/libvirt
+ Ansible               sdb, sdc   SELinux    k3s        workbook   cpu=host
+                                                                   VM .160-179
 ```
 
 Le lab est sur un réseau **isolé** : les VM sortent sur internet grâce au
@@ -259,6 +281,7 @@ cat > /root/lab/lab.hosts <<'EOF'
 10.10.10.13 lab-rhel
 10.10.10.14 lab-ops
 10.10.10.15 lab-git
+10.10.10.16 lab-virt
 EOF
 systemctl restart dnsmasq && systemctl enable dnsmasq
 dig +short @10.10.10.1 lab-web.lab.local     # 10.10.10.11
@@ -315,7 +338,7 @@ sur un stockage de type répertoire ce serait `local:9000/vm-9000-disk-0.raw`.
 Le script le lit dans `qm config 9000` au lieu de le deviner. Le port série
 (`--serial0 socket --vga serial0`) te donne une console qui marche avec
 `qm terminal 9001` même quand le réseau est cassé : tu en auras besoin au
-module 11.
+module 12.
 
 ::: astuce
 Les images cloud n'embarquent pas `qemu-guest-agent`. Si `libguestfs-tools`
@@ -359,12 +382,14 @@ qm set 9003 --scsi1 local-lvm:5 --scsi2 local-lvm:5   # sdb, sdc bruts
 qm resize 9005 scsi0 40G                  # lab-ops : / à 40 Go
 qm set 9005 --memory 4096                 # lab-ops : 4 Go
 qm set 9006 --cores 1 --memory 1024       # lab-git : 1 vCPU, 1 Go
+qm resize 9007 scsi0 40G                  # lab-virt : / à 40 Go
+qm set 9007 --cpu host --cores 4 --memory 6144  # lab-virt : CPU réel, 6 Go
 ```
 
 `--full 1` fait un clone complet, pas un *linked clone* : chaque VM est
 indépendante du template, ce qui simplifie snapshots et suppression. Les
 disques `scsi1`/`scsi2` de `lab-db` apparaissent en `/dev/sdb` et
-`/dev/sdc` dans la VM (contrôleur `virtio-scsi`), vierges : le module 10
+`/dev/sdc` dans la VM (contrôleur `virtio-scsi`), vierges : le module 11
 les partitionne. `lab-git` est annoncée à 15 Go mais hérite du disque de
 20 Go du template : `qm resize` ne sait pas réduire, et ça n'a aucune
 importance.
@@ -396,7 +421,7 @@ VM redémarre proprement. C'est ce qu'on veut pour un état de référence.
 ```bash
 bash lab-reset.sh                    # rollback des 6 VM sur snap-clean
 bash lab-reset.sh lab-db             # une seule
-bash lab-reset.sh --snap avant-lab10 lab-db   # un autre snapshot
+bash lab-reset.sh --snap avant-lab11 lab-db   # un autre snapshot
 bash lab-reset.sh --list lab-db      # ses snapshots
 bash lab-status.sh                   # statut, agent, ping, ssh, snapshot
 ```
@@ -410,9 +435,9 @@ Avant chaque lab destructeur, c'est toi qui poses le snapshot intermédiaire,
 depuis le nœud :
 
 ```bash
-qm snapshot 9003 avant-lab10             # avant le lab
-qm rollback 9003 avant-lab10             # si ça tourne mal
-qm delsnapshot 9003 avant-lab10          # quand c'est terminé
+qm snapshot 9003 avant-lab11             # avant le lab
+qm rollback 9003 avant-lab11             # si ça tourne mal
+qm delsnapshot 9003 avant-lab11          # quand c'est terminé
 ```
 
 ---
@@ -478,13 +503,13 @@ Host lab-web lab-db lab-rhel lab-ops lab-git
 
 `lab-adm` est atteint par le port 2222 du nœud (la règle DNAT de §0.3) ;
 les cinq autres passent par `lab-adm` avec `ProxyJump`, sans transfert
-d'agent. Le module 12 explique pourquoi c'est la bonne façon de faire.
+d'agent. Le module 14 explique pourquoi c'est la bonne façon de faire.
 
 Ensuite : `ssh lab-adm`, puis `ssh lab-db`. Pour **VS Code**, installe
 l'extension *Remote - SSH* : elle lit ce fichier, `Ctrl+Maj+P → Remote-SSH:
 Connect to Host → lab-adm`, et tu édites les fichiers des VM avec un vrai
 éditeur, terminal intégré compris. C'est l'outil de travail recommandé pour
-les modules 17 à 22 (YAML, HCL, pipelines).
+les modules 21 à 26 (YAML, HCL, pipelines).
 
 **WSL2 en option.** Si tu préfères un vrai bash sous Windows :
 `wsl --install -d Ubuntu-24.04`, puis suis la section « Depuis Ubuntu »
@@ -531,7 +556,7 @@ ajoute le nœud et, si tu utilises la route statique, les VM :
 
 Sans route statique, les entrées `10.10.10.x` ne servent qu'aux modules web
 (ouvrir `http://lab-web` dans ton navigateur via un tunnel `ssh -L`, module
-12). Ce n'est pas gênant de les mettre dès maintenant. L'entrée `lab-git`
+14). Ce n'est pas gênant de les mettre dès maintenant. L'entrée `lab-git`
 sert dès le §0.8 : c'est le nom que ton navigateur et tes `git clone`
 utiliseront.
 
@@ -554,7 +579,7 @@ s'écrit `foreach ($h in 'lab-adm','lab-web','lab-db','lab-rhel','lab-ops',
 'lab-git') { scp workbook.zip scripts/lab/bootstrap-lab.sh "${h}:~/" }`.
 La première connexion à chaque VM te demande d'accepter sa clé d'hôte :
 compare-la avec `qm terminal <vmid>` si tu veux être rigoureux (module
-12), réponds `yes` sinon.
+14), réponds `yes` sinon.
 
 Plus tard, quand tu modifieras tes propres scripts, `rsync` vers `lab-adm`
 suffira : `rsync -av scripts/ lab-adm:~/workbook/scripts/`.
@@ -616,7 +641,7 @@ Vérifie ensuite ce qui compte :
 ```bash
 ssh lab-web 'date; getent hosts lab-db; shellcheck --version | head -2'
 # jeu. 18 sept. 2026 21:04:12 CEST
-# 10.10.10.12     lab-db.lab.local lab-db
+# 11.10.10.12     lab-db.lab.local lab-db
 # ShellCheck - shell script analysis tool
 # version: 0.9.0
 ssh lab-adm 'ls ~/workbook/scripts'
@@ -697,7 +722,7 @@ multipass list                       # IP attribuées en DHCP
 
 Limites : les IP ne sont pas fixes (mets-les dans `/etc/hosts` de chaque VM
 après `multipass list`, et refais-le si elles changent), pas de disques
-additionnels pour `lab-db` (le module 10 travaille alors sur des fichiers
+additionnels pour `lab-db` (le module 11 travaille alors sur des fichiers
 images montés en *loop*, le corrigé le prévoit), et pas de snapshot pratique
 (`multipass snapshot` existe depuis la 1.13 mais reste lent ; `multipass
 delete --purge` + relance est souvent plus rapide).
@@ -764,8 +789,9 @@ directement aux IP depuis ton poste, sans bastion ; garde le `ProxyJump` de
 Un conteneur n'est pas une machine : pas de noyau propre, pas de `systemd`
 par défaut, pas de disques, pas de pare-feu à soi. Ça suffit pour les
 modules **01 à 07** (shell, fichiers, permissions, utilisateurs, texte,
-vim, bash) et **09** (paquets), avec une image `ubuntu:24.04` ou
-`rockylinux:9` lancée en `--privileged` si tu veux `chattr` et `setcap` :
+vim, bash), **10** (paquets) et **27** (Python), avec une image
+`ubuntu:24.04` ou `rockylinux:9` lancée en `--privileged` si tu veux
+`chattr` et `setcap` :
 
 ```bash
 docker run -it --name lab-adm -h lab-adm --privileged ubuntu:24.04 bash
@@ -776,16 +802,31 @@ Ce qui ne marche **pas**, ou mal, en conteneur :
 | Module | Ce qui coince |
 |---|---|
 | 08 (partiel) | pas de `systemd` PID 1, pas de cgroups délégués, OOM killer partagé |
+| 09 | pas de GRUB, d'initramfs, de modules ni de `sysctl` en écriture |
+| 11 | pas de périphériques bloc, pas de LVM, `mdadm`, NFS, iSCSI ni `fstab` |
+| 12, 13 (partiel) | pas de Netplan, `sysctl` réseau et `tcpdump` limités ; netns/veth/nft possibles en `--privileged` |
+| 18 (partiel) | pas de `nftables`/`firewalld` réel, pas de SELinux/AppArmor propre |
+| 14, 15, 16, 17 | `sshd`, nginx/PostgreSQL, `journald`, `rsyslog`, `cron` demandent une init : faisable avec une image systemd, pénible |
+| 19, 20, 22 à 26 | dépannage système, KVM imbriqué, Docker-in-Docker, k3s : non |
+
+Si Docker est ta seule option, fais les modules 01 à 07, 10 et 27 dedans,
+puis loue deux petites VM chez un hébergeur le temps des modules 08 à 19 :
+le coût est de l'ordre d'une dizaine d'euros par mois, et c'est un vrai
+serveur avec une vraie IP publique, ce qui rend le module 18 plus sérieux.
+Le module 20 (KVM imbriqué) exige un vrai hyperviseur ou un serveur dédié.
+
+---|---|
+| 08 (partiel) | pas de `systemd` PID 1, pas de cgroups délégués, OOM killer partagé |
 | 10 | pas de périphériques bloc, pas de LVM, `mdadm`, LUKS ni `fstab` |
 | 11 (partiel) | pas de Netplan / NetworkManager, `sysctl` réseau et `tcpdump` limités |
 | 15 (partiel) | pas de `nftables`/`firewalld` réel, pas de SELinux/AppArmor propre |
 | 12, 13, 14 | `sshd`, `journald`, `rsyslog`, `cron` demandent une init : faisable avec une image systemd, pénible |
 | 16, 18 à 22 | dépannage système, Docker-in-Docker, k3s : non |
 
-Si Docker est ta seule option, fais les modules 01 à 07 et 09 dedans, puis
-loue deux petites VM chez un hébergeur le temps des modules 08, 10 à 16 :
+Si Docker est ta seule option, fais les modules 01 à 07 et 10 dedans, puis
+loue deux petites VM chez un hébergeur le temps des modules 08, 11 à 19 :
 le coût est de l'ordre d'une dizaine d'euros par mois, et c'est un vrai
-serveur avec une vraie IP publique, ce qui rend le module 15 plus sérieux.
+serveur avec une vraie IP publique, ce qui rend le module 18 plus sérieux.
 
 ---
 
@@ -798,13 +839,13 @@ bootstrap crée le dossier), versionné (voir ci-dessous). Le modèle complet
 est en annexe D ; l'essentiel tient en six lignes par séance :
 
 ```markdown
-## 2026-09-21 — Module 10 — séance 1 (2 h)
-- Fait : E10.1 à E10.9, L10.1.
-- Bloqué : L10.2 étape 3, `lvextend` refuse (« insufficient free space »).
+## 2026-09-21 — Module 11 — séance 1 (2 h)
+- Fait : E11.1 à E11.9, L11.1.
+- Bloqué : L11.2 étape 3, `lvextend` refuse (« insufficient free space »).
   20 min : man lvextend, `vgs` → le VG était plein. Corrigé : ajouté sdc
   au VG. Corrigé lu après coup : même conclusion, mais `pvmove` en plus.
 - À revoir : différence `-L +5G` / `-l +100%FREE`.
-- Snapshot : avant-lab10 posé sur 9003, supprimé en fin de séance.
+- Snapshot : avant-lab11 posé sur 9003, supprimé en fin de séance.
 ```
 
 Ce carnet a trois usages : retrouver ce que tu as fait (les incidents de la
@@ -818,7 +859,7 @@ Chaque `X.1 Mise en place` dit quel snapshot poser. Fais-le **avant** de
 lire l'énoncé du Break & Fix, pas quand ça commence à sentir mauvais :
 
 ```bash
-qm snapshot 9003 avant-lab10        # sur le nœud, 5 secondes
+qm snapshot 9003 avant-lab11        # sur le nœud, 5 secondes
 ```
 
 Une VM cassée au-delà du réparable n'est pas un échec, c'est `qm rollback`.
@@ -830,14 +871,14 @@ refaire, ça, c'en est un.
 Tu te connectes toujours en `mathieu` et tu élèves ponctuellement avec
 `sudo`. Pas de `sudo -i` pour « aller plus vite », pas de `PermitRootLogin
 yes`. Trois raisons : c'est comme ça en production ; `sudo` laisse une trace
-dans `/var/log/auth.log` ou le journal (module 13) ; et un `rm -rf` mal tapé
+dans `/var/log/auth.log` ou le journal (module 16) ; et un `rm -rf` mal tapé
 sous ton compte détruit ton `$HOME`, pas la machine. Quand un module te fait
-travailler longtemps en root (module 16, réparation en mode `emergency`),
+travailler longtemps en root (module 19, réparation en mode `emergency`),
 il le dit explicitement.
 
 ### Versionner ses scripts dès le module 01
 
-N'attends pas le module 17 pour Git. Dès le premier script du module 01,
+N'attends pas le module 21 pour Git. Dès le premier script du module 01,
 sur `lab-adm` :
 
 ```bash
@@ -852,12 +893,12 @@ git add -A && git commit -m "M01: E1.1-E1.8, L1.1 ; carnet"
 ```
 
 Trois commandes (`git add -A`, `git commit -m`, `git log --oneline`)
-suffisent jusqu'au module 17, qui reprendra tout proprement (branches,
+suffisent jusqu'au module 21, qui reprendra tout proprement (branches,
 revues, hooks). Le dépôt distant, lui, existe dès maintenant : §0.8 monte
 un serveur Gitea dans ton LAN et §0.9 y pousse le workbook entier, tes
 réponses comprises. Ce dépôt devient le portfolio de l'annexe C : les
 scripts des défis, les post-mortem de P3, les rôles Ansible de P2. Ne mets
-jamais un secret dedans, même « pour tester » — le module 15 explique
+jamais un secret dedans, même « pour tester » — le module 18 explique
 pourquoi un secret commité est un secret grillé.
 
 ### Chercher comme un pro
@@ -902,15 +943,15 @@ wiki, *releases*, *Actions*) qui tient dans un binaire Go et une base
 SQLite. Trois usages :
 
 1. **Sauvegarde continue de ton travail** : tout ce que tu écris pendant
-   les 23 modules est poussé à chaque séance ; les VM de lab sont
+   les 27 modules est poussé à chaque séance ; les VM de lab sont
    jetables, `lab-git` ne l'est pas.
 2. **Portfolio** : le dépôt `workbook/linux-devops-workbook` devient, au
    fil des modules, la preuve de ce que tu sais faire (annexe C). Tu le
    mets en miroir sur GitHub quand tu es prêt à le montrer (§0.9).
-3. **Base des modules 17 et 21** : le module 17 (Git) peut pousser ses
+3. **Base des modules 21 et 25** : le module 21 (Git) peut pousser ses
    dépôts sur cette forge au lieu d'en monter une sur `lab-ops` (son lab
-   L17.5 reste valable, c'est le même produit), et le module 21 (CI/CD)
-   réutilise ta clé, ton compte et tes réflexes Gitea. Le module 21 garde
+   L21.5 reste valable, c'est le même produit), et le module 25 (CI/CD)
+   réutilise ta clé, ton compte et tes réflexes Gitea. Le module 25 garde
    **volontairement** sa propre installation en Docker Compose sur
    `lab-ops` : on y apprend à empiler forge, base PostgreSQL, registre et
    *runner* dans un `compose.yaml`, ce qui n'a rien à voir avec un service
@@ -918,10 +959,10 @@ SQLite. Trois usages :
    logiciel : c'est une comparaison utile, pas une redondance.
 
 Pourquoi **en binaire et pas en Docker** ? Parce que Docker n'arrive qu'au
-module 18 et qu'on ne fait pas tourner en production ce qu'on ne sait pas
+module 22 et qu'on ne fait pas tourner en production ce qu'on ne sait pas
 dépanner. Un binaire, un utilisateur système, une unité systemd, un
 fichier `app.ini` : tout ce dont Gitea a besoin est vu dans les modules 03,
-04, 08 et 09. Tu sauras exactement où sont les données, qui écrit quoi et
+04, 08 et 10. Tu sauras exactement où sont les données, qui écrit quoi et
 comment le sauvegarder.
 
 ### La VM `lab-git`
@@ -965,7 +1006,7 @@ avec SQLite, et ton dépôt fera quelques dizaines de Mo.
 
 Le script `~/workbook/scripts/lab/install-gitea.sh` suit à la lettre la
 procédure officielle (*Installation from binary*, docs.gitea.com). Lis-le
-avant de le lancer : c'est un condensé des modules 04, 08 et 09. Ses
+avant de le lancer : c'est un condensé des modules 04, 08 et 10. Ses
 variables sont en tête de fichier :
 
 ```bash
@@ -1060,7 +1101,7 @@ DISABLE_REGISTRATION = false    ; passera à true après le premier compte
 INSTALL_LOCK = false            ; l'installateur web est autorisé
 
 [actions]
-ENABLED = true                  ; les workflows du §0.9 (runner : module 21)
+ENABLED = true                  ; les workflows du §0.9 (runner : module 25)
 ```
 
 `ROOT_URL` est l'adresse que Gitea écrit partout : liens dans l'interface,
@@ -1069,7 +1110,7 @@ utilisent**, d'où un nom (`lab-git.lab.local`) et pas une IP : le jour où
 tu ajoutes un reverse proxy, une seule ligne change. `SSH_DOMAIN` sert
 aux URL de clone SSH. SQLite est le bon choix ici : une base dans un
 fichier, sauvegardée par un simple `gitea dump`, et un utilisateur seul ne
-la mettra jamais à genoux. Le module 21 utilisera PostgreSQL, pour
+la mettra jamais à genoux. Le module 25 utilisera PostgreSQL, pour
 apprendre l'autre configuration.
 
 **6. L'unité systemd**, reprise de `contrib/systemd/gitea.service` du
@@ -1097,7 +1138,7 @@ WantedBy=multi-user.target
 ```
 
 Les deux lignes commentées permettraient d'écouter sur le port 80 sans
-être root (module 15) ; avec le port 3000, inutile.
+être root (module 18) ; avec le port 3000, inutile.
 
 **7. Démarrage** : `systemctl daemon-reload`, `enable --now gitea`, puis
 un `curl` sur `/api/healthz` jusqu'à obtenir une réponse.
@@ -1207,7 +1248,7 @@ organisation*, visibilité *Publique*) et, dedans, le dépôt
 `linux-devops-workbook` : *Nouveau dépôt*, propriétaire `workbook`,
 **sans** initialiser (ni README, ni `.gitignore`, ni licence : le §0.9
 pousse un dépôt complet). Une organisation plutôt qu'un dépôt sous ton
-compte : tu y rangeras aussi `factura-infra` (module 17), tes rôles
+compte : tu y rangeras aussi `factura-infra` (module 21), tes rôles
 Ansible (P2) et tout ce qui a vocation à finir dans le portfolio, avec des
 équipes et des droits par dépôt le jour où tu travailles à plusieurs.
 
@@ -1275,7 +1316,7 @@ systemctl list-timers gitea-backup.timer --no-pager
 ```
 
 Le timer (`OnCalendar=*-*-* 03:30:00`, `Persistent=true`) rattrape une
-exécution manquée si la VM était éteinte à 3 h 30 ; le module 14 détaille
+exécution manquée si la VM était éteinte à 3 h 30 ; le module 17 détaille
 cette syntaxe. Mais un dump **sur la même VM** ne protège que d'une
 fausse manipulation, pas d'un disque perdu. Rapatrie-le ailleurs — sur ton
 poste, une fois par semaine :
@@ -1353,7 +1394,7 @@ n'y a pas de DNAT pour le port 22 de `lab-git`, et c'est voulu — un seul
 point d'entrée SSH dans le lab.
 
 **Facultatif : nginx en reverse proxy avec un certificat de la PKI de lab.**
-Le module 15 te fait monter une petite autorité de certification pour
+Le module 18 te fait monter une petite autorité de certification pour
 `lab.local`. Quand elle existe, tu peux servir Gitea en HTTPS sur le port
 443 de `lab-git`, sans toucher à Gitea lui-même. Sur `lab-git` :
 
@@ -1442,7 +1483,7 @@ section le met en place en une demi-heure ; le reste du workbook consiste
 linux-devops-workbook/
 ├── .git/                    l'historique (1 commit : import initial)
 ├── .gitea/workflows/
-│   └── build-pdf.yaml       reconstruit les PDF à chaque push (module 21)
+│   └── build-pdf.yaml       reconstruit les PDF à chaque push (module 25)
 ├── .gitignore               build/, *.pdf, secrets…
 ├── README.md                présentation, structure, comment builder
 ├── CONTRIBUTING.md          règles de commit et de rangement
@@ -1521,7 +1562,7 @@ Trois zones, trois règles, à ne jamais mélanger :
 
 **Tes réponses vont dans `reponses/MXX/`, jamais dans `src/`.** Un
 fichier par lab, nommé par l'identifiant : `reponses/M07/L7.2.md`,
-`reponses/M10/BF10.1.md`, `reponses/M15/D15.md`, et un `E7.md` pour les
+`reponses/M11/BF11.1.md`, `reponses/M18/D18.md`, et un `E7.md` pour les
 exercices guidés d'un module (ils sont trop courts pour un fichier
 chacun). Le modèle vide est `reponses/M07/L7.2.md` ; rempli, ça donne :
 
@@ -1577,7 +1618,7 @@ commiter fait grossir le dépôt à chaque page corrigée ; c'est pour ça que
 fichier de `reponses/` dont le nom commence par `secrets` est ignoré,
 pour que tu aies un endroit où noter un mot de passe de lab sans risquer
 de le pousser. Un secret commité puis retiré est toujours dans
-l'historique (module 17 : `git filter-repo`) — et sur GitHub, dans les
+l'historique (module 21 : `git filter-repo`) — et sur GitHub, dans les
 *forks* et les caches. Ça ne se répare pas, ça se **révoque**.
 
 ### Un commit par lab, une branche par module ?
@@ -1587,11 +1628,11 @@ Deux stratégies raisonnables :
 * **Un commit par lab, directement sur `main`** : `feat(M07): L7.2
   rotation des journaux`. Simple, linéaire, et `git log --oneline` raconte
   ta progression jour par jour. C'est la recommandation pour les modules
-  01 à 16.
+  01 à 19.
 * **Une branche par module** (`m17-git`, `m18-docker`), fusionnée par
   *pull request* dans Gitea à la fin du module : tu t'entraînes au *review*
   et aux PR, et tu peux « fermer » un module proprement. C'est la
-  recommandation à partir du module 17, qui introduit précisément ce
+  recommandation à partir du module 21, qui introduit précisément ce
   workflow — avant, ce serait du cérémonial sans contenu.
 
 Dans les deux cas, **un commit = un lab terminé** (ou un défi, ou un Break
@@ -1607,7 +1648,7 @@ final, sujet ≤ 72 caractères :
 
 ```text
 feat(M07): L7.2 rotation des journaux applicatifs
-feat(M10): D10 script d'extension LVM à chaud
+feat(M11): D11 script d'extension LVM à chaud
 fix(M03): E3.4 corrige le calcul de l'umask
 docs(carnet): séance du 2026-10-03
 chore(scripts): mes/backup.sh passe shellcheck
@@ -1619,7 +1660,7 @@ post-mortem), `chore` (outillage, `.gitignore`), `refactor` (un script
 réécrit sans changer ce qu'il fait). La portée est le module (`M07`) ou
 le projet (`P2`). Le corps du message, après une ligne vide, dit
 **pourquoi**, pas quoi (le diff dit quoi) : « corrigé parce que le check
-échouait sur les fichiers cachés ». Le module 17 y revient et te fait
+échouait sur les fichiers cachés ». Le module 21 y revient et te fait
 ajouter un hook qui refuse les messages hors format.
 
 ### Régénérer les PDF
@@ -1684,16 +1725,16 @@ jobs:
           retention-days: 30
 ```
 
-Il **ne tournera pas avant le module 21** : Gitea Actions a besoin d'un
+Il **ne tournera pas avant le module 25** : Gitea Actions a besoin d'un
 *runner* (`act_runner`) enregistré sur cette instance, et c'est
-exactement ce que le module 21 installe sur `lab-ops`. Jusque-là, les
+exactement ce que le module 25 installe sur `lab-ops`. Jusque-là, les
 runs restent en attente (*waiting*) dans l'onglet *Actions*, sans
 conséquence. Tu peux aussi désactiver Actions sur le dépôt (*Paramètres →
-Unités*) et le réactiver plus tard. Quand le runner du module 21 existe,
+Unités*) et le réactiver plus tard. Quand le runner du module 25 existe,
 enregistre-le une seconde fois sur `http://lab-git.lab.local:3000/` (un
 `act_runner` peut servir plusieurs instances, ou tu en lances un second),
 et le prochain push sur `main` produira les PDF en 6 à 8 minutes — le
-temps d'installer TeX Live dans le conteneur ; le module 21 montre comment
+temps d'installer TeX Live dans le conteneur ; le module 25 montre comment
 construire une image `runner` qui l'embarque déjà.
 
 ::: attention

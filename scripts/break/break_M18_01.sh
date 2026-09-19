@@ -1,78 +1,49 @@
 #!/usr/bin/env bash
-# break_M18_01.sh — panne BF18.1 (script shell en PID 1 : boucle et stop lent)
-# Idempotent. Ne modifie rien sur l'hôte hors /opt/factura-docker/bf/01.
+# break_M18_01.sh — panne BF18.1 (blocage invisible de « ufw status »)
+# À lancer sur lab-db, avec sudo. Idempotent.
+# Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-BF=/opt/factura-docker/bf
+
+command -v ufw >/dev/null 2>&1 || {
+  echo "ufw n'est pas installé : apt install ufw" >&2; exit 1; }
+
 SAUV=/root/.breakfix-backup
-REF=/opt/factura-docker/api
-mkdir -p "$SAUV" "$BF"
+BEFORE=/etc/ufw/before.rules
+mkdir -p "$SAUV"
 
-[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M18.sh" >&2; exit 1; }
-command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
-  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L18.1" >&2
-  exit 1; }
+# --- sauvegarde de l'état avant de casser ------------------------------
+[ -f "$SAUV/M18_01.before.rules" ] || cp -a "$BEFORE" \
+  "$SAUV/M18_01.before.rules"
+ufw status verbose > "$SAUV/M18_01.ufw-status.txt" 2>/dev/null || true
 
-# image de base commune aux Break & Fix (construite une seule fois)
-construire_base() {
-  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
-  mkdir -p "$BF/base"
-  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
-  cat > "$BF/base/Dockerfile" <<'DEOF'
-FROM python:3.12-slim-bookworm
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-ENTRYPOINT ["python3", "app.py"]
-DEOF
-  echo "construction de l'image factura-bf:base (une fois)…"
-  docker build -q -t factura-bf:base "$BF/base" >/dev/null
-}
+# --- on s'assure que la politique « correcte » est bien en place -------
+# (sinon le symptôme n'a pas de sens : la règle ALLOW doit exister)
+ufw allow from 10.10.10.10 to any port 22 proto tcp   >/dev/null
+ufw allow from 10.10.10.0/24 to any port 22 proto tcp >/dev/null
+ufw allow from 10.10.10.11 to any port 5432 proto tcp >/dev/null
+ufw default deny incoming  >/dev/null
+ufw default allow outgoing >/dev/null
+yes | ufw enable >/dev/null 2>&1 || true
 
-mkdir -p "$BF/01"
-cp "$REF/app.py" "$REF/requirements.txt" "$BF/01/"
-
-cat > "$BF/01/start.sh" <<'SEOF'
-#!/bin/sh
-# start.sh — lance l'API et surveille son demarrage (equipe precedente)
-echo "[start] lancement de l'API"
-python3 /app/app.py &
-echo "[start] API lancee, pid $!"
-for i in 1 2 3 4 5 6; do
-  sleep 5
-  if python3 -c "import urllib.request as u; \
-u.urlopen('http://127.0.0.1:8000/sante', timeout=2)" 2>/dev/null; then
-    echo "[start] verification $i : OK"
+# --- la panne : une règle DROP dans une chaîne que ufw status ignore ---
+MARQUE='# lab18-maintenance'
+if ! grep -q "$MARQUE" "$BEFORE"; then
+  REGLE="-A ufw-before-input -p tcp --dport 5432 -j DROP $MARQUE"
+  if grep -q '^-A ufw-before-input -i lo -j ACCEPT' "$BEFORE"; then
+    sed -i "/^-A ufw-before-input -i lo -j ACCEPT/a $REGLE" "$BEFORE"
   else
-    echo "[start] verification $i : KO"
+    sed -i "0,/^COMMIT/s//$REGLE\nCOMMIT/" "$BEFORE"
   fi
-done
-echo "[start] surveillance terminee, tout est en ordre"
-SEOF
-chmod 0755 "$BF/01/start.sh"
+fi
 
-cat > "$BF/01/Dockerfile" <<'DEOF'
-FROM python:3.12-slim-bookworm
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py start.sh ./
-EXPOSE 8000
-CMD sh /app/start.sh
-DEOF
+ufw reload >/dev/null 2>&1 || true
 
-echo "construction de l'image factura-legacy:2.3…"
-docker build -q -t factura-legacy:2.3 "$BF/01" >/dev/null
-docker rm -f factura-legacy >/dev/null 2>&1 || true
-docker run -d --name factura-legacy --restart always -p 8001:8000 \
-  factura-legacy:2.3 >/dev/null
+cat <<'EOF'
 
-cat <<'EOF2'
-
-Symptôme attendu : le conteneur factura-legacy (http://127.0.0.1:8001)
-répond pendant une trentaine de secondes, puis « docker ps » le montre
-en Restarting (0), puis il répond à nouveau, et ainsi de suite.
-« docker stop factura-legacy » prend 10 secondes.
-Les sources de l'image sont dans /opt/factura-docker/bf/01/.
-EOF2
+Symptôme attendu : depuis lab-web, toute connexion vers 10.10.10.12:5432
+reste sans réponse puis expire (« connection timed out »).
+Sur lab-db, « sudo ufw status numbered » affiche pourtant bien la règle
+5432/tcp ALLOW IN 10.10.10.11, le service écoute sur 0.0.0.0:5432, SSH
+fonctionne et le ping passe.
+EOF

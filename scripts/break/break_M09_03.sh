@@ -1,48 +1,53 @@
 #!/usr/bin/env bash
-# break_M09_03.sh — panne BF9.3 (un paquet retenu bloque la mise à jour)
+# break_M09_03.sh — panne BF9.3 (pilote réseau interdit : plus de réseau
+#                   au prochain reboot). NE REDÉMARRE PAS la VM.
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-PAQ="$LAB_HOME/lab09/paquets/outil-lab_1.0.0_all.deb"
 mkdir -p "$SAUV"
+F=/etc/modprobe.d/durcissement-pilotes.conf
 
-[ -f "$PAQ" ] || {
-  echo "$PAQ absent : lance d'abord setup_M09.sh" >&2; exit 1; }
-
-# --- on mémorise l'état des retenues avant de toucher à quoi que ce soit
-if [ ! -f "$SAUV/M09_03.holds" ]; then
-  apt-mark showhold > "$SAUV/M09_03.holds" 2>/dev/null || true
+# Le pilote de l'interface par défaut doit être virtio_net.
+IF=$(ip -o route show default 2>/dev/null | awk '{print $5; exit}')
+DRV=$(basename "$(readlink -f "/sys/class/net/${IF:-none}/device/driver" \
+      2>/dev/null)" 2>/dev/null || true)
+if [ "$DRV" != "virtio_net" ]; then
+  echo "l'interface ${IF:-?} n'utilise pas virtio_net (${DRV:-inconnu}) :" >&2
+  echo "scénario prévu pour une VM Proxmox avec carte virtio." >&2
+  exit 1
 fi
 
-# --- 1. la version ancienne est en place --------------------------------
-DEBIAN_FRONTEND=noninteractive \
-  dpkg -i --force-confdef --force-confold "$PAQ" >/dev/null 2>&1 || true
+[ -f "$F" ] && [ ! -f "$SAUV/M09_03.conf" ] && cp -a "$F" "$SAUV/M09_03.conf"
+K="$(uname -r)"
+[ -f "/boot/initrd.img-$K" ] && [ ! -f "$SAUV/M09_03.initrd.img-$K" ] && \
+  cp -a "/boot/initrd.img-$K" "$SAUV/M09_03.initrd.img-$K"
 
-# --- 2. deux verrous posés à deux endroits différents -------------------
-# a) le marqueur dpkg, visible avec apt-mark showhold
-apt-mark hold outil-lab >/dev/null
+# Le « durcissement » : une liste de pilotes inutiles… avec un intrus.
+cat > "$F" <<'EOF2'
+# SEC-77 : pilotes inutiles sur les VM (playbook durcissement v3)
+blacklist floppy
+blacklist pcspkr
+blacklist joydev
+blacklist virtio_net
+install virtio_net /bin/false
+blacklist usb_storage
+install usb_storage /bin/false
+EOF2
+chmod 0644 "$F"
 
-# b) un fichier d'épinglage oublié par un prédécesseur, qui interdit
-#    toute version supérieure à 1.0.0. Les deux produisent le même
-#    symptôme, mais un seul se voit avec apt-mark.
-cat > /etc/apt/preferences.d/80-outil-lab-gel.pref <<'EOF'
-# Gel temporaire suite a l'incident INC-1187 — a retirer apres validation
-Package: outil-lab
-Pin: version 1.0.0
-Pin-Priority: 1001
-EOF
-chmod 0644 /etc/apt/preferences.d/80-outil-lab-gel.pref
+# Comme le playbook : l'initramfs est régénéré pour « appliquer ».
+if command -v update-initramfs >/dev/null 2>&1; then
+  update-initramfs -u -k "$K" >/dev/null 2>&1 || true
+elif command -v dracut >/dev/null 2>&1; then
+  dracut -f >/dev/null 2>&1 || true
+fi
 
-apt-get update >/dev/null 2>&1 || true
+cat <<'EOF2'
 
-cat <<'EOF'
-
-Symptôme attendu : le dépôt publie outil-lab 1.2.0, « apt list
---upgradable » ne le propose pas, et « sudo apt upgrade » se termine
-sans rien faire pour ce paquet. « sudo apt install -y
-outil-lab=1.2.0 » s'arrête sur un E: au lieu d'installer.
-EOF
+Symptôme attendu : APRÈS « sudo reboot », la VM ne répond plus ni au ping
+ni au SSH. Sur la console (qm terminal 9001), « ip link » ne montre que lo.
+Le mot de passe local est réputé inconnu : la reprise se fait par GRUB.
+Rien n'est cassé tant que la VM n'a pas redémarré.
+EOF2

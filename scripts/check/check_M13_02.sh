@@ -1,95 +1,89 @@
 #!/usr/bin/env bash
-# check_M13_02.sh — vérifie le lab L13.2 (centralisation rsyslog)
-#                   À LANCER SUR lab-ops (10.10.10.14).
+# check_M13_02.sh — vérifie le lab L13.2 (policy routing, deux passerelles)
+# À lancer sur lab-adm, avec sudo.
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-echo "== Vérification L13.2 (collecteur) =="
+echo "== Vérification L13.2 =="
 
-CENTRAL=/var/log/central
-CONFD=/etc/rsyslog.d
+[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+LAB_USER="${SUDO_USER:-mathieu}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab13/rapports/policy-routing.md"
 
-# --- 1. le collecteur écoute --------------------------------------------
-if ss -tlnp 2>/dev/null | grep -q ':10514 '; then
-  ok "un service écoute en TCP sur le port 10514"
+# --- 1. la maquette ---------------------------------------------------
+for ns in c-bur gw1 dual gw2 c-prod; do
+  ip netns list 2>/dev/null | grep -qw "$ns" \
+    && ok "netns $ns présent" || ko "netns $ns absent"
+done
+ip -n dual addr 2>/dev/null | grep -q '10\.10\.11\.2/24' \
+  && ok "dual : eth1 = 10.10.11.2/24" || ko "dual sans 10.10.11.2/24"
+ip -n dual addr 2>/dev/null | grep -q '10\.10\.12\.2/24' \
+  && ok "dual : eth2 = 10.10.12.2/24" || ko "dual sans 10.10.12.2/24"
+for gw in gw1 gw2; do
+  [ "$(ip netns exec $gw sysctl -n net.ipv4.ip_forward 2>/dev/null)" = 1 ] \
+    && ok "$gw relaie (ip_forward=1)" \
+    || ko "$gw ne relaie pas (ip_forward dans le netns)"
+done
+
+# --- 2. la table nommée et la règle -------------------------------------
+if grep -qsE '^[0-9]+[[:space:]]+[a-z]' /etc/iproute2/rt_tables.d/*.conf \
+   /etc/iproute2/rt_tables 2>/dev/null; then
+  ok "une table de routage nommée est déclarée"
 else
-  ko "rien n'écoute en TCP sur 10514 (module imtcp chargé ? \
-rsyslog redémarré ?)"
+  ko "aucune table nommée (/etc/iproute2/rt_tables.d/*.conf)"
 fi
-
-if ss -ulnp 2>/dev/null | grep -qE ':514 '; then
-  ko "le port 514 UDP est ouvert : le lab demande du TCP sur 10514 \
-uniquement"
+RULES=$(ip -n dual rule show 2>/dev/null)
+if echo "$RULES" | grep -qE 'from 10\.10\.12\.2 lookup|fwmark .* lookup'; then
+  ok "dual : règle ip rule (par source ou par marque) en place"
 else
-  ok "aucune écoute UDP sur 514"
+  ko "dual : aucune règle from 10.10.12.2 / fwmark (ip -n dual rule)"
 fi
-
-if grep -rqsE '^\s*module\(load="imtcp"|^\s*\$ModLoad imtcp' \
-     /etc/rsyslog.conf "$CONFD" 2>/dev/null; then
-  ok "le module imtcp est chargé dans la configuration"
+TBL=$(echo "$RULES" | grep -oE 'lookup [a-z0-9]+' | grep -vE 'local|main|default' \
+      | head -1 | awk '{print $2}')
+if [ -n "$TBL" ] && ip -n dual route show table "$TBL" 2>/dev/null \
+   | grep -q 'default via 10\.10\.12\.1'; then
+  ok "table $TBL : route par défaut via 10.10.12.1"
+  ip -n dual route show table "$TBL" | grep -q '10\.10\.12\.0/24' \
+    && ok "table $TBL : route connectée 10.10.12.0/24 présente" \
+    || ko "table $TBL sans la route connectée 10.10.12.0/24 (cf. Q13.4)"
 else
-  ko "imtcp n'apparaît nulle part dans /etc/rsyslog.conf ni $CONFD"
+  ko "la table dédiée n'a pas de default via 10.10.12.1"
 fi
 
-# --- 2. le rangement par hôte et par programme ---------------------------
-if [ -d "$CENTRAL" ]; then
-  ok "$CENTRAL existe"
+# --- 3. la preuve : route get, ping, TCP --------------------------------
+if ip -n dual route get 192.168.2.10 from 10.10.12.2 iif eth2 2>/dev/null \
+   | grep -q 'via 10\.10\.12\.1 dev eth2'; then
+  ok "ip route get : la réponse à c-prod sort par eth2"
 else
-  ko "$CENTRAL absent"
+  ko "ip route get ... from 10.10.12.2 iif eth2 ne sort pas via 10.10.12.1"
 fi
-
-if [ -d "$CENTRAL/lab-web" ]; then
-  ok "$CENTRAL/lab-web existe : les messages distants arrivent"
-  NB=$(find "$CENTRAL/lab-web" -type f -name '*.log' 2>/dev/null | wc -l)
-  [ "$NB" -ge 1 ] && ok "$NB fichier(s) de programme rangés pour lab-web" \
-    || ko "aucun fichier .log sous $CENTRAL/lab-web (template mal formé ?)"
-  if find "$CENTRAL/lab-web" -type f -newermt '-10 minutes' 2>/dev/null \
-       | grep -q .; then
-    ok "au moins un fichier a été écrit dans les 10 dernières minutes"
-  else
-    ko "rien n'a été écrit récemment (envoie un logger depuis lab-web)"
-  fi
+if ip netns exec c-prod ping -c1 -W1 10.10.12.2 >/dev/null 2>&1; then
+  ok "ping c-prod -> dual"
 else
-  ko "$CENTRAL/lab-web absent : le nom d'hôte n'est pas exploité par le \
-template, ou rien n'arrive"
+  ko "c-prod ne ping pas 10.10.12.2"
 fi
-
-# --- 3. le service bruyant ne traverse pas le réseau ---------------------
-if [ -d "$CENTRAL" ]; then
-  if grep -rqs 'factura-bruyant' "$CENTRAL" 2>/dev/null || \
-     find "$CENTRAL" -name '*bruyant*' 2>/dev/null | grep -q .; then
-    ko "factura-bruyant est arrivé sur le collecteur : le filtre côté \
-lab-web ne fonctionne pas"
-  else
-    ok "aucune trace de factura-bruyant sur le collecteur"
-  fi
-fi
-
-# --- 4. les messages locaux restent locaux -------------------------------
-HOTE=$(hostname -s)
-if [ -d "$CENTRAL/$HOTE" ] && \
-   find "$CENTRAL/$HOTE" -type f 2>/dev/null | grep -q .; then
-  ko "les messages locaux de $HOTE atterrissent dans $CENTRAL : \
-sépare l'entrée réseau dans un ruleset dédié"
+ip netns exec dual timeout 4 nc -l 9009 >/dev/null 2>&1 &
+sleep 0.5
+if ip netns exec c-prod nc -z -w 2 10.10.12.2 9009 >/dev/null 2>&1; then
+  ok "TCP c-prod -> dual:9009 s'établit"
 else
-  ok "les messages locaux ne polluent pas $CENTRAL"
+  ko "TCP depuis c-prod échoue : la réponse repart par la mauvaise interface ?"
 fi
+wait 2>/dev/null
 
-# --- 5. pare-feu ---------------------------------------------------------
-if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q active
-then
-  if ufw status 2>/dev/null | grep -q '10514'; then
-    ufw status 2>/dev/null | grep '10514' | grep -q '10.10.10.0/24' \
-      && ok "ufw autorise 10514 depuis 10.10.10.0/24 uniquement" \
-      || ko "la règle ufw sur 10514 n'est pas limitée à 10.10.10.0/24"
-  else
-    ko "aucune règle ufw pour le port 10514"
-  fi
+# --- 4. rapport ----------------------------------------------------------
+if [ -s "$RAP" ] && [ "$(grep -cv '^[[:space:]]*$' "$RAP")" -ge 10 ]; then
+  ok "rapport policy-routing.md rédigé"
+  grep -qiE 'asym|rp_filter' "$RAP" \
+    && ok "route asymétrique / rp_filter expliqués" \
+    || ko "le rapport n'explique ni la route asymétrique ni rp_filter"
 else
-  note "ufw inactif : vérifie toi-même le filtrage réseau du port 10514"
+  ko "rapport absent ou trop court : $RAP"
 fi
+note "la variante par marque (étape 5) et Netplan (étape 7) sont à relire"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

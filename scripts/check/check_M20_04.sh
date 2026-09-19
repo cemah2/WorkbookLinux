@@ -1,124 +1,91 @@
 #!/usr/bin/env bash
-# check_M20_04.sh — vérifie le lab L20.4 (module vm-ubuntu, moved, inventaire,
-# qualité). À lancer sur lab-adm, en tant que mathieu. QUICK=1 saute tofu test.
+# check_M20_04.sh — vérifie le lab L20.4 (sauvegarde à chaud et restauration)
+# À lancer sur lab-virt, en tant que mathieu, sans sudo. Utilise l'agent
+# invité de vm-01 pour regarder dans /srv/data.
 set -uo pipefail
 PASS=0; FAIL=0
-ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
-ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
-note() { printf '  [note] %s\n' "$1"; }
+ok()  { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
+ko()  { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 echo "== Vérification L20.4 =="
 
-BASE="$HOME/lab20"
-MOD="$BASE/modules/vm-ubuntu"
-ROOT="$BASE/04-modules"
-INV="$BASE/ansible/inventory.ini"
-TOFU=$(command -v tofu || command -v terraform || true)
-[ -n "$TOFU" ] || { ko "ni tofu ni terraform dans le PATH"; exit 1; }
-if [ -r "$BASE/.env" ]; then set -a; . "$BASE/.env"; set +a; fi
+V="virsh -c qemu:///system"
+VM=vm-01
+BK="$HOME/lab20/backups"
 
-# --- 1. le module ----------------------------------------------------------
-for f in variables.tf main.tf outputs.tf versions.tf README.md; do
-  [ -s "$MOD/$f" ] && ok "module : $f" || ko "module : $f absent"
-done
-for v in name vm_id ip gateway node_name template_id cores memory disk_gb ssh_keys tags user_data; do
-  grep -qE "variable \"$v\"" "$MOD/variables.tf" 2>/dev/null \
-    || ko "module : variable \"$v\" absente"
-done
-ok "variables du module vérifiées"
-grep -q 'proxmox_virtual_environment_file' "$MOD/main.tf" 2>/dev/null \
-  && ok "module : ressource proxmox_virtual_environment_file (snippet)" \
-  || ko "module : pas de ressource proxmox_virtual_environment_file"
-grep -qE 'content_type *= *"snippets"' "$MOD/main.tf" 2>/dev/null \
-  && ok "module : content_type snippets" || ko "module : content_type doit valoir snippets"
-grep -q 'user_data_file_id' "$MOD/main.tf" 2>/dev/null \
-  && ok "module : initialization.user_data_file_id référencé" \
-  || ko "module : user_data_file_id absent"
-grep -qE 'count *= *.*user_data|for_each *= *.*user_data' "$MOD/main.tf" 2>/dev/null \
-  && ok "module : snippet conditionnel (count/for_each sur user_data)" \
-  || ko "module : le snippet doit être créé seulement si user_data est fourni"
-for o in vm_id name ip; do
-  grep -qE "output \"$o\"" "$MOD/outputs.tf" 2>/dev/null || ko "module : output \"$o\" absent"
-done
-ok "outputs du module vérifiés"
-[ "$(grep -c . "$MOD/README.md" 2>/dev/null)" -ge 8 ] && ok "README.md du module substantiel" \
-  || ko "README.md du module trop court (dix lignes attendues)"
+# gexec VM CMD [ARGS...] -> code de retour de la commande dans l'invité (99 si agent muet)
+gexec() {
+  local vm=$1 cmd=$2; shift 2
+  local args pid st i
+  args=$(jq -cn '$ARGS.positional' --args -- "$@")
+  pid=$($V qemu-agent-command "$vm" "{\"execute\":\"guest-exec\",\"arguments\":\
+{\"path\":\"$cmd\",\"arg\":$args,\"capture-output\":true}}" 2>/dev/null | jq -r .return.pid)
+  [ -n "$pid" ] && [ "$pid" != null ] || { echo 99; return; }
+  for i in $(seq 1 30); do
+    st=$($V qemu-agent-command "$vm" \
+         "{\"execute\":\"guest-exec-status\",\"arguments\":{\"pid\":$pid}}" 2>/dev/null)
+    if [ "$(jq -r .return.exited <<<"$st")" = true ]; then
+      jq -r '.return.exitcode // 0' <<<"$st"; return
+    fi
+    sleep 0.5
+  done
+  echo 99
+}
 
-# --- 2. la racine 04-modules ---------------------------------------------------
-cd "$ROOT" 2>/dev/null || { ko "$ROOT absent"; echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-grep -qE 'source *= *"(\.\./modules/vm-ubuntu|git::.*vm-ubuntu\?ref=v[0-9])' ./*.tf \
-  && ok "module \"vm\" appelé (source locale ou git ref)" \
-  || ko "module vm-ubuntu non appelé, ou source sans ref=vX.Y.Z"
-grep -qE 'ref=v0\.1\.0|ref=v1\.0\.0' ./*.tf \
-  && ok "source git versionnée par tag" || ko "source non versionnée (git::...?ref=v0.1.0)"
-git -C "$BASE" tag 2>/dev/null | grep -q '^v0\.1\.0$' && ok "tag git v0.1.0" \
-  || ko "tag v0.1.0 absent dans ~/lab20 (git init, commit, tag)"
-grep -q 'moved' ./*.tf && ok "blocs moved présents" || note "aucun bloc moved (déjà retirés ?)"
-grep -qE 'ssh *\{' providers.tf 2>/dev/null && ok "provider : bloc ssh {} configuré" \
-  || ko "provider : bloc ssh {} manquant (nécessaire pour les snippets)"
-grep -q 'backend "s3"' ./*.tf && ok "backend s3 déclaré" || ko "backend s3 absent"
-[ -s templates/inventory.tftpl ] && ok "templates/inventory.tftpl" || ko "templates/inventory.tftpl absent"
-grep -q 'local_file' ./*.tf && ok "local_file.inventory déclaré" || ko "pas de local_file"
-[ -s tests/vms.tftest.hcl ] && ok "tests/vms.tftest.hcl" || ko "tests/vms.tftest.hcl absent"
-grep -qE 'command *= *plan' tests/vms.tftest.hcl 2>/dev/null && ok "test en mode plan" \
-  || ko "le run du test doit être en command = plan"
-grep -qE 'hooks:' "$BASE/.pre-commit-config.yaml" 2>/dev/null \
-  && grep -q 'fmt' "$BASE/.pre-commit-config.yaml" && grep -q 'validate' "$BASE/.pre-commit-config.yaml" \
-  && ok ".pre-commit-config.yaml avec fmt et validate" \
-  || ko ".pre-commit-config.yaml absent ou sans hooks fmt/validate"
-
-"$TOFU" fmt -check -recursive "$BASE" >/dev/null 2>&1 && ok "tofu fmt -check -recursive" \
-  || ko "tofu fmt -check -recursive signale des fichiers"
-for d in "$ROOT" "$MOD"; do
-  ( cd "$d" && "$TOFU" init -backend=false -input=false >/dev/null 2>&1 \
-      && "$TOFU" validate >/dev/null 2>&1 ) \
-    && ok "validate : ${d#$BASE/}" || ko "validate échoue dans ${d#$BASE/}"
-done
-
-# --- 3. état et plan ------------------------------------------------------------
-"$TOFU" init -input=false >/dev/null 2>&1
-SL=$("$TOFU" state list 2>/dev/null)
-[ "$(grep -c '^module\.vm\["' <<<"$SL")" -ge 5 ] \
-  && ok "état : module.vm[\"...\"] (5 VM)" || ko "état : les VM ne sont pas dans module.vm"
-grep -q 'module\.vm\["lab2-web"\]\.proxmox_virtual_environment_vm' <<<"$SL" \
-  && ok "module.vm[\"lab2-web\"] présent" || ko "module.vm[\"lab2-web\"] absent"
-grep -q 'module\.vm\["lab2-ops"\]\.proxmox_virtual_environment_file' <<<"$SL" \
-  && ok "snippet de lab2-ops dans l'état" || ko "aucun snippet pour lab2-ops (étape 3)"
-grep -q '^proxmox_virtual_environment_vm\.rhel$' <<<"$SL" \
-  && ok "rhel toujours hors module" || ko "rhel absente de l'état"
-grep -q '^local_file\.inventory$' <<<"$SL" && ok "local_file.inventory dans l'état" \
-  || ko "local_file.inventory absent de l'état"
-if "$TOFU" plan -detailed-exitcode -input=false -lock=false >/dev/null 2>&1; then
-  ok "tofu plan vide"
+# --- sauvegarde autoportante --------------------------------------------------
+LAST=$(ls -1t "$BK"/$VM-*.qcow2 2>/dev/null | head -1)
+if [ -n "$LAST" ]; then
+  ok "sauvegarde présente : $(basename "$LAST")"
+  if qemu-img info "$LAST" 2>/dev/null | grep -q '^backing file'; then
+    ko "la sauvegarde a un backing file : elle n'est pas autoportante (convert)"
+  else
+    ok "sauvegarde autoportante (pas de backing file)"
+  fi
+  [ -s "${LAST%.qcow2}.xml" ] && grep -q "<name>$VM</name>" "${LAST%.qcow2}.xml" \
+    && ok "XML de la VM sauvegardé à côté" || ko "XML absent à côté de la sauvegarde"
+  grep -q '\.sauv' "${LAST%.qcow2}.xml" 2>/dev/null \
+    && ko "le XML sauvegardé référence l'overlay .sauv (dumpxml après le pivot)" \
+    || ok "le XML sauvegardé ne référence pas l'overlay"
 else
-  rc=$?
-  [ "$rc" -eq 2 ] && ko "tofu plan non vide" || ko "tofu plan échoue"
+  ko "aucune sauvegarde $BK/$VM-*.qcow2"
 fi
 
-# --- 4. inventaire et Ansible ------------------------------------------------------
-if [ -s "$INV" ]; then
-  ok "inventory.ini présent"
-  [ "$(awk '/^\[lab2\]/{f=1;next} /^\[/{f=0} f && /ansible_host=/' "$INV" | wc -l)" -eq 5 ] \
-    && ok "[lab2] : 5 hôtes" || ko "[lab2] ne contient pas 5 lignes ansible_host="
-  awk '/^\[docker\]/{f=1;next} /^\[/{f=0} f' "$INV" | grep -q '^lab2-ops' \
-    && ok "[docker] contient lab2-ops" || ko "[docker] sans lab2-ops"
-  grep -q 'ansible_user=mathieu' "$INV" && ok "[lab2:vars] ansible_user=mathieu" \
-    || ko "ansible_user=mathieu absent"
-  if command -v ansible >/dev/null 2>&1; then
-    P=$(ansible -i "$INV" lab2 -m ping -o 2>/dev/null | grep -c SUCCESS)
-    [ "$P" -eq 5 ] && ok "ansible ping : 5 SUCCESS" || ko "ansible ping : $P/5 SUCCESS"
-  else note "ansible absent : ping sauté"; fi
+# --- état de la VM et de la chaîne --------------------------------------------
+if [ "$($V domstate $VM 2>/dev/null)" = running ]; then
+  ok "$VM en marche"
+  DISK=$($V domblklist $VM | awk '$1=="vda"{print $2}')
+  case "$DISK" in
+    *.sauv*|*.snap*|*tmp*) ko "vda pointe sur un overlay ($DISK) : blockcommit --pivot manquant" ;;
+    *) ok "vda sur un disque de référence : $DISK" ;;
+  esac
+  $V vol-list default | awk 'NR>2{print $1}' | grep -q '\.sauv' \
+    && ko "un overlay .sauv traîne dans le pool default" \
+    || ok "aucun overlay .sauv dans le pool"
+  $V snapshot-list $VM | awk 'NR>2 && NF{print}' | grep -q . \
+    && ko "des snapshots internes subsistent (snapshot-delete)" \
+    || ok "aucun snapshot interne restant"
+  $V domstate --reason $VM | grep -q saved \
+    && ko "un managedsave est en attente (managedsave-remove ou start)" \
+    || ok "pas de managedsave en attente"
+  # contenu de l'invité, via l'agent
+  case "$(gexec $VM /usr/bin/test -e /srv/data/avant.txt)" in
+    0)  ok "/srv/data/avant.txt présent dans l'invité (restauration effective)" ;;
+    99) ko "agent muet : impossible de vérifier /srv/data" ;;
+    *)  ko "/srv/data/avant.txt absent : la restauration n'a pas repris la sauvegarde" ;;
+  esac
+  case "$(gexec $VM /usr/bin/test -e /srv/data/apres.txt)" in
+    0)  ko "/srv/data/apres.txt présent : le disque n'a pas été remplacé" ;;
+    99) : ;;
+    *)  ok "/srv/data/apres.txt absent" ;;
+  esac
 else
-  ko "$INV absent (généré par local_file.inventory)"
+  ko "$VM n'est pas en marche"
 fi
-ssh -o BatchMode=yes -o ConnectTimeout=5 mathieu@10.10.10.105 \
-  'docker version --format {{.Server.Version}}' 2>/dev/null | grep -q . \
-  && ok "docker actif sur lab2-ops (snippet appliqué)" \
-  || ko "docker absent sur lab2-ops (user-data non appliqué ?)"
 
-# --- 5. tofu test ----------------------------------------------------------------
-if [ "${QUICK:-0}" = 1 ]; then note "QUICK=1 : tofu test sauté"
-elif "$TOFU" test >/dev/null 2>&1; then ok "tofu test vert"
-else ko "tofu test échoue (lis la sortie de tofu test)"; fi
+# --- rapport ---------------------------------------------------------------
+R="$HOME/lab20/rapports/sav-15.md"
+[ -s "$R" ] && grep -qi 'vzdump' "$R" && grep -qi 'blockcommit' "$R" \
+  && ok "rapport sav-15.md (blockcommit et vzdump cités)" \
+  || ko "rapport $R absent ou incomplet"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M10_04.sh — vérifie le lab L10.4 (croissance du disque + swap)
+# check_M10_04.sh — vérifie le lab L10.4 (compiler puis empaqueter)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,73 +7,94 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L10.4 =="
 
-# --- 1. la racine a bien grandi ----------------------------------------
-GO=$(df -BG --output=size / 2>/dev/null | tail -1 | tr -dc '0-9')
-if [ "${GO:-0}" -ge 45 ]; then
-  ok "/ fait ${GO} Go (>= 45 Go attendus)"
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab10/rapports/compilation.md"
+PAQDIR="$HOMEDIR/lab10/paquets"
+
+# --- 1. le paquet construit ---------------------------------------------
+DEB=$(ls "$PAQDIR"/horodate*.deb 2>/dev/null | head -1)
+if [ -n "$DEB" ]; then
+  ok "paquet construit : $(basename "$DEB")"
+  CTRL=$(dpkg-deb -f "$DEB" 2>/dev/null)
+  printf '%s' "$CTRL" | grep -qi '^Version:.*1\.4' \
+    && ok "le champ Version reprend la version amont (1.4)" \
+    || ko "le champ Version du paquet ne contient pas 1.4"
+  printf '%s' "$CTRL" | grep -qi '^Maintainer:' \
+    && ok "champ Maintainer renseigné" \
+    || ko "champ Maintainer absent du control"
+  if dpkg-deb -c "$DEB" 2>/dev/null | grep -q './usr/local/bin/horodate'; then
+    ok "le paquet livre /usr/local/bin/horodate"
+  else
+    ko "le paquet ne contient pas ./usr/local/bin/horodate — utilise \
+make install DESTDIR=... avec --prefix=/usr/local"
+  fi
+  if dpkg-deb -c "$DEB" 2>/dev/null | grep -qE ' \./usr/bin/'; then
+    ko "le paquet écrit dans /usr/bin : ce territoire appartient à la \
+distribution, pas à toi"
+  else
+    ok "le paquet ne touche pas à /usr/bin"
+  fi
 else
-  ko "/ ne fait que ${GO:-?} Go : la chaîne growpart -> pvresize -> lvextend \
--> resize2fs n'est pas allée jusqu'au bout (df -h /, puis pvs et vgs)"
+  ko "aucun paquet horodate*.deb dans ~/lab10/paquets/"
 fi
 
-# --- 2. la chaîne a bien été poussée couche par couche -----------------
-if command -v pvs >/dev/null 2>&1; then
-  SRC=$(findmnt -no SOURCE / 2>/dev/null)
-  case "$SRC" in
-    /dev/mapper/*|/dev/*-*)
-      ok "/ est sur un volume logique ($SRC)"
-      VGFREE=$(vgs --noheadings --units g --nosuffix -o vg_free 2>/dev/null \
-        | head -1 | tr -d ' ' | cut -d. -f1)
-      [ "${VGFREE:-0}" -le 2 ] \
-        && ok "le groupe de volumes est consommé (${VGFREE:-0} Go libres)" \
-        || note "il reste ${VGFREE} Go libres dans le VG : \
-lvextend -l +100%FREE n'a pas tout pris"
-      ;;
-    *) note "/ n'est pas sur LVM ($SRC) : adapte la procédure à ta VM" ;;
-  esac
-fi
-
-# --- 3. le swap est actif et de la bonne taille ------------------------
-SWKB=$(awk 'NR>1 {s+=$3} END {print s+0}' /proc/swaps 2>/dev/null)
-SWMO=$(( SWKB / 1024 ))
-if [ "$SWMO" -ge 1900 ]; then
-  ok "swap actif : ${SWMO} Mio"
+# --- 2. le paquet est installé et suivi par dpkg -------------------------
+PKG=$(dpkg-query -W -f '${binary:Package}\n' 2>/dev/null \
+      | grep -i '^horodate' | head -1)
+if [ -n "$PKG" ]; then
+  ok "paquet installé et connu de dpkg : $PKG"
+  ETAT=$(dpkg-query -f '${db:Status-Abbrev}' -W "$PKG" 2>/dev/null)
+  [ "$ETAT" = "ii " ] && ok "état ii" || ko "état « $ETAT », on attend ii"
 else
-  ko "swap actif : ${SWMO} Mio (2 Gio attendus) — mkswap puis swapon, \
-vérifie avec swapon --show"
+  ko "aucun paquet horodate installé : dpkg -i ton .deb"
 fi
 
-# --- 4. le swap est permanent ------------------------------------------
-if awk '$0 !~ /^[[:space:]]*#/ && $3 == "swap"' /etc/fstab 2>/dev/null \
-     | grep -q .; then
-  ok "une ligne swap est présente dans /etc/fstab"
+# --- 3. le binaire répond et appartient au paquet ------------------------
+BIN=/usr/local/bin/horodate
+if [ -x "$BIN" ]; then
+  ok "$BIN est exécutable"
+  V=$("$BIN" --version 2>/dev/null)
+  [ "$V" = "horodate 1.4" ] \
+    && ok "horodate --version répond « horodate 1.4 »" \
+    || ko "horodate --version répond « ${V:-rien} »"
+  if dpkg -S "$BIN" >/dev/null 2>&1; then
+    ok "dpkg -S $BIN retrouve le paquet propriétaire"
+  else
+    ko "dpkg -S $BIN ne trouve rien : le binaire a été posé par un \
+make install sauvage, pas par un paquet"
+  fi
 else
-  ko "aucune ligne swap dans /etc/fstab : le swap disparaîtra au redémarrage \
-(/swapfile none swap sw 0 0)"
+  ko "$BIN absent ou non exécutable"
 fi
 
-if [ -f /swapfile ]; then
-  DROITS=$(stat -c %a /swapfile)
-  [ "$DROITS" = "600" ] && ok "/swapfile est en mode 600" \
-    || ko "/swapfile est en mode $DROITS : swapon exige 600 (chmod 600)"
-fi
+# --- 4. aucune trace du make install direct ------------------------------
+for f in /usr/bin/horodate /usr/local/bin/horodate.old; do
+  [ -e "$f" ] && ko "résidu à nettoyer : $f"
+done
+ORPH=$(ls -1 /usr/local/bin 2>/dev/null | while read -r f; do
+         dpkg -S "/usr/local/bin/$f" >/dev/null 2>&1 || echo "$f"
+       done | wc -l)
+[ "$ORPH" -eq 0 ] \
+  && ok "aucun binaire non suivi dans /usr/local/bin" \
+  || note "$ORPH binaire(s) de /usr/local/bin ne sont suivis par aucun \
+paquet — acceptable, mais sache-le"
 
-# --- 5. swappiness -----------------------------------------------------
-SW=$(cat /proc/sys/vm/swappiness 2>/dev/null)
-[ "${SW:-60}" = "10" ] && ok "vm.swappiness vaut 10" \
-  || ko "vm.swappiness vaut ${SW:-?} au lieu de 10"
-
-if grep -rqs 'swappiness' /etc/sysctl.d/ /etc/sysctl.conf 2>/dev/null; then
-  ok "vm.swappiness est fixé de façon persistante"
+# --- 5. le rapport --------------------------------------------------------
+if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 10 ]; then
+  ok "rapport compilation.md rédigé"
+  grep -qi 'DESTDIR' "$RAP" \
+    && ok "le rapport explique DESTDIR" \
+    || ko "le rapport doit expliquer le rôle de DESTDIR"
+  grep -qiE 'prefix' "$RAP" \
+    && ok "le rapport explique --prefix" \
+    || ko "le rapport doit expliquer --prefix et le choix de /usr/local"
+  grep -qiE 'desinstall|désinstall|uninstall|purge' "$RAP" \
+    && ok "le rapport décrit la désinstallation" \
+    || ko "le rapport doit décrire comment on retire proprement l'outil"
 else
-  ko "vm.swappiness n'est écrit nulle part dans /etc/sysctl.d/ : la valeur \
-sera perdue au redémarrage"
+  ko "rapport absent ou trop court : ~/lab10/rapports/compilation.md"
 fi
-
-# --- 6. fstab cohérent --------------------------------------------------
-findmnt --verify >/dev/null 2>&1 \
-  && ok "findmnt --verify ne signale aucune anomalie" \
-  || ko "findmnt --verify signale une anomalie dans /etc/fstab"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

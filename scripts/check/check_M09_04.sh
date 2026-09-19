@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M09_04.sh — vérifie le lab L9.4 (compiler puis empaqueter)
+# check_M09_04.sh — vérifie le lab L9.4 (disque à chaud, udev, ordonnanceur)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,94 +7,78 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L9.4 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab09/rapports/compilation.md"
-PAQDIR="$HOMEDIR/lab09/paquets"
+HOME_DIR="$(getent passwd "${SUDO_USER:-${USER:-$(id -un)}}" | cut -d: -f6)"
+RAP="$HOME_DIR/lab09/rapports"
+LINK=/dev/disk/lab/cache
 
-# --- 1. le paquet construit ---------------------------------------------
-DEB=$(ls "$PAQDIR"/horodate*.deb 2>/dev/null | head -1)
-if [ -n "$DEB" ]; then
-  ok "paquet construit : $(basename "$DEB")"
-  CTRL=$(dpkg-deb -f "$DEB" 2>/dev/null)
-  printf '%s' "$CTRL" | grep -qi '^Version:.*1\.4' \
-    && ok "le champ Version reprend la version amont (1.4)" \
-    || ko "le champ Version du paquet ne contient pas 1.4"
-  printf '%s' "$CTRL" | grep -qi '^Maintainer:' \
-    && ok "champ Maintainer renseigné" \
-    || ko "champ Maintainer absent du control"
-  if dpkg-deb -c "$DEB" 2>/dev/null | grep -q './usr/local/bin/horodate'; then
-    ok "le paquet livre /usr/local/bin/horodate"
-  else
-    ko "le paquet ne contient pas ./usr/local/bin/horodate — utilise \
-make install DESTDIR=... avec --prefix=/usr/local"
-  fi
-  if dpkg-deb -c "$DEB" 2>/dev/null | grep -qE ' \./usr/bin/'; then
-    ko "le paquet écrit dans /usr/bin : ce territoire appartient à la \
-distribution, pas à toi"
-  else
-    ok "le paquet ne touche pas à /usr/bin"
-  fi
+# --- 1. lien stable --------------------------------------------------------
+if [ -L "$LINK" ]; then
+  DEV=$(readlink -f "$LINK"); B=$(basename "$DEV")
+  ok "$LINK -> $DEV"
 else
-  ko "aucun paquet horodate*.deb dans ~/lab09/paquets/"
+  ko "$LINK absent : règle udev (SYMLINK+=) + udevadm trigger ?"
+  DEV=""; B=""
 fi
 
-# --- 2. le paquet est installé et suivi par dpkg -------------------------
-PKG=$(dpkg-query -W -f '${binary:Package}\n' 2>/dev/null \
-      | grep -i '^horodate' | head -1)
-if [ -n "$PKG" ]; then
-  ok "paquet installé et connu de dpkg : $PKG"
-  ETAT=$(dpkg-query -f '${db:Status-Abbrev}' -W "$PKG" 2>/dev/null)
-  [ "$ETAT" = "ii " ] && ok "état ii" || ko "état « $ETAT », on attend ii"
+# --- 2. la règle -----------------------------------------------------------
+RULE=$(grep -lsE 'disk/lab/cache' /etc/udev/rules.d/*.rules | head -1)
+if [ -n "$RULE" ]; then
+  ok "règle trouvée : $RULE"
+  grep -qE 'ID_SERIAL|ID_PATH|ID_WWN' "$RULE" \
+    && ok "la règle identifie le disque par une propriété stable" \
+    || ko "la règle n'utilise ni ID_SERIAL ni ID_PATH : KERNEL==\"sdb\" \
+n'est pas stable"
+  grep -qE 'queue/scheduler' "$RULE" \
+    && ok "la règle fixe l'ordonnanceur" \
+    || ko "pas de ATTR{queue/scheduler} dans la règle"
+  N=$(basename "$RULE" | cut -d- -f1)
+  case "$N" in
+    [0-5]*|60) ko "rang $N : la règle passe avant 60-persistent-storage \
+(ID_SERIAL pas encore importé)" ;;
+    *) ok "rang $N, après 60-persistent-storage" ;;
+  esac
 else
-  ko "aucun paquet horodate installé : dpkg -i ton .deb"
+  ko "aucune règle dans /etc/udev/rules.d mentionnant disk/lab/cache"
 fi
 
-# --- 3. le binaire répond et appartient au paquet ------------------------
-BIN=/usr/local/bin/horodate
-if [ -x "$BIN" ]; then
-  ok "$BIN est exécutable"
-  V=$("$BIN" --version 2>/dev/null)
-  [ "$V" = "horodate 1.4" ] \
-    && ok "horodate --version répond « horodate 1.4 »" \
-    || ko "horodate --version répond « ${V:-rien} »"
-  if dpkg -S "$BIN" >/dev/null 2>&1; then
-    ok "dpkg -S $BIN retrouve le paquet propriétaire"
-  else
-    ko "dpkg -S $BIN ne trouve rien : le binaire a été posé par un \
-make install sauvage, pas par un paquet"
-  fi
-else
-  ko "$BIN absent ou non exécutable"
+# --- 3. état du disque ------------------------------------------------------
+if [ -n "$B" ] && [ -f "/sys/block/$B/queue/scheduler" ]; then
+  grep -q '\[none\]' "/sys/block/$B/queue/scheduler" \
+    && ok "ordonnanceur de $B : none" \
+    || ko "ordonnanceur de $B : $(cat /sys/block/$B/queue/scheduler)"
+  SZ=$(( $(cat /sys/block/$B/size) * 512 / 1024 / 1024 ))
+  [ "$SZ" -ge 2000 ] && ok "taille de $B : $SZ Mo (agrandi à chaud)" \
+    || ko "taille de $B : $SZ Mo, attendu 2 Go (qm disk resize + rescan)"
+  FS=$(lsblk -no FSTYPE "$DEV" 2>/dev/null | head -1)
+  LB=$(lsblk -no LABEL "$DEV" 2>/dev/null | head -1)
+  [ "$FS" = ext4 ] && ok "système de fichiers ext4" \
+    || ko "pas de ext4 sur $DEV (lu : ${FS:-aucun})"
+  [ "$LB" = cache ] && ok "label 'cache' (by-label présent)" \
+    || ko "label attendu 'cache', lu : ${LB:-aucun}"
+  [ -e /dev/disk/by-label/cache ] && ok "/dev/disk/by-label/cache existe" \
+    || ko "/dev/disk/by-label/cache absent (udevadm trigger après mkfs ?)"
 fi
 
-# --- 4. aucune trace du make install direct ------------------------------
-for f in /usr/bin/horodate /usr/local/bin/horodate.old; do
-  [ -e "$f" ] && ko "résidu à nettoyer : $f"
-done
-ORPH=$(ls -1 /usr/local/bin 2>/dev/null | while read -r f; do
-         dpkg -S "/usr/local/bin/$f" >/dev/null 2>&1 || echo "$f"
-       done | wc -l)
-[ "$ORPH" -eq 0 ] \
-  && ok "aucun binaire non suivi dans /usr/local/bin" \
-  || note "$ORPH binaire(s) de /usr/local/bin ne sont suivis par aucun \
-paquet — acceptable, mais sache-le"
-
-# --- 5. le rapport --------------------------------------------------------
-if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 10 ]; then
-  ok "rapport compilation.md rédigé"
-  grep -qi 'DESTDIR' "$RAP" \
-    && ok "le rapport explique DESTDIR" \
-    || ko "le rapport doit expliquer le rôle de DESTDIR"
-  grep -qiE 'prefix' "$RAP" \
-    && ok "le rapport explique --prefix" \
-    || ko "le rapport doit expliquer --prefix et le choix de /usr/local"
-  grep -qiE 'desinstall|désinstall|uninstall|purge' "$RAP" \
-    && ok "le rapport décrit la désinstallation" \
-    || ko "le rapport doit décrire comment on retire proprement l'outil"
+# --- 4. fichiers de nommage d'interface (non installés) --------------------
+if ls "$HOME_DIR"/lab09/udev/*.link >/dev/null 2>&1; then
+  ok "un fichier .link est rédigé dans ~/lab09/udev"
 else
-  ko "rapport absent ou trop court : ~/lab09/rapports/compilation.md"
+  ko "aucun .link dans ~/lab09/udev"
 fi
+ls "$HOME_DIR"/lab09/udev/*.rules >/dev/null 2>&1 \
+  && ok "une règle udev de nommage est rédigée dans ~/lab09/udev" \
+  || ko "aucune règle .rules dans ~/lab09/udev"
+if grep -lsq 'NAME=' /etc/udev/rules.d/*.rules /etc/systemd/network/*.link \
+   2>/dev/null; then
+  ko "une règle de renommage est INSTALLÉE (elle devait rester à blanc)"
+else
+  ok "aucune règle de renommage installée pour de bon"
+fi
+
+# --- 5. rapport --------------------------------------------------------------
+[ -f "$RAP/udev.md" ] && [ "$(wc -l < "$RAP/udev.md")" -ge 12 ] \
+  && ok "rapport udev.md présent" \
+  || ko "rapport $RAP/udev.md absent ou trop court"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

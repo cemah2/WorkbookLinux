@@ -1,125 +1,134 @@
 #!/usr/bin/env bash
-# check_M22_06.sh — vérifie le défi D22 (kustomize, PDB/HPA, SLO, règles
-# burn rate testées, runbooks, tableau SLO, verif-prod.sh, post-mortem).
-# À lancer sur lab-ops, en tant que mathieu.
+# check_M22_06.sh — vérifie le défi D22 (livraison de factura-api 2.0)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
+note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification D22 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab22"
-OBS=/opt/observabilite
-PROM=http://10.10.10.14:9090
-GRAF=http://10.10.10.14:3000
-export KUBECONFIG="${KUBECONFIG:-$HOMEDIR/.kube/config}"
-k() { kubectl -n factura "$@" 2>/dev/null; }
+REG=lab-ops.lab.local:5000
+IMG="$REG/factura-api:2.0"
+D="$HOME/lab22/compose"
+S="$HOME/lab22/bin/livrer.sh"
+R="$HOME/lab22/rapports/runbook-docker.md"
+insp() { docker image inspect "$IMG" --format "$1" 2>/dev/null; }
 
-# --- 1. manifestes kustomize -------------------------------------------------
-KZ="$BASE/prod/kustomization.yaml"
-[ -s "$KZ" ] && ok "kustomization.yaml présent" || ko "$KZ absent"
-python3 - "$KZ" <<'EOF' 2>/dev/null && ok "kustomization : namespace factura, images, secretGenerator" \
-  || ko "kustomization.yaml : attendu namespace: factura, images: (newTag), secretGenerator ou Secrets en resources"
-import sys, yaml
-c = yaml.safe_load(open(sys.argv[1]))
-assert c.get("namespace") == "factura"
-assert c.get("images") and any("newTag" in i for i in c["images"])
-assert c.get("secretGenerator") or any("secret" in r for r in c.get("resources", []))
-EOF
-OUT=$(kubectl kustomize "$BASE/prod/" 2>/dev/null)
-if [ -n "$OUT" ]; then
-  ok "kubectl kustomize construit sans erreur"
-  for kind in PodDisruptionBudget HorizontalPodAutoscaler Ingress StatefulSet; do
-    printf '%s' "$OUT" | grep -q "^kind: $kind$" && ok "  contient $kind" \
-      || ko "  $kind absent du rendu kustomize"
+docker info >/dev/null 2>&1 || { ko "Docker inaccessible (L22.1)"; \
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
+
+# --- 1. l'image ---------------------------------------------------------
+if docker image inspect "$IMG" >/dev/null 2>&1; then
+  ok "image $IMG présente localement"
+  T=$(insp '{{.Size}}')
+  [ "$T" -lt $((150 * 1024 * 1024)) ] \
+    && ok "taille $((T / 1024 / 1024)) Mio (< 150)" \
+    || ko "image trop grosse : $((T / 1024 / 1024)) Mio"
+  case "$(insp '{{.Config.User}}')" in
+    ""|root|0|0:0) ko "l'image tourne en root" ;;
+    *[!0-9:]*) ko "USER doit être numérique (lu : $(insp '{{.Config.User}}'))" ;;
+    *) ok "utilisateur numérique $(insp '{{.Config.User}}')" ;;
+  esac
+  [ "$(insp '{{.Config.Healthcheck}}')" != "<nil>" ] \
+    && ok "HEALTHCHECK présent" || ko "HEALTHCHECK absent"
+  case "$(insp '{{index .Config.Entrypoint 0}}')" in
+    ""|sh|/bin/sh|bash|/bin/bash) ko "ENTRYPOINT absent ou forme shell" ;;
+    *) ok "ENTRYPOINT en forme exec" ;;
+  esac
+  [ "$(insp '{{index .Config.Labels "org.opencontainers.image.version"}}')" \
+    = "2.0" ] && ok "label version=2.0" || ko "label \
+org.opencontainers.image.version doit valoir 2.0"
+  insp '{{.RepoDigests}}' | grep -q "$REG/factura-api@sha256:" \
+    && ok "l'image a été poussée dans le registre (RepoDigests)" \
+    || ko "aucun digest $REG dans RepoDigests : docker push manquant"
+else
+  ko "image $IMG absente (livrer.sh 2.0 ?)"
+fi
+grep -qiE '^FROM .*:latest|^FROM [a-z]+:[0-9]+($| )' "$HOME/lab22/api/Dockerfile" \
+  2>/dev/null && ko "Dockerfile : tag de base flottant" \
+  || ok "Dockerfile : base épinglée"
+
+# --- 2. la pile prod ----------------------------------------------------
+if [ -f "$D/compose.yaml" ] && [ -f "$D/compose.prod.yaml" ]; then
+  J=$(cd "$D" && APP_VERSION=2.0 docker compose -f compose.yaml \
+    -f compose.prod.yaml config --format json 2>/dev/null)
+  [ -n "$J" ] && ok "compose.yaml + compose.prod.yaml valides" \
+    || ko "docker compose -f compose.yaml -f compose.prod.yaml config échoue"
+  echo "$J" | jq -e '.services.app.build == null' >/dev/null 2>&1 \
+    && ok "prod : pas de build:" || ko "prod : build: encore présent"
+  echo "$J" | jq -e ".services.app.image | test(\"$REG\")" >/dev/null 2>&1 \
+    && ok "prod : image du registre" || ko "prod : app.image hors registre"
+  echo "$J" | jq -e '.services.app.read_only == true and (.services.app.cap_drop | index("ALL") != null)' \
+    >/dev/null 2>&1 && ok "app : read_only + cap_drop ALL" \
+    || ko "app : read_only: true et cap_drop: [ALL] attendus"
+  echo "$J" | jq -e '.services.app.security_opt | map(test("no-new-privileges")) | any' \
+    >/dev/null 2>&1 && ok "app : no-new-privileges" \
+    || ko "app : security_opt no-new-privileges manquant"
+  echo "$J" | jq -e '(.services.app.mem_limit // .services.app.deploy.resources.limits.memory) != null' \
+    >/dev/null 2>&1 && ok "app : limite mémoire" || ko "app : mem_limit manquant"
+  echo "$J" | jq -e '.services.app.logging.options["max-size"]' >/dev/null 2>&1 \
+    && ok "app : journaux bornés" || ko "app : logging max-size manquant"
+  echo "$J" | jq -e '.services.app.secrets' >/dev/null 2>&1 \
+    && ok "app : secret déclaré" || ko "app : aucun secret Compose"
+  [ "$(echo "$J" | jq -r '.services.app.depends_on.db.condition')" \
+    = service_healthy ] && ok "app attend db healthy" \
+    || ko "app.depends_on.db : condition service_healthy attendue"
+else
+  ko "$D/compose.yaml ou compose.prod.yaml manquant"
+fi
+V=$(curl -fsS --max-time 4 http://127.0.0.1:8080/version 2>/dev/null \
+  | jq -r .version 2>/dev/null)
+case "$V" in
+  2.*) ok "/version répond $V via le proxy" ;;
+  *)   ko "/version ne répond pas 2.x sur :8080 (lu : ${V:-rien})" ;;
+esac
+CI=$(docker inspect factura-app-1 --format '{{.Config.Image}}' 2>/dev/null)
+echo "$CI" | grep -q "^$REG/" && ok "factura-app-1 tourne depuis $CI" \
+  || ko "factura-app-1 ne tourne pas depuis l'image du registre (${CI:-absent})"
+[ "$(docker inspect factura-app-1 --format '{{.State.Health.Status}}' \
+  2>/dev/null)" = healthy ] && ok "factura-app-1 healthy" \
+  || ko "factura-app-1 n'est pas healthy"
+
+# --- 3. le script ------------------------------------------------------
+if [ -x "$S" ]; then
+  ok "livrer.sh présent et exécutable"
+  head -5 "$S" | grep -q 'set -euo pipefail' && ok "bash strict" \
+    || ko "livrer.sh : set -euo pipefail attendu en tête"
+  grep -q 'trivy' "$S" && ok "livrer.sh appelle Trivy" \
+    || ko "livrer.sh n'appelle pas trivy"
+  grep -qE 'docker (image )?inspect' "$S" \
+    && ok "livrer.sh lit l'image avec docker inspect" \
+    || ko "livrer.sh doit contrôler taille et utilisateur via docker inspect"
+  grep -q 'docker push' "$S" && ok "livrer.sh pousse l'image" \
+    || ko "livrer.sh ne fait pas de docker push"
+  grep -q -- '--wait' "$S" && ok "livrer.sh attend la santé (--wait)" \
+    || ko "livrer.sh : docker compose up --wait attendu"
+  bash -n "$S" 2>/dev/null && ok "syntaxe bash valide" \
+    || ko "livrer.sh : erreur de syntaxe (bash -n)"
+  grep -qE '\$\{1:\?|\$#|\$\{1\}|"\$1"' "$S" \
+    && ok "livrer.sh prend la version en argument" \
+    || ko "livrer.sh doit prendre la version en premier argument"
+else
+  ko "$S absent ou non exécutable"
+fi
+L="$HOME/lab22/rapports/livraisons.log"
+[ -s "$L" ] && grep -q '2.0' "$L" && grep -q 'sha256' "$L" \
+  && ok "livraisons.log contient la 2.0 avec son digest" \
+  || ko "$L absent ou sans ligne 2.0 + digest"
+grep -q '2.1' "$L" 2>/dev/null && ok "livraison 2.1 journalisée" \
+  || ko "pas de livraison 2.1 dans le journal"
+
+# --- 4. le runbook ------------------------------------------------------
+if [ -s "$R" ]; then
+  [ "$(wc -l < "$R")" -ge 40 ] && ok "runbook d'au moins 40 lignes" \
+    || ko "runbook trop court"
+  for mot in 'pg-data' '137' 'system df' 'docker.sock' 'privileged'; do
+    grep -qi -- "$mot" "$R" && ok "runbook : $mot traité" \
+      || ko "runbook : rien sur « $mot »"
   done
-  printf '%s' "$OUT" | grep -c '^kind: Secret$' | grep -qE '^[3-9]' \
-    && ok "  3 Secrets générés (postgres, registre, TLS)" \
-    || ko "  moins de 3 Secrets dans le rendu : mot de passe, registre, TLS attendus"
 else
-  ko "kubectl kustomize ~/lab22/prod/ échoue"
+  ko "runbook $R absent"
 fi
-MA=$(k get pdb factura-api -o jsonpath='{.spec.minAvailable}')
-[ "$MA" = 1 ] && ok "PDB factura-api minAvailable=1" || ko "PDB factura-api absent ou minAvailable != 1"
-k get hpa factura-api -o jsonpath='{.spec.minReplicas} {.spec.maxReplicas}' \
-  | grep -q '^2 4$' && ok "HPA factura-api 2..4 réplicas" \
-  || ko "HPA factura-api absent ou bornes != 2..4"
-A=$(k get deploy factura-api -o jsonpath='{.status.availableReplicas}')
-[ "${A:-0}" -ge 2 ] && ok "API : $A réplicas disponibles" || ko "API : ${A:-0} disponibles"
-
-# --- 2. SLO et règles ---------------------------------------------------------
-grep -qiE 'burn ?rate' "$BASE/rapports/slo.md" 2>/dev/null \
-  && grep -q '99,5\|99.5' "$BASE/rapports/slo.md" \
-  && ok "slo.md : SLO 99,5 % et burn rate" \
-  || ko "~/lab22/rapports/slo.md absent ou sans SLO 99,5 % / burn rate"
-[ -s "$OBS/prometheus/rules/slo.yml" ] && ok "rules/slo.yml présent" \
-  || ko "$OBS/prometheus/rules/slo.yml absent"
-RULES=$(curl -s -m 10 "$PROM/api/v1/rules")
-for r in slo:factura_errors:ratio_rate5m slo:factura_errors:ratio_rate30m \
-         slo:factura_errors:ratio_rate1h slo:factura_errors:ratio_rate6h; do
-  printf '%s' "$RULES" | grep -q "\"name\":\"$r\"" && ok "règle $r chargée" \
-    || ko "règle $r absente de Prometheus (reload ?)"
-done
-printf '%s' "$RULES" | python3 -c '
-import sys, json
-g = json.load(sys.stdin)["data"]["groups"]
-al = [r for x in g for r in x["rules"] if r["type"] == "alerting"
-      and "slo" in str(r.get("labels", {})) + r["query"]]
-q = lambda r: r["query"].replace(" ", "")
-assert any(r["labels"].get("severity") == "page"
-           and ("14.4*" in q(r) or "0.072" in q(r)) for r in al)
-assert any(r["labels"].get("severity") == "ticket"
-           and ("(6*" in q(r) or ">6*" in q(r) or "0.03" in q(r)) for r in al)
-assert all("runbook_url" in r["annotations"] for r in al)
-' 2>/dev/null && ok "alertes burn rate page (14,4) et ticket (6) avec runbook_url" \
-  || ko "alertes multi-fenêtre : page à 14,4 et ticket à 6, chacune avec runbook_url"
-T=$(ls "$OBS"/prometheus/tests/*.yml 2>/dev/null | head -1)
-if [ -n "$T" ]; then
-  (cd "$OBS" && docker compose exec -T prometheus promtool test rules \
-     "/etc/prometheus/tests/$(basename "$T")" >/dev/null 2>&1) \
-    && ok "promtool test rules : SUCCESS ($(basename "$T"))" \
-    || ko "promtool test rules échoue sur $(basename "$T")"
-else
-  ko "aucun fichier de test dans $OBS/prometheus/tests/ (hors du glob rules/*.yml)"
-fi
-
-# --- 3. runbooks ------------------------------------------------------------
-for f in api-erreurs.md instance-down.md; do
-  if [ -s "$BASE/runbooks/$f" ] && grep -qi 'escalad' "$BASE/runbooks/$f"; then
-    ok "runbook $f (avec section escalade)"
-  else
-    ko "~/lab22/runbooks/$f absent ou sans section « escalade »"
-  fi
-done
-
-# --- 4. tableau SLO ------------------------------------------------------------
-curl -s -m 10 -u admin:labpass "$GRAF/api/search?query=SLO" \
-  | grep -q 'Lab — SLO factura' && ok "tableau « Lab — SLO factura » présent" \
-  || ko "tableau « Lab — SLO factura » absent (fichier dans grafana/dashboards/)"
-
-# --- 5. script de conformité ----------------------------------------------------
-V="$BASE/bin/verif-prod.sh"
-if [ -x "$V" ]; then
-  head -5 "$V" | grep -q 'set -euo pipefail' && ok "verif-prod.sh : set -euo pipefail" \
-    || ko "verif-prod.sh sans set -euo pipefail"
-  if bash "$V" >/tmp/verif-prod.out 2>&1; then
-    ok "verif-prod.sh passe (code 0)"
-  else
-    ko "verif-prod.sh échoue : $(grep -c FAIL /tmp/verif-prod.out) point(s) en FAIL"
-  fi
-  grep -qE '\[ OK \]|\[FAIL\]' /tmp/verif-prod.out && ok "sortie [ OK ]/[FAIL]" \
-    || ko "verif-prod.sh doit afficher [ OK ] ou [FAIL] par point"
-else
-  ko "$V absent ou non exécutable"
-fi
-
-# --- 6. post-mortem ------------------------------------------------------------
-PM="$BASE/rapports/postmortem.md"
-[ -s "$PM" ] && grep -qi 'chronolog' "$PM" && grep -qi 'action' "$PM" \
-  && ok "post-mortem rédigé (chronologie, actions)" \
-  || ko "~/lab22/rapports/postmortem.md absent ou sans chronologie/actions"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

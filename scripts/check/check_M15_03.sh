@@ -1,136 +1,74 @@
 #!/usr/bin/env bash
-# check_M15_03.sh — vérifie le lab L15.3 (SELinux, application sur 8088)
-# À lancer sur lab-rhel (Rocky 9).
+# check_M15_03.sh — vérifie le lab L15.3 (PostgreSQL ouvert à lab-web)
+# À lancer sur lab-db (contrôles principaux) puis sur lab-web (connexion).
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-echo "== Vérification L15.3 =="
+HOST="$(hostname -s)"
+echo "== Vérification L15.3 sur $HOST =="
 
-LAB_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
-
-command -v getenforce >/dev/null 2>&1 || {
-  ko "SELinux n'est pas présent : ce lab se fait sur lab-rhel (Rocky 9)"
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-
-# --- 1. le mode, maintenant ET au prochain démarrage -------------------
-[ "$(getenforce)" = Enforcing ] \
-  && ok "SELinux est en Enforcing" \
-  || ko "SELinux est en $(getenforce) : tout l'intérêt du lab est de \
-faire fonctionner l'application SANS baisser le mode"
-
-CONF=$(awk -F= '/^SELINUX=/{print $2}' /etc/selinux/config 2>/dev/null)
-[ "$CONF" = enforcing ] \
-  && ok "/etc/selinux/config prévoit enforcing au démarrage" \
-  || ko "/etc/selinux/config contient SELINUX=$CONF : au prochain reboot \
-la protection tombe"
-
-# --- 2. le port 8088 est déclaré comme port HTTP -----------------------
-if command -v semanage >/dev/null 2>&1; then
-  semanage port -l 2>/dev/null | grep -E '^http_port_t' | grep -q '8088' \
-    && ok "8088/tcp est étiqueté http_port_t" \
-    || ko "8088 n'est pas déclaré : semanage port -a -t http_port_t \
--p tcp 8088"
-else
-  ko "semanage absent (dnf install policycoreutils-python-utils)"
-fi
-
-# --- 3. le contexte du contenu ----------------------------------------
-if [ -d /srv/api/public ]; then
-  ok "/srv/api/public existe"
-  CTX=$(ls -Zd /srv/api/public 2>/dev/null | awk '{print $1}')
-  grep -q 'httpd_sys_content_t' <<<"$CTX" \
-    && ok "le contexte est httpd_sys_content_t" \
-    || ko "contexte actuel : $CTX — il faut httpd_sys_content_t"
-
-  # déclaré dans la politique, pas seulement posé à la main (chcon)
-  if semanage fcontext -l 2>/dev/null | grep -q '/srv/api'; then
-    ok "le contexte est déclaré dans la politique (semanage fcontext)"
-  else
-    ko "aucune règle fcontext pour /srv/api : un chcon seul ne survit pas \
-à un restorecon ni à une restauration de sauvegarde"
-  fi
-
-  # et il résiste à un restorecon
-  if command -v restorecon >/dev/null 2>&1; then
-    if restorecon -nv /srv/api/public 2>/dev/null | grep -q 'Would relabel'
-    then
-      ko "restorecon voudrait réétiqueter /srv/api/public : la politique \
-et la réalité divergent"
-    else
-      ok "le contexte survit à un restorecon (politique cohérente)"
-    fi
-  fi
-else
-  ko "/srv/api/public absent (étape 2 du lab)"
-fi
-
-# --- 4. le booléen de connexion sortante ------------------------------
-B=$(getsebool httpd_can_network_connect 2>/dev/null | awk '{print $3}')
-[ "$B" = on ] \
-  && ok "httpd_can_network_connect est activé" \
-  || ko "httpd_can_network_connect est $B : le proxy_pass ne sortira pas"
-
-if command -v semanage >/dev/null 2>&1; then
-  semanage boolean -l 2>/dev/null \
-    | grep '^httpd_can_network_connect' | grep -q '(on   ,   on)' \
-    && ok "le booléen est persistant (setsebool -P)" \
-    || ko "le booléen n'est pas persistant : sans -P il retombe au reboot"
-fi
-
-# --- 5. le service répond ---------------------------------------------
-systemctl is-active nginx >/dev/null 2>&1 \
-  && ok "nginx est actif" \
-  || ko "nginx n'est pas actif (journalctl -u nginx)"
-
-ss -tlnH 2>/dev/null | grep -q ':8088' \
-  && ok "quelque chose écoute sur 8088" \
-  || ko "rien n'écoute sur 8088"
-
-C=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-    http://127.0.0.1:8088/ 2>/dev/null)
-[ "$C" = 200 ] \
-  && ok "http://127.0.0.1:8088/ répond 200" \
-  || ko "http://127.0.0.1:8088/ répond $C (403 = contexte, 000 = pas \
-d'écoute)"
-
-CA=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-     http://127.0.0.1:8088/api/ 2>/dev/null)
-case "$CA" in
-  200|301|302) ok "le proxy_pass /api/ atteint lab-web ($CA)" ;;
-  502|504) ko "/api/ répond $CA : connexion sortante refusée \
-(booléen httpd_can_network_connect) ou lab-web injoignable" ;;
-  404) note "/api/ répond 404 : le location existe mais lab-web ne sert \
-rien à cette adresse" ;;
-  *) ko "/api/ répond $CA" ;;
+case "$HOST" in
+lab-db)
+  Q() { sudo -n -u postgres psql -Atqc "$1" 2>/dev/null; }
+  U=postgresql@16-main.service
+  [ "$(systemctl is-active $U 2>/dev/null)" = active ] && ok "$U actif" \
+    || ko "$U inactif (systemctl status $U ; journal postgresql-16-main.log)"
+  ss -Hltn 'sport = :5432' | grep -q '10.10.10.12:5432' \
+    && ok "écoute sur 10.10.10.12:5432" \
+    || ko "pas d'écoute sur 10.10.10.12 (listen_addresses, puis RESTART)"
+  ss -Hltn 'sport = :5432' | grep -q '0.0.0.0:5432' \
+    && ko "écoute sur 0.0.0.0 : restreins listen_addresses" || ok "pas d'écoute sur 0.0.0.0"
+  [ -f /etc/postgresql/16/main/conf.d/10-factura.conf ] \
+    && ok "conf.d/10-factura.conf présent" || ko "conf.d/10-factura.conf absent"
+  # paramètres effectifs
+  chk() { local v; v="$(Q "SHOW $1")"; [ "$v" = "$2" ] && ok "$1 = $v" \
+          || ko "$1 vaut « $v », attendu $2 (reload ou restart ?)"; }
+  chk log_min_duration_statement 500ms
+  chk log_lock_waits on
+  chk timezone Europe/Paris
+  chk password_encryption scram-sha-256
+  SB="$(Q "SELECT setting::bigint*8/1024 FROM pg_settings WHERE name='shared_buffers'")"
+  [ "${SB:-0}" -ge 256 ] && ok "shared_buffers = ${SB} MB" \
+    || ko "shared_buffers = ${SB:-?} MB : trop bas pour 2 Go (et restart nécessaire)"
+  Q "SHOW shared_preload_libraries" | grep -q pg_stat_statements \
+    && ok "pg_stat_statements préchargé" \
+    || ko "shared_preload_libraries sans pg_stat_statements (restart nécessaire)"
+  [ "$(sudo -n -u postgres psql -d factura_demo -Atqc \
+      "SELECT 1 FROM pg_extension WHERE extname='pg_stat_statements'" 2>/dev/null)" = 1 ] \
+    && ok "extension pg_stat_statements créée dans factura_demo" \
+    || ko "CREATE EXTENSION pg_stat_statements manquant dans factura_demo"
+  PR="$(Q "SELECT count(*) FROM pg_settings WHERE pending_restart")"
+  [ "$PR" = 0 ] && ok "aucun paramètre en attente de restart" \
+    || ko "$PR paramètre(s) en attente de restart (pg_settings.pending_restart)"
+  # pg_hba
+  HBA="$(sudo -n cat /etc/postgresql/16/main/pg_hba.conf 2>/dev/null | grep -Ev '^\s*#|^\s*$')"
+  grep -qE '\strust\s*$' <<<"$HBA" && ko "pg_hba contient trust" || ok "aucune ligne trust"
+  grep -qE '\smd5\s*$' <<<"$HBA" && ko "pg_hba contient md5" || ok "aucune ligne md5"
+  grep -E '^host' <<<"$HBA" | grep -E 'factura_demo\s+factura_app\s+10\.10\.10\.11/32\s+scram-sha-256' -q \
+    && ok "ligne host factura_demo factura_app 10.10.10.11/32 scram-sha-256" \
+    || ko "pas de ligne host factura_demo factura_app 10.10.10.11/32 scram-sha-256"
+  grep -E '^host' <<<"$HBA" | grep -qE '0\.0\.0\.0/0|10\.10\.10\.0/24|/0\s' \
+    && ko "une ligne host couvre tout un réseau" || ok "aucune ligne host large"
+  ERR="$(Q "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL")"
+  [ "$ERR" = 0 ] && ok "pg_hba_file_rules sans erreur" \
+    || ko "pg_hba_file_rules signale $ERR erreur(s)"
+  [ -f "$HOME/lab15/rapports/pg-ouverture.md" ] && ok "rapport pg-ouverture.md présent" \
+    || ko "rapport ~/lab15/rapports/pg-ouverture.md absent"
+  ;;
+lab-web)
+  command -v psql >/dev/null || ko "psql absent (postgresql-client)"
+  if psql -w -h 10.10.10.12 -U factura_app -d factura_demo -Atc 'SELECT 1' 2>/dev/null | grep -q '^1$'
+  then ok "connexion factura_app sans mot de passe interactif (.pgpass)"
+  else ko "connexion factura_app impossible sans prompt (pg_hba ? .pgpass 0600 ?)"; fi
+  psql -w -h 10.10.10.12 -U factura_ro -d factura_demo -Atc 'SELECT 1' 2>/dev/null | grep -q '^1$' \
+    && ok "connexion factura_ro" || ko "connexion factura_ro impossible"
+  psql -w -h 10.10.10.12 -U factura_ro -d factura_demo \
+    -c "UPDATE customers SET city=city WHERE id=1" 2>&1 | grep -q 'permission denied' \
+    && ok "factura_ro ne peut pas écrire" || ko "factura_ro peut écrire (ou erreur autre)"
+  ;;
+*) note "ce check se lance sur lab-db puis lab-web" ;;
 esac
-
-# --- 6. plus aucun refus pour httpd_t ---------------------------------
-if command -v ausearch >/dev/null 2>&1; then
-  AVC=$(ausearch -m AVC -ts recent 2>/dev/null | grep -c 'httpd_t')
-  [ "${AVC:-0}" -eq 0 ] \
-    && ok "aucun AVC récent impliquant httpd_t" \
-    || ko "$AVC lignes d'AVC récentes pour httpd_t : \
-ausearch -m AVC -ts recent | audit2why"
-else
-  note "ausearch absent (dnf install audit) : contrôle des AVC ignoré"
-fi
-
-# --- 7. la procédure rendue à l'équipe --------------------------------
-P="$LAB_HOME/lab15/procedure-selinux.md"
-if [ -f "$P" ]; then
-  if grep -qE 'setenforce|SELINUX=disabled|SELINUX=permissive' "$P"; then
-    ko "la procédure contient encore un setenforce ou un mode dégradé"
-  else
-    ok "la procédure ne dégrade pas SELinux"
-  fi
-  grep -q 'semanage' "$P" \
-    && ok "la procédure utilise semanage" \
-    || ko "la procédure devrait s'appuyer sur semanage (port + fcontext)"
-else
-  ko "~/lab15/procedure-selinux.md absent (étape 7)"
-fi
-
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

@@ -14,24 +14,24 @@ PARTS = [
      ["01-shell-bases", "02-filesystem-fhs", "03-permissions",
       "04-users-groups-sudo", "05-text-processing", "06-vim-archives"]),
     ("Partie II", "Administration système",
-     "Scripter, superviser les processus, installer, stocker, connecter, "
+     "Scripter, piloter les processus et le noyau, installer, stocker, connecter, "
      "accéder à distance : le socle d'un serveur en production.",
-     ["07-bash-scripting", "08-processus-systemd", "09-paquets",
-      "10-stockage-lvm", "11-reseau", "12-ssh"]),
+     ["07-bash-scripting", "08-processus-systemd", "09-noyau-demarrage", "10-paquets",
+      "11-stockage-lvm", "12-reseau", "13-reseau-avance", "14-ssh"]),
     ("Partie III", "Exploitation, sécurité et incidents",
-     "Ce qui distingue un serveur qui tourne d'un serveur qu'on exploite : "
+     "Ce qui distingue un serveur qui tourne d'un serveur qu'on exploite : services, "
      "journaux, planification, durcissement, dépannage.",
-     ["13-logs-monitoring", "14-cron-timers", "15-securite",
-      "16-troubleshooting-perf"]),
+     ["15-services-applicatifs", "16-logs-monitoring", "17-cron-timers", "18-securite",
+      "19-troubleshooting-perf"]),
     ("Projet A", "Factura : plateforme multi-services, à la main",
      "Premier projet fil rouge. Tu déploies, sécurises, sauvegardes et "
-     "supervises une plateforme complète avec les seuls modules 1 à 16.",
+     "supervises une plateforme complète avec les seuls modules 1 à 19.",
      ["P1-factura"]),
     ("Partie IV", "Socle DevOps",
-     "Versionner, conteneuriser, automatiser, provisionner, livrer en continu, "
+     "Virtualiser, versionner, conteneuriser, automatiser, provisionner, livrer en continu, "
      "orchestrer, observer, outiller en Python.",
-     ["17-git", "18-docker", "19-ansible", "20-iac-terraform", "21-cicd",
-      "22-kubernetes-observabilite", "23-python-ops"]),
+     ["20-virtualisation-kvm", "21-git", "22-docker", "23-ansible", "24-iac-terraform",
+      "25-cicd", "26-kubernetes-observabilite", "27-python-ops"]),
     ("Projet B", "Factura v2 : industrialisation DevOps",
      "La même plateforme, reconstruite par le code : OpenTofu, Ansible, "
      "Compose, CI/CD, observabilité, k3s.",
@@ -79,12 +79,12 @@ def assemble(kind):
     if kind == "labs":
         parts.append(cover(
             "Énoncés", "Quiz, exercices, labs, Break & Fix, projets",
-            "23 modules et 3 projets fil rouge pour devenir opérationnel sur Linux "
+            "27 modules et 3 projets fil rouge pour devenir opérationnel sur Linux "
             "puis sur le socle DevOps : Git, Docker, Ansible, OpenTofu, CI/CD, Kubernetes, "
             "observabilité. Chaque module se joue sur ton laboratoire Proxmox et se corrige "
             "avec le volume \\emph{Corrigés \\& explications}.",
             [("Volume", "1 / 3 — Énoncés"), ("Niveau", "Intermédiaire → confirmé"),
-             ("Durée conseillée", "12 à 17 semaines"),
+             ("Durée conseillée", "14 à 19 semaines"),
              ("Compagnons", "Corrigés & explications · Mémo · scripts.zip")]))
         parts.append(raw("\\tableofcontents\\clearpage"))
         parts.append(clean_md((SRC / "00-mise-en-place.md").read_text(encoding="utf-8")))

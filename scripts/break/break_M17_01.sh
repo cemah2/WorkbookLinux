@@ -1,122 +1,68 @@
 #!/usr/bin/env bash
-# break_M17_01.sh — panne BF17.1 : un rebase abandonné en plein conflit
-# Construit ~/lab17/bf1/factura-infra (dépôt autonome, indépendant du dépôt
-# principal du module) et le laisse au milieu d'un rebase mal engagé.
-# Idempotent. Sauvegarde (bundle) dans /root/.breakfix-backup/.
+# break_M17_01.sh — panne BF17.1 (la collecte de nuit ne produit plus rien)
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-LAB_USER="${SUDO_USER:-mathieu}"
-LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
-[ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
-command -v git >/dev/null || { echo "git manquant" >&2; exit 1; }
-
-BF="$LAB_HOME/lab17/bf1"
-DEPOT="$BF/factura-infra"
-ORIGIN="$BF/origin.git"
 SAUV=/root/.breakfix-backup
-mkdir -p "$SAUV" "$BF"
+CIBLE=/etc/cron.d/factura-collecte
+LOG=/var/log/factura/collecte.log
+mkdir -p "$SAUV"
 
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null TZ=Europe/Paris
-c() { # c <auteur> <date> <message>
-  GIT_AUTHOR_NAME=$1 GIT_AUTHOR_EMAIL="$1@lab.local" GIT_AUTHOR_DATE="$2" \
-  GIT_COMMITTER_NAME=$1 GIT_COMMITTER_EMAIL="$1@lab.local" \
-  GIT_COMMITTER_DATE="$2" git commit -q -m "$3"
-}
-TPL=ansible/roles/nginx/templates/factura.conf.j2
+[ -x /opt/factura/bin/factura-collecte.sh ] || {
+  echo "/opt/factura/bin/factura-collecte.sh absent : lance setup_M17.sh" >&2
+  exit 1; }
 
-rm -rf "$DEPOT" "$ORIGIN"
-mkdir -p "$DEPOT"; cd "$DEPOT"
-git init -q -b main
-git config user.name mathieu; git config user.email mathieu@lab.local
-mkdir -p "$(dirname $TPL)"
-cat > $TPL <<'EOF'
-# {{ ansible_managed }}
-events {
-    worker_connections 4096;
-}
+# On sauvegarde la version saine du fichier, une seule fois.
+if [ -f "$CIBLE" ] && [ ! -f "$SAUV/M17_01.cron" ]; then
+  cp -a "$CIBLE" "$SAUV/M17_01.cron"
+fi
 
-http {
-    server {
-        listen 80;
-        server_name factura.lab.local;
-        root /srv/factura/public;
-
-        location /api/ {
-            proxy_pass http://127.0.0.1:8080/;
-        }
-    }
-}
+# --- la version « d'avant », celle qui marchait --------------------------
+# Elle contenait une ligne PATH incluant /usr/local/bin, là où vit
+# l'utilitaire factura-inventaire appelé par le script. On la conserve
+# pour référence dans la sauvegarde, elle n'est PAS installée.
+cat > "$SAUV/M17_01.reference" <<'EOF'
+# version d'origine (pour mémoire, workbook module 17)
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+*/5 * * * * factura /opt/factura/bin/factura-collecte.sh 2>&1 | logger -t factura-collecte
 EOF
-printf '# factura-infra (extrait BF17.1)\n' > README.md
-git add -A; c mathieu 2026-07-06T09:00:00+02:00 "chore: dépôt de départ"
 
-git switch -q -c feature/tls
-python3 - <<'PY'
-p='ansible/roles/nginx/templates/factura.conf.j2'; s=open(p).read()
-s=s.replace('''        listen 80;
-        server_name factura.lab.local;
-        root /srv/factura/public;
-''','''        listen 443 ssl;
-        server_name factura.lab.local;
-        root /srv/factura/public;
-        ssl_certificate     /etc/letsencrypt/live/factura/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/factura/privkey.pem;
-''')
-open(p,'w').write(s)
-PY
-git add -A; c alice 2026-07-07T10:15:00+02:00 \
-  "feat(nginx): écoute en 443 avec certificat Let's Encrypt"
-mkdir -p ansible/roles/nginx/tasks
-cat > ansible/roles/nginx/tasks/main.yml <<'EOF'
----
-- name: Installe certbot
-  ansible.builtin.apt:
-    name: certbot
-    state: present
+# --- la version cassée ---------------------------------------------------
+# Un collègue a « aligné la tâche sur le PATH standard de cron » : il a
+# remplacé la ligne PATH d'origine par le PATH par défaut du démon.
+cat > "$CIBLE" <<'EOF'
+# Collecte periodique factura.
+# (PATH aligne sur le PATH standard de cron le 17/09)
+PATH=/usr/bin:/bin
+MAILTO=""
+*/5 * * * * factura /opt/factura/bin/factura-collecte.sh 2>&1 | logger -t factura-collecte
 EOF
-git add -A; c alice 2026-07-07T11:40:00+02:00 "feat(nginx): tâche certbot"
-printf '\n# TODO: tester le renouvellement\n' >> ansible/roles/nginx/tasks/main.yml
-git add -A; c alice 2026-07-07T11:52:00+02:00 "wip"
+chmod 0644 "$CIBLE"
+chown root:root "$CIBLE"
 
-git switch -q main
-python3 - <<'PY'
-p='ansible/roles/nginx/templates/factura.conf.j2'; s=open(p).read()
-s=s.replace('''        root /srv/factura/public;
-''','''        root /srv/factura/public;
-        add_header Strict-Transport-Security "max-age=31536000" always;
-        add_header X-Content-Type-Options nosniff;
-''')
-open(p,'w').write(s)
-PY
-git add -A; c mathieu 2026-07-08T09:30:00+02:00 \
-  "feat(nginx): en-têtes de sécurité HSTS et nosniff"
-printf '\nVoir docs/runbook.md.\n' >> README.md
-git add -A; c mathieu 2026-07-08T09:45:00+02:00 "docs(readme): renvoi runbook"
+# Le journal applicatif s'arrête hier soir : on lui donne un passé crédible.
+touch "$LOG"
+if ! grep -q 'collecte ok' "$LOG" 2>/dev/null; then
+  for h in 20 21 22 23; do
+    printf '%s collecte ok : 200 enregistrements\n' \
+      "$(date -d "yesterday $h:03" '+%F %T')" >> "$LOG"
+  done
+fi
+chown factura:factura "$LOG"
+chmod 0664 "$LOG"
 
-# origin + sauvegarde
-git clone -q --bare "$DEPOT" "$ORIGIN"
-git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
-git remote add origin "$ORIGIN"; git fetch -q origin
-git branch -q -u origin/main main
-git branch -q -u origin/feature/tls feature/tls
-git bundle create -q "$SAUV/M17_01.bundle" --all
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  systemctl reload-or-restart cron.service >/dev/null 2>&1 \
+    || systemctl reload-or-restart crond.service >/dev/null 2>&1 || true
+fi
 
-# --- la panne : rebase lancé, conflit, « résolution » bâclée, abandon -----
-git switch -q feature/tls
-git -c core.editor=true rebase main >/dev/null 2>&1 || true
-# le collègue a « résolu » en gardant les marqueurs, puis a fait git add
-git add "$TPL"
-printf 'reprendre le rebase lundi\n' > notes-alice.txt
+cat <<'EOF'
 
-chown -R "$LAB_USER":"$LAB_USER" "$BF"
-
-cat <<EOF
-
-Symptôme attendu : alice devait rebaser feature/tls sur main dans
-$DEPOT avant de partir en congé.
-Ce matin, dans ce dépôt, git status parle d'un « rebase in progress »,
-git switch main refuse, le template nginx contient des lignes <<<<<<< et
->>>>>>>, et la branche feature/tls n'a toujours pas les commits HSTS de main.
-Le collègue n'est pas joignable.
+Symptôme attendu : /var/log/factura/collecte.log n'a plus une seule ligne
+depuis hier soir. La tâche est bien présente, cron tourne, et le script
+fonctionne quand on le lance à la main, y compris avec
+« sudo -u factura /opt/factura/bin/factura-collecte.sh ».
+Attends cinq minutes (ou moins) avant de commencer le diagnostic.
 EOF

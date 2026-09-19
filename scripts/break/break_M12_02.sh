@@ -1,49 +1,45 @@
 #!/usr/bin/env bash
-# break_M12_02.sh — panne BF12.2 (AllowUsers déposé dans un fragment)
-# À lancer SUR lab-web, avec sudo. Idempotent.
-# Sauvegarde dans /root/.breakfix-backup/.
+# break_M12_02.sh — panne BF12.2 (/etc/resolv.conf vers un DNS mort)
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-FRAG=/etc/ssh/sshd_config.d/00-maintenance.conf
-SSHD=$(command -v sshd || echo /usr/sbin/sshd)
-mkdir -p "$SAUV" /etc/ssh/sshd_config.d
+mkdir -p "$SAUV"
 
-# --- le fichier principal doit bien inclure les fragments ----------------
-if ! grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d' \
-     /etc/ssh/sshd_config; then
-  [ -f "$SAUV/M12_02.sshd_config" ] || \
-    cp -a /etc/ssh/sshd_config "$SAUV/M12_02.sshd_config"
-  sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+# --- sauvegarde de la NATURE de /etc/resolv.conf ------------------------
+if [ ! -f "$SAUV/M12_02.resolv.state" ]; then
+  if [ -L /etc/resolv.conf ]; then
+    printf 'symlink %s\n' "$(readlink /etc/resolv.conf)" \
+      > "$SAUV/M12_02.resolv.state"
+  else
+    printf 'file\n' > "$SAUV/M12_02.resolv.state"
+    cp -a /etc/resolv.conf "$SAUV/M12_02.resolv.conf"
+  fi
 fi
 
-# --- sauvegarde de l'existant, une seule fois ---------------------------
-if [ ! -d "$SAUV/M12_02.d" ]; then
-  mkdir -p "$SAUV/M12_02.d"
-  cp -a /etc/ssh/sshd_config.d/. "$SAUV/M12_02.d/" 2>/dev/null || true
-fi
-
-# --- le fragment fautif, au nom rassurant et au préfixe prioritaire -----
-cat > "$FRAG" <<'EOF'
-# Déposé pendant la fenêtre de maintenance du 17/09 (ticket CHG-4471).
-# Restriction temporaire des accès pendant la migration.
-AllowUsers root deploiement
+# --- on remplace le lien par un fichier réel pointant dans le vide ------
+# 11.10.10.250 : adresse du réseau de lab où rien ne répond. Les paquets
+# partent, personne ne répond : chaque résolution coûte le timeout plein.
+rm -f /etc/resolv.conf
+cat > /etc/resolv.conf <<'EOF'
+# fichier statique (ne pas modifier)
+nameserver 10.10.10.250
+options timeout:5 attempts:2
 EOF
-chmod 0644 "$FRAG"
+chmod 0644 /etc/resolv.conf
 
-"$SSHD" -t
+# systemd-resolved reste actif : le stub écoute toujours, mais plus
+# personne ne lui parle. C'est ce qui rend la panne déroutante.
 if [ -d /run/systemd/system ]; then
-  systemctl reload ssh >/dev/null 2>&1 || \
-  systemctl reload sshd >/dev/null 2>&1 || \
-  systemctl restart ssh >/dev/null 2>&1 || true
+  systemctl restart systemd-resolved >/dev/null 2>&1 || true
+  resolvectl flush-caches >/dev/null 2>&1 || true
 fi
 
 cat <<'EOF'
 
-Symptôme attendu : depuis lab-adm, « ssh mathieu@lab-web » répond
-immédiatement « Permission denied (publickey). » pour tous les comptes
-d'exploitation. La clé est bonne, les permissions sont bonnes, le
-service est actif, et une relecture ligne à ligne de
-/etc/ssh/sshd_config ne montre rien d'anormal.
+Symptôme attendu : « curl http://10.10.10.11/ » répond instantanément,
+mais « curl http://www.lab.local/ » attend une dizaine de secondes puis
+échoue sur « Could not resolve host ». « apt update » est devenu
+interminable. « ping 9.9.9.9 » fonctionne parfaitement.
 EOF

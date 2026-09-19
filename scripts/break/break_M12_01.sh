@@ -1,51 +1,35 @@
 #!/usr/bin/env bash
-# break_M12_01.sh — panne BF12.1 (permissions de ~/.ssh côté serveur)
-# À lancer SUR lab-web, avec sudo. Idempotent.
-# Sauvegarde dans /root/.breakfix-backup/.
+# break_M12_01.sh — panne BF12.1 (route par défaut supprimée)
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-
-CIBLE="${1:-mathieu}"
-HOMEDIR=$(getent passwd "$CIBLE" | cut -d: -f6)
-[ -n "$HOMEDIR" ] || { echo "utilisateur $CIBLE inconnu" >&2; exit 1; }
-[ -d "$HOMEDIR/.ssh" ] || { \
-  echo "$HOMEDIR/.ssh absent : lance d'abord setup_M12.sh puis L12.1" >&2
-  exit 1; }
-[ -s "$HOMEDIR/.ssh/authorized_keys" ] || { \
-  echo "authorized_keys vide : déploie ta clé (L12.1) avant de casser" >&2
-  exit 1; }
 
 SAUV=/root/.breakfix-backup
 mkdir -p "$SAUV"
 
-# --- sauvegarde des modes actuels, une seule fois -----------------------
-if [ ! -f "$SAUV/M12_01.modes" ]; then
-  {
-    stat -c '%a %n' "$HOMEDIR"
-    stat -c '%a %n' "$HOMEDIR/.ssh"
-    stat -c '%a %n' "$HOMEDIR/.ssh/authorized_keys"
-  } > "$SAUV/M12_01.modes"
-fi
+DEF="$(ip -o -4 route show default | head -1)"
 
-# --- la panne : StrictModes va refuser de lire authorized_keys -----------
-chmod 0757 "$HOMEDIR/.ssh"
-chmod 0666 "$HOMEDIR/.ssh/authorized_keys"
-chmod g+w,o+w "$HOMEDIR"
-
-# on s'assure que le mot de passe ne sert pas de porte de secours :
-# c'est l'état normal après L12.1, on le confirme seulement.
-if [ -d /etc/ssh/sshd_config.d ] && \
-   ! grep -rqi '^[[:space:]]*PasswordAuthentication[[:space:]]*no' \
-     /etc/ssh/sshd_config.d/ /etc/ssh/sshd_config 2>/dev/null; then
-  echo "note : l'authentification par mot de passe est encore active," >&2
-  echo "       la panne sera moins réaliste (voir L12.1 étape 6)." >&2
+if [ -n "$DEF" ]; then
+  # on note la route exacte pour pouvoir la remettre en cas de besoin
+  [ -f "$SAUV/M12_01.default-route" ] || \
+    printf '%s\n' "$DEF" > "$SAUV/M12_01.default-route"
+  GW="$(printf '%s' "$DEF" | awk '{print $3}')"
+  DEV="$(printf '%s' "$DEF" | awk '{print $5}')"
+  ip route del default >/dev/null 2>&1 || true
+  # certaines configurations en posent plusieurs : on vide
+  while ip -o -4 route show default | grep -q .; do
+    ip route del default >/dev/null 2>&1 || break
+  done
+  echo "  (sauvegarde : $SAUV/M12_01.default-route — $GW via $DEV)" >&2
+else
+  [ -f "$SAUV/M12_01.default-route" ] || \
+    echo "default via 10.10.10.1 dev ens18" > "$SAUV/M12_01.default-route"
 fi
 
 cat <<'EOF'
 
-Symptôme attendu : depuis lab-adm, « ssh lab-web » répond
-« mathieu@10.10.10.11: Permission denied (publickey). » La même clé
-continue de fonctionner sur lab-db et lab-ops. L'authentification par
-mot de passe étant désactivée sur lab-web, aucune connexion SSH n'est
-plus possible vers cette machine.
+Symptôme attendu : le réseau local répond normalement (ping 10.10.10.11,
+ssh lab-web), mais « ping 9.9.9.9 » renvoie « Network is unreachable »
+immédiatement, sans attente, et « apt update » finit par échouer.
+Aucune configuration sur disque n'a été modifiée.
 EOF

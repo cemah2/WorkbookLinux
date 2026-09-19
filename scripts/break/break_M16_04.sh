@@ -1,63 +1,90 @@
 #!/usr/bin/env bash
-# break_M16_04.sh — panne BF16.4 (processus en boucle, CPU saturé)
+# break_M16_04.sh — panne BF16.4 (copytruncate : fichier creux et lignes
+#                   perdues)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-BINL=/usr/local/sbin/vitrine-reindex
-UNIT=/etc/systemd/system/vitrine-reindex.service
-mkdir -p "$SAUV"
+CONF=/etc/logrotate.d/factura-acces
+LOGD=/var/log/factura
+FIC="$LOGD/acces.log"
+UDROPD=/etc/systemd/system/factura-ecrivain.service.d
+UDROP="$UDROPD/10-sans-append.conf"
+mkdir -p "$SAUV" "$UDROPD"
 
-if [ ! -f "$SAUV/M16_04.etat" ]; then
-  uptime > "$SAUV/M16_04.etat"
-fi
+[ -d "$LOGD" ] || { echo "$LOGD absent : lance setup_M16.sh" >&2; exit 1; }
 
-# --- le brûleur de CPU --------------------------------------------------
-cat > "$BINL" <<'SHEOF'
-#!/usr/bin/env bash
-# vitrine-reindex — reconstruction incrementale de l'index de recherche.
-# Boucle de calcul : la condition de sortie n'est jamais atteinte
-# (regression introduite en 2.3.1).
-set -u
-N="${1:-3}"
-pids=()
-brule() { local i=0; while :; do i=$(( (i + 7) % 1000003 )); done; }
-trap 'kill "${pids[@]}" 2>/dev/null; exit 0' TERM INT
-for _ in $(seq 1 "$N"); do brule & pids+=("$!"); done
-wait
-SHEOF
-chmod 0755 "$BINL"
+# --- 1. la configuration de rotation « recommandée par un forum » -------
+[ -e "$CONF" ] && [ ! -f "$SAUV/M16_04.logrotate" ] && \
+  cp -a "$CONF" "$SAUV/M16_04.logrotate"
 
-# --- maintenu en vie par systemd : tuer le PID ne suffit pas ------------
-cat > "$UNIT" <<'EOF'
-[Unit]
-Description=Vitrine — reconstruction de l'index de recherche
-After=vitrine-api.service
-
-[Service]
-Type=simple
-ExecStart=/usr/local/sbin/vitrine-reindex 3
-Restart=always
-RestartSec=2s
-
-[Install]
-WantedBy=multi-user.target
+cat > "$CONF" <<'EOF'
+/var/log/factura/acces.log {
+    daily
+    rotate 7
+    size 1M
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
 EOF
-chmod 0644 "$UNIT"
+chown root:root "$CONF"
+chmod 0644 "$CONF"
+
+# --- 2. l'application ouvre son log sans O_APPEND -----------------------
+cat > "$UDROP" <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/opt/factura/bin/factura-ecrivain.py \
+          --fichier /var/log/factura/acces.log --periode 0.2 --sans-append
+EOF
+chmod 0644 "$UDROP"
+
+# --- 3. l'état dans lequel la nuit a laissé le fichier ------------------
+# Un copytruncate sur un fichier de 800 Mo laisse deux traces : le trou
+# de numérotation (lignes écrites pendant la copie) et la zone creuse
+# (le processus écrit à sa position absolue, le noyau comble de zéros).
+[ -f "$SAUV/M16_04.acces.log.debut" ] || \
+  { head -c 200000 "$FIC" > "$SAUV/M16_04.acces.log.debut" 2>/dev/null \
+    || true; }
+
+DERNIER=$(grep -ao 'seq=[0-9]*' "$FIC" 2>/dev/null | tail -1 | cut -d= -f2)
+[ -n "${DERNIER:-}" ] || DERNIER=20000
+
+python3 - "$FIC" "$DERNIER" <<'PYEOF'
+import datetime as dt
+import os
+import sys
+
+fic, dernier = sys.argv[1], int(sys.argv[2])
+trou = 640                      # lignes écrites pendant la copie : perdues
+creux = 800 * 1024 * 1024       # position où en était le processus
+
+fd = os.open(fic, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+os.lseek(fd, creux, os.SEEK_SET)
+t = dt.datetime.now() - dt.timedelta(minutes=13)
+for i in range(4000):
+    t += dt.timedelta(seconds=0.2)
+    ligne = "%s seq=%d service=factura-acces etat=ok\n" % (
+        t.strftime("%Y-%m-%dT%H:%M:%S%z"), dernier + trou + i)
+    os.write(fd, ligne.encode())
+os.close(fd)
+PYEOF
+
+chown factura:adm "$FIC" 2>/dev/null || chown factura:factura "$FIC"
+chmod 0640 "$FIC"
 
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload
-  systemctl enable --now vitrine-reindex.service >/dev/null 2>&1 || true
-else
-  pgrep -f "$BINL" >/dev/null 2>&1 || \
-    setsid nohup "$BINL" 3 >/dev/null 2>&1 < /dev/null &
+  systemctl restart factura-ecrivain.service >/dev/null 2>&1 || true
 fi
 
 cat <<'EOF'
 
-Symptôme attendu : le site répond en 2 à 4 secondes au lieu de 40 ms.
-La charge moyenne dépasse 4 sur une VM à 2 vCPU et ne redescend pas.
-Un coup d'oeil rapide à « top » ne montre aucun nom de processus connu de
-l'équipe applicative.
+Symptôme attendu : « ls -lh /var/log/factura/acces.log » annonce 800 Mo,
+« du -h » sur le même fichier en annonce une douzaine, « wc -l » compte
+quelques milliers de lignes, et les numéros de séquence sautent de
+plusieurs centaines après chaque rotation. « less » affiche des ^@.
 EOF

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# check_M14_04.sh — vérifie le lab L14.4 (certificat + OnFailure)
+# check_M14_04.sh — vérifie le lab L14.4 (tunnels -L, -R, -D)
+# À lancer sur lab-adm, SANS sudo.
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,143 +8,93 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L14.4 =="
 
-[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-[ -d /run/systemd/system ] || { \
-  ko "systemd ne pilote pas cette machine : lab inapplicable ici"; \
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
+R="$HOME/lab14/rapports/tunnels.md"
+ecoute() { ss -tlnH "( sport = :$1 )" 2>/dev/null | grep -q . ; }
+banniere() {   # banniere <port> : lit la première ligne du service
+  timeout 4 bash -c "exec 3<>/dev/tcp/127.0.0.1/$1 && head -1 <&3" 2>/dev/null
+}
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab14/rapports/alerte.md"
-CHK=/opt/factura/bin/factura-cert-check.sh
-CRT=/etc/factura/tls/portail.crt
-ALOG=/var/log/factura/alertes.log
-
-v() { systemctl show -p "$2" --value "$1" 2>/dev/null; }
-
-# --- 1. le script de vérification -------------------------------------
-if [ -x "$CHK" ]; then
-  ok "$CHK existe et est exécutable"
-  grep -q 'checkend' "$CHK" \
-    && ok "utilise openssl x509 -checkend" \
-    || ko "l'énoncé demande openssl x509 -checkend, pas un calcul de date \
-maison"
-  "$CHK" "$CRT" 1 >/tmp/.m14_04.a 2>&1; R1=$?
-  "$CHK" "$CRT" 3650 >/tmp/.m14_04.b 2>&1; R2=$?
-  [ "$R1" -eq 0 ] \
-    && ok "seuil 1 jour : code 0 (certificat encore valide)" \
-    || ko "seuil 1 jour : code $R1, on attend 0 (voir /tmp/.m14_04.a)"
-  [ "$R2" -eq 1 ] \
-    && ok "seuil 3650 jours : code 1 (expiration détectée)" \
-    || ko "seuil 3650 jours : code $R2, on attend 1 (voir /tmp/.m14_04.b)"
-  [ -s /tmp/.m14_04.b ] \
-    && ok "un message est produit dans le cas d'échec" \
-    || ko "aucun message en cas d'échec : l'énoncé demande un message clair \
-dans les deux cas"
-else
-  ko "$CHK absent ou non exécutable"
-fi
-
-# --- 2. service + timer ------------------------------------------------
-if systemctl cat factura-cert.service >/dev/null 2>&1; then
-  ok "factura-cert.service existe"
-  [ "$(v factura-cert.service Type)" = oneshot ] \
-    && ok "Type=oneshot" \
-    || ko "Type=$(v factura-cert.service Type), oneshot attendu"
-  v factura-cert.service ExecStart | grep -q 'factura-cert-check' \
-    && ok "ExecStart appelle le script de vérification" \
-    || ko "ExecStart n'appelle pas $CHK"
-else
-  ko "factura-cert.service introuvable"
-fi
-
-if systemctl cat factura-cert.timer >/dev/null 2>&1; then
-  ok "factura-cert.timer existe"
-  v factura-cert.timer TimersCalendar | grep -q '07:00' \
-    && ok "OnCalendar à 07:00" \
-    || ko "OnCalendar=$(v factura-cert.timer TimersCalendar), 07:00 attendu"
-  ACC=$(v factura-cert.timer AccuracyUSec)
-  if [ -n "$ACC" ] && [ "$ACC" -ge 3600000000 ] 2>/dev/null; then
-    ok "AccuracySec d'une heure ou plus ($ACC µs)"
+# --- 1. le ménage a été fait (étape 6) ------------------------------------
+for p in 15432 1080 8080; do
+  if ecoute "$p"; then
+    ko "le port $p écoute encore : les tunnels devaient être fermés"
   else
-    ko "AccuracySec=$ACC : l'énoncé demande une tolérance d'une heure \
-(AccuracySec=1h)"
+    ok "port $p libre"
   fi
-  [ "$(systemctl is-enabled factura-cert.timer 2>/dev/null)" = enabled ] \
-    && ok "factura-cert.timer est enabled" \
-    || ko "factura-cert.timer n'est pas activé"
+done
+if pgrep -af 'ssh .*-[NfD]' >/dev/null 2>&1 && \
+   pgrep -af 'ssh ' | grep -qE '\-N|\-D [0-9]+'; then
+  ko "des processus ssh de tunnel subsistent (pgrep -af ssh)"
 else
-  ko "factura-cert.timer introuvable"
+  ok "aucun processus de tunnel résiduel"
 fi
 
-# --- 3. l'unité modèle d'alerte ---------------------------------------
-if systemctl cat 'factura-alerte@.service' >/dev/null 2>&1; then
-  ok "unité modèle factura-alerte@.service présente"
-  systemctl cat 'factura-alerte@.service' 2>/dev/null | grep -q '%i' \
-    && ok "l'unité modèle exploite le paramètre %i" \
-    || ko "l'unité modèle n'utilise pas %i : elle ne saura pas de quelle \
-unité l'échec provient"
+# --- 2. l'infrastructure permet bien les trois tunnels --------------------
+# On remonte nous-mêmes un tunnel local : ça valide la configuration client,
+# le rebond, et AllowTcpForwarding sur le bastion.
+if ssh -f -N -o BatchMode=yes -o ConnectTimeout=5 \
+       -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none \
+       -L 15499:10.10.10.12:5432 bastion 2>/tmp/m12.tun; then
+  ok "tunnel local monté via le bastion (ExitOnForwardFailure actif)"
+  sleep 1
+  case "$(banniere 15499)" in
+    LAB12-DB-OK*) ok "le service de lab-db répond à travers le tunnel" ;;
+    *) ko "aucune bannière LAB12-DB-OK : lab14-db.service tourne-t-il ?" ;;
+  esac
+  pkill -f 'ssh -f -N .*15499' 2>/dev/null
 else
-  ko "factura-alerte@.service introuvable (unité modèle, avec un @ avant \
-le point)"
+  ko "impossible de monter le tunnel : $(head -1 /tmp/m12.tun)"
 fi
 
-OF=$(v factura-cert.service OnFailure)
-if echo "$OF" | grep -q 'factura-alerte@'; then
-  ok "OnFailure= branché sur l'unité d'alerte ($OF)"
+# proxy SOCKS
+if ssh -f -N -o BatchMode=yes -o ConnectTimeout=5 \
+       -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none \
+       -D 1099 bastion 2>/dev/null; then
+  sleep 1
+  if command -v curl >/dev/null 2>&1; then
+    curl -s --max-time 5 --socks5-hostname 127.0.0.1:1099 \
+         http://10.10.10.11/ >/dev/null 2>&1 \
+      && ok "le proxy SOCKS atteint lab-web" \
+      || note "SOCKS monté mais lab-web ne sert rien en HTTP (sans gravité)"
+  else
+    note "curl absent : test SOCKS applicatif sauté"
+  fi
+  ok "proxy SOCKS montable via le bastion"
+  pkill -f 'ssh -f -N .*-D 1099' 2>/dev/null
 else
-  ko "OnFailure= absent ou mal branché sur factura-cert.service (valeur : \
-« $OF ») — point 4"
+  ko "le proxy SOCKS ne peut pas être monté (AllowTcpForwarding sur bastion ?)"
 fi
 
-# --- 4. le chemin d'échec a réellement été emprunté -------------------
-if [ -s "$ALOG" ]; then
-  ok "$ALOG contient des alertes"
-  grep -q 'factura-cert' "$ALOG" \
-    && ok "une alerte nomme factura-cert.service" \
-    || ko "aucune alerte concernant factura-cert : le chemin d'échec n'a \
-pas été testé (point 5)"
-else
-  ko "$ALOG vide : aucune alerte n'a jamais été produite"
-fi
+# --- 3. GatewayPorts a bien été traité sur lab-ops ------------------------
+GP=$(ssh -o BatchMode=yes -o ConnectTimeout=5 lab-ops \
+     'grep -rhi "^[[:space:]]*GatewayPorts" /etc/ssh/sshd_config \
+      /etc/ssh/sshd_config.d/ 2>/dev/null | tail -1' 2>/dev/null)
+case "$GP" in
+  *clientspecified*|*yes*) ok "lab-ops : GatewayPorts configuré ($GP)" ;;
+  "") ko "lab-ops : aucune directive GatewayPorts (étape 4 non traitée)" ;;
+  *)  ko "lab-ops : GatewayPorts vaut '$GP' (clientspecified attendu)" ;;
+esac
 
-# --- 5. test dynamique : on provoque un échec et on regarde -----------
-echo "  -- test dynamique du chemin d'échec --"
-AV=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
-cat > /run/.m14_04_test.conf <<'EOF'
-[Service]
-ExecStart=
-ExecStart=/opt/factura/bin/factura-cert-check.sh \
-  /etc/factura/tls/portail.crt 3650
-EOF
-mkdir -p /run/systemd/system/factura-cert.service.d
-cp /run/.m14_04_test.conf \
-   /run/systemd/system/factura-cert.service.d/zz-test.conf
-systemctl daemon-reload
-systemctl start factura-cert.service >/dev/null 2>&1
-sleep 3
-AP=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
-rm -rf /run/systemd/system/factura-cert.service.d /run/.m14_04_test.conf
-systemctl daemon-reload
-systemctl reset-failed factura-cert.service >/dev/null 2>&1
-[ "$AP" -gt "$AV" ] \
-  && ok "un échec provoqué déclenche bien une nouvelle alerte" \
-  || ko "un échec provoqué n'a produit aucune alerte : vérifie OnFailure= \
-et que factura-alerte@ écrit bien dans $ALOG"
-
-# --- 6. le rapport écrit ----------------------------------------------
-if [ -s "$RAP" ]; then
-  ok "rapport alerte.md présent"
-  grep -qiE 'systemd|unité|unite|hors' "$RAP" \
-    && ok "point 6 : le rapport explique le lancement hors systemd" \
-    || ko "le rapport n'explique pas pourquoi OnFailure ne joue pas quand \
-on lance le script à la main"
-  grep -qiE 'alerte.*(échou|echou|fail)|boucle|récursi|recursi' "$RAP" \
-    && ok "point 6 : le cas de l'unité d'alerte en échec est traité" \
-    || ko "le rapport ne dit pas ce qui se passe si l'unité d'alerte \
-échoue elle-même"
+# --- 4. le rapport --------------------------------------------------------
+if [ -s "$R" ]; then
+  ok "rapport présent : ~/lab14/rapports/tunnels.md"
+  L=$(grep -c . "$R")
+  [ "$L" -ge 20 ] \
+    && ok "rapport suffisamment détaillé ($L lignes)" \
+    || ko "rapport trop court ($L lignes, 20 minimum)"
+  MANQUE=""
+  for mot in '\-L' '\-R' '\-D' GatewayPorts AllowTcpForwarding \
+             ExitOnForwardFailure; do
+    grep -qE -- "$mot" "$R" || MANQUE="$MANQUE ${mot#\\}"
+  done
+  [ -z "$MANQUE" ] \
+    && ok "le rapport couvre les trois tunnels et les directives serveur" \
+    || ko "il manque dans le rapport :$MANQUE"
+  grep -qiE 'risque|sécurit|danger' "$R" \
+    && ok "le rapport traite le risque de sécurité de chaque tunnel" \
+    || ko "chaque ticket doit s'accompagner de son risque de sécurité"
 else
-  ko "rapport absent : $RAP"
+  ko "rapport manquant : ~/lab14/rapports/tunnels.md"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

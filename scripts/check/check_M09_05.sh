@@ -1,103 +1,68 @@
 #!/usr/bin/env bash
-# check_M09_05.sh — vérifie le lab L9.5 (versant RHEL, sur lab-rhel)
+# check_M09_05.sh — vérifie le lab L9.5 (serveur chrony sur lab-adm)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-echo "== Vérification L9.5 =="
+echo "== Vérification L9.5 (à lancer sur lab-adm) =="
 
-command -v rpm >/dev/null 2>&1 || {
-  ko "rpm absent : ce lab se fait sur lab-rhel (10.10.10.13)"
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
+HOME_DIR="$(getent passwd "${SUDO_USER:-${USER:-$(id -un)}}" | cut -d: -f6)"
+RAP="$HOME_DIR/lab09/rapports"
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab09/rapports/rhel.md"
-
-# --- 1. le dépôt interne déclaré -----------------------------------------
-REPO=$(grep -rls 'depot-lab\|8099' /etc/yum.repos.d/ 2>/dev/null | head -1)
-if [ -n "$REPO" ]; then
-  ok "dépôt déclaré : $REPO"
-  grep -qE '^gpgcheck[[:space:]]*=[[:space:]]*1' "$REPO" \
-    && ok "gpgcheck=1" \
-    || ko "gpgcheck=1 absent de $REPO : les paquets ne sont pas vérifiés"
-  grep -qE '^gpgkey[[:space:]]*=' "$REPO" \
-    && ok "gpgkey= renseigné" \
-    || ko "gpgkey= absent : dnf ne saura pas quelle clé importer"
-  grep -qE '^enabled[[:space:]]*=[[:space:]]*1' "$REPO" \
-    && ok "dépôt activé" || ko "enabled=1 manquant"
+if [ -f /etc/chrony/chrony.conf ]; then
+  UNIT=chrony.service; CONF=/etc/chrony
+elif [ -f /etc/chrony.conf ]; then
+  UNIT=chronyd.service; CONF=/etc
 else
-  ko "aucun fichier de /etc/yum.repos.d/ ne décrit le dépôt interne"
+  ko "chrony n'est pas installé"; echo "Résultat : $PASS réussis, $FAIL échoués"
+  exit 1
 fi
 
-# --- 2. la clé importée dans la base rpm ---------------------------------
-if rpm -q gpg-pubkey --qf '%{SUMMARY}\n' 2>/dev/null \
-     | grep -qi 'depot@lab.local'; then
-  ok "la clé du dépôt est importée (rpm -q gpg-pubkey)"
-else
-  ko "clé absente de la base rpm : sudo rpm --import <clé>"
+[ "$(systemctl is-active $UNIT 2>/dev/null)" = active ] \
+  && ok "$UNIT est actif" || ko "$UNIT inactif"
+[ "$(systemctl is-enabled $UNIT 2>/dev/null)" = enabled ] \
+  && ok "$UNIT activé au boot" || ko "$UNIT n'est pas enabled"
+case "$(systemctl is-active systemd-timesyncd 2>/dev/null)" in
+  active) ko "systemd-timesyncd tourne encore en même temps que chrony" ;;
+  *)      ok "systemd-timesyncd n'est pas actif" ;;
+esac
+
+ss -ulnp 2>/dev/null | grep -q ':123 ' \
+  && ok "écoute UDP 123" || ko "rien n'écoute en UDP 123 (chronyd démarré ?)"
+
+grep -rhsE '^\s*allow\s' "$CONF" 2>/dev/null | grep -q '10.10.10' \
+  && ok "directive allow pour 10.10.10.0/24" \
+  || ko "aucune directive 'allow 10.10.10.0/24' dans la configuration"
+grep -rhsqE '^\s*local\s+stratum' "$CONF" 2>/dev/null \
+  && ok "local stratum configuré (sert le lab sans Internet)" \
+  || ko "pas de 'local stratum 10'"
+
+if command -v chronyc >/dev/null 2>&1; then
+  chronyc tracking 2>/dev/null | grep -q 'Leap status *: Normal' \
+    && ok "chronyc tracking : Leap status Normal (synchronisé)" \
+    || ko "chrony n'est pas synchronisé (chronyc sources -v)"
+  C=$(sudo -n chronyc clients 2>/dev/null | grep -cE '^10\.10\.10\.' || true)
+  [ "${C:-0}" -ge 1 ] && ok "$C client(s) du lab vu(s) par chronyc clients" \
+    || ko "aucun client 10.10.10.x vu (clients configurés ? serveur \
+redémarré avant eux ?)"
 fi
 
-# --- 3. le paquet installé, et attribué au dépôt --------------------------
-if rpm -q outil-lab >/dev/null 2>&1; then
-  ok "outil-lab installé ($(rpm -q --qf '%{VERSION}' outil-lab))"
-  FROM=$(dnf -q repoquery --installed --qf '%{from_repo}' outil-lab \
-         2>/dev/null | head -1)
-  case "$FROM" in
-    ""|"@System"|"@commandline")
-      ko "outil-lab n'est rattaché à aucun dépôt (from_repo=$FROM) : \
-tu l'as posé avec rpm -i au lieu de dnf install" ;;
-    *) ok "installé depuis le dépôt « $FROM »" ;;
-  esac
-  rpm -V outil-lab >/dev/null 2>&1 \
-    && ok "rpm -V outil-lab ne signale aucune altération" \
-    || note "rpm -V signale des écarts — normal si tu as modifié le \
-fichier de configuration"
-else
-  ko "outil-lab n'est pas installé (sudo dnf install outil-lab)"
-fi
+TZ_NOW=$(timedatectl show -p Timezone --value 2>/dev/null)
+[ "$TZ_NOW" = "Europe/Paris" ] && ok "fuseau Europe/Paris" \
+  || ko "fuseau = ${TZ_NOW:-?}, attendu Europe/Paris"
+[ "$(timedatectl show -p LocalRTC --value 2>/dev/null)" = no ] \
+  && ok "RTC en UTC" || ko "RTC en heure locale : à remettre en UTC"
 
-# --- 4. l'historique dnf porte la trace d'un undo ------------------------
-HIST=$(dnf history list 2>/dev/null | head -20)
-if printf '%s' "$HIST" | grep -qiE '^\s*[0-9]+ +\|.*(Erase|Removed|Undone)'; then
-  ok "l'historique dnf contient une transaction annulée ou une suppression"
+if [ -f "$RAP/temps.md" ] && [ "$(wc -l < "$RAP/temps.md")" -ge 15 ]; then
+  ok "rapport temps.md présent"
+  grep -qiE 'slew|makestep' "$RAP/temps.md" \
+    && ok "le rapport traite slew/makestep" \
+    || ko "le rapport ne parle ni de slew ni de makestep"
 else
-  ko "aucune trace d'annulation dans dnf history : l'étape 5 demande un \
-dnf history undo"
+  ko "rapport $RAP/temps.md absent ou trop court"
 fi
-
-# --- 5. dnf-automatic : sécurité seulement, sans application -------------
-CONF=/etc/dnf/automatic.conf
-if [ -f "$CONF" ]; then
-  ok "$CONF présent"
-  grep -qE '^upgrade_type[[:space:]]*=[[:space:]]*security' "$CONF" \
-    && ok "upgrade_type = security" \
-    || ko "upgrade_type doit valoir security, pas default"
-  grep -qE '^(apply_updates|download_updates)[[:space:]]*=' "$CONF" \
-    && ok "apply_updates / download_updates explicitement réglés" \
-    || ko "règle explicitement download_updates et apply_updates"
-  if systemctl is-enabled dnf-automatic.timer >/dev/null 2>&1; then
-    ok "dnf-automatic.timer actif au démarrage"
-  else
-    ko "dnf-automatic.timer n'est pas activé \
-(systemctl enable --now dnf-automatic.timer)"
-  fi
-else
-  ko "$CONF absent : sudo dnf install -y dnf-automatic"
-fi
-
-# --- 6. le rapport --------------------------------------------------------
-if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 10 ]; then
-  ok "rapport rhel.md rédigé"
-  for mot in 'rpm -qf' 'history' 'EPEL'; do
-    grep -qiF "$mot" "$RAP" \
-      && ok "le rapport traite « $mot »" \
-      || ko "le rapport doit traiter « $mot »"
-  done
-else
-  ko "rapport absent ou trop court : ~/lab09/rapports/rhel.md"
-fi
+note "lab-web et lab-rhel : vérifie 'chronyc sources' à la main (^* 10.10.10.10)"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

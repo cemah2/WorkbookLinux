@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install-gitea.sh — installe Gitea en binaire + systemd + SQLite sur lab-git
-# (Ubuntu 24.04). Sans Docker : la forge doit exister avant le module 18.
+# (Ubuntu 24.04). Sans Docker : la forge doit exister avant le module 22.
 # À lancer en sudo sur lab-git, depuis n'importe quel répertoire :
 #   sudo bash ~/workbook/scripts/lab/install-gitea.sh        # installe
 #   sudo bash ~/workbook/scripts/lab/install-gitea.sh lock   # après le web

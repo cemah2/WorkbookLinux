@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M09_06.sh — vérifie le défi D9 (politique de mise à jour)
+# check_M09_06.sh — vérifie le défi D9 (base noyau Factura)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,118 +7,115 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification D9 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-SCR="$HOMEDIR/lab09/bin/etat-paquets.sh"
-RAP="$HOMEDIR/lab09/rapports/politique-maj.md"
+HOME_DIR="$(getent passwd "${SUDO_USER:-${USER:-$(id -un)}}" | cut -d: -f6)"
+RAP="$HOME_DIR/lab09/rapports"; BIN="$HOME_DIR/lab09/bin"
+F=/etc/sysctl.d/60-factura.conf
 
-# --- 1. le script ---------------------------------------------------------
-if [ -x "$SCR" ]; then
-  ok "$SCR existe et est exécutable"
-  head -1 "$SCR" | grep -q '^#!/usr/bin/env bash' \
-    && ok "shebang #!/usr/bin/env bash" \
-    || ko "shebang attendu : #!/usr/bin/env bash"
-  grep -qE '^set -euo pipefail' "$SCR" \
-    && ok "set -euo pipefail présent" || ko "set -euo pipefail manquant"
-
-  SORTIE=$(bash "$SCR" 2>/dev/null); RC=$?
-  ERR=$(bash "$SCR" 2>&1 >/dev/null)
-
-  [ -n "$SORTIE" ] && ok "le script écrit un rapport sur stdout" \
-                   || ko "stdout vide"
-  printf '%s' "$SORTIE" | grep -q '^#' \
-    && ok "le rapport est en Markdown" \
-    || ko "le rapport stdout ne contient aucun titre Markdown"
-
-  for t in 'retenu' 'épingl' 'sécurit'; do
-    printf '%s' "$SORTIE" | grep -qi "$t" \
-      && ok "le rapport couvre « $t »" \
-      || ko "le rapport ne dit rien sur « $t »"
+# --- 1. fichier sysctl unique et valeurs effectives -----------------------
+[ -f "$F" ] && ok "$F existe" || ko "$F absent"
+want() {
+  local v; v=$(sysctl -n "$1" 2>/dev/null | tr '\t' ' ')
+  [ "$v" = "$2" ] && ok "$1 = $2" \
+    || ko "$1 = ${v:-ABSENT} (attendu $2) : sysctl --system, rang, module ?"
+}
+want vm.swappiness 10
+want vm.dirty_background_ratio 5
+want vm.dirty_ratio 10
+want net.core.somaxconn 8192
+want net.ipv4.ip_local_port_range "10240 65000"
+want fs.inotify.max_user_watches 524288
+want kernel.panic 10
+want kernel.kptr_restrict 2
+want kernel.dmesg_restrict 1
+want kernel.sysrq 176
+want net.ipv4.ip_forward 0
+want net.netfilter.nf_conntrack_max 131072
+if [ -f "$F" ]; then
+  for k in swappiness somaxconn nf_conntrack_max kptr_restrict; do
+    grep -q "$k" "$F" || ko "$k n'est pas dans $F (un seul fichier attendu)"
   done
+fi
+grep -qsE '^\s*nf_conntrack\s*$' /etc/modules-load.d/*.conf \
+  && ok "nf_conntrack dans modules-load.d (prérequis résolu)" \
+  || ko "nf_conntrack absent de /etc/modules-load.d : la clé sera ignorée \
+au boot"
+if [ -d /run/systemd/system ]; then
+  journalctl -u systemd-sysctl -b --no-pager 2>/dev/null | \
+    grep -qiE 'cannot|failed|Couldn' \
+    && ko "systemd-sysctl a émis une erreur à ce boot (journalctl -u \
+systemd-sysctl -b)" \
+    || ok "systemd-sysctl sans erreur à ce boot"
+fi
 
-  if printf '%s' "$ERR" | grep -q '^#'; then
-    ko "du Markdown part sur stderr : le rapport va sur stdout, la trace \
-de diagnostic sur stderr"
-  else
-    ok "stderr ne contient pas le rapport"
-  fi
-  case "$RC" in
-    0|1) ok "code retour $RC (0 = conforme, 1 = dérive)" ;;
-    *)   ko "code retour $RC : seuls 0 et 1 sont prévus" ;;
-  esac
+# --- 2. modules -----------------------------------------------------------
+lsmod | grep -q '^joydev ' && ko "joydev chargé" \
+  || ok "joydev n'est pas chargé"
+grep -qsE '^\s*install\s+joydev\s+/bin/false' /etc/modprobe.d/*.conf \
+  && ok "joydev interdit (install /bin/false)" \
+  || note "joydev non interdit : accepté si un autre module de L9.3 l'est"
+
+# --- 3. ligne de commande du noyau ----------------------------------------
+CMD=$(cat /proc/cmdline)
+[[ $CMD == *console=ttyS0* ]] && ok "console série sur la ligne noyau" \
+  || ko "console=ttyS0 absent de /proc/cmdline"
+[[ $CMD == *transparent_hugepage=madvise* ]] && ok "THP madvise au boot" \
+  || ko "transparent_hugepage=madvise absent (update-grub + reboot ?)"
+[[ $CMD == *mitigations=off* ]] && ko "mitigations=off est présent : refusé" \
+  || ok "mitigations actives"
+[[ $CMD == *crashkernel=* ]] && ok "crashkernel= réservé" \
+  || ko "pas de crashkernel= : kdump ne peut pas charger"
+
+# --- 4. kdump -------------------------------------------------------------
+if [ "$(cat /sys/kernel/kexec_crash_loaded 2>/dev/null)" = 1 ]; then
+  ok "noyau de secours chargé (kexec_crash_loaded=1)"
 else
-  ko "$SCR introuvable ou non exécutable"
+  ko "kdump non chargé : kdump-config show / systemctl status kdump-tools"
 fi
-
-# --- 2. unattended-upgrades ----------------------------------------------
-if dpkg -s unattended-upgrades >/dev/null 2>&1; then
-  ok "unattended-upgrades installé"
+if ls /var/crash/*/dump* >/dev/null 2>&1 || ls /var/crash/*/vmcore* \
+   >/dev/null 2>&1; then
+  ok "un dump existe dans /var/crash (test réel effectué)"
 else
-  ko "unattended-upgrades n'est pas installé"
+  ko "aucun dump dans /var/crash : le test SysRq 'c' n'a pas été fait"
 fi
 
-AUTO=/etc/apt/apt.conf.d/20auto-upgrades
-if [ -f "$AUTO" ]; then
-  ok "$AUTO présent"
-  grep -qE 'Update-Package-Lists "1"' "$AUTO" \
-    && ok "mise à jour des index activée" \
-    || ko "APT::Periodic::Update-Package-Lists doit valoir \"1\""
-  grep -qE 'Unattended-Upgrade "1"' "$AUTO" \
-    && ok "unattended-upgrade activé" \
-    || ko "APT::Periodic::Unattended-Upgrade doit valoir \"1\""
+# --- 5. temps et /boot ----------------------------------------------------
+[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = yes ] \
+  && ok "horloge synchronisée" || ko "horloge non synchronisée"
+[ -s "$HOME_DIR/lab09/conf/chrony-client.conf" ] \
+  && ok "modèle chrony client rangé dans ~/lab09/conf" \
+  || ko "~/lab09/conf/chrony-client.conf absent"
+USE=$(df --output=pcent /boot 2>/dev/null | tail -1 | tr -dc 0-9)
+[ -n "$USE" ] && [ "$USE" -lt 70 ] && ok "/boot à $USE %" \
+  || ko "/boot à ${USE:-?} % (>= 70)"
+
+# --- 6. script de conformité ---------------------------------------------
+S="$BIN/verif-noyau.sh"
+if [ -x "$S" ]; then
+  ok "script $S exécutable"
+  head -5 "$S" | grep -q 'set -euo pipefail' && ok "set -euo pipefail" \
+    || ko "le script n'a pas set -euo pipefail en tête"
+  OUT=$(sudo -n "$S" 2>/dev/null); RC=$?
+  L=$(printf '%s\n' "$OUT" | grep -cE '^\[ ?(OK|FAIL) ?\]')
+  [ "$L" -ge 12 ] && ok "le script affiche $L lignes [ OK ]/[FAIL]" \
+    || ko "le script n'affiche que $L lignes [ OK ]/[FAIL] (12 attendues)"
+  [ "$RC" -eq 0 ] && ok "le script sort en 0" \
+    || ko "le script sort en $RC : au moins un point non conforme"
 else
-  ko "$AUTO absent : sudo dpkg-reconfigure -plow unattended-upgrades \
-ou écris-le à la main"
+  ko "$S absent ou non exécutable"
 fi
 
-# Les réglages locaux doivent être dans un fichier à soi, pas dans
-# 50unattended-upgrades qui est un conffile du paquet.
-LOCAL=$(grep -rls 'Unattended-Upgrade::' /etc/apt/apt.conf.d/ 2>/dev/null \
-        | grep -v '50unattended-upgrades' | head -1)
-if [ -n "$LOCAL" ]; then
-  ok "réglages locaux dans un fichier dédié : $(basename "$LOCAL")"
-  CIBLE="$LOCAL"
+# --- 7. rapport -----------------------------------------------------------
+if [ -f "$RAP/base-noyau.md" ] && [ "$(wc -l < "$RAP/base-noyau.md")" -ge 25 ]
+then
+  ok "rapport base-noyau.md présent"
+  grep -qi 'mitigations' "$RAP/base-noyau.md" \
+    && ok "le rapport justifie le refus de mitigations=off" \
+    || ko "le rapport ne parle pas de mitigations=off"
+  grep -qiE 'kdump|crash' "$RAP/base-noyau.md" \
+    && ok "le rapport documente le test kdump" \
+    || ko "le rapport ne documente pas kdump"
 else
-  note "aucun fichier local : les réglages sont dans le conffile du \
-paquet, ils déclencheront un prompt dpkg à la prochaine mise à jour"
-  CIBLE=/etc/apt/apt.conf.d/50unattended-upgrades
-fi
-
-if [ -f "$CIBLE" ]; then
-  grep -A20 'Allowed-Origins\|Origins-Pattern' "$CIBLE" 2>/dev/null \
-    | grep -qiE '^\s*"?\$?\{?distro_id\}?:\$?\{?distro_codename\}?-security' \
-    && ok "l'origine -security est autorisée" \
-    || note "vérifie que \${distro_id}:\${distro_codename}-security est \
-bien la seule origine décommentée"
-  grep -qE '^\s*Unattended-Upgrade::Automatic-Reboot\s+"false"' "$CIBLE" \
-    && ok "redémarrage automatique désactivé" \
-    || ko "Automatic-Reboot doit être explicitement \"false\" sur un \
-serveur de production"
-  grep -qE '^\s*Unattended-Upgrade::Package-Blacklist' "$CIBLE" \
-    && ok "une liste d'exclusion est définie" \
-    || ko "définis Package-Blacklist, même vide : c'est le point de \
-rendez-vous documenté pour exclure un paquet applicatif"
-fi
-
-if command -v unattended-upgrade >/dev/null 2>&1; then
-  if unattended-upgrade --dry-run >/dev/null 2>&1; then
-    ok "unattended-upgrade --dry-run s'exécute sans erreur"
-  else
-    ko "unattended-upgrade --dry-run échoue : la configuration est \
-syntaxiquement invalide (relance-la avec --debug)"
-  fi
-fi
-
-# --- 3. le rapport --------------------------------------------------------
-if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 15 ]; then
-  ok "rapport politique-maj.md rédigé"
-  for mot in 'sécurité' 'redémarrage' 'exclusion' 'rollback'; do
-    grep -qi "$mot" "$RAP" \
-      && ok "le rapport traite « $mot »" \
-      || ko "le rapport doit traiter « $mot »"
-  done
-else
-  ko "rapport absent ou trop court : ~/lab09/rapports/politique-maj.md"
+  ko "rapport $RAP/base-noyau.md absent ou trop court (25 lignes)"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

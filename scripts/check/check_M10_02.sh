@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M10_02.sh — vérifie le lab L10.2 (base sous LVM, extension, pvmove)
+# check_M10_02.sh — vérifie le lab L10.2 (dépôt interne signé)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,107 +7,105 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L10.2 =="
 
-command -v lvs >/dev/null 2>&1 || {
-  echo "  [FAIL] lvm2 n'est pas installé : sudo apt install -y lvm2"
-  exit 1; }
+SRC=$(grep -rslE '^(Types:|deb )' /etc/apt/sources.list.d/ 2>/dev/null \
+      | xargs -r grep -rls 'depot-lab\|8099' 2>/dev/null | head -1)
 
-DB=/srv/factura/db
-VG=vg_data
-[ -f /etc/lab10.env ] && . /etc/lab10.env
-DISQUE1="${DISQUE1:-/dev/sdb}"
-
-# --- 1. le VG et les LV existent ---------------------------------------
-if vgs --noheadings -o vg_name 2>/dev/null | grep -qw "$VG"; then
-  ok "le groupe de volumes $VG existe"
+# --- 1. la source est déclarée, et au format deb822 ---------------------
+if [ -n "$SRC" ]; then
+  ok "source du dépôt déclarée : $SRC"
+  case "$SRC" in
+    *.sources) ok "format deb822 (.sources)" ;;
+    *.list)    ko "$SRC est au format une-ligne : l'énoncé demande un \
+fichier .sources deb822" ;;
+  esac
 else
-  ko "le groupe $VG n'existe pas (vgcreate $VG <pv>)"
+  ko "aucun fichier de /etc/apt/sources.list.d/ ne référence le dépôt"
 fi
 
-if lvs --noheadings -o lv_name "$VG" 2>/dev/null | grep -qw lv_pgdata; then
-  ok "le volume logique lv_pgdata existe"
-else
-  ko "lv_pgdata est absent de $VG (lvcreate -L 2G -n lv_pgdata $VG)"
+# --- 2. la clé : signed-by, keyrings, et rien d'autre -------------------
+KEYF=""
+if [ -n "$SRC" ]; then
+  KEYF=$(grep -iE '^Signed-By:' "$SRC" 2>/dev/null | awk '{print $2}')
+  [ -z "$KEYF" ] && KEYF=$(grep -oE 'signed-by=[^]" ]+' "$SRC" 2>/dev/null \
+                           | cut -d= -f2)
 fi
-
-# --- 2. /srv/factura/db est monté sur ce LV ----------------------------
-if findmnt -no TARGET "$DB" >/dev/null 2>&1; then
-  SRC=$(findmnt -no SOURCE "$DB")
-  REEL=$(readlink -f "/dev/$VG/lv_pgdata" 2>/dev/null)
-  if [ "$(readlink -f "$SRC")" = "$REEL" ] && [ -n "$REEL" ]; then
-    ok "$DB est monté sur $VG/lv_pgdata"
-  else
-    ko "$DB est monté sur $SRC, pas sur /dev/$VG/lv_pgdata"
-  fi
-  TAILLE=$(df -BM --output=size "$DB" 2>/dev/null | tail -1 | tr -dc '0-9')
-  if [ "${TAILLE:-0}" -ge 3000 ]; then
-    ok "le système de fichiers fait ${TAILLE} Mio (extension propagée)"
-  else
-    ko "le système de fichiers ne fait que ${TAILLE:-0} Mio : as-tu utilisé \
-lvextend -r (ou resize2fs) après l'extension du LV ?"
-  fi
-else
-  ko "$DB n'est pas monté"
-fi
-
-# --- 3. le VG ne contient plus le premier disque -----------------------
-PVS=$(pvs --noheadings -o pv_name --select "vg_name=$VG" 2>/dev/null \
-  | tr -d ' ' | tr '\n' ' ')
-if [ -n "$PVS" ]; then
-  note "PV du groupe $VG : $PVS"
-  if echo "$PVS" | grep -q "^${DISQUE1}[0-9]* $\|${DISQUE1}[0-9]* "; then
-    ko "$DISQUE1 appartient encore à $VG : pvmove puis vgreduce n'ont pas \
-été menés à leur terme"
-  else
-    ok "$DISQUE1 ne fait plus partie de $VG"
-  fi
-  NB=$(echo "$PVS" | wc -w)
-  [ "$NB" -eq 1 ] && ok "le groupe ne contient plus qu'un seul PV" \
-    || note "le groupe contient $NB PV (1 attendu après l'étape 7)"
-else
-  ko "impossible de lister les PV de $VG"
-fi
-
-# --- 4. lv_test réduit à 1 Go, données intactes ------------------------
-if lvs --noheadings -o lv_name "$VG" 2>/dev/null | grep -qw lv_test; then
-  ok "lv_test existe"
-  MO=$(lvs --noheadings --units m --nosuffix -o lv_size "$VG/lv_test" \
-    2>/dev/null | tr -d ' ' | cut -d. -f1)
-  if [ "${MO:-0}" -ge 900 ] && [ "${MO:-0}" -le 1100 ]; then
-    ok "lv_test fait ${MO} Mio (~1 Go, réduction réussie)"
-  else
-    ko "lv_test fait ${MO:-?} Mio : la réduction à 1 Go n'a pas abouti"
-  fi
-
-  MNT=$(lvs --noheadings -o lv_path "$VG/lv_test" 2>/dev/null | tr -d ' ')
-  CIBLE=$(findmnt -nro TARGET -S "$(readlink -f "$MNT")" 2>/dev/null | head -1)
-  if [ -n "$CIBLE" ]; then
-    if [ -s "$CIBLE/donnees.bin" ]; then
-      ok "les données de lv_test sont intactes ($CIBLE/donnees.bin)"
+if [ -n "$KEYF" ]; then
+  ok "la source désigne un trousseau : $KEYF"
+  case "$KEYF" in
+    /etc/apt/keyrings/*|/usr/share/keyrings/*)
+      ok "le trousseau est dans un répertoire keyrings" ;;
+    *) ko "$KEYF n'est ni dans /etc/apt/keyrings ni dans \
+/usr/share/keyrings" ;;
+  esac
+  if [ -r "$KEYF" ]; then
+    ok "le trousseau est lisible"
+    PERM=$(stat -c '%a' "$KEYF")
+    case "$PERM" in
+      644|444|664) ok "permissions $PERM (lisible par _apt)" ;;
+      *) ko "permissions $PERM : _apt doit pouvoir lire le trousseau \
+(0644 attendu)" ;;
+    esac
+    if gpg --show-keys --with-colons "$KEYF" 2>/dev/null \
+         | grep -q 'depot@lab.local'; then
+      ok "le trousseau contient bien la clé depot@lab.local"
     else
-      ko "donnees.bin est absent ou vide sur $CIBLE : la réduction a mangé \
-les données (mauvais ordre resize2fs / lvreduce ?)"
+      ko "le trousseau ne contient pas la clé du dépôt \
+(gpg --show-keys $KEYF)"
     fi
   else
-    note "lv_test n'est pas monté : impossible de vérifier les données. \
-Remonte-le puis relance le contrôle."
+    ko "$KEYF est introuvable ou illisible"
   fi
 else
-  ko "lv_test est absent : l'étape 8 (réduction) n'a pas été faite"
+  ko "la source ne comporte ni Signed-By: ni [signed-by=...] : sans lui, \
+la clé vaut pour TOUS les dépôts de la machine"
 fi
 
-# --- 5. le rapport ------------------------------------------------------
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab10/rapports/inf-4118.md"
-if [ -s "$RAP" ]; then
-  L=$(grep -c . "$RAP")
-  [ "$L" -ge 10 ] && ok "rapport inf-4118.md rédigé ($L lignes)" \
-    || ko "rapport inf-4118.md trop court ($L lignes, 10 minimum)"
-  for mot in pvmove lvextend resize2fs; do
-    grep -qi "$mot" "$RAP" || note "le rapport ne mentionne pas « $mot »"
-  done
+# --- 3. aucune clé posée dans le trousseau global -----------------------
+if ls /etc/apt/trusted.gpg.d/ 2>/dev/null | grep -qi 'depot\|lab'; then
+  ko "une clé du lab traîne dans /etc/apt/trusted.gpg.d : elle serait \
+acceptée pour n'importe quel dépôt"
 else
-  ko "rapport absent : $RAP"
+  ok "rien du lab dans /etc/apt/trusted.gpg.d"
+fi
+if [ -s /etc/apt/trusted.gpg ] && \
+   gpg --show-keys /etc/apt/trusted.gpg 2>/dev/null \
+     | grep -q 'depot@lab.local'; then
+  ko "la clé est dans /etc/apt/trusted.gpg (méthode apt-key, obsolète)"
+else
+  ok "pas de clé du lab dans /etc/apt/trusted.gpg"
+fi
+
+# --- 4. apt update passe sans avertissement GPG -------------------------
+SORTIE=$(apt-get update 2>&1)
+if printf '%s' "$SORTIE" | grep -qi 'NO_PUBKEY\|is not signed\|GPG error'; then
+  ko "apt update signale encore un problème de signature"
+  printf '%s\n' "$SORTIE" | grep -i 'NO_PUBKEY\|not signed\|GPG error' \
+    | head -2 | sed 's/^/         /'
+else
+  ok "apt update ne signale aucun problème de signature"
+fi
+
+# --- 5. le paquet vient bien du dépôt interne ---------------------------
+POL=$(apt-cache policy outil-lab 2>/dev/null)
+if printf '%s' "$POL" | grep -q 'Installed: 1\.'; then
+  ok "outil-lab est installé ($(printf '%s' "$POL" \
+      | awk '/Installed:/ {print $2}'))"
+else
+  ko "outil-lab n'est pas installé (apt install outil-lab)"
+fi
+if printf '%s' "$POL" | grep -qE '(8099|/srv/depot-lab)'; then
+  ok "le dépôt interne est bien une source de outil-lab"
+else
+  ko "apt-cache policy outil-lab ne montre pas le dépôt interne"
+fi
+
+# --- 6. le paquet vient du dépôt, pas d'un dpkg -i ----------------------
+if apt-cache policy outil-lab 2>/dev/null \
+     | grep -A1 '^ \*\*\*' | grep -qE '8099|/srv/depot-lab'; then
+  ok "la version installée est attribuée au dépôt, pas à un dpkg -i"
+else
+  note "la version installée n'est rattachée à aucun dépôt : \
+tu l'as sans doute posée avec dpkg -i"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

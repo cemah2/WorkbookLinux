@@ -1,62 +1,62 @@
 #!/usr/bin/env bash
-# break_M18_04.sh — panne BF18.4 (/var/lib/docker remplit le disque)
-# Idempotent. Rien à sauvegarder : l'espace est pris dans la couche
-# d'écriture d'un conteneur.
+# break_M18_04.sh — panne BF18.4 (fail2ban bannit le bastion)
+# À lancer sur lab-web, avec sudo. Idempotent.
+# Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-BF=/opt/factura-docker/bf
-SAUV=/root/.breakfix-backup
-REF=/opt/factura-docker/api
-mkdir -p "$SAUV" "$BF"
 
-[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M18.sh" >&2; exit 1; }
-command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
-  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L18.1" >&2
+command -v fail2ban-client >/dev/null 2>&1 || {
+  echo "fail2ban n'est pas installé : apt install fail2ban" >&2; exit 1; }
+
+SAUV=/root/.breakfix-backup
+JL=/etc/fail2ban/jail.local
+BASTION=10.10.10.10
+mkdir -p "$SAUV"
+
+# --- sauvegarde de l'état avant de casser ------------------------------
+if [ -f "$JL" ] && [ ! -f "$SAUV/M18_04.jail.local" ]; then
+  cp -a "$JL" "$SAUV/M18_04.jail.local"
+fi
+
+# --- la configuration « d'origine », volontairement sans ignoreip ------
+# (c'est la cause racine : le bastion n'est pas protégé)
+cat > "$JL" <<'EOF'
+# Configuration fail2ban du lab.
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 4
+# ignoreip : à compléter (c'est justement ce qui manque)
+
+[sshd]
+enabled = true
+backend = systemd
+EOF
+
+systemctl restart fail2ban >/dev/null 2>&1 || true
+
+# on laisse le démon démarrer avant de lui parler
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  fail2ban-client ping >/dev/null 2>&1 && break
+  sleep 1
+done
+
+# --- la panne : le bastion est banni ----------------------------------
+fail2ban-client set sshd banip "$BASTION" >/dev/null 2>&1 || {
+  echo "impossible de bannir via fail2ban-client (jail sshd absente ?)" >&2
   exit 1; }
 
-# image de base commune aux Break & Fix (construite une seule fois)
-construire_base() {
-  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
-  mkdir -p "$BF/base"
-  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
-  cat > "$BF/base/Dockerfile" <<'DEOF'
-FROM python:3.12-slim-bookworm
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-ENTRYPOINT ["python3", "app.py"]
-DEOF
-  echo "construction de l'image factura-bf:base (une fois)…"
-  docker build -q -t factura-bf:base "$BF/base" >/dev/null
-}
-
-construire_base
-FICHIER=/var/tmp/export-clients-$(date +%Y%m).bin
-
-if ! docker inspect factura-export >/dev/null 2>&1; then
-  docker run -d --name factura-export --entrypoint sleep \
-    --restart unless-stopped factura-bf:base infinity >/dev/null
+# --- la politique ufw, elle, reste impeccable -------------------------
+if command -v ufw >/dev/null 2>&1; then
+  ufw allow from "$BASTION" to any port 22 proto tcp >/dev/null 2>&1 || true
 fi
 
-if docker exec factura-export test -f "$FICHIER" 2>/dev/null; then
-  echo "le disque est déjà rempli (fichier présent)"
-else
-  # espace libre réel du système de fichiers de Docker, blocs réservés
-  # à root compris (Docker tourne en root), moins 48 Mio de marge
-  DOCKER_ROOT=$(docker info --format '{{.DockerRootDir}}')
-  read -r BLOCS TAILLE_BLOC < <(stat -f -c '%f %S' "$DOCKER_ROOT")
-  LIBRE=$(( BLOCS * TAILLE_BLOC ))
-  TAILLE=$(( LIBRE - 48 * 1024 * 1024 ))
-  [ "$TAILLE" -gt $((1024 * 1024 * 1024)) ] || {
-    echo "moins de 1 Go de libre : panne non déclenchée" >&2; exit 1; }
-  docker exec factura-export fallocate -l "$TAILLE" "$FICHIER"
-fi
+cat <<'EOF'
 
-cat <<'EOF2'
-
-Symptôme attendu : df -h / affiche 100 % d'utilisation. docker build
-échoue avec « no space left on device », apt et journalctl se plaignent.
-Personne n'a copié de fichier sur la VM, du -sh /home /srv /var/log ne
-montre rien d'anormal.
-EOF2
+Symptôme attendu : depuis lab-adm (10.10.10.10), « ssh 10.10.10.11 »
+reste bloqué puis sort en « Connection timed out ». Depuis lab-db, la
+même commande fonctionne immédiatement.
+« ping 10.10.10.11 » depuis lab-adm répond, et « ufw status » sur
+lab-web affiche bien 22/tcp ALLOW IN 10.10.10.10. Le service ssh est
+actif et n'a pas été modifié.
+EOF

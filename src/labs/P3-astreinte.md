@@ -27,7 +27,7 @@ Temps estimé : 12 à 16 h (étalées, comme une vraie semaine d'astreinte).
 Prérequis : toute la partie système, en particulier les modules 08 (systemd),
 11 (réseau), 12 (SSH), 13 (logs), 14 (timers), 15 (sécurité) et **16
 (dépannage, performance, gestion d'incident)**, dont ce projet est le
-prolongement appliqué. Les huit pannes du module 16 ne sont **pas** rejouées
+prolongement appliqué. Les huit pannes du module 19 ne sont **pas** rejouées
 ici : les scénarios sont tous différents.
 :::
 
@@ -121,7 +121,7 @@ une nouvelle session devient impossible — celle qui est déjà ouverte tient.
 | P2 | dégradé / risque | on tranche vite, on trace |
 | P3 | gênant, pas urgent | on planifie proprement |
 
-Trois règles non négociables, héritées du module 16 : **une seule modification
+Trois règles non négociables, héritées du module 19 : **une seule modification
 à la fois**, **on note tout**, **on préserve les preuves avant de réparer** un
 incident majeur. Chaque journée se clôt par un **rapport de fin de journée**
 (modèle `~/astreinte/modeles/rapport-journee.md`). La semaine se clôt par la

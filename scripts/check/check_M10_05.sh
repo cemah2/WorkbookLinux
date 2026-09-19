@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M10_05.sh — vérifie le lab L10.5 (LUKS + client NFS)
+# check_M10_05.sh — vérifie le lab L10.5 (versant RHEL, sur lab-rhel)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,119 +7,96 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L10.5 =="
 
-COFFRE=/srv/coffre
-NFSMNT=/mnt/archives-adm
+command -v rpm >/dev/null 2>&1 || {
+  ko "rpm absent : ce lab se fait sur lab-rhel (10.10.10.13)"
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
 
-# ======================= Partie A : LUKS ==============================
-if ! command -v cryptsetup >/dev/null 2>&1; then
-  ko "cryptsetup absent : sudo apt install -y cryptsetup-bin"
-else
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab10/rapports/rhel.md"
 
-# --- 1. le volume déchiffré est monté ----------------------------------
-if findmnt -no TARGET "$COFFRE" >/dev/null 2>&1; then
-  SRC=$(findmnt -no SOURCE "$COFFRE")
-  case "$SRC" in
-    /dev/mapper/coffre) ok "$COFFRE est monté depuis /dev/mapper/coffre" ;;
-    *) ko "$COFFRE est monté depuis $SRC, pas depuis /dev/mapper/coffre" ;;
-  esac
+# --- 1. le dépôt interne déclaré -----------------------------------------
+REPO=$(grep -rls 'depot-lab\|8099' /etc/yum.repos.d/ 2>/dev/null | head -1)
+if [ -n "$REPO" ]; then
+  ok "dépôt déclaré : $REPO"
+  grep -qE '^gpgcheck[[:space:]]*=[[:space:]]*1' "$REPO" \
+    && ok "gpgcheck=1" \
+    || ko "gpgcheck=1 absent de $REPO : les paquets ne sont pas vérifiés"
+  grep -qE '^gpgkey[[:space:]]*=' "$REPO" \
+    && ok "gpgkey= renseigné" \
+    || ko "gpgkey= absent : dnf ne saura pas quelle clé importer"
+  grep -qE '^enabled[[:space:]]*=[[:space:]]*1' "$REPO" \
+    && ok "dépôt activé" || ko "enabled=1 manquant"
 else
-  ko "$COFFRE n'est pas monté (cryptsetup luksOpen puis mount)"
+  ko "aucun fichier de /etc/yum.repos.d/ ne décrit le dépôt interne"
 fi
 
-# --- 2. le périphérique déchiffré est bien un conteneur LUKS ouvert ----
-if [ -e /dev/mapper/coffre ]; then
-  ok "/dev/mapper/coffre existe (conteneur ouvert)"
-  BACKING=$(lsblk -nrpo NAME,TYPE 2>/dev/null \
-    | awk '$2=="crypt"{print}' | head -1)
-  PARENT=$(lsblk -nrpso NAME /dev/mapper/coffre 2>/dev/null | sed -n 2p)
-  if [ -n "$PARENT" ] && cryptsetup isLuks "$PARENT" 2>/dev/null; then
-    ok "le périphérique sous-jacent ($PARENT) est un conteneur LUKS"
+# --- 2. la clé importée dans la base rpm ---------------------------------
+if rpm -q gpg-pubkey --qf '%{SUMMARY}\n' 2>/dev/null \
+     | grep -qi 'depot@lab.local'; then
+  ok "la clé du dépôt est importée (rpm -q gpg-pubkey)"
+else
+  ko "clé absente de la base rpm : sudo rpm --import <clé>"
+fi
 
-    # --- 3. crypttab référence l'UUID DU CONTENEUR --------------------
-    UUID_LUKS=$(cryptsetup luksUUID "$PARENT" 2>/dev/null)
-    if grep -qs "$UUID_LUKS" /etc/crypttab 2>/dev/null; then
-      ok "/etc/crypttab référence l'UUID du conteneur LUKS"
-    elif grep -qs '^coffre' /etc/crypttab 2>/dev/null; then
-      ko "/etc/crypttab contient bien une entrée « coffre » mais pas l'UUID \
-du conteneur ($UUID_LUKS) : c'est celui de cryptsetup luksUUID, pas celui \
-du système de fichiers"
-    else
-      ko "aucune entrée « coffre » dans /etc/crypttab : le volume ne sera \
-pas déverrouillé au démarrage"
-    fi
+# --- 3. le paquet installé, et attribué au dépôt --------------------------
+if rpm -q outil-lab >/dev/null 2>&1; then
+  ok "outil-lab installé ($(rpm -q --qf '%{VERSION}' outil-lab))"
+  FROM=$(dnf -q repoquery --installed --qf '%{from_repo}' outil-lab \
+         2>/dev/null | head -1)
+  case "$FROM" in
+    ""|"@System"|"@commandline")
+      ko "outil-lab n'est rattaché à aucun dépôt (from_repo=$FROM) : \
+tu l'as posé avec rpm -i au lieu de dnf install" ;;
+    *) ok "installé depuis le dépôt « $FROM »" ;;
+  esac
+  rpm -V outil-lab >/dev/null 2>&1 \
+    && ok "rpm -V outil-lab ne signale aucune altération" \
+    || note "rpm -V signale des écarts — normal si tu as modifié le \
+fichier de configuration"
+else
+  ko "outil-lab n'est pas installé (sudo dnf install outil-lab)"
+fi
 
-    # --- 4. deux emplacements de clé ----------------------------------
-    NBK=$(cryptsetup luksDump "$PARENT" 2>/dev/null \
-      | grep -cE '^[[:space:]]+[0-9]+: luks2|^Key Slot [0-9]+: ENABLED')
-    if [ "${NBK:-0}" -ge 2 ]; then
-      ok "$NBK emplacements de clé occupés"
-    else
-      ko "${NBK:-0} emplacement de clé occupé : ajoute-en un second \
-(cryptsetup luksAddKey $PARENT)"
-    fi
+# --- 4. l'historique dnf porte la trace d'un undo ------------------------
+HIST=$(dnf history list 2>/dev/null | head -20)
+if printf '%s' "$HIST" | grep -qiE '^\s*[0-9]+ +\|.*(Erase|Removed|Undone)'; then
+  ok "l'historique dnf contient une transaction annulée ou une suppression"
+else
+  ko "aucune trace d'annulation dans dnf history : l'étape 5 demande un \
+dnf history undo"
+fi
+
+# --- 5. dnf-automatic : sécurité seulement, sans application -------------
+CONF=/etc/dnf/automatic.conf
+if [ -f "$CONF" ]; then
+  ok "$CONF présent"
+  grep -qE '^upgrade_type[[:space:]]*=[[:space:]]*security' "$CONF" \
+    && ok "upgrade_type = security" \
+    || ko "upgrade_type doit valoir security, pas default"
+  grep -qE '^(apply_updates|download_updates)[[:space:]]*=' "$CONF" \
+    && ok "apply_updates / download_updates explicitement réglés" \
+    || ko "règle explicitement download_updates et apply_updates"
+  if systemctl is-enabled dnf-automatic.timer >/dev/null 2>&1; then
+    ok "dnf-automatic.timer actif au démarrage"
   else
-    ko "impossible d'identifier le conteneur LUKS sous /dev/mapper/coffre"
-    [ -n "$BACKING" ] && note "vu par lsblk : $BACKING"
+    ko "dnf-automatic.timer n'est pas activé \
+(systemctl enable --now dnf-automatic.timer)"
   fi
 else
-  ko "/dev/mapper/coffre n'existe pas : le conteneur n'est pas ouvert"
+  ko "$CONF absent : sudo dnf install -y dnf-automatic"
 fi
 
-# --- 5. fstab utilise le nom du mapper et des options durcies ----------
-LIGNE=$(awk -v m="$COFFRE" '$0 !~ /^[[:space:]]*#/ && $2 == m {print}' \
-  /etc/fstab 2>/dev/null | tail -1)
-if [ -n "$LIGNE" ]; then
-  echo "$LIGNE" | grep -q '^/dev/mapper/coffre' \
-    && ok "/etc/fstab utilise /dev/mapper/coffre" \
-    || ko "/etc/fstab doit référencer /dev/mapper/coffre, pas un UUID"
-  OPT=$(echo "$LIGNE" | awk '{print $4}')
-  for o in nodev nosuid noexec; do
-    case ",$OPT," in
-      *",$o,"*) ok "option $o présente dans fstab" ;;
-      *) note "option $o absente : recommandée sur un volume de données" ;;
-    esac
+# --- 6. le rapport --------------------------------------------------------
+if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 10 ]; then
+  ok "rapport rhel.md rédigé"
+  for mot in 'rpm -qf' 'history' 'EPEL'; do
+    grep -qiF "$mot" "$RAP" \
+      && ok "le rapport traite « $mot »" \
+      || ko "le rapport doit traiter « $mot »"
   done
 else
-  ko "aucune ligne /etc/fstab pour $COFFRE"
-fi
-
-fi  # fin cryptsetup
-
-# ======================= Partie B : NFS ===============================
-if findmnt -no TARGET "$NFSMNT" >/dev/null 2>&1; then
-  ok "$NFSMNT est monté"
-  FS=$(findmnt -no FSTYPE "$NFSMNT")
-  case "$FS" in
-    nfs4|nfs) ok "le type est $FS" ;;
-    *) ko "le type est $FS, un montage NFS était demandé" ;;
-  esac
-  OPTS=$(findmnt -no OPTIONS "$NFSMNT")
-  case ",$OPTS," in
-    *",ro,"*) ok "le partage est monté en lecture seule" ;;
-    *) ko "le partage n'est pas en ro (options : $OPTS)" ;;
-  esac
-  case "$OPTS" in
-    *soft*) ko "le partage est monté en soft : préfère hard pour éviter \
-les corruptions silencieuses" ;;
-    *) ok "le partage n'est pas en soft" ;;
-  esac
-else
-  ko "$NFSMNT n'est pas monté (showmount -e 10.10.10.10 puis mount -t nfs4)"
-fi
-
-LNFS=$(awk -v m="$NFSMNT" '$0 !~ /^[[:space:]]*#/ && $2 == m {print}' \
-  /etc/fstab 2>/dev/null | tail -1)
-if [ -n "$LNFS" ]; then
-  ok "une ligne /etc/fstab couvre $NFSMNT"
-  echo "$LNFS" | awk '{print $4}' | grep -q '_netdev' \
-    && ok "l'option _netdev est présente" \
-    || ko "il manque _netdev : le montage serait tenté avant le réseau"
-  echo "$LNFS" | awk '{print $4}' | grep -qE 'nofail|x-systemd.automount' \
-    && ok "le boot est protégé (nofail ou x-systemd.automount)" \
-    || ko "ajoute nofail ou x-systemd.automount : sinon lab-adm éteint \
-bloque le démarrage de lab-db"
-else
-  ko "aucune ligne /etc/fstab pour $NFSMNT"
+  ko "rapport absent ou trop court : ~/lab10/rapports/rhel.md"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

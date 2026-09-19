@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M10_06.sh — vérifie le défi D10 (RAID1 + LVM + LUKS + supervision)
+# check_M10_06.sh — vérifie le défi D10 (politique de mise à jour)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,172 +7,118 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification D10 =="
 
-VG=vg_sauv
-MNT=/srv/sauvegardes
-SAUV=/opt/factura/bin/sauvegarde.sh
-VERIF=/opt/factura/bin/verif-stockage.sh
-
-# --- 1. RAID1 -----------------------------------------------------------
-if grep -qE '^md[0-9]+ : active raid1' /proc/mdstat 2>/dev/null; then
-  ok "un tableau RAID1 est actif"
-  LIGNE=$(grep -E '^md[0-9]+ : active raid1' /proc/mdstat | head -1)
-  NBD=$(echo "$LIGNE" | grep -oE '\[[0-9]+\]' | wc -l)
-  [ "$NBD" -ge 2 ] && ok "le miroir compte $NBD membres" \
-    || ko "le miroir ne compte que $NBD membre : --raid-devices=2 attendu"
-  if grep -qE '\[U+\]' /proc/mdstat; then
-    ok "le tableau est sain (tous les membres marqués U)"
-  elif grep -qE 'recovery|resync' /proc/mdstat; then
-    note "reconstruction en cours : c'est attendu juste après l'étape 7"
-  else
-    ko "le tableau est dégradé : $(grep -E '\[[U_]+\]' /proc/mdstat | tr -s ' ')"
-  fi
-else
-  ko "aucun RAID1 actif dans /proc/mdstat (mdadm --create /dev/md0 \
---level=1 --raid-devices=2 ...)"
-fi
-
-CONF=""
-for f in /etc/mdadm/mdadm.conf /etc/mdadm.conf; do
-  [ -f "$f" ] && CONF="$f" && break
-done
-if [ -n "$CONF" ] && grep -q '^ARRAY' "$CONF"; then
-  ok "$CONF contient une ligne ARRAY"
-else
-  ko "aucune ligne ARRAY dans mdadm.conf : le tableau reviendra en \
-/dev/md127 au prochain démarrage (mdadm --detail --scan | tee -a ...)"
-fi
-
-if [ -d /boot ] && ls /boot/initrd.img-* >/dev/null 2>&1 && [ -n "$CONF" ]; then
-  RECENT=$(ls -1t /boot/initrd.img-* 2>/dev/null | head -1)
-  if [ "$RECENT" -nt "$CONF" ]; then
-    ok "l'initramfs est plus récent que mdadm.conf (update-initramfs fait)"
-  else
-    ko "l'initramfs est plus ancien que $CONF : lance \
-sudo update-initramfs -u, sinon l'assemblage au boot utilisera l'ancienne conf"
-  fi
-fi
-
-# --- 2. LVM sur le RAID -------------------------------------------------
-if command -v vgs >/dev/null 2>&1; then
-  if vgs --noheadings -o vg_name 2>/dev/null | grep -qw "$VG"; then
-    ok "le groupe $VG existe"
-    PVL=$(pvs --noheadings -o pv_name --select "vg_name=$VG" 2>/dev/null \
-      | tr -d ' ')
-    echo "$PVL" | grep -q '/dev/md' \
-      && ok "le PV du groupe est un tableau md ($PVL)" \
-      || ko "le PV du groupe est $PVL : le PV doit être posé sur /dev/md0"
-
-    TOT=$(vgs --noheadings --units m --nosuffix -o vg_size "$VG" 2>/dev/null \
-      | tr -d ' ' | cut -d. -f1)
-    LVC=$(lvs --noheadings --units m --nosuffix -o lv_size "$VG/lv_coffre" \
-      2>/dev/null | tr -d ' ' | cut -d. -f1)
-    if [ -n "${LVC:-}" ] && [ "${TOT:-0}" -gt 0 ]; then
-      PCT=$(( LVC * 100 / TOT ))
-      if [ "$PCT" -ge 55 ] && [ "$PCT" -le 65 ]; then
-        ok "lv_coffre occupe ${PCT} % du groupe (60 % attendus)"
-      else
-        ko "lv_coffre occupe ${PCT} % du groupe : 60 % étaient demandés, \
-les 40 % restants doivent rester libres"
-      fi
-    else
-      ko "lv_coffre est absent de $VG"
-    fi
-  else
-    ko "le groupe $VG n'existe pas"
-  fi
-fi
-
-# --- 3. LUKS et montage -------------------------------------------------
-if findmnt -no TARGET "$MNT" >/dev/null 2>&1; then
-  SRC=$(findmnt -no SOURCE "$MNT")
-  case "$SRC" in
-    /dev/mapper/coffre) ok "$MNT est monté depuis /dev/mapper/coffre" ;;
-    *) ko "$MNT est monté depuis $SRC : la pile LUKS n'est pas en place" ;;
-  esac
-  OPTS=$(findmnt -no OPTIONS "$MNT")
-  for o in nodev nosuid noexec; do
-    case ",$OPTS," in
-      *",$o,"*) ok "option $o active sur $MNT" ;;
-      *) ko "option $o absente sur $MNT" ;;
-    esac
-  done
-else
-  ko "$MNT n'est pas monté"
-fi
-
-grep -qs '^coffre' /etc/crypttab 2>/dev/null \
-  && ok "/etc/crypttab contient une entrée coffre" \
-  || ko "aucune entrée coffre dans /etc/crypttab"
-
-# --- 4. script de sauvegarde -------------------------------------------
-if [ -x "$SAUV" ]; then
-  ok "$SAUV existe et est exécutable"
-  grep -q 'set -euo pipefail' "$SAUV" && ok "set -euo pipefail présent" \
-    || ko "set -euo pipefail manquant dans $SAUV"
-  grep -qE '^\s*trap\b' "$SAUV" && ok "trap de nettoyage présent" \
-    || ko "aucun trap : un échec laissera un snapshot en place"
-  grep -qE 'vg_free|vgs' "$SAUV" \
-    && ok "le script contrôle l'espace libre du groupe avant de démarrer" \
-    || ko "le script ne vérifie pas l'espace libre du VG (exigence 4)"
-  grep -qE '\b7\b' "$SAUV" \
-    && ok "une rétention est implémentée" \
-    || note "vérifie la rétention à 7 archives"
-  grep -q '/var/log/factura' "$SAUV" \
-    && ok "le script journalise dans /var/log/factura" \
-    || ko "aucune journalisation vers /var/log/factura"
-else
-  ko "$SAUV absent ou non exécutable"
-fi
-
-# --- 5. script de supervision ------------------------------------------
-if [ -x "$VERIF" ]; then
-  ok "$VERIF existe et est exécutable"
-  for motif in mdstat data_percent vg_free findmnt; do
-    grep -q "$motif" "$VERIF" && ok "contrôle « $motif » présent" \
-      || ko "le script ne contrôle pas « $motif » (exigence 5)"
-  done
-  grep -qE 'ipcent|df -i|inode' "$VERIF" \
-    && ok "le script surveille aussi les inodes" \
-    || ko "le script ne surveille pas les inodes (df -i / --output=ipcent)"
-  "$VERIF" >/dev/null 2>&1
-  RC=$?
-  if [ "$RC" -eq 0 ] || [ "$RC" -eq 1 ]; then
-    ok "le script sort en $RC (0 = tout va bien, 1 = alerte)"
-  else
-    ko "le script sort en $RC : seuls 0 et 1 sont prévus"
-  fi
-else
-  ko "$VERIF absent ou non exécutable"
-fi
-
-# --- 6. timers ----------------------------------------------------------
-if [ -d /run/systemd/system ]; then
-  for t in factura-sauvegarde.timer verif-stockage.timer; do
-    if systemctl is-enabled "$t" >/dev/null 2>&1; then
-      ok "$t est activé"
-    else
-      ko "$t n'est pas activé (systemctl enable --now $t)"
-    fi
-  done
-else
-  note "systemd n'est pas actif : contrôle des timers sauté"
-fi
-
-# --- 7. rapport ---------------------------------------------------------
 LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab10/rapports/d10.md"
-if [ -s "$RAP" ]; then
-  L=$(grep -c . "$RAP")
-  [ "$L" -ge 20 ] && ok "rapport d10.md rédigé ($L lignes)" \
-    || ko "rapport d10.md trop court ($L lignes, 20 minimum)"
-  for mot in raid luks lvm; do
-    grep -qi "$mot" "$RAP" || note "le rapport ne parle pas de « $mot »"
+SCR="$HOMEDIR/lab10/bin/etat-paquets.sh"
+RAP="$HOMEDIR/lab10/rapports/politique-maj.md"
+
+# --- 1. le script ---------------------------------------------------------
+if [ -x "$SCR" ]; then
+  ok "$SCR existe et est exécutable"
+  head -1 "$SCR" | grep -q '^#!/usr/bin/env bash' \
+    && ok "shebang #!/usr/bin/env bash" \
+    || ko "shebang attendu : #!/usr/bin/env bash"
+  grep -qE '^set -euo pipefail' "$SCR" \
+    && ok "set -euo pipefail présent" || ko "set -euo pipefail manquant"
+
+  SORTIE=$(bash "$SCR" 2>/dev/null); RC=$?
+  ERR=$(bash "$SCR" 2>&1 >/dev/null)
+
+  [ -n "$SORTIE" ] && ok "le script écrit un rapport sur stdout" \
+                   || ko "stdout vide"
+  printf '%s' "$SORTIE" | grep -q '^#' \
+    && ok "le rapport est en Markdown" \
+    || ko "le rapport stdout ne contient aucun titre Markdown"
+
+  for t in 'retenu' 'épingl' 'sécurit'; do
+    printf '%s' "$SORTIE" | grep -qi "$t" \
+      && ok "le rapport couvre « $t »" \
+      || ko "le rapport ne dit rien sur « $t »"
   done
-  grep -qi 'reconstruction\|recovery\|resync' "$RAP" \
-    || note "le rapport ne mentionne pas le temps de reconstruction (étape 7)"
+
+  if printf '%s' "$ERR" | grep -q '^#'; then
+    ko "du Markdown part sur stderr : le rapport va sur stdout, la trace \
+de diagnostic sur stderr"
+  else
+    ok "stderr ne contient pas le rapport"
+  fi
+  case "$RC" in
+    0|1) ok "code retour $RC (0 = conforme, 1 = dérive)" ;;
+    *)   ko "code retour $RC : seuls 0 et 1 sont prévus" ;;
+  esac
 else
-  ko "rapport absent : $RAP"
+  ko "$SCR introuvable ou non exécutable"
+fi
+
+# --- 2. unattended-upgrades ----------------------------------------------
+if dpkg -s unattended-upgrades >/dev/null 2>&1; then
+  ok "unattended-upgrades installé"
+else
+  ko "unattended-upgrades n'est pas installé"
+fi
+
+AUTO=/etc/apt/apt.conf.d/20auto-upgrades
+if [ -f "$AUTO" ]; then
+  ok "$AUTO présent"
+  grep -qE 'Update-Package-Lists "1"' "$AUTO" \
+    && ok "mise à jour des index activée" \
+    || ko "APT::Periodic::Update-Package-Lists doit valoir \"1\""
+  grep -qE 'Unattended-Upgrade "1"' "$AUTO" \
+    && ok "unattended-upgrade activé" \
+    || ko "APT::Periodic::Unattended-Upgrade doit valoir \"1\""
+else
+  ko "$AUTO absent : sudo dpkg-reconfigure -plow unattended-upgrades \
+ou écris-le à la main"
+fi
+
+# Les réglages locaux doivent être dans un fichier à soi, pas dans
+# 50unattended-upgrades qui est un conffile du paquet.
+LOCAL=$(grep -rls 'Unattended-Upgrade::' /etc/apt/apt.conf.d/ 2>/dev/null \
+        | grep -v '50unattended-upgrades' | head -1)
+if [ -n "$LOCAL" ]; then
+  ok "réglages locaux dans un fichier dédié : $(basename "$LOCAL")"
+  CIBLE="$LOCAL"
+else
+  note "aucun fichier local : les réglages sont dans le conffile du \
+paquet, ils déclencheront un prompt dpkg à la prochaine mise à jour"
+  CIBLE=/etc/apt/apt.conf.d/50unattended-upgrades
+fi
+
+if [ -f "$CIBLE" ]; then
+  grep -A20 'Allowed-Origins\|Origins-Pattern' "$CIBLE" 2>/dev/null \
+    | grep -qiE '^\s*"?\$?\{?distro_id\}?:\$?\{?distro_codename\}?-security' \
+    && ok "l'origine -security est autorisée" \
+    || note "vérifie que \${distro_id}:\${distro_codename}-security est \
+bien la seule origine décommentée"
+  grep -qE '^\s*Unattended-Upgrade::Automatic-Reboot\s+"false"' "$CIBLE" \
+    && ok "redémarrage automatique désactivé" \
+    || ko "Automatic-Reboot doit être explicitement \"false\" sur un \
+serveur de production"
+  grep -qE '^\s*Unattended-Upgrade::Package-Blacklist' "$CIBLE" \
+    && ok "une liste d'exclusion est définie" \
+    || ko "définis Package-Blacklist, même vide : c'est le point de \
+rendez-vous documenté pour exclure un paquet applicatif"
+fi
+
+if command -v unattended-upgrade >/dev/null 2>&1; then
+  if unattended-upgrade --dry-run >/dev/null 2>&1; then
+    ok "unattended-upgrade --dry-run s'exécute sans erreur"
+  else
+    ko "unattended-upgrade --dry-run échoue : la configuration est \
+syntaxiquement invalide (relance-la avec --debug)"
+  fi
+fi
+
+# --- 3. le rapport --------------------------------------------------------
+if [ -s "$RAP" ] && [ "$(grep -c . "$RAP")" -ge 15 ]; then
+  ok "rapport politique-maj.md rédigé"
+  for mot in 'sécurité' 'redémarrage' 'exclusion' 'rollback'; do
+    grep -qi "$mot" "$RAP" \
+      && ok "le rapport traite « $mot »" \
+      || ko "le rapport doit traiter « $mot »"
+  done
+else
+  ko "rapport absent ou trop court : ~/lab10/rapports/politique-maj.md"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

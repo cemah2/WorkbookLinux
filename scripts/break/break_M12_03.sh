@@ -1,43 +1,50 @@
 #!/usr/bin/env bash
-# break_M12_03.sh — panne BF12.3 (clé d'hôte changée)
-# À lancer SUR lab-web, avec sudo. Idempotent.
-# Sauvegarde dans /root/.breakfix-backup/.
+# break_M12_03.sh — panne BF12.3 (service lié à 127.0.0.1)
+# À lancer sur lab-web. Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
-SAUV=/root/.breakfix-backup/M12_03
-SSHD=$(command -v sshd || echo /usr/sbin/sshd)
+SAUV=/root/.breakfix-backup
+DROPD=/etc/systemd/system/factura-api.service.d
 mkdir -p "$SAUV"
 
-# --- sauvegarde des vraies clés d'hôte, une seule fois -------------------
-if [ ! -f "$SAUV/.fait" ]; then
-  cp -a /etc/ssh/ssh_host_* "$SAUV/" 2>/dev/null || true
-  for f in /etc/ssh/ssh_host_*_key.pub; do
-    [ -e "$f" ] || continue
-    ssh-keygen -lf "$f"
-  done > "$SAUV/empreintes-origine.txt" 2>/dev/null || true
-  : > "$SAUV/.fait"
-fi
+[ -x /opt/factura/bin/factura-api.py ] || {
+  echo "/opt/factura/bin/factura-api.py absent : lance setup_M12.sh" >&2
+  exit 1; }
 
-# --- la panne : régénération complète des clés d'hôte -------------------
-rm -f /etc/ssh/ssh_host_*
-ssh-keygen -A >/dev/null
+# on note qu'il n'y avait pas de drop-in avant, pour pouvoir revenir
+[ -f "$SAUV/M12_03.state" ] || {
+  if [ -f "$DROPD/override.conf" ]; then
+    cp -a "$DROPD/override.conf" "$SAUV/M12_03.override.conf"
+    printf 'dropin\n' > "$SAUV/M12_03.state"
+  else
+    printf 'none\n' > "$SAUV/M12_03.state"
+  fi
+}
 
-# les clés régénérées doivent être lisibles par sshd
-chmod 600 /etc/ssh/ssh_host_*_key
-chmod 644 /etc/ssh/ssh_host_*_key.pub
+mkdir -p "$DROPD"
+cat > "$DROPD/override.conf" <<'EOF'
+[Service]
+Environment=FACTURA_BIND=127.0.0.1
+EOF
+chmod 0644 "$DROPD/override.conf"
 
-"$SSHD" -t
 if [ -d /run/systemd/system ]; then
-  systemctl restart ssh.socket >/dev/null 2>&1 || true
-  systemctl restart ssh       >/dev/null 2>&1 || \
-  systemctl restart sshd      >/dev/null 2>&1 || true
+  systemctl daemon-reload
+  systemctl restart factura-api.service >/dev/null 2>&1 || true
 fi
+
+# le pare-feu doit rester hors de cause : l'énoncé l'interdit comme piste
+for u in ufw firewalld nftables; do
+  systemctl is-active --quiet "$u" 2>/dev/null && \
+    systemctl stop "$u" >/dev/null 2>&1 || true
+done
 
 cat <<'EOF'
 
-Symptôme attendu : depuis lab-adm, toute connexion vers lab-web affiche
-le pavé « @@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@@ »
-et refuse d'aller plus loin. lab-db et lab-ops répondent normalement, et
-personne dans l'équipe ne reconnaît avoir réinstallé la machine.
+Symptôme attendu : sur lab-web, « curl http://localhost:8099/health »
+répond {"status": "ok", ...}. Depuis lab-adm, « curl http://10.10.10.11:8099/
+health » échoue immédiatement avec le code de retour 7. Le service est
+active (running), ses journaux ne montrent aucune erreur, et personne
+n'a touché au code de l'application.
 EOF

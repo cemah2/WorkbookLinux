@@ -1,33 +1,49 @@
 #!/usr/bin/env bash
-# break_M22_05.sh — panne BF22.5 (toutes les VM DOWN dans Prometheus)
-# Idempotent. Sauvegarde dans /root/.breakfix-backup/M22_05/.
-# Suppose L22.4 terminé (pile Compose démarrée, job node dans prometheus.yml).
+# break_M22_05.sh — panne BF22.5 (pas de DNS sur le bridge par défaut)
+# Idempotent. Rien à sauvegarder sur l'hôte.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+BF=/opt/factura-docker/bf
+SAUV=/root/.breakfix-backup
+REF=/opt/factura-docker/api
+mkdir -p "$SAUV" "$BF"
 
-OBS=/opt/observabilite
-CFG="$OBS/prometheus/prometheus.yml"
-SAUV=/root/.breakfix-backup/M22_05
-mkdir -p "$SAUV"
+[ -f "$REF/app.py" ] || { echo "$REF/app.py absent : lance setup_M22.sh" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
+  echo "Docker n'est pas installé ou ne tourne pas : fais d'abord le lab L22.1" >&2
+  exit 1; }
 
-[ -s "$CFG" ] || { echo "$CFG absent : lance setup_M22.sh" >&2; exit 1; }
-grep -q ':9100"' "$CFG" || grep -q ':9101"' "$CFG" \
-  || { echo "aucune cible node :9100 dans $CFG : fais d'abord L22.4" >&2; exit 1; }
-curl -sf -m 5 http://localhost:9090/-/ready >/dev/null \
-  || { echo "Prometheus ne tourne pas : docker compose up -d dans $OBS" >&2; exit 1; }
+# image de base commune aux Break & Fix (construite une seule fois)
+construire_base() {
+  docker image inspect factura-bf:base >/dev/null 2>&1 && return 0
+  mkdir -p "$BF/base"
+  cp "$REF/app.py" "$REF/requirements.txt" "$BF/base/"
+  cat > "$BF/base/Dockerfile" <<'DEOF'
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+ENTRYPOINT ["python3", "app.py"]
+DEOF
+  echo "construction de l'image factura-bf:base (une fois)…"
+  docker build -q -t factura-bf:base "$BF/base" >/dev/null
+}
 
-[ -s "$SAUV/prometheus.yml" ] || cp "$CFG" "$SAUV/prometheus.yml"
+construire_base
+docker image inspect redis:7-alpine >/dev/null 2>&1 \
+  || docker pull -q redis:7-alpine >/dev/null
 
-# --- la panne -----------------------------------------------------------
-# les cinq cibles du job node visent un port où rien n'écoute
-sed -i 's/:9100"/:9101"/g' "$CFG"
-curl -s -X POST http://localhost:9090/-/reload >/dev/null
+docker rm -f factura-app factura-cache >/dev/null 2>&1 || true
+docker run -d --name factura-cache --restart unless-stopped \
+  redis:7-alpine >/dev/null
+docker run -d --name factura-app --restart unless-stopped -p 8005:8000 \
+  -e REDIS_URL=redis://factura-cache:6379/0 factura-bf:base >/dev/null
 
-cat <<'EOF'
+cat <<'EOF2'
 
-Symptôme attendu : dans http://10.10.10.14:9090/targets, les 5 cibles du
-job node passent DOWN dans la minute ; Grafana affiche « No data » sur
-« Lab — Nœuds » et, au bout de 2 minutes, InstanceDown est firing pour
-les 5 VM. Pourtant ssh fonctionne partout et
-« curl http://10.10.10.11:9100/metrics » depuis lab-ops répond.
-EOF
+Symptôme attendu : http://127.0.0.1:8005/compteur renvoie une erreur 500
+et le journal de factura-app contient « Name or service not known » pour
+factura-cache. Pourtant factura-cache est Up, répond PONG à redis-cli, et
+les deux conteneurs se joignent par IP.
+EOF2

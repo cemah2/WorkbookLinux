@@ -1,51 +1,47 @@
 #!/usr/bin/env bash
-# break_M10_01.sh — panne BF10.1 (fstab fautif : la VM ne démarre plus)
+# break_M10_01.sh — panne BF10.1 (base dpkg en état incohérent)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
-#
-# ATTENTION : cette panne empêche RÉELLEMENT le démarrage. Prends un
-# snapshot Proxmox avant (qm snapshot 9003 avant-bf10-1) et prépare-toi
-# à utiliser la console noVNC : le SSH ne répondra pas.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-CIBLE=/srv/factura/archives
-MARQUE="# break_M10_01"
-mkdir -p "$SAUV" "$CIBLE"
+LAB_USER="${SUDO_USER:-mathieu}"
+LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
+PAQ="$LAB_HOME/lab10/paquets/outil-lab_1.3.0_all.deb"
+mkdir -p "$SAUV"
 
-# --- sauvegarde de l'état avant de casser -------------------------------
-[ -f "$SAUV/M10_01.fstab" ] || cp -a /etc/fstab "$SAUV/M10_01.fstab"
+[ -f "$PAQ" ] || {
+  echo "$PAQ absent : lance d'abord setup_M10.sh" >&2; exit 1; }
 
-# --- on retire une éventuelle exécution précédente ----------------------
-FAUX="9c1f7a30-2b4e-4d81-a5c6-7e0f3b9d1234"
-sed -i "/$FAUX/d" /etc/fstab
-sed -i "\|^$MARQUE|d" /etc/fstab
+# --- 1. outil-lab 1.3.0 : son postinst exige un fichier de licence -----
+# On s'assure qu'il n'existe pas, puis on installe : dpkg dépose les
+# fichiers (unpack) mais échoue à la configuration.
+rm -f /etc/outil-lab/licence.key
+DEBIAN_FRONTEND=noninteractive \
+  dpkg -i --force-confdef --force-confold "$PAQ" >/dev/null 2>&1 || true
 
-# --- on neutralise la ligne correcte, si l'apprenant en a posé une ------
-# (elle est conservée, simplement commentée, pour que la réparation
-#  consiste bien à corriger un UUID et non à en inventer un)
-awk -v c="$CIBLE" '
-  $0 !~ /^[[:space:]]*#/ && $2 == c { print "#break# " $0; next }
-  { print }
-' /etc/fstab > /etc/fstab.new && mv /etc/fstab.new /etc/fstab
+# --- 2. journal dpkg non rejoué ---------------------------------------
+# Une entrée numérique dans /var/lib/dpkg/updates fait croire à apt
+# qu'une transaction dpkg a été interrompue : il refuse de travailler.
+mkdir -p /var/lib/dpkg/updates
+if [ ! -f "$SAUV/M10_01.marqueur" ]; then
+  : > "$SAUV/M10_01.marqueur"
+fi
+# Le fichier est laissé vide à dessein : apt ne regarde que le nom
+# (une suite de chiffres), et un contenu invalide rendrait dpkg-query
+# lui-même inutilisable — ce n'est pas la panne recherchée.
+: > /var/lib/dpkg/updates/0042
 
-# --- la ligne fautive ---------------------------------------------------
-# UUID plausible mais qui ne correspond à aucun volume de la machine.
-# Pas de nofail, pass=2 : l'échec entraîne local-fs.target, donc
-# emergency.target. Le marqueur est sur sa propre ligne : une ligne de
-# fstab ne doit compter que six champs.
-printf '%s (panne volontaire)\nUUID=%s  %s  ext4  defaults  0  2\n' \
-  "$MARQUE" "$FAUX" "$CIBLE" >> /etc/fstab
-
-[ -d /run/systemd/system ] && systemctl daemon-reload >/dev/null 2>&1 || true
+# --- 3. verrou orphelin ------------------------------------------------
+# Un /var/lib/dpkg/lock-frontend laissé par un apt tué au mauvais moment
+# n'est PAS le problème ici (le verrou est libéré à la mort du process),
+# mais on ajoute le symptôme classique : un cache d'archives partiel.
+mkdir -p /var/cache/apt/archives/partial
+: > /var/cache/apt/archives/partial/outil-lab_1.3.0_all.deb.FAILED
 
 cat <<'EOF'
 
-Symptôme attendu : après « sudo reboot », la VM ne répond plus en SSH.
-Dans la console Proxmox, le démarrage s'arrête environ 1 min 30 s sur
-« A start job is running for /dev/disk/by-uuid/9c1f... », puis affiche
-« Dependency failed for Local File Systems » et
-« You are in emergency mode ».
-
-Rappel : console Proxmox obligatoire, le réseau n'est pas démarré.
+Symptôme attendu : « sudo apt install <n'importe quoi> » refuse de
+démarrer avec un message d'erreur unique, sans rien installer.
+« dpkg -l outil-lab » n'affiche pas ii dans la première colonne.
 EOF

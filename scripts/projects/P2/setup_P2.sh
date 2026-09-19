@@ -155,12 +155,12 @@ fi
 cat <<EOF
 
 == Prêt. Reste à faire à la main (voir B.0 de l'énoncé) ==
-  * Proxmox : template cloud-init VMID 9000 (module 20). Si absent :
+  * Proxmox : template cloud-init VMID 9000 (module 24). Si absent :
       scp $HERE/tools/make-template.sh root@<proxmox>:/root/
       ssh root@<proxmox> bash /root/make-template.sh
   * Proxmox : token API pour OpenTofu (tofu@pve!factura), puis :
       export TF_VAR_pve_api_token='tofu@pve!factura=xxxxxxxx-...'
-  * Gitea (lab-ops:3000, module 21) : dépôt mathieu/factura, runner
+  * Gitea (lab-ops:3000, module 25) : dépôt mathieu/factura, runner
     act_runner label « ops-host », token d'accès au registre.
   * Reconnecte-toi pour que le groupe docker et ~/.local/bin soient pris
     en compte : exit puis ssh lab-adm.

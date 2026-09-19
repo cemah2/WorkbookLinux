@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# check_M12_02.sh — vérifie le lab L12.2 (~/.ssh/config de référence)
-# À lancer sur lab-adm, SANS sudo.
+# check_M12_02.sh — vérifie le lab L12.2 (configuration persistante)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8,115 +7,95 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L12.2 =="
 
-CONF="$HOME/.ssh/config"
-# valeur effective d'une directive pour un alias : ssh -G est l'arbitre
-eff() { ssh -G "$1" 2>/dev/null | awk -v k="$2" '$1==k {print $2; exit}'; }
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab12/rapports/reseau-3-formalismes.md"
+IFACE=$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')
+[ -n "$IFACE" ] || IFACE=ens18
 
-command -v ssh >/dev/null 2>&1 || { \
-  ko "ssh introuvable"
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-
-# --- 1. le fichier et ses droits ------------------------------------------
-if [ -f "$CONF" ]; then
-  ok "~/.ssh/config présent"
-  M=$(stat -c %a "$CONF")
-  [ "$M" = 600 ] || [ "$M" = 644 ] \
-    && ok "permissions du fichier de configuration : $M" \
-    || ko "~/.ssh/config en $M : ssh refusera de le lire (600 attendu)"
+# --- 1. état du noyau : c'est le résultat qui compte -------------------
+if ip -4 a show dev "$IFACE" 2>/dev/null | grep -q '10\.10\.10\.'; then
+  ok "adresse principale présente sur $IFACE"
 else
-  ko "~/.ssh/config absent"
-fi
-grep -qE '^[[:space:]]*Include[[:space:]]' "$CONF" 2>/dev/null \
-  && ok "une directive Include est présente (étape 5)" \
-  || ko "aucune directive Include : sors les machines dans ~/.ssh/config.d/"
-
-# --- 2. le bastion --------------------------------------------------------
-[ "$(eff bastion hostname)" = 10.10.10.10 ] \
-  && ok "alias bastion -> 10.10.10.10" \
-  || ko "ssh -G bastion : hostname vaut '$(eff bastion hostname)'"
-[ "$(eff bastion user)" = mathieu ] \
-  && ok "bastion : user mathieu" \
-  || ko "ssh -G bastion : user vaut '$(eff bastion user)'"
-
-# --- 3. les quatre serveurs -----------------------------------------------
-verif_hote() {
-  local alias=$1 ip=$2
-  [ "$(eff "$alias" hostname)" = "$ip" ] \
-    && ok "$alias -> $ip" \
-    || ko "ssh -G $alias : hostname vaut '$(eff "$alias" hostname)' (≠ $ip)"
-  [ "$(eff "$alias" user)" = mathieu ] \
-    && ok "$alias : user mathieu" \
-    || ko "$alias : user vaut '$(eff "$alias" user)'"
-  PJ=$(ssh -G "$alias" 2>/dev/null | awk '$1=="proxyjump"{print $2; exit}')
-  case "$PJ" in
-    ""|none) ko "$alias : aucun ProxyJump (le rebond par le bastion manque)" ;;
-    *)       ok "$alias : proxyjump $PJ" ;;
-  esac
-  [ "$(eff "$alias" identitiesonly)" = yes ] \
-    && ok "$alias : identitiesonly yes" \
-    || ko "$alias : identitiesonly vaut '$(eff "$alias" identitiesonly)'"
-  case "$(ssh -G "$alias" 2>/dev/null | awk '$1=="identityfile"{print $2}' \
-          | tr '\n' ' ')" in
-    *id_ed25519*) ok "$alias : la clé ed25519 est désignée explicitement" ;;
-    *) ko "$alias : IdentityFile ne désigne pas ~/.ssh/id_ed25519" ;;
-  esac
-}
-verif_hote lab-web  10.10.10.11
-verif_hote lab-db   10.10.10.12
-verif_hote lab-rhel 10.10.10.13
-verif_hote lab-ops  10.10.10.14
-
-# --- 4. réglages globaux --------------------------------------------------
-[ "$(eff lab-db controlmaster)" = auto ] \
-  && ok "controlmaster auto" \
-  || ko "controlmaster vaut '$(eff lab-db controlmaster)' (auto attendu)"
-CP=$(eff lab-db controlpath)
-case "$CP" in
-  ""|none) ko "controlpath non défini : pas de multiplexage possible" ;;
-  *)       ok "controlpath $CP" ;;
-esac
-PERSIST=$(eff lab-db controlpersist)
-case "$PERSIST" in
-  ""|no|0) ko "controlpersist inactif : le maître ne survit pas aux sessions" ;;
-  *)       ok "controlpersist $PERSIST" ;;
-esac
-SAI=$(eff lab-db serveraliveinterval)
-[ -n "$SAI" ] && [ "$SAI" -gt 0 ] 2>/dev/null \
-  && ok "serveraliveinterval $SAI" \
-  || ko "serveraliveinterval non positionné (sessions coupées par le NAT)"
-
-# --- 5. le répertoire des sockets de contrôle -----------------------------
-CMDIR=$(dirname "${CP:-$HOME/.ssh/cm/x}")
-if [ -d "$CMDIR" ]; then
-  ok "répertoire des sockets présent : $CMDIR"
-  [ "$(stat -c %a "$CMDIR")" = 700 ] \
-    && ok "$CMDIR en 700" \
-    || ko "$CMDIR en $(stat -c %a "$CMDIR") : 700 attendu"
-else
-  ko "$CMDIR absent : OpenSSH ne le crée pas, le multiplexage sera inactif"
+  ko "aucune adresse 10.10.10.x sur $IFACE"
 fi
 
-# --- 6. le multiplexage fonctionne réellement -----------------------------
-if ssh -o BatchMode=yes -o ConnectTimeout=5 lab-web true 2>/dev/null; then
-  ok "ssh lab-web fonctionne en une frappe (rebond compris)"
-  if ssh -O check lab-web >/dev/null 2>&1; then
-    ok "une session maître est active (ssh -O check)"
+if ip -4 a show dev "$IFACE" 2>/dev/null | grep -q '10\.10\.20\.'; then
+  ok "adresse secondaire 10.10.20.x présente"
+else
+  ko "adresse secondaire 10.10.20.<dernier octet>/24 absente (ip -br a)"
+fi
+
+if ip -4 r 2>/dev/null | grep -q '^default via 10\.10\.10\.1'; then
+  ok "route par défaut via 10.10.10.1"
+else
+  ko "route par défaut absente ou mauvaise passerelle (ip r)"
+fi
+
+NDEF=$(ip -4 r 2>/dev/null | grep -c '^default')
+if [ "$NDEF" -le 1 ]; then
+  ok "une seule route par défaut ($NDEF)"
+else
+  ko "$NDEF routes par défaut : deux gestionnaires se disputent l'interface"
+fi
+
+# --- 2. domaine de recherche ------------------------------------------
+if command -v resolvectl >/dev/null 2>&1 &&
+   resolvectl status 2>/dev/null | grep -qi 'lab\.local'; then
+  ok "domaine de recherche lab.local déclaré"
+elif grep -qE '^(search|domain).*lab\.local' /etc/resolv.conf 2>/dev/null
+then
+  ok "domaine de recherche lab.local déclaré (resolv.conf)"
+else
+  ko "search lab.local absent (resolvectl status / nameservers.search)"
+fi
+
+# --- 3. persistance : Netplan (Ubuntu) ou NetworkManager (Rocky) ------
+if [ -d /etc/netplan ] && ls /etc/netplan/*.yaml >/dev/null 2>&1; then
+  FIC=$(grep -lE '10\.10\.20\.' /etc/netplan/*.yaml 2>/dev/null | head -1)
+  if [ -n "$FIC" ]; then
+    ok "configuration persistante trouvée dans $FIC"
+    M=$(stat -c '%a' "$FIC")
+    [ "$M" = 600 ] \
+      && ok "droits du fichier Netplan : 0600" \
+      || ko "droits $M sur $FIC — netplan attend 0600 (chmod 600)"
+    grep -qE '^[[:space:]]*renderer:[[:space:]]*networkd' "$FIC" \
+      && ok "renderer networkd déclaré" \
+      || note "renderer non déclaré dans $FIC (valeur par défaut utilisée)"
+    grep -qE 'to:[[:space:]]*default' "$FIC" \
+      && ok "route par défaut écrite en syntaxe routes: (pas gateway4)" \
+      || ko "utilise routes: [{to: default, via: ...}] — gateway4 est retiré"
+    if command -v netplan >/dev/null 2>&1; then
+      netplan generate >/dev/null 2>&1 \
+        && ok "netplan generate valide la syntaxe" \
+        || ko "netplan generate échoue : la configuration ne s'appliquera pas"
+    fi
   else
-    ko "aucune session maître : vérifie ControlMaster/ControlPath"
+    ko "aucun fichier /etc/netplan/*.yaml ne contient l'adresse secondaire"
+  fi
+elif [ -d /etc/NetworkManager/system-connections ]; then
+  if grep -rqE '10\.10\.20\.' /etc/NetworkManager/system-connections/ \
+       2>/dev/null; then
+    ok "configuration persistante trouvée dans un keyfile NetworkManager"
+  else
+    ko "aucun keyfile ne contient l'adresse secondaire (nmcli con mod)"
   fi
 else
-  ko "ssh lab-web échoue : reprends L12.1 avant ce lab"
+  ko "ni /etc/netplan ni keyfiles NetworkManager : rien de persistant"
 fi
 
-# --- 7. rapport -----------------------------------------------------------
-R="$HOME/lab12/rapports/config-ordre.md"
-if [ -s "$R" ]; then
-  ok "rapport présent : ~/lab12/rapports/config-ordre.md"
-  grep -qiE 'premi(è|e)re valeur|first obtained|premier' "$R" \
-    && ok "le rapport énonce la règle de précédence" \
-    || ko "le rapport doit énoncer la règle : la première valeur gagne"
+# --- 4. le rapport aux trois formalismes ------------------------------
+if [ -s "$RAP" ]; then
+  ok "rapport reseau-3-formalismes.md présent"
+  n=0
+  grep -qi 'netplan'   "$RAP" && n=$((n+1))
+  grep -qi 'nmcli'     "$RAP" && n=$((n+1))
+  grep -qi 'interfaces' "$RAP" && n=$((n+1))
+  [ "$n" -eq 3 ] \
+    && ok "les trois formalismes sont documentés" \
+    || ko "seulement $n/3 formalismes dans le rapport"
 else
-  ko "rapport manquant : ~/lab12/rapports/config-ordre.md"
+  ko "rapport absent : $RAP (Netplan, nmcli, /etc/network/interfaces)"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

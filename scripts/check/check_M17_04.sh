@@ -1,91 +1,150 @@
 #!/usr/bin/env bash
-# check_M17_04.sh — vérifie le lab L17.4 (purge d'un secret de l'historique)
+# check_M17_04.sh — vérifie le lab L17.4 (certificat + OnFailure)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-has()  { grep "$@" >/dev/null; }   # comme grep -q, sans SIGPIPE (pipefail)
 echo "== Vérification L17.4 =="
 
-D="$HOME/lab17/factura-infra"
-O="$HOME/lab17/remote/factura-infra.git"
-RAP="$HOME/lab17/rapports/incident-secret.md"
-SECRET='S3cr3t-Factura-2026'
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+[ -d /run/systemd/system ] || { \
+  ko "systemd ne pilote pas cette machine : lab inapplicable ici"; \
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
 
-for R in "$O" "$D"; do
-  if ! git -C "$R" rev-parse --git-dir >/dev/null 2>&1; then
-    ko "$R n'est pas un dépôt git"; continue
-  fi
-  nom=${R##*/}
-  if git -C "$R" log --all --format=%h -- .env 2>/dev/null | has .; then
-    ko "$nom : des commits touchent encore .env (git log --all -- .env)"
-  else ok "$nom : plus aucun commit ne touche .env"; fi
-  if git -C "$R" grep -q "$SECRET" $(git -C "$R" rev-list --all 2>/dev/null) \
-     2>/dev/null; then
-    ko "$nom : le mot de passe est encore lisible dans un objet de l'historique"
-  else ok "$nom : le secret n'apparaît dans aucune révision"; fi
-  if git -C "$R" for-each-ref refs/original refs/replace 2>/dev/null | has .
-  then ko "$nom : refs/original ou refs/replace subsistent (les anciens \
-objets restent joignables)"
-  else ok "$nom : pas de référence de secours vers l'ancien historique"; fi
-  # objets orphelins encore présents ?
-  if git -C "$R" cat-file -e 1557f83fa5280573d92393c3cc2ae285890be472 2>/dev/null
-  then ko "$nom : l'ancien commit 1557f83 est encore dans la base d'objets \
-(reflog expire + gc --prune=now)"
-  else ok "$nom : l'ancien commit 1557f83 a été physiquement supprimé"; fi
-done
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+RAP="$HOMEDIR/lab17/rapports/alerte.md"
+CHK=/opt/factura/bin/factura-cert-check.sh
+CRT=/etc/factura/tls/portail.crt
+ALOG=/var/log/factura/alertes.log
 
-# le clone de travail suit bien le nouvel historique
-git -C "$D" fetch -q origin 2>/dev/null
-[ "$(git -C "$D" rev-parse main 2>/dev/null)" = \
-  "$(git -C "$D" rev-parse origin/main 2>/dev/null)" ] \
-  && ok "main et origin/main coïncident après réécriture" \
-  || ko "main et origin/main divergent : re-clone ou reset --hard origin/main"
+v() { systemctl show -p "$2" --value "$1" 2>/dev/null; }
 
-git -C "$D" cat-file -e v1.0.0 2>/dev/null \
-  && ok "le tag v1.0.0 a survécu à la réécriture" \
-  || ko "le tag v1.0.0 a disparu"
+# --- 1. le script de vérification -------------------------------------
+if [ -x "$CHK" ]; then
+  ok "$CHK existe et est exécutable"
+  grep -q 'checkend' "$CHK" \
+    && ok "utilise openssl x509 -checkend" \
+    || ko "l'énoncé demande openssl x509 -checkend, pas un calcul de date \
+maison"
+  "$CHK" "$CRT" 1 >/tmp/.m14_04.a 2>&1; R1=$?
+  "$CHK" "$CRT" 3650 >/tmp/.m14_04.b 2>&1; R2=$?
+  [ "$R1" -eq 0 ] \
+    && ok "seuil 1 jour : code 0 (certificat encore valide)" \
+    || ko "seuil 1 jour : code $R1, on attend 0 (voir /tmp/.m14_04.a)"
+  [ "$R2" -eq 1 ] \
+    && ok "seuil 3650 jours : code 1 (expiration détectée)" \
+    || ko "seuil 3650 jours : code $R2, on attend 1 (voir /tmp/.m14_04.b)"
+  [ -s /tmp/.m14_04.b ] \
+    && ok "un message est produit dans le cas d'échec" \
+    || ko "aucun message en cas d'échec : l'énoncé demande un message clair \
+dans les deux cas"
+else
+  ko "$CHK absent ou non exécutable"
+fi
 
-grep -qx '.env' "$D/.gitignore" 2>/dev/null \
-  && ok ".env reste ignoré" || ko ".env n'est plus dans .gitignore"
+# --- 2. service + timer ------------------------------------------------
+if systemctl cat factura-cert.service >/dev/null 2>&1; then
+  ok "factura-cert.service existe"
+  [ "$(v factura-cert.service Type)" = oneshot ] \
+    && ok "Type=oneshot" \
+    || ko "Type=$(v factura-cert.service Type), oneshot attendu"
+  v factura-cert.service ExecStart | grep -q 'factura-cert-check' \
+    && ok "ExecStart appelle le script de vérification" \
+    || ko "ExecStart n'appelle pas $CHK"
+else
+  ko "factura-cert.service introuvable"
+fi
 
-# --- hook pre-commit ------------------------------------------------------
-HP=$(git -C "$D" config core.hooksPath 2>/dev/null)
-if [ -n "$HP" ]; then HOOK="$D/$HP/pre-commit"; else HOOK="$D/.git/hooks/pre-commit"; fi
-[ "${HP:0:1}" = / ] && HOOK="$HP/pre-commit"
-if [ -x "$HOOK" ]; then
-  ok "hook pre-commit en place ($HOOK)"
-  git clone -q "$D" "$TMP/t" 2>/dev/null
-  mkdir -p "$TMP/t/$(dirname "${HP:-.git/hooks}")"
-  if [ -n "$HP" ] && [ "${HP:0:1}" != / ]; then
-    cp -r "$D/$HP" "$TMP/t/$HP" 2>/dev/null
+if systemctl cat factura-cert.timer >/dev/null 2>&1; then
+  ok "factura-cert.timer existe"
+  v factura-cert.timer TimersCalendar | grep -q '07:00' \
+    && ok "OnCalendar à 07:00" \
+    || ko "OnCalendar=$(v factura-cert.timer TimersCalendar), 07:00 attendu"
+  ACC=$(v factura-cert.timer AccuracyUSec)
+  if [ -n "$ACC" ] && [ "$ACC" -ge 3600000000 ] 2>/dev/null; then
+    ok "AccuracySec d'une heure ou plus ($ACC µs)"
   else
-    cp "$HOOK" "$TMP/t/.git/hooks/pre-commit"
+    ko "AccuracySec=$ACC : l'énoncé demande une tolérance d'une heure \
+(AccuracySec=1h)"
   fi
-  git -C "$TMP/t" config user.name t; git -C "$TMP/t" config user.email t@t
-  [ -n "$HP" ] && git -C "$TMP/t" config core.hooksPath "$HP"
-  printf 'DB_PASSWORD=Encore-Un-S3cret\nAWS_SECRET_ACCESS_KEY=abc\n' \
-    > "$TMP/t/conf.env"
-  git -C "$TMP/t" add -f conf.env
-  if git -C "$TMP/t" -c commit.gpgsign=false commit -q -m "test" >/dev/null 2>&1
-  then ko "le hook laisse passer un fichier contenant DB_PASSWORD="
-  else ok "le hook bloque un commit contenant un secret"; fi
-  git -C "$TMP/t" reset -q; rm -f "$TMP/t/conf.env"
-  printf 'x=1\n' > "$TMP/t/ok.txt"; git -C "$TMP/t" add ok.txt
-  if git -C "$TMP/t" -c commit.gpgsign=false commit -q -m "test ok" \
-       >/dev/null 2>&1
-  then ok "le hook laisse passer un commit sain"
-  else ko "le hook bloque aussi un commit sans secret"; fi
-else ko "pas de hook pre-commit exécutable"; fi
+  [ "$(systemctl is-enabled factura-cert.timer 2>/dev/null)" = enabled ] \
+    && ok "factura-cert.timer est enabled" \
+    || ko "factura-cert.timer n'est pas activé"
+else
+  ko "factura-cert.timer introuvable"
+fi
 
-if [ -f "$RAP" ]; then
-  ok "rapport d'incident présent"
-  grep -qiE 'rotation|révoqu|revoqu|changé|change' "$RAP" \
-    && ok "le rapport parle de rotation du secret" \
-    || ko "le rapport doit expliquer que le secret est révoqué/tourné"
-else ko "rapport ~/lab17/rapports/incident-secret.md absent"; fi
+# --- 3. l'unité modèle d'alerte ---------------------------------------
+if systemctl cat 'factura-alerte@.service' >/dev/null 2>&1; then
+  ok "unité modèle factura-alerte@.service présente"
+  systemctl cat 'factura-alerte@.service' 2>/dev/null | grep -q '%i' \
+    && ok "l'unité modèle exploite le paramètre %i" \
+    || ko "l'unité modèle n'utilise pas %i : elle ne saura pas de quelle \
+unité l'échec provient"
+else
+  ko "factura-alerte@.service introuvable (unité modèle, avec un @ avant \
+le point)"
+fi
+
+OF=$(v factura-cert.service OnFailure)
+if echo "$OF" | grep -q 'factura-alerte@'; then
+  ok "OnFailure= branché sur l'unité d'alerte ($OF)"
+else
+  ko "OnFailure= absent ou mal branché sur factura-cert.service (valeur : \
+« $OF ») — point 4"
+fi
+
+# --- 4. le chemin d'échec a réellement été emprunté -------------------
+if [ -s "$ALOG" ]; then
+  ok "$ALOG contient des alertes"
+  grep -q 'factura-cert' "$ALOG" \
+    && ok "une alerte nomme factura-cert.service" \
+    || ko "aucune alerte concernant factura-cert : le chemin d'échec n'a \
+pas été testé (point 5)"
+else
+  ko "$ALOG vide : aucune alerte n'a jamais été produite"
+fi
+
+# --- 5. test dynamique : on provoque un échec et on regarde -----------
+echo "  -- test dynamique du chemin d'échec --"
+AV=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
+cat > /run/.m14_04_test.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/opt/factura/bin/factura-cert-check.sh \
+  /etc/factura/tls/portail.crt 3650
+EOF
+mkdir -p /run/systemd/system/factura-cert.service.d
+cp /run/.m14_04_test.conf \
+   /run/systemd/system/factura-cert.service.d/zz-test.conf
+systemctl daemon-reload
+systemctl start factura-cert.service >/dev/null 2>&1
+sleep 3
+AP=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
+rm -rf /run/systemd/system/factura-cert.service.d /run/.m14_04_test.conf
+systemctl daemon-reload
+systemctl reset-failed factura-cert.service >/dev/null 2>&1
+[ "$AP" -gt "$AV" ] \
+  && ok "un échec provoqué déclenche bien une nouvelle alerte" \
+  || ko "un échec provoqué n'a produit aucune alerte : vérifie OnFailure= \
+et que factura-alerte@ écrit bien dans $ALOG"
+
+# --- 6. le rapport écrit ----------------------------------------------
+if [ -s "$RAP" ]; then
+  ok "rapport alerte.md présent"
+  grep -qiE 'systemd|unité|unite|hors' "$RAP" \
+    && ok "point 6 : le rapport explique le lancement hors systemd" \
+    || ko "le rapport n'explique pas pourquoi OnFailure ne joue pas quand \
+on lance le script à la main"
+  grep -qiE 'alerte.*(échou|echou|fail)|boucle|récursi|recursi' "$RAP" \
+    && ok "point 6 : le cas de l'unité d'alerte en échec est traité" \
+    || ko "le rapport ne dit pas ce qui se passe si l'unité d'alerte \
+échoue elle-même"
+else
+  ko "rapport absent : $RAP"
+fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

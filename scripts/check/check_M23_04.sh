@@ -1,69 +1,81 @@
 #!/usr/bin/env bash
-# check_M23_04.sh — vérifie le lab L23.4 (rotate_backups.py + tests)
+# check_M23_04.sh — vérifie le lab L23.4 (rolling update avec santé)
+# À lancer sur lab-adm, en tant que mathieu. VERSION=2.1.0 par défaut.
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
+has()  { grep "$@" >/dev/null; }
 echo "== Vérification L23.4 =="
 
-D="$HOME/lab23/rotate"
-S="$D/rotate_backups.py"
-PY="$HOME/lab23/venv/bin/python"; [ -x "$PY" ] || PY=python3
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+export PATH="$HOME/.local/bin:$PATH"
+BASE="$HOME/lab23"
+V="${VERSION:-2.1.0}"
+cd "$BASE" 2>/dev/null || { ko "$BASE absent (setup_M23.sh)"; exit 1; }
+command -v ansible-playbook >/dev/null || { ko "ansible introuvable"; exit 1; }
+PB=playbooks/rolling.yml
+[ -f "$PB" ] && ok "$PB présent" || { ko "$PB absent"; exit 1; }
 
-[ -f "$S" ] || { ko "$S est absent (nom importable : underscore, pas tiret)"; \
-  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
-ok "le script existe"
+# --- 1. structure du playbook (résultat observable via --list-*) -----------
+python3 - "$PB" <<'EOF' && ok "serial: 1 et max_fail_percentage: 0 sur le play web" \
+  || ko "serial: 1 / max_fail_percentage: 0 absents du play (énoncé, étape 1)"
+import sys, yaml
+plays = yaml.safe_load(open(sys.argv[1]))
+ok_ = any(str(p.get('serial')) == '1' and p.get('max_fail_percentage') == 0
+          for p in plays if isinstance(p, dict))
+sys.exit(0 if ok_ else 1)
+EOF
+grep -Eq '^\s*(pre_tasks|post_tasks):' "$PB" && grep -Eq 'pre_tasks' "$PB" \
+  && grep -Eq 'post_tasks' "$PB" && ok "pre_tasks et post_tasks présents" \
+  || ko "pre_tasks / post_tasks manquants"
+grep -q 'flush_handlers' "$PB" && ok "meta: flush_handlers présent" \
+  || ko "pas de flush_handlers : le reload arriverait après la vérification"
+grep -Eq 'until:' "$PB" && grep -Eq 'uri:' "$PB" \
+  && ok "vérification uri avec until" || ko "uri + until absents des post_tasks"
+grep -q 'run_once' "$PB" && ok "tâche run_once (journal)" \
+  || ko "pas de run_once pour le journal des déploiements"
+hosts=$(ansible-playbook "$PB" --list-hosts 2>/dev/null)
+printf '%s\n' "$hosts" | has 'lab-web' && printf '%s\n' "$hosts" | has 'lab-rhel' \
+  && ok "--list-hosts montre lab-web et lab-rhel" \
+  || ko "--list-hosts ne montre pas les deux frontaux (hosts: web ?)"
 
-# jeu d'essai isolé : 120 jours + intrus
-mkdir -p "$TMP/sauv"
-for i in $(seq 0 119); do
-  d=$(date -d "-$i days" +%F); echo x > "$TMP/sauv/factura-$d.tar.gz"
+# --- 2. les deux frontaux servent la version -------------------------------
+for h in lab-web:10.10.10.11 lab-rhel:10.10.10.13; do
+  n=${h%%:*}; ip=${h##*:}
+  body=$(curl -sk -m 5 "https://$ip/" 2>/dev/null)
+  printf '%s\n' "$body" | has "vitrine $V sur $n" \
+    && ok "$n : corps « vitrine $V sur $n »" \
+    || ko "$n : le corps ne contient pas « vitrine $V sur $n »"
+  curl -skI -m 5 "https://$ip/" 2>/dev/null | has -i "x-vitrine-version: $V" \
+    && ok "$n : en-tête X-Vitrine-Version: $V" \
+    || ko "$n : en-tête X-Vitrine-Version != $V (vhost redéployé + reload ?)"
 done
-echo x > "$TMP/sauv/export final.tar.gz"
-echo x > "$TMP/sauv/gitea-$(date +%F).tar.gz"
 
-# --- dry-run -------------------------------------------------------------
-"$PY" "$S" --dry-run "$TMP/sauv" > "$TMP/out" 2>"$TMP/err"; rc=$?
-[ "$rc" -eq 0 ] && ok "--dry-run sort en 0" || ko "--dry-run : code 0 attendu, obtenu $rc"
-[ "$(ls "$TMP/sauv" | wc -l)" -eq 122 ] && ok "--dry-run n'a rien supprimé" \
-  || ko "--dry-run a supprimé des fichiers"
+# --- 3. journal des déploiements -------------------------------------------
+LOG=rapports/deploiements.log
+if [ -f "$LOG" ]; then
+  n=$(grep -c " $V " "$LOG")
+  [ "$n" -ge 2 ] && ok "$LOG : $n lignes pour $V (une par lot)" \
+    || ko "$LOG : $n ligne(s) pour $V, attendu >= 2 (run_once par lot)"
+  grep " $V " "$LOG" | has -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' \
+    && ok "lignes datées en ISO 8601" || ko "les lignes ne commencent pas par une date ISO"
+  grep " $V " "$LOG" | has 'lab-web' && grep " $V " "$LOG" | has 'lab-rhel' \
+    && ok "les deux hôtes apparaissent dans le journal" \
+    || ko "un des deux hôtes manque dans le journal (ansible_play_batch)"
+else ko "$LOG absent"; fi
 
-# --- exécution réelle ----------------------------------------------------
-"$PY" "$S" "$TMP/sauv" > "$TMP/out2" 2>"$TMP/err2"; rc=$?
-[ "$rc" -eq 0 ] && ok "exécution réelle : code 0" || ko "code 0 attendu, obtenu $rc"
-[ -f "$TMP/sauv/export final.tar.gz" ] && ok "« export final.tar.gz » survit" \
-  || ko "un fichier hors motif a été supprimé"
-[ -f "$TMP/sauv/gitea-$(date +%F).tar.gz" ] && ok "un autre préfixe survit" \
-  || ko "le préfixe gitea- ne devait pas être touché"
-manque=0
-for i in $(seq 0 6); do
-  d=$(date -d "-$i days" +%F); [ -f "$TMP/sauv/factura-$d.tar.gz" ] || manque=1
-done
-[ "$manque" -eq 0 ] && ok "les 7 dernières quotidiennes sont gardées" \
-  || ko "une des 7 dernières archives quotidiennes manque"
-n=$(ls "$TMP/sauv" | grep -c '^factura-')
-[ "$n" -ge 12 ] && [ "$n" -le 17 ] && ok "$n archives factura gardées (7+4+6 avec recouvrements)" \
-  || ko "$n archives gardées : attendu entre 12 et 17"
-p1=$(date -d "$(date +%Y-%m-01) -1 month" +%F)
-[ -f "$TMP/sauv/factura-$p1.tar.gz" ] && ok "la mensuelle du 1er du mois précédent est gardée" \
-  || ko "factura-$p1.tar.gz (1er du mois précédent) devrait être gardée"
-"$PY" "$S" "$TMP/sauv" >/dev/null 2>&1
-[ "$(ls "$TMP/sauv" | grep -c '^factura-')" -eq "$n" ] && ok "idempotent : 2e passage sans effet" \
-  || ko "le second passage a encore supprimé des fichiers"
+# --- 4. la validation de version refuse un mauvais format -----------------
+out=$(ansible-playbook "$PB" -e vitrine_version=abc --check 2>&1)
+printf '%s\n' "$out" | has -E 'failed=1|FAILED' \
+  && ok "vitrine_version=abc est refusé (assert)" \
+  || ko "vitrine_version=abc n'est pas refusé par l'assert des pre_tasks"
 
-# --- tests ---------------------------------------------------------------
-if [ -d "$D/tests" ] && ls "$D"/tests/test_*.py >/dev/null 2>&1; then
-  ok "un répertoire tests/ avec des test_*.py existe"
-  if "$PY" -m pytest --version >/dev/null 2>&1; then
-    if (cd "$D" && "$PY" -m pytest -q > "$TMP/pt" 2>&1); then
-      nt=$(grep -Eo '[0-9]+ passed' "$TMP/pt" | grep -Eo '[0-9]+')
-      ok "pytest : $nt tests passent"
-      [ "${nt:-0}" -ge 5 ] && ok "au moins 5 tests" || ko "au moins 5 tests attendus"
-    else ko "pytest échoue : cd $D && $PY -m pytest"; fi
-  else note "pytest absent du venv"; fi
-else ko "$D/tests/test_*.py attendu"; fi
+# --- 5. lint ---------------------------------------------------------------
+if command -v ansible-lint >/dev/null; then
+  ansible-lint -q "$PB" >/dev/null 2>&1 && ok "ansible-lint muet sur $PB" \
+    || ko "ansible-lint signale des problèmes sur $PB"
+else note "ansible-lint absent, lint non testé"; fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

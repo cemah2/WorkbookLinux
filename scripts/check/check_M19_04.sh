@@ -1,81 +1,89 @@
 #!/usr/bin/env bash
-# check_M19_04.sh — vérifie le lab L19.4 (rolling update avec santé)
-# À lancer sur lab-adm, en tant que mathieu. VERSION=2.1.0 par défaut.
+# check_M19_04.sh — vérifie le lab L19.4 (application lente : où part le
+#                   temps ?)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
-has()  { grep "$@" >/dev/null; }
 echo "== Vérification L19.4 =="
 
-export PATH="$HOME/.local/bin:$PATH"
-BASE="$HOME/lab19"
-V="${VERSION:-2.1.0}"
-cd "$BASE" 2>/dev/null || { ko "$BASE absent (setup_M19.sh)"; exit 1; }
-command -v ansible-playbook >/dev/null || { ko "ansible introuvable"; exit 1; }
-PB=playbooks/rolling.yml
-[ -f "$PB" ] && ok "$PB présent" || { ko "$PB absent"; exit 1; }
+LAB_USER="${SUDO_USER:-$(id -un)}"
+HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
+BASE="$HOMEDIR/lab19"
+RAP="$BASE/rapports/latence.md"
+BASELINE="$BASE/rapports/baseline.txt"
+URL="${URL:-http://127.0.0.1:8080}"
 
-# --- 1. structure du playbook (résultat observable via --list-*) -----------
-python3 - "$PB" <<'EOF' && ok "serial: 1 et max_fail_percentage: 0 sur le play web" \
-  || ko "serial: 1 / max_fail_percentage: 0 absents du play (énoncé, étape 1)"
-import sys, yaml
-plays = yaml.safe_load(open(sys.argv[1]))
-ok_ = any(str(p.get('serial')) == '1' and p.get('max_fail_percentage') == 0
-          for p in plays if isinstance(p, dict))
-sys.exit(0 if ok_ else 1)
-EOF
-grep -Eq '^\s*(pre_tasks|post_tasks):' "$PB" && grep -Eq 'pre_tasks' "$PB" \
-  && grep -Eq 'post_tasks' "$PB" && ok "pre_tasks et post_tasks présents" \
-  || ko "pre_tasks / post_tasks manquants"
-grep -q 'flush_handlers' "$PB" && ok "meta: flush_handlers présent" \
-  || ko "pas de flush_handlers : le reload arriverait après la vérification"
-grep -Eq 'until:' "$PB" && grep -Eq 'uri:' "$PB" \
-  && ok "vérification uri avec until" || ko "uri + until absents des post_tasks"
-grep -q 'run_once' "$PB" && ok "tâche run_once (journal)" \
-  || ko "pas de run_once pour le journal des déploiements"
-hosts=$(ansible-playbook "$PB" --list-hosts 2>/dev/null)
-printf '%s\n' "$hosts" | has 'lab-web' && printf '%s\n' "$hosts" | has 'lab-rhel' \
-  && ok "--list-hosts montre lab-web et lab-rhel" \
-  || ko "--list-hosts ne montre pas les deux frontaux (hosts: web ?)"
+# --- 1. la latence est revenue ------------------------------------------
+if command -v curl >/dev/null 2>&1; then
+  MAX=0
+  for _ in 1 2 3 4 5; do
+    T=$(curl -s -o /dev/null -w '%{time_total}' --max-time 20 \
+        "$URL/produits" 2>/dev/null || echo 99)
+    MS=$(printf '%.0f' "$(echo "$T * 1000" | bc -l 2>/dev/null || echo 99000)")
+    [ "$MS" -gt "$MAX" ] && MAX=$MS
+  done
+  if [ "$MAX" -lt 200 ]; then
+    ok "/produits répond en moins de 200 ms (pire cas : ${MAX} ms)"
+  elif [ "$MAX" -lt 1000 ]; then
+    ko "pire cas ${MAX} ms : mieux, mais on n'est pas revenu à la baseline"
+  else
+    ko "pire cas ${MAX} ms : la cause de la lenteur est toujours là \
+(décompose avec curl -w time_namelookup)"
+  fi
+  TS=$(curl -s -o /dev/null -w '%{time_total}' --max-time 20 \
+       "$URL/sante" 2>/dev/null || echo 99)
+  note "référence /sante : ${TS}s"
+else
+  note "curl absent : mesure de latence impossible"
+fi
 
-# --- 2. les deux frontaux servent la version -------------------------------
-for h in lab-web:10.10.10.11 lab-rhel:10.10.10.13; do
-  n=${h%%:*}; ip=${h##*:}
-  body=$(curl -sk -m 5 "https://$ip/" 2>/dev/null)
-  printf '%s\n' "$body" | has "vitrine $V sur $n" \
-    && ok "$n : corps « vitrine $V sur $n »" \
-    || ko "$n : le corps ne contient pas « vitrine $V sur $n »"
-  curl -skI -m 5 "https://$ip/" 2>/dev/null | has -i "x-vitrine-version: $V" \
-    && ok "$n : en-tête X-Vitrine-Version: $V" \
-    || ko "$n : en-tête X-Vitrine-Version != $V (vhost redéployé + reload ?)"
-done
+# --- 2. la résolution de noms est saine ---------------------------------
+if command -v getent >/dev/null 2>&1; then
+  T0=$(date +%s%N)
+  getent hosts api-interne.lab.local >/dev/null 2>&1
+  T1=$(date +%s%N)
+  D=$(( (T1 - T0) / 1000000 ))
+  if [ "$D" -lt 500 ]; then
+    ok "résolution de api-interne.lab.local en ${D} ms"
+  else
+    ko "résolution en ${D} ms : le résolveur attend toujours un serveur \
+qui ne répond pas (/etc/resolv.conf, /etc/hosts)"
+  fi
+fi
 
-# --- 3. journal des déploiements -------------------------------------------
-LOG=rapports/deploiements.log
-if [ -f "$LOG" ]; then
-  n=$(grep -c " $V " "$LOG")
-  [ "$n" -ge 2 ] && ok "$LOG : $n lignes pour $V (une par lot)" \
-    || ko "$LOG : $n ligne(s) pour $V, attendu >= 2 (run_once par lot)"
-  grep " $V " "$LOG" | has -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' \
-    && ok "lignes datées en ISO 8601" || ko "les lignes ne commencent pas par une date ISO"
-  grep " $V " "$LOG" | has 'lab-web' && grep " $V " "$LOG" | has 'lab-rhel' \
-    && ok "les deux hôtes apparaissent dans le journal" \
-    || ko "un des deux hôtes manque dans le journal (ansible_play_batch)"
-else ko "$LOG absent"; fi
+# --- 3. les livrables ----------------------------------------------------
+if [ -s "$BASELINE" ]; then
+  ok "baseline.txt présent (E19.15)"
+else
+  ko "baseline absente : $BASELINE — sans « avant », pas de comparaison"
+fi
 
-# --- 4. la validation de version refuse un mauvais format -----------------
-out=$(ansible-playbook "$PB" -e vitrine_version=abc --check 2>&1)
-printf '%s\n' "$out" | has -E 'failed=1|FAILED' \
-  && ok "vitrine_version=abc est refusé (assert)" \
-  || ko "vitrine_version=abc n'est pas refusé par l'assert des pre_tasks"
-
-# --- 5. lint ---------------------------------------------------------------
-if command -v ansible-lint >/dev/null; then
-  ansible-lint -q "$PB" >/dev/null 2>&1 && ok "ansible-lint muet sur $PB" \
-    || ko "ansible-lint signale des problèmes sur $PB"
-else note "ansible-lint absent, lint non testé"; fi
+if [ -s "$RAP" ]; then
+  ok "latence.md présent"
+  grep -qiE 'dns|r[ée]solution|resolv' "$RAP" \
+    && ok "la cause (résolution de noms) est identifiée" \
+    || ko "latence.md ne désigne pas la résolution de noms"
+  grep -qiE 'namelookup|connect|starttransfer|time_total' "$RAP" \
+    && ok "la décomposition curl -w figure dans le rapport" \
+    || ko "latence.md doit décomposer la requête (time_namelookup, \
+time_connect, time_starttransfer)"
+  grep -qiE 'strace|tcpdump' "$RAP" \
+    && ok "au moins un outil d'observation fine est cité" \
+    || ko "latence.md doit s'appuyer sur strace ou tcpdump"
+  grep -qiE 'avant|apr[èe]s|baseline' "$RAP" \
+    && ok "la comparaison avant/après est présente" \
+    || ko "latence.md ne compare pas avant et après correctif"
+  grep -qE '[0-9]+[.,][0-9]+' "$RAP" \
+    && ok "des mesures chiffrées figurent au rapport" \
+    || ko "aucun chiffre dans latence.md"
+  [ "$(grep -c '[^[:space:]]' "$RAP")" -ge 15 ] \
+    && ok "latence.md est étoffé" \
+    || ko "latence.md fait moins de 15 lignes utiles"
+else
+  ko "rapport absent : $RAP"
+fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

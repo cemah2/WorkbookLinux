@@ -19,21 +19,25 @@ trois semaines est un signal, pas un détail.
 | 06 Vim et archives | éditer vite, `tar`, `rsync`, intégrité | ☐ ☐ ☐ | |
 | 07 Scripting bash | script robuste, `trap`, `getopts`, shellcheck | ☐ ☐ ☐ | |
 | 08 Processus et systemd | signaux, cgroups, unité `.service` durcie | ☐ ☐ ☐ | |
-| 09 Paquets | `apt`/`dpkg`, `dnf`/`rpm`, dépôts, épinglage | ☐ ☐ ☐ | |
-| 10 Stockage et LVM | partitions, `fstab`, LVM à chaud, RAID, LUKS | ☐ ☐ ☐ | |
-| 11 Réseau | `ip`, Netplan/`nmcli`, DNS, `ss`, `tcpdump` | ☐ ☐ ☐ | |
-| 12 SSH | clés, bastion, `sshd` durci, tunnels | ☐ ☐ ☐ | |
-| 13 Logs et supervision | journald, rsyslog, logrotate, métriques | ☐ ☐ ☐ | |
-| 14 Planification | cron, timers, `flock`, détection d'absence | ☐ ☐ ☐ | |
-| 15 Sécurité | pare-feu, fail2ban, SELinux, TLS, secrets | ☐ ☐ ☐ | |
-| 16 Dépannage et incident | méthode USE, 60 secondes, post-mortem | ☐ ☐ ☐ | |
-| 17 Git | branches, rebase, revue, hooks, dépôt distant | ☐ ☐ ☐ | |
-| 18 Docker et Compose | image multi-étapes, réseau, volumes, registre | ☐ ☐ ☐ | |
-| 19 Ansible | inventaire, rôles, idempotence, vault | ☐ ☐ ☐ | |
-| 20 OpenTofu / cloud-init | VM Proxmox déclarées, état, modules | ☐ ☐ ☐ | |
-| 21 CI/CD Gitea Actions | pipeline build/test/deploy, runner, secrets | ☐ ☐ ☐ | |
-| 22 k3s et observabilité | déploiement, ingress, Prometheus, Loki | ☐ ☐ ☐ | |
-| 23 Python pour l'ops | outils d'exploitation, API, tests, packaging | ☐ ☐ ☐ | |
+| 09 Noyau et démarrage | boot, GRUB, initramfs, modules, udev, sysctl, `/proc` `/sys` `/dev` | ☐ ☐ ☐ | |
+| 10 Paquets | `apt`/`dpkg`, `dnf`/`rpm`, dépôts, épinglage | ☐ ☐ ☐ | |
+| 11 Stockage et LVM | partitions, `fstab`, LVM à chaud, RAID, LUKS | ☐ ☐ ☐ | |
+| 12 Réseau | `ip`, Netplan/`nmcli`, DNS, `ss`, `tcpdump` | ☐ ☐ ☐ | |
+| 13 Réseau Linux avancé | netns, veth, bridge, VLAN/VXLAN, bonding, nftables, NAT, DNS serveur | ☐ ☐ ☐ | |
+| 14 SSH | clés, bastion, `sshd` durci, tunnels | ☐ ☐ ☐ | |
+| 15 Services applicatifs | nginx, PostgreSQL, Redis : configurer, sauvegarder, diagnostiquer | ☐ ☐ ☐ | |
+| 16 Logs et supervision | journald, rsyslog, logrotate, métriques | ☐ ☐ ☐ | |
+| 17 Planification | cron, timers, `flock`, détection d'absence | ☐ ☐ ☐ | |
+| 18 Sécurité | pare-feu, fail2ban, SELinux, TLS, secrets | ☐ ☐ ☐ | |
+| 19 Dépannage et incident | méthode USE, 60 secondes, post-mortem | ☐ ☐ ☐ | |
+| 20 Virtualisation KVM | QEMU/libvirt, virsh, virtio, réseau virtuel, snapshots, cloud-init | ☐ ☐ ☐ | |
+| 21 Git | branches, rebase, revue, hooks, dépôt distant | ☐ ☐ ☐ | |
+| 22 Docker et Compose | image multi-étapes, réseau, volumes, registre | ☐ ☐ ☐ | |
+| 23 Ansible | inventaire, rôles, idempotence, vault | ☐ ☐ ☐ | |
+| 24 OpenTofu / cloud-init | VM Proxmox déclarées, état, modules | ☐ ☐ ☐ | |
+| 25 CI/CD Gitea Actions | pipeline build/test/deploy, runner, secrets | ☐ ☐ ☐ | |
+| 26 k3s et observabilité | déploiement, ingress, Prometheus, Loki | ☐ ☐ ☐ | |
+| 27 Python pour l'ops | outils d'exploitation, API, tests, packaging | ☐ ☐ ☐ | |
 | P1 Factura à la main | déployer et documenter une app 3 tiers | ☐ — ☐ | |
 | P2 Factura industrialisée | la même en code : Ansible, CI, conteneurs | ☐ — ☐ | |
 | P3 Semaine d'astreinte | 5 incidents, 5 post-mortem, 1 runbook | ☐ — ☐ | |
@@ -107,33 +111,31 @@ cinq domaines et leur pondération (programme 2024-2025) :
 
 | Domaine LFCS | Poids | Modules du workbook |
 |---|---|---|
-| Operations Deployment | 25 % | 08, 09, 13, 14, 16, 18, 20 |
-| Networking | 25 % | 11, 12, 15 |
-| Storage | 20 % | 02, 10 |
-| Essential Commands | 20 % | 01, 02, 03, 05, 06, 17 |
+| Operations Deployment | 25 % | 07, 08, 09, 10, 16, 17, 19, 20, 22 |
+| Networking | 25 % | 12, 13, 14, 15, 18 |
+| Storage | 20 % | 02, 11 |
+| Essential Commands | 20 % | 01, 02, 03, 05, 06, 21 |
 | Users and Groups | 10 % | 04 |
 
 Détail par domaine, avec ce qui n'est pas ou peu couvert :
 
-* **Operations Deployment** : boot et `systemd` (08), paquets (09),
-  planification (14), journaux et métriques (13), scripts (07), gestion de
-  processus (08, 16), conteneurs (18) et machines virtuelles (20 pour
-  Proxmox, cloud-init au chapitre 0). Le programme mentionne aussi la
-  gestion des *kernel modules* et des paramètres `sysctl` : vus au passage en
-  15 (modules interdits, `sysctl` de sécurité) — complète avec `man modprobe`,
-  `man 5 modules-load.d` et `man 8 sysctl`.
-* **Networking** : `ip`, routage, DNS, `ss` (11), SSH (12), pare-feu (15).
-  Le programme cite aussi la configuration d'un reverse proxy ou d'un
-  équilibreur de charge : nginx en reverse proxy est monté en P1 et 18, un
-  `upstream` à plusieurs backends dans P2. Le NAT et le *port forwarding*
-  côté Linux sont faits au chapitre 0 (règles `iptables` du nœud) et en 15.
-* **Storage** : partitions, systèmes de fichiers, `fstab`, LVM, RAID, LUKS,
-  NFS (10), quotas d'inodes et `du`/`df` (02). Les **quotas disque
-  utilisateur** (`quota`, `edquota`) ne sont pas traités : `man quota` et
-  le chapitre stockage de l'*Ubuntu Server Guide* suffisent en une heure.
-* **Essential Commands** : tout 01 à 06, plus `git` de base (17). Le
+* **Operations Deployment** : boot, GRUB, modules noyau et `sysctl` (09),
+  `systemd` et cgroups (08), paquets (10), planification (17), journaux et
+  métriques (16), scripts (07), gestion de processus (08, 19), conteneurs
+  (22) et machines virtuelles (20 pour KVM/libvirt, 24 pour Proxmox et
+  cloud-init). Rien d'important ne manque pour ce domaine.
+* **Networking** : `ip`, routage, DNS client, `ss` (12), namespaces, bridges,
+  VLAN, tunnels, nftables, NAT, DNS serveur (13), SSH (14), reverse proxy et
+  équilibrage nginx (15), politique de pare-feu (18). Le programme est
+  couvert au-delà de ce qu'il demande.
+* **Storage** : partitions, systèmes de fichiers, `fstab`, LVM, RAID `mdadm`,
+  LUKS, NFS serveur et client, iSCSI (11), inodes, `du`/`df` (02). Les
+  **quotas disque utilisateur** (`quota`, `edquota`) ne sont pas traités :
+  `man quota` et le chapitre stockage de l'*Ubuntu Server Guide* suffisent
+  en une heure.
+* **Essential Commands** : tout 01 à 06, plus `git` de base (21). Le
   programme demande aussi de savoir manipuler SELinux/AppArmor en commandes
-  simples (15) et de gérer les certificats (15).
+  simples (18) et de gérer les certificats (18).
 * **Users and Groups** : 04 en totalité, PAM et `limits.conf` compris.
   Le programme parle d'un annuaire LDAP : abordé en 04 par `getent` et
   `nsswitch`, mais l'installation d'un client SSSD n'est pas faite — la
@@ -150,37 +152,39 @@ pas de pondération ; les objectifs officiels, face aux modules :
 |---|---|---|
 | Understand and use essential tools | 01, 02, 05, 06 | — |
 | Create simple shell scripts | 07 | — |
-| Operate running systems | 08, 13, 14, 16 | cibles `systemctl isolate`, `tuned` |
-| Configure local storage | 10 | — |
-| Create and configure file systems | 10 | `autofs`, Stratis (selon version) |
-| Deploy, configure, maintain systems | 09, 14, 16 | `chrony` détaillé, `kernel` args GRUB |
-| Manage basic networking | 11, 15 | — (`nmcli` et `firewalld` traités) |
+| Operate running systems | 08, 09, 16, 17, 19 | `tuned` |
+| Configure local storage | 11 | — |
+| Create and configure file systems | 11 | `autofs`, Stratis (selon version) |
+| Deploy, configure, maintain systems | 09, 10, 17, 19 | — (`chrony` et GRUB traités en 09) |
+| Manage basic networking | 12, 13, 18 | — (`nmcli` et `firewalld` traités) |
 | Manage users and groups | 04 | — |
-| Manage security | 03, 04, 12, 15 | — (SELinux traité en 15) |
-| Manage containers | 18 | **`podman`** rootless, unités Quadlet |
+| Manage security | 03, 04, 14, 18 | — (SELinux traité en 18) |
+| Manage containers | 22 | **`podman`** rootless, unités Quadlet |
 
 Où trouver ce qui manque :
 
 * **Réinitialisation du mot de passe root** au boot (`rd.break`, puis
   `chroot /sysroot`, `passwd`, `touch /.autorelabel`) : la méthode est en
-  16 avec GRUB et `emergency`, mais en version Ubuntu ; refais-la sur
-  `lab-rhel` avec la doc Red Hat « Recovering and restoring a system ».
+  09 avec GRUB (`init=/bin/bash`) et en 19 avec `emergency`, en version
+  Ubuntu ; refais-la sur `lab-rhel` avec la doc Red Hat « Recovering and
+  restoring a system ».
 * **`autofs`** : `man 5 autofs`, `man auto.master` ; monte le partage NFS du
-  module 10 par `autofs` plutôt que par `fstab`.
+  module 11 par `autofs` plutôt que par `fstab`.
 * **`tuned`** : `tuned-adm list`, `tuned-adm profile virtual-guest`,
   10 minutes avec la doc Red Hat « Monitoring and managing system status ».
-* **`podman`** : Docker (18) se transpose presque mot pour mot ; ce qui est
+* **`podman`** : Docker (22) se transpose presque mot pour mot ; ce qui est
   spécifique à l'examen — conteneur rootless lancé comme service utilisateur
   (`podman generate systemd`, ou Quadlet en RHEL 9.4+), `loginctl
   enable-linger` — se travaille en deux heures sur `lab-rhel` avec la doc
   « Building, running, and managing containers ».
 * **Arguments noyau** persistants : `grubby --update-kernel=ALL --args=...`
-  sur RHEL, à la place de `/etc/default/grub` + `update-grub` d'Ubuntu.
+  sur RHEL, à la place de `/etc/default/grub` + `update-grub` d'Ubuntu
+  (les deux sont en 09).
 
 ### CKA et Terraform Associate : couverture partielle
 
 Le workbook s'arrête volontairement avant ces deux certifications ; les
-modules 20 et 22 en couvrent l'entrée, pas le programme.
+modules 24 et 26 en couvrent l'entrée, pas le programme.
 
 | Certification | Ce que le workbook couvre | Ce qu'il ne couvre pas |
 |---|---|---|
@@ -189,7 +193,7 @@ modules 20 et 22 en couvrent l'entrée, pas le programme.
 
 Pour la CKA, le programme officiel (Cluster Architecture 25 %, Workloads
 15 %, Services & Networking 20 %, Storage 10 %, Troubleshooting 30 %) et
-`kubernetes.io/docs` sont la seule référence à suivre ; le module 22 te
+`kubernetes.io/docs` sont la seule référence à suivre ; le module 26 te
 met en confiance avec `kubectl`, il ne te prépare pas à l'examen.
 
 ---
@@ -205,7 +209,7 @@ met en confiance avec `kubectl`, il ne te prépare pas à l'examen.
 | **Ops cloud / système** | parc de VM, patching, stockage, réseau, sécurité, coût | 04, 09, 10, 11, 12, 15, 19, 20, P1 |
 
 Les frontières sont floues et dépendent de la taille de l'entreprise : dans
-une PME, un seul poste fait les trois. Le socle **système** (01 à 16) est
+une PME, un seul poste fait les trois. Le socle **système** (01 à 19) est
 commun et non négociable ; c'est lui qui distingue un DevOps qui comprend ce
 que son pipeline déploie de celui qui copie des YAML.
 
@@ -275,8 +279,8 @@ Un recruteur technique regarde ton dépôt avant de te parler. Le workbook
 t'en donne un, à condition de le rendre public et lisible :
 
 * **Un dépôt public** (GitHub, GitLab ou Codeberg) nommé clairement, par
-  exemple `devops-workbook`, avec les livrables des défis (`D07`, `D10`,
-  `D15`…), les rôles Ansible et le code OpenTofu de P2, les post-mortem et
+  exemple `devops-workbook`, avec les livrables des défis (`D07`, `D11`,
+  `D18`…), les rôles Ansible et le code OpenTofu de P2, les post-mortem et
   le runbook de P3. Pas les corrigés du workbook, pas les énoncés : ton
   travail. Aucun secret, aucune IP publique réelle, aucun nom de client.
 * **Un `README.md` à la racine** qui dit en dix lignes ce qu'est le dépôt,
@@ -284,7 +288,7 @@ t'en donne un, à condition de le rendre public et lisible :
   chaque projet, et ce que tu as appris de plus dur. Un README par projet
   avec : objectif, architecture, commandes, ce qui casserait en production
   et ce que tu ferais différemment.
-* **Des commits propres** (module 17) : on lit `git log --oneline` pour
+* **Des commits propres** (module 21) : on lit `git log --oneline` pour
   voir si tu travailles par petits pas cohérents ou par « fix » et « wip ».
 * **Les post-mortem de P3**, même sur des incidents de lab : c'est le
   document qui montre le mieux comment tu raisonnes.
@@ -302,7 +306,7 @@ inconnu, pas de site qui vend une certification.
   si les modules 01 à 07 te semblent trop rapides.
 * *UNIX and Linux System Administration Handbook*, 5e édition (Nemeth,
   Snyder, Hein, Whaley, Mackin) — le livre de chevet de l'administrateur,
-  à lire par chapitre en parallèle des modules 08 à 16.
+  à lire par chapitre en parallèle des modules 08 à 19.
 * *Ubuntu Server Guide* (documentation.ubuntu.com/server) et la
   documentation Red Hat pour RHEL 9 (docs.redhat.com) — les références pour
   chaque commande qui diffère entre les deux familles.
@@ -327,7 +331,7 @@ inconnu, pas de site qui vend une certification.
   (docs.gitea.com), Prometheus (prometheus.io/docs) — toujours la doc
   officielle avant un tutoriel.
 * *Pro Git*, Chacon et Straub (git-scm.com/book, libre) — chapitres 1 à 3
-  et 7 pour le module 17.
+  et 7 pour le module 21.
 * roadmap.sh/devops — pour situer ce que tu ne connais pas encore, pas pour
   l'apprendre.
 
@@ -338,30 +342,30 @@ inconnu, pas de site qui vend une certification.
 * sadservers.com : des serveurs cassés à réparer en temps limité ; c'est
   exactement l'esprit des Break & Fix, avec d'autres pannes.
 * KodeKloud : labs interactifs payants pour Kubernetes, Ansible et Terraform,
-  utiles pour la CKA après le module 22.
+  utiles pour la CKA après le module 26.
 
 ---
 
 ## Annexe D — Modèles
 
 Les quatre modèles sont reproduits ici pour être copiés dans `~/carnet/`
-(carnet), `~/lab16/rapports/` (post-mortem, runbook) ou le dépôt de P2
-(demande de changement). Ils sont aussi installés par `setup_M16.sh` dans
-`~/lab16/modeles/`.
+(carnet), `~/lab19/rapports/` (post-mortem, runbook) ou le dépôt de P2
+(demande de changement). Ils sont aussi installés par `setup_M19.sh` dans
+`~/lab19/modeles/`.
 
 ### D.1 Carnet de bord de lab
 
-Un fichier par module (`~/carnet/M10-stockage.md`), une entrée par séance.
+Un fichier par module (`~/carnet/M11-stockage.md`), une entrée par séance.
 
 ```markdown
-# Module 10 — Stockage et LVM — carnet
+# Module 11 — Stockage et LVM — carnet
 
 Objectif perso du module : (une phrase, avant de commencer)
 Prérequis vérifiés : ☐ snapshot posé  ☐ setup lancé  ☐ check à blanc
 
 ## AAAA-MM-JJ — séance N — durée réelle
 - VM utilisée(s) et snapshot posé :
-- Fait : (identifiants : E10.1-E10.6, L10.1…)
+- Fait : (identifiants : E11.1-E11.6, L11.1…)
 - Bloqué sur : (identifiant + étape)
   - ce que j'ai cherché (man, doc, test) et combien de temps :
   - ce que j'ai trouvé / ce que le corrigé disait en plus :
@@ -379,7 +383,7 @@ Prérequis vérifiés : ☐ snapshot posé  ☐ setup lancé  ☐ check à blanc
 
 ### D.2 Post-mortem
 
-Même modèle que celui du module 16 (`~/lab16/modeles/postmortem.md`) :
+Même modèle que celui du module 19 (`~/lab19/modeles/postmortem.md`) :
 utilise-le tel quel pour P3, sans en retirer de section.
 
 ```markdown

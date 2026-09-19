@@ -1,68 +1,53 @@
 #!/usr/bin/env bash
-# break_M09_02.sh — panne BF9.2 (dépôt tiers non vérifiable : NO_PUBKEY)
+# break_M09_02.sh — panne BF9.2 (sysctl qui « ne tient pas » : rang,
+#                   extension, module absent)
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 SAUV=/root/.breakfix-backup
-DEPOT=/srv/depot-lab
-SRC=/etc/apt/sources.list.d/depot-lab.sources
-LEGACY=/etc/apt/sources.list.d/depot-lab.list
 mkdir -p "$SAUV"
 
-[ -f "$DEPOT/InRelease" ] || {
-  echo "$DEPOT absent : lance d'abord setup_M09.sh" >&2; exit 1; }
-
-# --- sauvegarde de l'existant -----------------------------------------
-for f in "$SRC" "$LEGACY" /etc/apt/keyrings/depot-lab.gpg; do
-  base="$(basename "$f")"
-  if [ -e "$f" ] && [ ! -e "$SAUV/M09_02.$base" ]; then
-    cp -a "$f" "$SAUV/M09_02.$base"
-  fi
-done
-
-# --- la casse ----------------------------------------------------------
-# 1. on retire la clé du trousseau apt et toute trace de confiance
-rm -f /etc/apt/keyrings/depot-lab.gpg \
-      /etc/apt/trusted.gpg.d/depot-lab.gpg \
-      /usr/share/keyrings/depot-lab.gpg
-rm -f "$SRC"
-
-# 2. on réécrit la source à l'ancienne : format une ligne, aucun
-#    signed-by. C'est exactement le copier-coller qu'on trouve encore
-#    dans la moitié des tutoriels en ligne.
-cat > "$LEGACY" <<'EOF'
-# Depot interne de l'equipe socle — ajoute en urgence pendant l'astreinte
-deb http://127.0.0.1:8099 ./
-EOF
-chmod 0644 "$LEGACY"
-
-# 3. le paquet a été purgé « pour repartir propre » pendant l'astreinte :
-#    impossible de le réinstaller tant que le dépôt n'est pas vérifiable
-if dpkg -s outil-lab >/dev/null 2>&1; then
-  dpkg-query -W -f '${Version}\n' outil-lab > "$SAUV/M09_02.version" \
-    2>/dev/null || true
-  DEBIAN_FRONTEND=noninteractive apt-get -y purge outil-lab \
-    >/dev/null 2>&1 || dpkg --purge --force-all outil-lab >/dev/null 2>&1
+# --- sauvegarde de l'état avant de casser -------------------------------
+[ -f "$SAUV/M09_02.sysctl.conf" ] || cp -a /etc/sysctl.conf "$SAUV/M09_02.sysctl.conf"
+if [ ! -f "$SAUV/M09_02.modules-load.txt" ]; then
+  ls /etc/modules-load.d/ > "$SAUV/M09_02.modules-load.txt" 2>/dev/null || true
 fi
 
-# 4. le dépôt HTTP doit répondre, sinon le symptôme est faussé
-if [ -d /run/systemd/system ]; then
-  systemctl start depot-lab.service >/dev/null 2>&1 || true
+# --- 1. le fichier de l'équipe base de données (rang trop bas) ------------
+cat > /etc/sysctl.d/10-factura.conf <<'EOF2'
+# OPS-412 : demande de l'equipe base de donnees
+vm.swappiness = 10
+EOF2
+
+# --- 2. le fichier réseau, sans extension .conf ---------------------------
+cat > /etc/sysctl.d/20-factura-reseau <<'EOF2'
+net.core.somaxconn = 8192
+EOF2
+
+# --- 3. la clé qui n'existe pas tant que le module n'est pas chargé -------
+cat > /etc/sysctl.d/30-factura-conntrack.conf <<'EOF2'
+net.netfilter.nf_conntrack_max = 131072
+EOF2
+rm -f /etc/modules-load.d/nf_conntrack.conf
+modprobe -r nf_conntrack >/dev/null 2>&1 || true
+
+# --- 4. la valeur « par défaut » remise dans /etc/sysctl.conf -------------
+if ! grep -q '^vm.swappiness = 60' /etc/sysctl.conf; then
+  printf '\n# valeur par defaut Ubuntu (ne pas toucher)\nvm.swappiness = 60\n' \
+    >> /etc/sysctl.conf
 fi
 
-# 5. purge des index déjà validés pour ce dépôt : sans ça, apt réutilise
-#    l'ancien index signé et l'erreur reste un simple avertissement.
-rm -f /var/lib/apt/lists/*8099* /var/lib/apt/lists/*depot?lab* \
-      /var/lib/apt/lists/*srv_depot* 2>/dev/null || true
+# --- application comme au boot -------------------------------------------
+sysctl --system >/dev/null 2>&1 || true
+sysctl -w vm.swappiness=60 net.core.somaxconn=4096 >/dev/null 2>&1 || true
 
-apt-get update >/dev/null 2>&1 || true
+cat <<'EOF2'
 
-cat <<'EOF'
-
-Symptôme attendu : « sudo apt update » se termine sur un W: puis un E:
-concernant le dépôt http://127.0.0.1:8099, et « sudo apt install
-outil-lab » répond « E: Unable to locate package outil-lab » alors que
-le dépôt est bien joignable (curl http://127.0.0.1:8099/Packages
-fonctionne).
-EOF
+Symptôme attendu : « sysctl vm.swappiness » répond 60 et
+« sysctl net.core.somaxconn » 4096, alors que les fichiers de l'équipe sont
+bien dans /etc/sysctl.d/. Après un reboot, c'est pareil, et
+« journalctl -u systemd-sysctl -b » contient un avertissement.
+« sudo sysctl -p /etc/sysctl.d/<fichier> » applique la valeur… jusqu'au
+prochain reboot.
+EOF2

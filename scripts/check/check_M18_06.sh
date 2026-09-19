@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M18_06.sh — vérifie le défi D18 (livraison de factura-api 2.0)
+# check_M18_06.sh — vérifie le défi D18 (audit-securite.sh + rapport)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,128 +7,120 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification D18 =="
 
-REG=lab-ops.lab.local:5000
-IMG="$REG/factura-api:2.0"
-D="$HOME/lab18/compose"
-S="$HOME/lab18/bin/livrer.sh"
-R="$HOME/lab18/rapports/runbook-docker.md"
-insp() { docker image inspect "$IMG" --format "$1" 2>/dev/null; }
+LAB_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
+S="$LAB_HOME/lab18/bin/audit-securite.sh"
 
-docker info >/dev/null 2>&1 || { ko "Docker inaccessible (L18.1)"; \
+[ -f "$S" ] || { ko "$S est absent"
   echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
+ok "le script existe"
+[ -x "$S" ] && ok "il est exécutable" || ko "il n'est pas exécutable \
+(chmod +x)"
 
-# --- 1. l'image ---------------------------------------------------------
-if docker image inspect "$IMG" >/dev/null 2>&1; then
-  ok "image $IMG présente localement"
-  T=$(insp '{{.Size}}')
-  [ "$T" -lt $((150 * 1024 * 1024)) ] \
-    && ok "taille $((T / 1024 / 1024)) Mio (< 150)" \
-    || ko "image trop grosse : $((T / 1024 / 1024)) Mio"
-  case "$(insp '{{.Config.User}}')" in
-    ""|root|0|0:0) ko "l'image tourne en root" ;;
-    *[!0-9:]*) ko "USER doit être numérique (lu : $(insp '{{.Config.User}}'))" ;;
-    *) ok "utilisateur numérique $(insp '{{.Config.User}}')" ;;
-  esac
-  [ "$(insp '{{.Config.Healthcheck}}')" != "<nil>" ] \
-    && ok "HEALTHCHECK présent" || ko "HEALTHCHECK absent"
-  case "$(insp '{{index .Config.Entrypoint 0}}')" in
-    ""|sh|/bin/sh|bash|/bin/bash) ko "ENTRYPOINT absent ou forme shell" ;;
-    *) ok "ENTRYPOINT en forme exec" ;;
-  esac
-  [ "$(insp '{{index .Config.Labels "org.opencontainers.image.version"}}')" \
-    = "2.0" ] && ok "label version=2.0" || ko "label \
-org.opencontainers.image.version doit valoir 2.0"
-  insp '{{.RepoDigests}}' | grep -q "$REG/factura-api@sha256:" \
-    && ok "l'image a été poussée dans le registre (RepoDigests)" \
-    || ko "aucun digest $REG dans RepoDigests : docker push manquant"
-else
-  ko "image $IMG absente (livrer.sh 2.0 ?)"
-fi
-grep -qiE '^FROM .*:latest|^FROM [a-z]+:[0-9]+($| )' "$HOME/lab18/api/Dockerfile" \
-  2>/dev/null && ko "Dockerfile : tag de base flottant" \
-  || ok "Dockerfile : base épinglée"
+head -1 "$S" | grep -q '^#!/usr/bin/env bash' \
+  && ok "shebang conforme" \
+  || ko "shebang attendu : #!/usr/bin/env bash"
+grep -qE '^set -[euo]+' "$S" \
+  && ok "le script pose des options strictes" \
+  || ko "aucune ligne « set -uo pipefail »"
 
-# --- 2. la pile prod ----------------------------------------------------
-if [ -f "$D/compose.yaml" ] && [ -f "$D/compose.prod.yaml" ]; then
-  J=$(cd "$D" && APP_VERSION=2.0 docker compose -f compose.yaml \
-    -f compose.prod.yaml config --format json 2>/dev/null)
-  [ -n "$J" ] && ok "compose.yaml + compose.prod.yaml valides" \
-    || ko "docker compose -f compose.yaml -f compose.prod.yaml config échoue"
-  echo "$J" | jq -e '.services.app.build == null' >/dev/null 2>&1 \
-    && ok "prod : pas de build:" || ko "prod : build: encore présent"
-  echo "$J" | jq -e ".services.app.image | test(\"$REG\")" >/dev/null 2>&1 \
-    && ok "prod : image du registre" || ko "prod : app.image hors registre"
-  echo "$J" | jq -e '.services.app.read_only == true and (.services.app.cap_drop | index("ALL") != null)' \
-    >/dev/null 2>&1 && ok "app : read_only + cap_drop ALL" \
-    || ko "app : read_only: true et cap_drop: [ALL] attendus"
-  echo "$J" | jq -e '.services.app.security_opt | map(test("no-new-privileges")) | any' \
-    >/dev/null 2>&1 && ok "app : no-new-privileges" \
-    || ko "app : security_opt no-new-privileges manquant"
-  echo "$J" | jq -e '(.services.app.mem_limit // .services.app.deploy.resources.limits.memory) != null' \
-    >/dev/null 2>&1 && ok "app : limite mémoire" || ko "app : mem_limit manquant"
-  echo "$J" | jq -e '.services.app.logging.options["max-size"]' >/dev/null 2>&1 \
-    && ok "app : journaux bornés" || ko "app : logging max-size manquant"
-  echo "$J" | jq -e '.services.app.secrets' >/dev/null 2>&1 \
-    && ok "app : secret déclaré" || ko "app : aucun secret Compose"
-  [ "$(echo "$J" | jq -r '.services.app.depends_on.db.condition')" \
-    = service_healthy ] && ok "app attend db healthy" \
-    || ko "app.depends_on.db : condition service_healthy attendue"
-else
-  ko "$D/compose.yaml ou compose.prod.yaml manquant"
-fi
-V=$(curl -fsS --max-time 4 http://127.0.0.1:8080/version 2>/dev/null \
-  | jq -r .version 2>/dev/null)
-case "$V" in
-  2.*) ok "/version répond $V via le proxy" ;;
-  *)   ko "/version ne répond pas 2.x sur :8080 (lu : ${V:-rien})" ;;
+# --- 1. il ne modifie rien --------------------------------------------
+suspect=""
+for cmd in 'sysctl -w' 'systemctl start' 'systemctl stop' \
+           'systemctl enable' 'systemctl disable' 'systemctl restart' \
+           'setsebool' 'setenforce' 'ufw allow' 'ufw deny' 'ufw enable' \
+           'firewall-cmd --add' 'apt-get install' 'dnf install' \
+           'semanage' 'chmod ' 'chown '; do
+  # on ignore les commentaires et les chaînes de message (verdict, echo,
+  # printf) : « ufw enable » dans un conseil affiché n'est pas une action
+  grep -n "$cmd" "$S" \
+    | grep -vE ':\s*#|verdict |note |ko |ok |echo |printf ' \
+    | grep -q . && suspect="$suspect [$cmd]"
+done
+[ -z "$suspect" ] \
+  && ok "aucune commande de modification détectée" \
+  || ko "le script semble MODIFIER le système :$suspect — un outil \
+d'audit lit, il n'écrit pas"
+
+# --- 2. exécution : séparation stdout / stderr -------------------------
+OUT=$(mktemp); ERR=$(mktemp)
+"$S" >"$OUT" 2>"$ERR"; RC=$?
+case "$RC" in
+  0|1|2) ok "code retour $RC conforme au contrat (0/1/2)" ;;
+  *) ko "code retour $RC hors contrat" ;;
 esac
-CI=$(docker inspect factura-app-1 --format '{{.Config.Image}}' 2>/dev/null)
-echo "$CI" | grep -q "^$REG/" && ok "factura-app-1 tourne depuis $CI" \
-  || ko "factura-app-1 ne tourne pas depuis l'image du registre (${CI:-absent})"
-[ "$(docker inspect factura-app-1 --format '{{.State.Health.Status}}' \
-  2>/dev/null)" = healthy ] && ok "factura-app-1 healthy" \
-  || ko "factura-app-1 n'est pas healthy"
 
-# --- 3. le script ------------------------------------------------------
-if [ -x "$S" ]; then
-  ok "livrer.sh présent et exécutable"
-  head -5 "$S" | grep -q 'set -euo pipefail' && ok "bash strict" \
-    || ko "livrer.sh : set -euo pipefail attendu en tête"
-  grep -q 'trivy' "$S" && ok "livrer.sh appelle Trivy" \
-    || ko "livrer.sh n'appelle pas trivy"
-  grep -qE 'docker (image )?inspect' "$S" \
-    && ok "livrer.sh lit l'image avec docker inspect" \
-    || ko "livrer.sh doit contrôler taille et utilisateur via docker inspect"
-  grep -q 'docker push' "$S" && ok "livrer.sh pousse l'image" \
-    || ko "livrer.sh ne fait pas de docker push"
-  grep -q -- '--wait' "$S" && ok "livrer.sh attend la santé (--wait)" \
-    || ko "livrer.sh : docker compose up --wait attendu"
-  bash -n "$S" 2>/dev/null && ok "syntaxe bash valide" \
-    || ko "livrer.sh : erreur de syntaxe (bash -n)"
-  grep -qE '\$\{1:\?|\$#|\$\{1\}|"\$1"' "$S" \
-    && ok "livrer.sh prend la version en argument" \
-    || ko "livrer.sh doit prendre la version en premier argument"
+[ -s "$OUT" ] && ok "le rapport part bien sur stdout" \
+              || ko "stdout est vide"
+head -1 "$OUT" | grep -q '^# ' \
+  && ok "le rapport commence par un titre Markdown" \
+  || ko "stdout ne ressemble pas à du Markdown (première ligne : \
+$(head -1 "$OUT"))"
+grep -qiE '\[[0-9:]+\]|trace|diagnostic' "$ERR" \
+  && ok "la trace de diagnostic part sur stderr" \
+  || note "stderr est vide : vérifie que la trace ne pollue pas stdout"
+
+# --- 3. les sections obligatoires --------------------------------------
+manquantes=""
+verif_section() {   # verif_section <libellé> <motif ERE>
+  grep -qiE "$2" "$OUT" || manquantes="$manquantes $1"
+}
+verif_section pare-feu  'pare-?feu|firewall'
+verif_section ecoute    'coute|listen|socket'
+verif_section MAC       'MAC|SELinux|AppArmor'
+verif_section comptes   'omptes|UID 0'
+verif_section maj       'mise[s]? à jour|correctif|update'
+verif_section sysctl    'sysctl|noyau|kernel'
+verif_section suid      'SUID'
+verif_section tls       'TLS|certificat'
+verif_section fail2ban  'fail2ban'
+verif_section synthese  'synth|score'
+[ -z "$manquantes" ] \
+  && ok "les dix rubriques attendues sont présentes" \
+  || ko "rubriques absentes du rapport :$manquantes"
+
+# --- 4. verdicts et score ---------------------------------------------
+for v in OK AVERTISSEMENT CRITIQUE; do
+  grep -q "$v" "$OUT" || note "aucun verdict « $v » dans ce rapport \
+(normal si la machine est conforme)"
+done
+grep -qE 'Score *: *[0-9]+' "$OUT" \
+  && ok "le rapport affiche un score chiffré" \
+  || ko "aucun score sur 100 dans le rapport"
+grep -qE '^\|' "$OUT" \
+  && ok "le rapport contient un tableau de synthèse" \
+  || ko "pas de tableau de synthèse Markdown"
+
+# --- 5. cohérence code retour / contenu --------------------------------
+if grep -q 'CRITIQUE' "$OUT" && [ "$RC" -ne 2 ]; then
+  ko "le rapport contient un CRITIQUE mais le code retour est $RC"
+elif ! grep -q 'CRITIQUE' "$OUT" && [ "$RC" -eq 2 ]; then
+  ko "code retour 2 sans aucun CRITIQUE dans le rapport"
 else
-  ko "$S absent ou non exécutable"
+  ok "le code retour est cohérent avec le contenu du rapport"
 fi
-L="$HOME/lab18/rapports/livraisons.log"
-[ -s "$L" ] && grep -q '2.0' "$L" && grep -q 'sha256' "$L" \
-  && ok "livraisons.log contient la 2.0 avec son digest" \
-  || ko "$L absent ou sans ligne 2.0 + digest"
-grep -q '2.1' "$L" 2>/dev/null && ok "livraison 2.1 journalisée" \
-  || ko "pas de livraison 2.1 dans le journal"
 
-# --- 4. le runbook ------------------------------------------------------
+# --- 6. idempotence : deux exécutions, même verdict global -------------
+"$S" >/dev/null 2>&1; RC2=$?
+[ "$RC" -eq "$RC2" ] \
+  && ok "deux exécutions consécutives donnent le même verdict" \
+  || ko "le verdict change entre deux exécutions : le script modifie \
+l'état qu'il mesure"
+
+# --- 7. le livrable ----------------------------------------------------
+R="$LAB_HOME/lab18/rapport-T3.md"
 if [ -s "$R" ]; then
-  [ "$(wc -l < "$R")" -ge 40 ] && ok "runbook d'au moins 40 lignes" \
-    || ko "runbook trop court"
-  for mot in 'pg-data' '137' 'system df' 'docker.sock' 'privileged'; do
-    grep -qi -- "$mot" "$R" && ok "runbook : $mot traité" \
-      || ko "runbook : rien sur « $mot »"
-  done
+  n=$(grep -c '^# Audit' "$R")
+  [ "${n:-0}" -ge 2 ] \
+    && ok "rapport-T3.md agrège $n machines" \
+    || ko "rapport-T3.md ne contient que $n rapport(s) : le défi en \
+demande cinq"
+  head -20 "$R" | grep -qiE 'synth|priorit|action' \
+    && ok "le rapport s'ouvre sur une synthèse" \
+    || ko "pas de synthèse en tête de rapport-T3.md (point 6)"
 else
-  ko "runbook $R absent"
+  ko "~/lab18/rapport-T3.md absent"
 fi
 
+rm -f "$OUT" "$ERR"
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

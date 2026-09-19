@@ -1,96 +1,71 @@
 #!/usr/bin/env bash
-# check_M21_03.sh — vérifie le lab L21.3 (blue/green derrière nginx)
-# À lancer sur lab-ops, en tant que mathieu.
+# check_M21_03.sh — vérifie le lab L21.3 (serveur Git minimal sur lab-adm)
+# À lancer sur lab-adm, en tant que mathieu.
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
+has()  { grep "$@" >/dev/null; }   # comme grep -q, sans SIGPIPE (pipefail)
 echo "== Vérification L21.3 =="
 
-LAB_USER="${SUDO_USER:-$(id -un)}"
-HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab21"
-API=http://10.10.10.14:3000/api/v1
-TOKEN=$(tr -d '[:space:]' < "$BASE/.gitea-token" 2>/dev/null || true)
-REPO="$API/repos/mathieu/factura"
-api() { curl -s -m 10 -H "Authorization: token $TOKEN" "$@"; }
-SSH="ssh -i $BASE/keys/bg -o BatchMode=yes -o ConnectTimeout=5 \
- -o StrictHostKeyChecking=accept-new deploy@10.10.10.11"
+BARE=/srv/git/factura-infra.git
+DEST=/srv/factura-conf
+D="$HOME/lab21/factura-infra"
 
-# --- 1. nginx en frontal, couleur annoncée ---------------------------------
-H=$(curl -sI -m 5 http://10.10.10.11/ | tr -d '\r')
-COLOR=$(printf '%s' "$H" | awk 'tolower($1)=="x-factura-color:"{print $2}')
-if printf '%s' "$H" | grep -q '^HTTP/.* 200'; then
-  ok "http://10.10.10.11/ répond 200 via nginx"
-else
-  ko "http://10.10.10.11/ ne répond pas 200 (site factura.conf ? symlink ?)"
+if [ ! -d "$BARE" ]; then
+  ko "$BARE absent (git init --bare)"
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1
 fi
-case "$COLOR" in
-  blue|green) ok "en-tête X-Factura-Color : $COLOR" ;;
-  *) ko "X-Factura-Color absent ou invalide ('$COLOR') : map + add_header ?" ;;
+[ "$(git -C "$BARE" rev-parse --is-bare-repository 2>/dev/null)" = true ] \
+  && ok "$BARE est un dépôt bare" || ko "$BARE n'est pas bare"
+
+[ "$(git -C "$BARE" symbolic-ref HEAD 2>/dev/null)" = refs/heads/main ] \
+  && ok "HEAD du bare pointe sur main" \
+  || ko "HEAD du bare ne pointe pas sur main (git symbolic-ref HEAD refs/heads/main)"
+
+grp=$(stat -c %G "$BARE")
+[ "$grp" = git ] && ok "le dépôt appartient au groupe git" \
+                 || ko "groupe du dépôt : $grp (attendu git)"
+if [ -g "$BARE/objects" ]; then ok "bit setgid posé sur objects/"
+else ko "objects/ n'a pas le bit setgid : les objets créés par un autre \
+membre auront le mauvais groupe (chmod -R g+s)"; fi
+shared=$(git -C "$BARE" config core.sharedRepository 2>/dev/null)
+case "$shared" in
+  group|true|1|0660|660) ok "core.sharedRepository=$shared" ;;
+  *) ko "core.sharedRepository non défini (git init --bare --shared=group)" ;;
 esac
+id -nG | has -w git && ok "$(id -un) est membre du groupe git" \
+                     || ko "$(id -un) n'est pas dans le groupe git (usermod -aG git)"
 
-# --- 2. deux couleurs, deux tags ------------------------------------------
-ST=$($SSH status 2>/dev/null || true)
-if printf '%s' "$ST" | grep -q 'live='; then
-  ok "factura-bg status : $(printf '%s' "$ST" | head -1)"
-  TB=$(printf '%s' "$ST" | sed -n 's/^TAG_BLUE=//p')
-  TG=$(printf '%s' "$ST" | sed -n 's/^TAG_GREEN=//p')
-  if [ -n "$TB" ] && [ -n "$TG" ] && [ "$TB" != "$TG" ]; then
-    ok "blue ($TB) et green ($TG) portent des tags différents"
-  else
-    ko "TAG_BLUE et TAG_GREEN doivent être définis et différents"
-  fi
-  LIVE=$(printf '%s' "$ST" | sed -n 's/.*live=\([a-z]*\).*/\1/p' | head -1)
-  [ "$LIVE" = "$COLOR" ] && ok "couleur live ($LIVE) = couleur servie" \
-    || ko "status dit live=$LIVE mais nginx sert $COLOR"
-else
-  ko "la clé bg ne renvoie pas « status » (authorized_keys, factura-bg ?)"
-fi
-V=$($SSH smoke 2>/dev/null | tr -d '[:space:]')
-[ -n "$V" ] && ok "sous-commande smoke : la couleur inactive sert $V" \
-  || ko "« smoke » ne renvoie rien (curl local sur le port inactif)"
+H="$BARE/hooks/post-receive"
+if [ -x "$H" ]; then
+  ok "hook post-receive présent et exécutable"
+  head -1 "$H" | has '^#!' && ok "le hook a un shebang" \
+                               || ko "le hook n'a pas de shebang"
+  grep -q 'refs/heads/main' "$H" && ok "le hook filtre sur refs/heads/main" \
+    || ko "le hook ne filtre pas la référence poussée (il déploierait \
+n'importe quelle branche)"
+else ko "$H absent ou non exécutable (chmod +x)"; fi
 
-# --- 3. pas de coupure pendant une bascule --------------------------------
-if [ -n "$ST" ]; then
-  codes=""
-  ( for i in $(seq 1 40); do
-      curl -s -o /dev/null -m 2 -w '%{http_code} ' http://10.10.10.11/
-      sleep 0.1
-    done ) > /tmp/check_m21_03_codes &
-  sleep 1
-  $SSH switch >/dev/null 2>&1; sleep 1
-  $SSH back >/dev/null 2>&1
-  wait
-  codes=$(cat /tmp/check_m21_03_codes); rm -f /tmp/check_m21_03_codes
-  if printf '%s' "$codes" | tr ' ' '\n' | grep -v '^$' | grep -qv '^200$'; then
-    ko "codes autres que 200 pendant switch/back : $codes"
-  else
-    ok "40 requêtes en 200 pendant un switch puis un back"
-  fi
+if [ -d "$DEST" ]; then
+  ok "$DEST existe"
+  if git -C "$BARE" show main:ansible/inventory.ini 2>/dev/null \
+     | diff -q - "$DEST/ansible/inventory.ini" >/dev/null 2>&1; then
+    ok "$DEST/ansible/inventory.ini est identique à main"
+  else ko "$DEST n'est pas au niveau de main : le hook n'a pas déployé"; fi
+  [ -d "$DEST/.git" ] && ko "$DEST contient un .git : déploie avec git archive \
+ou --work-tree, pas avec clone" || ok "$DEST est une copie de travail sans .git"
+else ko "$DEST absent : rien n'a été déployé"; fi
+
+if git -C "$D" remote get-url lab-adm 2>/dev/null | has -E 'lab-adm|10\.10\.10\.10'
+then ok "le remote « lab-adm » est déclaré dans ~/lab21/factura-infra"
+else note "pas de remote lab-adm dans $D (attendu si tu as poussé depuis lab-ops)"
 fi
 
-# --- 4. le workflow ------------------------------------------------------
-WF=$(api "$REPO/raw/.gitea/workflows/ci.yaml")
-printf '%s' "$WF" | python3 - <<'EOF' && ok "deploy : stage → smoke → switch → smoke, back conditionné à l'issue de switch" \
-  || ko "deploy : attendu steps stage/smoke/switch/smoke et back avec steps.<switch>.outcome"
-import sys, yaml
-w = yaml.safe_load(sys.stdin)
-steps = w["jobs"]["deploy"]["steps"]
-txt = [str(s.get("run", "")) for s in steps]
-i_stage = next(i for i, t in enumerate(txt) if "stage" in t)
-i_switch = next(i for i, t in enumerate(txt) if "switch" in t)
-i_back = next(i for i, t in enumerate(txt) if "back" in t)
-assert i_stage < i_switch < i_back
-assert any("smoke" in t for t in txt[i_stage + 1:i_switch])
-assert "outcome" in str(steps[i_back].get("if", "")) and "failure()" in str(steps[i_back].get("if", ""))
-EOF
-
-# --- 5. rapport -------------------------------------------------------------
-grep -qiE 'canar|split_clients|weight' "$BASE/rapports/pipeline.md" 2>/dev/null \
-  && ok "pipeline.md aborde le canari nginx" \
-  || ko "pipeline.md : section canari (weight ou split_clients) attendue"
+n=$(git -C "$BARE" rev-list --count main 2>/dev/null || echo 0)
+[ "$n" -ge 20 ] && ok "main du bare contient l'historique complet ($n commits)" \
+                || ko "main du bare n'a que $n commits"
 
 echo "Résultat : $PASS réussis, $FAIL échoués"
 [ "$FAIL" -eq 0 ]

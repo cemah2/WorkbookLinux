@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# check_M16_04.sh — vérifie le lab L16.4 (application lente : où part le
-#                   temps ?)
+# check_M16_04.sh — vérifie le lab L16.4 (collecte de métriques + rapport)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8,81 +7,102 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L16.4 =="
 
+COL=/opt/factura/bin/collecte-metriques.sh
+RAPS=/opt/factura/bin/rapport-quotidien.sh
+CSV=/var/log/factura/metriques.csv
 LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-BASE="$HOMEDIR/lab16"
-RAP="$BASE/rapports/latence.md"
-BASELINE="$BASE/rapports/baseline.txt"
-URL="${URL:-http://127.0.0.1:8080}"
+RAP="$HOMEDIR/lab16/rapport-quotidien.md"
+priv() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 
-# --- 1. la latence est revenue ------------------------------------------
-if command -v curl >/dev/null 2>&1; then
-  MAX=0
-  for _ in 1 2 3 4 5; do
-    T=$(curl -s -o /dev/null -w '%{time_total}' --max-time 20 \
-        "$URL/produits" 2>/dev/null || echo 99)
-    MS=$(printf '%.0f' "$(echo "$T * 1000" | bc -l 2>/dev/null || echo 99000)")
-    [ "$MS" -gt "$MAX" ] && MAX=$MS
+# --- 1. les deux scripts --------------------------------------------------
+for S in "$COL" "$RAPS"; do
+  if [ -x "$S" ]; then
+    ok "$(basename "$S") existe et est exécutable"
+    head -1 "$S" | grep -q '^#!/usr/bin/env bash' \
+      && ok "$(basename "$S") : shebang conforme" \
+      || ko "$(basename "$S") : shebang attendu #!/usr/bin/env bash"
+    grep -q 'set -euo pipefail' "$S" \
+      && ok "$(basename "$S") : set -euo pipefail" \
+      || ko "$(basename "$S") : set -euo pipefail manquant"
+  else
+    ko "$S manquant ou non exécutable"
+  fi
+done
+
+# --- 2. le CSV ------------------------------------------------------------
+if priv test -s "$CSV"; then
+  ok "$CSV existe"
+  ENTETE=$(priv head -1 "$CSV")
+  NCOL=$(echo "$ENTETE" | awk -F, '{print NF}')
+  [ "$NCOL" -ge 12 ] \
+    && ok "en-tête à $NCOL colonnes" \
+    || ko "en-tête à $NCOL colonnes : il en faut au moins 12 (voir la \
+liste du §16.6 L16.4)"
+  for C in charge wa mem; do
+    echo "$ENTETE" | grep -qi "$C" \
+      && ok "colonne « $C » présente" \
+      || ko "aucune colonne ne mentionne « $C »"
   done
-  if [ "$MAX" -lt 200 ]; then
-    ok "/produits répond en moins de 200 ms (pire cas : ${MAX} ms)"
-  elif [ "$MAX" -lt 1000 ]; then
-    ko "pire cas ${MAX} ms : mieux, mais on n'est pas revenu à la baseline"
-  else
-    ko "pire cas ${MAX} ms : la cause de la lenteur est toujours là \
-(décompose avec curl -w time_namelookup)"
-  fi
-  TS=$(curl -s -o /dev/null -w '%{time_total}' --max-time 20 \
-       "$URL/sante" 2>/dev/null || echo 99)
-  note "référence /sante : ${TS}s"
+  NL=$(priv wc -l < "$CSV")
+  [ "$NL" -ge 21 ] \
+    && ok "$((NL - 1)) relevés enregistrés" \
+    || ko "seulement $((NL - 1)) relevés : on en attend au moins 20"
+  MAL=$(priv awk -F, -v n="$NCOL" 'NF != n {c++} END {print c+0}' "$CSV")
+  [ "$MAL" -eq 0 ] \
+    && ok "toutes les lignes ont le même nombre de colonnes" \
+    || ko "$MAL ligne(s) n'ont pas $NCOL colonnes"
+  DOUBLE=$(priv grep -c -i '^horodat\|^date\|^timestamp' "$CSV")
+  [ "${DOUBLE:-0}" -le 1 ] \
+    && ok "l'en-tête n'est écrit qu'une fois" \
+    || ko "l'en-tête est réécrit à chaque exécution ($DOUBLE fois)"
 else
-  note "curl absent : mesure de latence impossible"
+  ko "$CSV absent ou vide"
 fi
 
-# --- 2. la résolution de noms est saine ---------------------------------
-if command -v getent >/dev/null 2>&1; then
-  T0=$(date +%s%N)
-  getent hosts api-interne.lab.local >/dev/null 2>&1
-  T1=$(date +%s%N)
-  D=$(( (T1 - T0) / 1000000 ))
-  if [ "$D" -lt 500 ]; then
-    ok "résolution de api-interne.lab.local en ${D} ms"
+# --- 3. le script de collecte est rejouable et rapide ---------------------
+if [ -x "$COL" ]; then
+  AVANT=$(priv wc -l < "$CSV" 2>/dev/null || echo 0)
+  DEB=$(date +%s)
+  if priv "$COL" >/dev/null 2>&1; then
+    DUREE=$(( $(date +%s) - DEB ))
+    [ "$DUREE" -le 4 ] \
+      && ok "une collecte dure ${DUREE}s (budget : 3s)" \
+      || ko "une collecte dure ${DUREE}s : trop long pour un relevé"
+    APRES=$(priv wc -l < "$CSV" 2>/dev/null || echo 0)
+    [ "$APRES" -eq $((AVANT + 1)) ] \
+      && ok "la collecte ajoute exactement une ligne" \
+      || ko "la collecte a ajouté $((APRES - AVANT)) ligne(s) au lieu d'une"
   else
-    ko "résolution en ${D} ms : le résolveur attend toujours un serveur \
-qui ne répond pas (/etc/resolv.conf, /etc/hosts)"
+    ko "$COL sort en erreur"
   fi
 fi
 
-# --- 3. les livrables ----------------------------------------------------
-if [ -s "$BASELINE" ]; then
-  ok "baseline.txt présent (E16.15)"
-else
-  ko "baseline absente : $BASELINE — sans « avant », pas de comparaison"
+# --- 4. le rapport --------------------------------------------------------
+if [ -x "$RAPS" ]; then
+  ERRS=$(priv "$RAPS" 2>&1 >/dev/null)
+  [ -z "$ERRS" ] \
+    && ok "rapport-quotidien.sh n'écrit rien sur stderr" \
+    || ko "rapport-quotidien.sh écrit sur stderr : $(echo "$ERRS" | head -1)"
+  SORTIE=$(priv "$RAPS" 2>/dev/null)
+  echo "$SORTIE" | grep -q '^#' \
+    && ok "la sortie est du Markdown (au moins un titre)" \
+    || ko "la sortie ne ressemble pas à du Markdown"
+  echo "$SORTIE" | grep -qiE 'min|moy|max' \
+    && ok "le rapport donne min/moyenne/max" \
+    || ko "le rapport ne donne pas min/moyenne/max"
+  echo "$SORTIE" | grep -qiE 'surveiller|anomalie|seuil' \
+    && ok "une section d'anomalies existe" \
+    || ko "aucune section « À surveiller » / seuils dans la sortie"
 fi
 
 if [ -s "$RAP" ]; then
-  ok "latence.md présent"
-  grep -qiE 'dns|r[ée]solution|resolv' "$RAP" \
-    && ok "la cause (résolution de noms) est identifiée" \
-    || ko "latence.md ne désigne pas la résolution de noms"
-  grep -qiE 'namelookup|connect|starttransfer|time_total' "$RAP" \
-    && ok "la décomposition curl -w figure dans le rapport" \
-    || ko "latence.md doit décomposer la requête (time_namelookup, \
-time_connect, time_starttransfer)"
-  grep -qiE 'strace|tcpdump' "$RAP" \
-    && ok "au moins un outil d'observation fine est cité" \
-    || ko "latence.md doit s'appuyer sur strace ou tcpdump"
-  grep -qiE 'avant|apr[èe]s|baseline' "$RAP" \
-    && ok "la comparaison avant/après est présente" \
-    || ko "latence.md ne compare pas avant et après correctif"
-  grep -qE '[0-9]+[.,][0-9]+' "$RAP" \
-    && ok "des mesures chiffrées figurent au rapport" \
-    || ko "aucun chiffre dans latence.md"
-  [ "$(grep -c '[^[:space:]]' "$RAP")" -ge 15 ] \
-    && ok "latence.md est étoffé" \
-    || ko "latence.md fait moins de 15 lignes utiles"
+  ok "$RAP existe"
+  grep -qiE 'cpu|e/s|io|m[ée]moire' "$RAP" \
+    && ok "le rapport désigne une ressource limitante" \
+    || ko "le rapport ne conclut pas sur la ressource limitante"
 else
-  ko "rapport absent : $RAP"
+  ko "$RAP manquant"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

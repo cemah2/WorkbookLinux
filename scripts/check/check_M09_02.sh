@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_M09_02.sh — vérifie le lab L9.2 (dépôt interne signé)
+# check_M09_02.sh — vérifie le lab L9.2 (noyau HWE, purge, /boot)
 set -uo pipefail
 PASS=0; FAIL=0
 ok()   { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
@@ -7,105 +7,65 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification L9.2 =="
 
-SRC=$(grep -rslE '^(Types:|deb )' /etc/apt/sources.list.d/ 2>/dev/null \
-      | xargs -r grep -rls 'depot-lab\|8099' 2>/dev/null | head -1)
+HOME_DIR="$(getent passwd "${SUDO_USER:-${USER:-$(id -un)}}" | cut -d: -f6)"
+RAP="$HOME_DIR/lab09/rapports"
 
-# --- 1. la source est déclarée, et au format deb822 ---------------------
-if [ -n "$SRC" ]; then
-  ok "source du dépôt déclarée : $SRC"
-  case "$SRC" in
-    *.sources) ok "format deb822 (.sources)" ;;
-    *.list)    ko "$SRC est au format une-ligne : l'énoncé demande un \
-fichier .sources deb822" ;;
-  esac
-else
-  ko "aucun fichier de /etc/apt/sources.list.d/ ne référence le dépôt"
-fi
+command -v dpkg >/dev/null 2>&1 || { \
+  ko "ce contrôle vise lab-adm (Ubuntu) ; sur Rocky, vérifie à la main \
+grubby --default-kernel et dnf list installed 'kernel*'"; \
+  echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
 
-# --- 2. la clé : signed-by, keyrings, et rien d'autre -------------------
-KEYF=""
-if [ -n "$SRC" ]; then
-  KEYF=$(grep -iE '^Signed-By:' "$SRC" 2>/dev/null | awk '{print $2}')
-  [ -z "$KEYF" ] && KEYF=$(grep -oE 'signed-by=[^]" ]+' "$SRC" 2>/dev/null \
-                           | cut -d= -f2)
-fi
-if [ -n "$KEYF" ]; then
-  ok "la source désigne un trousseau : $KEYF"
-  case "$KEYF" in
-    /etc/apt/keyrings/*|/usr/share/keyrings/*)
-      ok "le trousseau est dans un répertoire keyrings" ;;
-    *) ko "$KEYF n'est ni dans /etc/apt/keyrings ni dans \
-/usr/share/keyrings" ;;
-  esac
-  if [ -r "$KEYF" ]; then
-    ok "le trousseau est lisible"
-    PERM=$(stat -c '%a' "$KEYF")
-    case "$PERM" in
-      644|444|664) ok "permissions $PERM (lisible par _apt)" ;;
-      *) ko "permissions $PERM : _apt doit pouvoir lire le trousseau \
-(0644 attendu)" ;;
-    esac
-    if gpg --show-keys --with-colons "$KEYF" 2>/dev/null \
-         | grep -q 'depot@lab.local'; then
-      ok "le trousseau contient bien la clé depot@lab.local"
-    else
-      ko "le trousseau ne contient pas la clé du dépôt \
-(gpg --show-keys $KEYF)"
-    fi
-  else
-    ko "$KEYF est introuvable ou illisible"
-  fi
+K=$(uname -r)
+case "$K" in
+  6.8.*) ko "le noyau en cours est encore un 6.8 ($K) : HWE installé et \
+reboot fait ?" ;;
+  *)     ok "noyau en cours : $K (HWE)" ;;
+esac
+
+dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q '^ii' \
+  && ok "métapaquet linux-generic-hwe-24.04 installé" \
+  || ko "linux-generic-hwe-24.04 n'est pas installé"
+
+N=$(ls /boot/vmlinuz-* 2>/dev/null | wc -l)
+if [ "$N" -ge 1 ] && [ "$N" -le 2 ]; then
+  ok "$N version(s) de noyau dans /boot (max 2)"
 else
-  ko "la source ne comporte ni Signed-By: ni [signed-by=...] : sans lui, \
-la clé vaut pour TOUS les dépôts de la machine"
+  ko "$N versions dans /boot : purge les noyaux superflus (apt autoremove \
+--purge, puis les orphelins)"
 fi
 
-# --- 3. aucune clé posée dans le trousseau global -----------------------
-if ls /etc/apt/trusted.gpg.d/ 2>/dev/null | grep -qi 'depot\|lab'; then
-  ko "une clé du lab traîne dans /etc/apt/trusted.gpg.d : elle serait \
-acceptée pour n'importe quel dépôt"
+if ls /boot/vmlinuz-6.8.* >/dev/null 2>&1; then
+  ok "un noyau 6.8 est conservé comme repli"
 else
-  ok "rien du lab dans /etc/apt/trusted.gpg.d"
-fi
-if [ -s /etc/apt/trusted.gpg ] && \
-   gpg --show-keys /etc/apt/trusted.gpg 2>/dev/null \
-     | grep -q 'depot@lab.local'; then
-  ko "la clé est dans /etc/apt/trusted.gpg (méthode apt-key, obsolète)"
-else
-  ok "pas de clé du lab dans /etc/apt/trusted.gpg"
+  note "aucun 6.8 conservé : l'énoncé demandait un repli (non bloquant)"
 fi
 
-# --- 4. apt update passe sans avertissement GPG -------------------------
-SORTIE=$(apt-get update 2>&1)
-if printf '%s' "$SORTIE" | grep -qi 'NO_PUBKEY\|is not signed\|GPG error'; then
-  ko "apt update signale encore un problème de signature"
-  printf '%s\n' "$SORTIE" | grep -i 'NO_PUBKEY\|not signed\|GPG error' \
-    | head -2 | sed 's/^/         /'
+[ -f "/boot/vmlinuz-$K" ] && [ -f "/boot/initrd.img-$K" ] \
+  && ok "vmlinuz et initrd du noyau courant présents" \
+  || ko "il manque vmlinuz ou initrd.img pour $K dans /boot !"
+
+USE=$(df --output=pcent /boot 2>/dev/null | tail -1 | tr -dc 0-9)
+if [ -n "$USE" ] && [ "$USE" -le 70 ]; then
+  ok "/boot occupé à $USE % (plus de 30 % libres)"
 else
-  ok "apt update ne signale aucun problème de signature"
+  ko "/boot occupé à ${USE:-?} % : il faut au moins 30 % de libre"
 fi
 
-# --- 5. le paquet vient bien du dépôt interne ---------------------------
-POL=$(apt-cache policy outil-lab 2>/dev/null)
-if printf '%s' "$POL" | grep -q 'Installed: 1\.'; then
-  ok "outil-lab est installé ($(printf '%s' "$POL" \
-      | awk '/Installed:/ {print $2}'))"
-else
-  ko "outil-lab n'est pas installé (apt install outil-lab)"
-fi
-if printf '%s' "$POL" | grep -qE '(8099|/srv/depot-lab)'; then
-  ok "le dépôt interne est bien une source de outil-lab"
-else
-  ko "apt-cache policy outil-lab ne montre pas le dépôt interne"
+if [ -f /boot/grub/grub.cfg ]; then
+  grep -E "^menuentry" /boot/grub/grub.cfg | head -1 | grep -q "$K" \
+    && ok "l'entrée GRUB par défaut est le noyau en cours" \
+    || note "la première entrée GRUB n'est pas $K (GRUB_DEFAULT modifié ?)"
 fi
 
-# --- 6. le paquet vient du dépôt, pas d'un dpkg -i ----------------------
-if apt-cache policy outil-lab 2>/dev/null \
-     | grep -A1 '^ \*\*\*' | grep -qE '8099|/srv/depot-lab'; then
-  ok "la version installée est attribuée au dépôt, pas à un dpkg -i"
+[ -s "$RAP/noyaux-avant.txt" ] && ok "inventaire avant conservé" \
+  || ko "$RAP/noyaux-avant.txt absent"
+if [ -f "$RAP/noyaux.md" ] && [ "$(wc -l < "$RAP/noyaux.md")" -ge 15 ]; then
+  ok "rapport noyaux.md présent"
+  grep -qi 'secure' "$RAP/noyaux.md" \
+    && ok "le rapport a une section Secure Boot" \
+    || ko "le rapport ne parle pas de Secure Boot / MOK"
 else
-  note "la version installée n'est rattachée à aucun dépôt : \
-tu l'as sans doute posée avec dpkg -i"
+  ko "rapport $RAP/noyaux.md absent ou trop court"
 fi
 
 echo "Résultat : $PASS réussis, $FAIL échoués"

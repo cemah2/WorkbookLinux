@@ -1,62 +1,38 @@
 #!/usr/bin/env bash
-# break_M15_04.sh — panne BF15.4 (fail2ban bannit le bastion)
-# À lancer sur lab-web, avec sudo. Idempotent.
-# Sauvegarde dans /root/.breakfix-backup/.
+# break_M15_04.sh — panne BF15.4 (à lancer sur lab-db, après L15.3)
+# Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
-
-command -v fail2ban-client >/dev/null 2>&1 || {
-  echo "fail2ban n'est pas installé : apt install fail2ban" >&2; exit 1; }
-
+CONFD=/etc/postgresql/16/main/conf.d
 SAUV=/root/.breakfix-backup
-JL=/etc/fail2ban/jail.local
-BASTION=10.10.10.10
 mkdir -p "$SAUV"
+PW="$(grep '^PGPASSWORD=' /etc/factura/db.env | cut -d= -f2-)"
+[ -n "$PW" ] || { echo "/etc/factura/db.env absent : lance setup_M15.sh" >&2; exit 1; }
+[ -f "$SAUV/M15_04.conf.d.tar" ] || tar -cf "$SAUV/M15_04.conf.d.tar" -C "$CONFD" .
 
-# --- sauvegarde de l'état avant de casser ------------------------------
-if [ -f "$JL" ] && [ ! -f "$SAUV/M15_04.jail.local" ]; then
-  cp -a "$JL" "$SAUV/M15_04.jail.local"
-fi
+# « optimisation mémoire » de la semaine dernière, effective au restart
+cat > "$CONFD/90-tuning.conf" <<'EOF2'
+# tuning 2026-09 : moins de backends = moins de RAM
+max_connections = 20
+EOF2
+chown postgres:postgres "$CONFD/90-tuning.conf"
+if [ -d /run/systemd/system ]; then systemctl restart postgresql@16-main.service
+else pg_ctlcluster 16 main restart; fi
+for _ in $(seq 20); do sudo -u postgres psql -Atqc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
 
-# --- la configuration « d'origine », volontairement sans ignoreip ------
-# (c'est la cause racine : le bastion n'est pas protégé)
-cat > "$JL" <<'EOF'
-# Configuration fail2ban du lab.
-[DEFAULT]
-bantime  = 1h
-findtime = 10m
-maxretry = 4
-# ignoreip : à compléter (c'est justement ce qui manque)
-
-[sshd]
-enabled = true
-backend = systemd
-EOF
-
-systemctl restart fail2ban >/dev/null 2>&1 || true
-
-# on laisse le démon démarrer avant de lui parler
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  fail2ban-client ping >/dev/null 2>&1 && break
-  sleep 1
+# des connexions applicatives jamais fermées (17 = 20 - 3 réservées)
+pkill -f '^bf15-idle-' 2>/dev/null || true
+for i in $(seq 17); do
+  setsid -f bash -c "exec -a bf15-idle-$i sleep 86400 | \
+    PGPASSWORD='$PW' PGAPPNAME=factura-api psql -h 127.0.0.1 -U factura_app \
+    -d factura_demo -q >/dev/null 2>&1" </dev/null >/dev/null 2>&1
 done
+sleep 2
 
-# --- la panne : le bastion est banni ----------------------------------
-fail2ban-client set sshd banip "$BASTION" >/dev/null 2>&1 || {
-  echo "impossible de bannir via fail2ban-client (jail sshd absente ?)" >&2
-  exit 1; }
+cat <<'EOF2'
 
-# --- la politique ufw, elle, reste impeccable -------------------------
-if command -v ufw >/dev/null 2>&1; then
-  ufw allow from "$BASTION" to any port 22 proto tcp >/dev/null 2>&1 || true
-fi
-
-cat <<'EOF'
-
-Symptôme attendu : depuis lab-adm (10.10.10.10), « ssh 10.10.10.11 »
-reste bloqué puis sort en « Connection timed out ». Depuis lab-db, la
-même commande fonctionne immédiatement.
-« ping 10.10.10.11 » depuis lab-adm répond, et « ufw status » sur
-lab-web affiche bien 22/tcp ALLOW IN 10.10.10.10. Le service ssh est
-actif et n'a pas été modifié.
-EOF
+Symptôme attendu : toute nouvelle connexion de l'application échoue avec
+« FATAL: remaining connection slots are reserved for roles with the
+SUPERUSER attribute ». La charge de lab-db est nulle, le disque est libre.
+Interdit : redémarrer PostgreSQL.
+EOF2
