@@ -1,0 +1,4 @@
+- `runbook-deploy.md` : comment déployer, promouvoir, revenir en arrière
+- `rebuild-<date>.log` : chronométrage d'une reconstruction complète (PB.9)
+- `slo.md` : objectifs de niveau de service et budget d'erreur (PB.8)
+- `compose-vs-k3s.md` : comparaison argumentée (PB.10)

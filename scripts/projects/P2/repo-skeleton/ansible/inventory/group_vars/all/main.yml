@@ -1,0 +1,6 @@
+# Variables communes à tous les environnements
+lab_domain: lab.local
+lab_admin_ip: 10.10.10.10
+lab_ops_ip: 10.10.10.14
+registry: lab-ops.lab.local:3000
+registry_namespace: mathieu

@@ -1,0 +1,9 @@
+profile: production
+exclude_paths:
+  - .cache/
+  - .gitea/
+  - app/
+  - infra/
+  - k8s/
+skip_list:
+  - yaml[line-length]

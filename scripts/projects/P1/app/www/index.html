@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factura — facturation interne</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Factura</h1>
+    <p id="state" class="state">état : inconnu</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Nouvelle facture</h2>
+      <form id="new-invoice">
+        <label>Client <input name="customer" required maxlength="80"></label>
+        <label>Montant (EUR)
+          <input name="amount" type="number" min="0.01" step="0.01" required>
+        </label>
+        <button type="submit">Créer et exporter</button>
+      </form>
+      <p id="feedback" class="feedback"></p>
+    </section>
+
+    <section class="card">
+      <h2>Dernières factures</h2>
+      <table id="invoices">
+        <thead>
+          <tr><th>Numéro</th><th>Client</th><th>Montant</th>
+              <th>Statut</th><th>Créée le</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    Factura 1.0 — projet A du workbook Linux/DevOps.
+    L'API est servie sous <code>/api/</code>.
+  </footer>
+  <script src="/app.js"></script>
+</body>
+</html>

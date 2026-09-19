@@ -1,0 +1,21 @@
+# secrets et état
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+.vault-pass
+ansible/inventory/*.ini
+ansible/*.retry
+.env
+.env.*
+!.env.example
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+# divers
+*.log
+*.sql.gz

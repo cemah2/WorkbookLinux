@@ -1,0 +1,20 @@
+# généré par build.py : PDF, .tex, .aux, .log
+build/
+*.pdf
+*.aux
+*.log
+*.toc
+*.out
+
+# Python
+__pycache__/
+.venv/
+
+# mots de passe, jetons, clés de lab : JAMAIS dans l'historique
+reponses/**/secrets*
+
+# éditeurs et systèmes
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

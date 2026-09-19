@@ -1,0 +1,10 @@
+[Unit]
+Description=Sauvegarde de Gitea (gitea dump)
+After=gitea.service
+Wants=gitea.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/backup-gitea.sh
+Nice=10
+IOSchedulingClass=idle

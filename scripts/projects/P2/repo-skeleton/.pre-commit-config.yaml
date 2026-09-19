@@ -1,0 +1,10 @@
+# Squelette : à compléter au jalon PB.1 (le corrigé donne la version finale).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+  # TODO PB.1 : ajouter gitleaks, shellcheck, yamllint, ansible-lint,
+  # et un hook de format des messages de commit.

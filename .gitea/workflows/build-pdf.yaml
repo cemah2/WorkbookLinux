@@ -1,0 +1,35 @@
+# Reconstruit les trois PDF du workbook à chaque push sur main et les
+# publie en artefact (onglet Actions du dépôt, 30 jours).
+# Nécessite un runner Gitea Actions (act_runner) enregistré sur cette
+# instance avec le label ubuntu-latest : c'est le module 21 qui l'installe.
+# Tant qu'il n'existe pas, les runs restent en attente, sans conséquence.
+name: build-pdf
+on:
+  push:
+    branches: [main]
+    paths: ["src/**", "tex/**", "build.py", ".gitea/workflows/**"]
+  workflow_dispatch:
+
+jobs:
+  pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Le job tourne en root dans le conteneur du runner : pas de sudo.
+      # TeX Live pèse ~1 Go : compter 5 à 6 min ; le module 21 montre
+      # comment construire une image de runner qui l'embarque déjà.
+      - name: Dépendances (pandoc, XeLaTeX, DejaVu)
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+            pandoc texlive-xetex texlive-latex-extra \
+            texlive-fonts-recommended fonts-dejavu python3
+      - name: Identifiants énoncés / corrigés
+        run: python3 scripts/lib/check_ids.py
+      - name: Construction des PDF
+        run: python3 build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbook-pdf
+          path: build/Workbook-Linux-DevOps-*.pdf
+          retention-days: 30

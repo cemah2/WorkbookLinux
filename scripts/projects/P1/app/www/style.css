@@ -1,0 +1,25 @@
+/* Factura — feuille de style minimale */
+:root { --ok: #1b7f3b; --ko: #b3261e; --line: #d8d8d8; }
+body { font-family: system-ui, sans-serif; margin: 0; color: #222;
+       background: #f5f5f5; }
+header { background: #1f2d3d; color: #fff; padding: 1rem 1.5rem; }
+header h1 { margin: 0 0 .25rem 0; font-size: 1.5rem; }
+.state { margin: 0; font-size: .9rem; opacity: .9; }
+.state.ok { color: #9be7ae; }
+.state.ko { color: #ffb4ab; }
+main { max-width: 900px; margin: 1.5rem auto; padding: 0 1rem; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 6px;
+        padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+.card h2 { margin-top: 0; font-size: 1.1rem; }
+form label { display: inline-block; margin-right: 1rem; }
+form input { padding: .3rem .5rem; }
+form button { padding: .4rem .9rem; }
+.feedback { min-height: 1.2em; font-size: .9rem; color: #444; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: .4rem .5rem;
+         border-bottom: 1px solid var(--line); }
+tr.st-exported td:nth-child(4) { color: var(--ok); }
+tr.st-error td:nth-child(4) { color: var(--ko); font-weight: bold; }
+tr.st-pending td:nth-child(4) { color: #8a6d00; }
+footer { text-align: center; font-size: .8rem; color: #666;
+         padding: 1rem; }

@@ -1,0 +1,16 @@
+[Unit]
+Description=État de santé du serveur (pilotage, Python)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+# Le venv est appelé par son chemin absolu : rien à « activer ».
+ExecStart=/opt/factura/venv/bin/sante-serveur --delai 2
+# stdout (le rapport) va dans un fichier, stderr (les diagnostics) au journal.
+StandardOutput=append:/var/log/factura/sante-serveur.md
+StandardError=journal
+SyslogIdentifier=sante-serveur
+Environment=PYTHONUNBUFFERED=1 LANG=C.UTF-8
+# Un code 1 ou 2 est un verdict, pas un plantage.
+SuccessExitStatus=1 2

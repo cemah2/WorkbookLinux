@@ -1,0 +1,24 @@
+{
+  "_commentaire": "Réponses figées de l'API Proxmox : GET /cluster/resources?type=vm puis GET /nodes/{node}/qemu/{vmid}/config. Sert au mode --fixture d'inventaire.py.",
+  "resources": [
+    {"vmid": 9001, "name": "lab-adm", "node": "pve", "type": "qemu", "status": "running", "template": 0, "maxcpu": 2, "maxmem": 2147483648, "maxdisk": 21474836480, "tags": "adm;ubuntu", "uptime": 412233},
+    {"vmid": 9002, "name": "lab-web", "node": "pve", "type": "qemu", "status": "running", "template": 0, "maxcpu": 2, "maxmem": 2147483648, "maxdisk": 21474836480, "tags": "web;ubuntu;prod", "uptime": 412201},
+    {"vmid": 9003, "name": "lab-db", "node": "pve", "type": "qemu", "status": "running", "template": 0, "maxcpu": 2, "maxmem": 2147483648, "maxdisk": 32212254720, "tags": "db;ubuntu;prod", "uptime": 412190},
+    {"vmid": 9004, "name": "lab-rhel", "node": "pve", "type": "qemu", "status": "running", "template": 0, "maxcpu": 2, "maxmem": 2147483648, "maxdisk": 21474836480, "tags": "rhel;rocky", "uptime": 412150},
+    {"vmid": 9005, "name": "lab-ops", "node": "pve", "type": "qemu", "status": "running", "template": 0, "maxcpu": 2, "maxmem": 4294967296, "maxdisk": 42949672960, "tags": "ops;ubuntu;docker", "uptime": 412100},
+    {"vmid": 9100, "name": "tpl-ubuntu-2404", "node": "pve", "type": "qemu", "status": "stopped", "template": 1, "maxcpu": 2, "maxmem": 2147483648, "maxdisk": 21474836480, "tags": "template;ubuntu", "uptime": 0},
+    {"vmid": 9111, "name": "lab-web-old", "node": "pve", "type": "qemu", "status": "stopped", "template": 0, "maxcpu": 1, "maxmem": 1073741824, "maxdisk": 10737418240, "tags": "web;ubuntu", "uptime": 0},
+    {"vmid": 9120, "name": "lab-sandbox", "node": "pve", "type": "qemu", "status": "running", "template": 0, "maxcpu": 1, "maxmem": 1073741824, "maxdisk": 10737418240, "uptime": 3600},
+    {"vmid": 200, "name": "ct-dns", "node": "pve", "type": "lxc", "status": "running", "template": 0, "maxcpu": 1, "maxmem": 536870912, "maxdisk": 4294967296, "tags": "dns", "uptime": 900000}
+  ],
+  "configs": {
+    "9001": {"name": "lab-adm", "cores": 2, "memory": 2048, "ipconfig0": "ip=10.10.10.10/24,gw=10.10.10.1", "net0": "virtio=BC:24:11:3A:10:10,bridge=vmbr1", "tags": "adm;ubuntu", "agent": "1"},
+    "9002": {"name": "lab-web", "cores": 2, "memory": 2048, "ipconfig0": "ip=10.10.10.11/24,gw=10.10.10.1", "net0": "virtio=BC:24:11:3A:10:11,bridge=vmbr1", "tags": "web;ubuntu;prod", "agent": "1"},
+    "9003": {"name": "lab-db", "cores": 2, "memory": 2048, "ipconfig0": "ip=10.10.10.12/24,gw=10.10.10.1", "net0": "virtio=BC:24:11:3A:10:12,bridge=vmbr1", "tags": "db;ubuntu;prod", "agent": "1"},
+    "9004": {"name": "lab-rhel", "cores": 2, "memory": 2048, "ipconfig0": "ip=10.10.10.13/24,gw=10.10.10.1", "net0": "virtio=BC:24:11:3A:10:13,bridge=vmbr1", "tags": "rhel;rocky", "agent": "1"},
+    "9005": {"name": "lab-ops", "cores": 2, "memory": 4096, "ipconfig0": "ip=10.10.10.14/24,gw=10.10.10.1", "net0": "virtio=BC:24:11:3A:10:14,bridge=vmbr1", "tags": "ops;ubuntu;docker", "agent": "1"},
+    "9100": {"name": "tpl-ubuntu-2404", "cores": 2, "memory": 2048, "ipconfig0": "ip=dhcp", "template": 1, "tags": "template;ubuntu"},
+    "9111": {"name": "lab-web-old", "cores": 1, "memory": 1024, "ipconfig0": "ip=10.10.10.21/24,gw=10.10.10.1", "tags": "web;ubuntu"},
+    "9120": {"name": "lab-sandbox", "cores": 1, "memory": 1024, "ipconfig0": "ip=dhcp", "net0": "virtio=BC:24:11:3A:10:99,bridge=vmbr1"}
+  }
+}
