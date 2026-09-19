@@ -1,0 +1,52 @@
+\begin{tikzpicture}[wb]
+  % ---- 12 bits ----
+  \def\cw{9mm}
+  % groupes : (nom, x0, couleur, bits, poids, valeur pour 4755)
+  \foreach \g/\x/\st/\a/\b/\c/\va/\vb/\vc in {
+      spéciaux/0/boxwarn/suid/sgid/sticky/1/0/0,
+      u (propriétaire)/30mm/box/r/w/x/1/1/1,
+      g (groupe)/60mm/box2/r/w/x/1/0/1,
+      o (autres)/90mm/boxg/r/w/x/1/0/1}{
+    \node[lbl, anchor=south] at (\x+\cw*1.5,7.5mm) {\textbf{\g}};
+    \node[\st, minimum width=\cw, minimum height=8mm, inner sep=1pt, anchor=south west, font=\scriptsize\sffamily] (b\x a) at (\x,0) {\a};
+    \node[\st, minimum width=\cw, minimum height=8mm, inner sep=1pt, anchor=south west, font=\scriptsize\sffamily] at (\x+\cw,0) {\b};
+    \node[\st, minimum width=\cw, minimum height=8mm, inner sep=1pt, anchor=south west, font=\scriptsize\sffamily] at (\x+\cw*2,0) {\c};
+    \node[lbl, anchor=north] at (\x+\cw*0.5,-0.5mm) {4};
+    \node[lbl, anchor=north] at (\x+\cw*1.5,-0.5mm) {2};
+    \node[lbl, anchor=north] at (\x+\cw*2.5,-0.5mm) {1};
+    \node[code, anchor=north] at (\x+\cw*0.5,-4.5mm) {\va};
+    \node[code, anchor=north] at (\x+\cw*1.5,-4.5mm) {\vb};
+    \node[code, anchor=north] at (\x+\cw*2.5,-4.5mm) {\vc};
+  }
+  \node[lbl, anchor=east] at (-2mm,4mm) {12 bits};
+  \node[lbl, anchor=east] at (-2mm,-2.5mm) {poids};
+  \node[lbl, anchor=east] at (-2mm,-6.5mm) {\texttt{4755}};
+  % chiffres octaux
+  \foreach \x/\d/\st in {0/4/chipo,30mm/7/chip,60mm/5/chip2,90mm/5/chip}{
+    \node[\st, minimum width=8mm, minimum height=5mm, font=\small\sffamily\bfseries, anchor=north] (o\d\x) at (\x+\cw*1.5,-10mm) {\d};
+    \draw[arrg, -] (\x+\cw*0.5,-9mm) -- (\x+\cw*0.5,-9.5mm) -- (\x+\cw*2.5,-9.5mm) -- (\x+\cw*2.5,-9mm);
+  }
+  \node[lbl, anchor=north] at (13.5mm,-16mm) {4 = suid};
+  \node[lbl, anchor=north] at (43.5mm,-16mm) {4+2+1};
+  \node[lbl, anchor=north] at (73.5mm,-16mm) {4+1};
+  \node[lbl, anchor=north] at (103.5mm,-16mm) {4+1};
+  % ls -l
+  \node[lblk, anchor=north west, align=left] (ls) at (0,-23mm)
+    {\texttt{ls -l} affiche \texttt{\textcolor{muted}{-}\textcolor{accent}{rw\textcolor{orange}{s}}\textcolor{accent2}{r-x}r-x} : \textcolor{orange}{\texttt{s}} = suid \textbf{et} x ; \texttt{S} majuscule = suid sans x (erreur probable)};
+  \node[lbl, anchor=north west] at (0,-28mm) {sur un répertoire : \texttt{2} (sgid) = nouveaux fichiers héritent du groupe, \texttt{1} (sticky) = seul le propriétaire supprime (\texttt{/tmp} = 1777)};
+
+  % ---- r/w/x fichier vs répertoire ----
+  \node[boxg, minimum width=26mm, minimum height=7mm, anchor=north west] (h0) at (0,-36mm) {\scriptsize\textbf{bit}};
+  \node[boxg, minimum width=44mm, minimum height=7mm, right=0mm of h0] (h1) {\scriptsize\textbf{sur un fichier}};
+  \node[boxg, minimum width=50mm, minimum height=7mm, right=0mm of h1] (h2) {\scriptsize\textbf{sur un répertoire}};
+  \node[boxw, minimum width=26mm, minimum height=7mm, below=0mm of h0] (r0) {\texttt{r}};
+  \node[boxw, minimum width=44mm, minimum height=7mm, right=0mm of r0] (r1) {\scriptsize lire le contenu};
+  \node[boxw, minimum width=50mm, minimum height=7mm, right=0mm of r1] (r2) {\scriptsize \textbf{lister} les noms (\texttt{ls})};
+  \node[boxw, minimum width=26mm, minimum height=7mm, below=0mm of r0] (w0) {\texttt{w}};
+  \node[boxw, minimum width=44mm, minimum height=7mm, right=0mm of w0] (w1) {\scriptsize modifier le contenu};
+  \node[boxw, minimum width=50mm, minimum height=7mm, right=0mm of w1] (w2) {\scriptsize créer, supprimer, renommer des entrées};
+  \node[boxw, minimum width=26mm, minimum height=7mm, below=0mm of w0] (x0) {\texttt{x}};
+  \node[boxw, minimum width=44mm, minimum height=7mm, right=0mm of x0] (x1) {\scriptsize exécuter};
+  \node[boxw, minimum width=50mm, minimum height=7mm, right=0mm of x1] (x2) {\scriptsize \textbf{traverser} : entrer, atteindre un nom};
+  \node[lbl, anchor=north west] at ([yshift=-1.5mm]x0.south west) {supprimer un fichier = \texttt{w} sur le \textbf{répertoire} ; atteindre \texttt{/a/b/c} = \texttt{x} sur \texttt{/}, \texttt{/a} et \texttt{/a/b}};
+\end{tikzpicture}

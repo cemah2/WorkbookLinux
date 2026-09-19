@@ -1,0 +1,29 @@
+\begin{tikzpicture}[wb]
+  % les quatre zones
+  \node[boxw, minimum width=24mm, minimum height=22mm, align=center] (wd) at (0,0) {\textbf{Répertoire}\\\textbf{de travail}\\[1pt]{\scriptsize fichiers réels,}\\{\scriptsize modifiés, non suivis}};
+  \node[box, minimum width=24mm, minimum height=22mm, right=22mm of wd] (idx) {\textbf{Index}\\{\scriptsize (staging)}\\[1pt]{\scriptsize le prochain \emph{tree}}\\{\scriptsize \texttt{.git/index}}};
+  \node[boxdark, minimum width=24mm, minimum height=22mm, right=22mm of idx] (head) {\textbf{HEAD / commits}\\[1pt]{\scriptsize objets immuables}\\{\scriptsize \texttt{.git/objects}}\\{\scriptsize branche = pointeur}};
+  \node[box2, minimum width=24mm, minimum height=22mm, right=22mm of head] (rem) {\textbf{Dépôt distant}\\{\scriptsize \texttt{origin} (lab-git)}\\[1pt]{\scriptsize copie locale :}\\{\scriptsize \texttt{origin/main}}};
+  % groupe local
+  \begin{scope}[on background layer]
+    \node[group, fit=(wd)(idx)(head), inner sep=7pt, yshift=1mm] (local) {};
+  \end{scope}
+  \node[glabel] at ([yshift=-1pt]local.north west) {dépôt local (\texttt{.git/})};
+  % vers l'avant (au-dessus)
+  \draw[arr] ([yshift=5mm]wd.east) -- node[lbl, above] {\texttt{git add}\\[-1pt]{\tiny \texttt{-p} : par morceau}} ([yshift=5mm]idx.west);
+  \draw[arr] ([yshift=5mm]idx.east) -- node[lbl, above] {\texttt{git commit}\\[-1pt]{\tiny nouveau SHA,}\\[-2pt]{\tiny parent = HEAD}} ([yshift=5mm]head.west);
+  \draw[arr2] ([yshift=5mm]head.east) -- node[lbl, above] {\texttt{git push}\\[-1pt]{\tiny refusé si}\\[-2pt]{\tiny non-fast-forward}} ([yshift=5mm]rem.west);
+  % retour (en dessous)
+  \draw[arr2] ([yshift=-5mm]rem.west) -- node[lbl, below] {\texttt{git fetch}\\[-1pt]{\tiny ne touche que}\\[-2pt]{\tiny \texttt{origin/*}}} ([yshift=-5mm]head.east);
+  \draw[arrg] ([yshift=-5mm]head.west) -- node[lbl, below] {\texttt{restore --staged}\\[-1pt]{\tiny désindexe, fichier gardé}} ([yshift=-5mm]idx.east);
+  \draw[arrg] ([yshift=-5mm]idx.west) -- node[lbl, below] {\texttt{git restore}\\[-1pt]{\tiny écrase la modif locale}} ([yshift=-5mm]wd.east);
+  % merge / pull : de origin/main vers HEAD et le WD
+  \draw[arr2, rounded corners=3pt] (rem.south) |- node[lbl, pos=0.75, below] {\texttt{git merge origin/main} \ (\texttt{pull} = \texttt{fetch} + \texttt{merge} ou \texttt{rebase}) : met à jour HEAD, l'index et les fichiers} ([yshift=-12mm]wd.south) -- (wd.south);
+  % reset : trois profondeurs
+  \node[title, anchor=north west] (rt) at ([yshift=-21mm]local.south west) {\texttt{git reset <commit>} — jusqu'où on recule (HEAD bouge toujours)};
+  \node[boxg, minimum width=31mm, minimum height=9mm, below=2mm of rt.south west, anchor=north west] (soft) {\texttt{--soft}\\[-1pt]{\scriptsize HEAD seulement · index et fichiers gardés}};
+  \node[boxwarn, minimum width=31mm, minimum height=9mm, right=4mm of soft] (mixed) {\texttt{--mixed} (défaut)\\[-1pt]{\scriptsize HEAD + index · fichiers gardés}};
+  \node[boxbad, minimum width=31mm, minimum height=9mm, right=4mm of mixed] (hard) {\texttt{--hard}\\[-1pt]{\scriptsize HEAD + index + fichiers : perte}};
+  \draw[arrg] (soft.east) -- (mixed.west); \draw[arrbad] (mixed.east) -- (hard.west);
+  \node[lbl, anchor=west, align=left] at ([xshift=3mm]hard.east) {le commit reculé reste\\joignable via \texttt{git reflog}};
+\end{tikzpicture}

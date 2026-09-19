@@ -1,0 +1,30 @@
+\begin{tikzpicture}[wb]
+  % barreaux, du bas (lien) vers le haut (application)
+  \node[box, minimum width=34mm, anchor=west] (l1) at (0,0) {\textbf{1. lien}};
+  \node[box, minimum width=34mm, above=3.5mm of l1] (l2) {\textbf{2. adresse IP}};
+  \node[box, minimum width=34mm, above=3.5mm of l2] (l3) {\textbf{3. route}};
+  \node[box2, minimum width=34mm, above=3.5mm of l3] (l4) {\textbf{4. DNS}};
+  \node[box2, minimum width=34mm, above=3.5mm of l4] (l5) {\textbf{5. port}};
+  \node[box2, minimum width=34mm, above=3.5mm of l5] (l6) {\textbf{6. application}};
+  \foreach \a/\b in {l1/l2,l2/l3,l3/l4,l4/l5,l5/l6} \draw[arr] (\a) -- (\b);
+  % titres de colonnes
+  \node[title, anchor=south west] at ([xshift=6mm,yshift=2.5mm]l6.north east) {la commande qui tranche};
+  \node[title, anchor=south west] at ([xshift=62mm,yshift=2.5mm]l6.north east) {symptôme typique};
+  % commandes
+  \node[codel, anchor=west] at ([xshift=6mm]l1.east) {ip -br link ; ip neigh};
+  \node[codel, anchor=west] at ([xshift=6mm]l2.east) {ip -br a};
+  \node[codel, anchor=west] at ([xshift=6mm]l3.east) {ip r ; ping 10.10.10.1};
+  \node[codel, anchor=west] at ([xshift=6mm]l4.east) {dig X ; getent hosts X};
+  \node[codel, anchor=west] at ([xshift=6mm]l5.east) {nc -zv X 443 ; ss -tlnp};
+  \node[codel, anchor=west] at ([xshift=6mm]l6.east) {curl -v ; journalctl -u};
+  % symptômes
+  \node[lbl, anchor=west, align=left] at ([xshift=62mm]l1.east) {\texttt{state DOWN}, \texttt{NO-CARRIER}, voisin \texttt{FAILED}};
+  \node[lbl, anchor=west, align=left] at ([xshift=62mm]l2.east) {pas d'IP, ou \texttt{169.254.x.x}, mauvais masque};
+  \node[lbl, anchor=west, align=left] at ([xshift=62mm]l3.east) {pas de \texttt{default}, passerelle muette};
+  \node[lbl, anchor=west, align=left] at ([xshift=62mm]l4.east) {\texttt{NXDOMAIN}, \texttt{SERVFAIL}, ancienne IP (cache, /etc/hosts)};
+  \node[lbl, anchor=west, align=left] at ([xshift=62mm]l5.east) {\emph{refused} = rien n'écoute ; \emph{timeout} = filtré};
+  \node[lbl, anchor=west, align=left] at ([xshift=62mm]l6.east) {502/504, TLS, vhost par défaut, erreur en journal};
+  % règle
+  \node[boxwarn, minimum width=34mm, below=5mm of l1, align=center, text width=32mm] (rule) {\scriptsize on ne monte d'un barreau qu'une fois celui du dessous \textbf{prouvé}};
+  \node[lbl, anchor=west, align=left] at ([xshift=6mm]rule.east) {un test qui échoue en haut ne dit rien : redescendre au premier barreau qui casse};
+\end{tikzpicture}

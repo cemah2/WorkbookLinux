@@ -1,0 +1,42 @@
+\begin{tikzpicture}[wb]
+  \node[code, anchor=west, font=\small\ttfamily\bfseries, text=accent] at (0,0) {rsync -a --delete --link-dest=../<veille> src/ backup/<jour>/};
+  \node[lbl, anchor=west] at (0,-5mm) {fichier identique à la veille : \textbf{lien dur} vers l'inode existant (0 octet copié) ; fichier modifié : \textbf{copié}, nouvel inode};
+  % --- trois snapshots ---
+  \foreach \name/\x/\sub in {lundi/0/copie complète, mardi/46mm/--link-dest=../lundi, mercredi/92mm/--link-dest=../mardi}{
+    \node[group, minimum width=42mm, minimum height=32mm, anchor=north west] (g\x) at (\x,-10mm) {};
+    \node[glabel, text=accent] at (g\x.north west) {\texttt{backup/\name/} \ {\normalfont\color{muted}\texttt{\sub}}};
+  }
+  \foreach \x/\ca/\cc/\ma/\mc in {0/boxw/boxw//, 46mm/box/boxw/ modifié/, 92mm/boxw/box// modifié}{
+    \node[\ca, minimum width=28mm, minimum height=6.5mm, inner sep=2pt, anchor=north] (\x-conf) at (\x+21mm,-15mm) {\scriptsize\texttt{factura.conf}\textbf{\ma}};
+    \node[boxw, minimum width=28mm, minimum height=6.5mm, inner sep=2pt, below=1.5mm of \x-conf] (\x-jar) {\scriptsize\texttt{app.jar}};
+    \node[\cc, minimum width=28mm, minimum height=6.5mm, inner sep=2pt, below=1.5mm of \x-jar] (\x-db) {\scriptsize\texttt{data.db}\textbf{\mc}};
+  }
+  % --- inodes ---
+  \node[disk, minimum width=22mm, minimum height=13mm, anchor=north] (i1) at (11mm,-58mm) {\scriptsize conf v1\\ liens : \textbf{1}};
+  \node[disk, minimum width=22mm, minimum height=13mm, anchor=north, fill=accent!25] (i4) at (37mm,-58mm) {\scriptsize conf v2\\ liens : \textbf{2}};
+  \node[disk, minimum width=22mm, minimum height=13mm, anchor=north] (i2) at (63mm,-58mm) {\scriptsize app.jar\\ liens : \textbf{3}};
+  \node[disk, minimum width=22mm, minimum height=13mm, anchor=north] (i3) at (89mm,-58mm) {\scriptsize data.db v1\\ liens : \textbf{2}};
+  \node[disk, minimum width=22mm, minimum height=13mm, anchor=north, fill=accent!25] (i5) at (115mm,-58mm) {\scriptsize data.db v2\\ liens : \textbf{1}};
+  \node[lbl, anchor=north] at (63mm,-72mm) {inodes et blocs réellement occupés sur le disque (\texttt{stat -c '\%h'} = nombre de liens)};
+  % --- conf : sort par la gauche ---
+  \draw[arr]      (0-conf.west)    -- (3.5mm,-18mm)  |- (11mm,-45mm) -- (i1.north);
+  \draw[arr]      (46mm-conf.west) -- (49.5mm,-18mm) |- (35mm,-45mm) -- ([xshift=-2mm]i4.north);
+  \draw[link, ->] (92mm-conf.west) -- (95.5mm,-18mm) |- (39mm,-46.5mm) -- ([xshift=2mm]i4.north);
+  % --- jar : sort par la droite, tous vers le même inode ---
+  \draw[link] (0-jar.east)    -- (38.5mm,-26mm)  |- (130.5mm,-49mm);
+  \draw[link] (46mm-jar.east) -- (84.5mm,-26mm)  -- (84.5mm,-49mm);
+  \draw[link] (92mm-jar.east) -- (130.5mm,-26mm) -- (130.5mm,-49mm);
+  \draw[link, ->] (63mm,-49mm) -- (i2.north);
+  % --- db : sort par le bas ---
+  \draw[link] (0-db.south)    -- (21mm,-52mm) -- (89mm,-52mm);
+  \draw[link] (46mm-db.south) -- (67mm,-52mm);
+  \draw[link, ->] (89mm,-52mm) -- (i3.north);
+  \draw[arr]  (92mm-db.south) -- (113mm,-52mm) -- (115mm,-52mm) -- (i5.north);
+  % légende
+  \node[lbl, anchor=north west, align=left] at (0,-78mm)
+    {\tikz\draw[link,->] (0,0) -- (5mm,0); lien dur (même inode, 0 octet) \quad
+     \tikz\draw[arr] (0,0) -- (5mm,0); copie (nouveau contenu) \quad
+     \texttt{du -sh <jour>} $\approx$ taille complète chacun, mais \texttt{du -sh backup/} $\approx$ 1 copie + les deltas};
+  \node[lbl, anchor=north west, align=left] at (0,-83mm)
+    {supprimer \texttt{lundi/} ne casse rien : un inode vit tant qu'un lien existe ; \texttt{rsync} copie au lieu de modifier en place, donc \texttt{lundi/} garde conf v1 intact};
+\end{tikzpicture}

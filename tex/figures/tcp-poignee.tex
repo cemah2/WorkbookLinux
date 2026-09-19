@@ -1,0 +1,39 @@
+\begin{tikzpicture}[wb]
+  % lignes de vie
+  \node[boxdark, minimum width=24mm] (c) at (0,0) {client};
+  \node[boxdark, minimum width=24mm] (s) at (5.2,0) {serveur};
+  \draw[dlink] (c.south) -- ++(0,-7.6);
+  \draw[dlink] (s.south) -- ++(0,-7.6);
+  \node[chip2] at ([yshift=-3mm]s.south) {LISTEN};
+  \node[lbl, anchor=west] at ([xshift=2mm,yshift=-3mm]s.south east) {\texttt{ss -tln} : *:443};
+  % ouverture
+  \draw[arr] (0,-0.9) -- node[lblk, above, pos=0.5] {SYN} (5.2,-1.2);
+  \node[chip] at (0,-0.75) {SYN\_SENT};
+  \draw[arr] (5.2,-1.5) -- node[lblk, above, pos=0.5] {SYN, ACK} (0,-1.8);
+  \node[chip2] at (5.2,-1.35) {SYN\_RECV};
+  \draw[arr] (0,-2.1) -- node[lblk, above, pos=0.5] {ACK} (5.2,-2.4);
+  \node[chip, fill=green] at (0,-2.5) {ESTABLISHED};
+  \node[chip, fill=green] at (5.2,-2.75) {ESTABLISHED};
+  \node[lbl, anchor=west] at (6.4,-2.6) {\texttt{ss -tan} : ESTAB, des deux côtés};
+  % données
+  \draw[darr, draw=muted] (0,-3.3) -- node[lbl, above] {données + ACK} (5.2,-3.3);
+  % fermeture : client ferme en premier
+  \draw[arr] (0,-4.0) -- node[lblk, above, pos=0.5] {FIN} (5.2,-4.3);
+  \node[chip] at (0,-3.85) {FIN\_WAIT\_1};
+  \draw[arr] (5.2,-4.6) -- node[lblk, above, pos=0.5] {ACK} (0,-4.9);
+  \node[chipo] at (5.2,-4.55) {CLOSE\_WAIT};
+  \node[lbl, anchor=west] at (6.4,-4.55) {le pair a fermé, l'appli n'a pas encore fait \texttt{close()}};
+  \node[lbl, anchor=west] at (6.4,-4.95) {s'il s'accumule : bug applicatif};
+  \node[chip] at (0,-5.05) {FIN\_WAIT\_2};
+  \draw[arr] (5.2,-5.5) -- node[lblk, above, pos=0.5] {FIN} (0,-5.8);
+  \node[chip2] at (5.2,-5.35) {LAST\_ACK};
+  \draw[arr] (0,-6.1) -- node[lblk, above, pos=0.5] {ACK} (5.2,-6.4);
+  \node[chipo] at (0,-6.25) {TIME\_WAIT};
+  \node[lbl, anchor=west] at (6.4,-6.1) {celui qui ferme \textbf{en premier} attend 60 s};
+  \node[lbl, anchor=west] at (6.4,-6.5) {normal, même par milliers : \texttt{ss -t state time-wait}};
+  \node[chip, fill=muted] at (5.2,-6.75) {CLOSED};
+  \node[chip, fill=muted] at (0,-7.3) {CLOSED};
+  \node[lbl, anchor=west] at (6.4,-7.2) {\texttt{ss} écrit les états avec des tirets : TIME-WAIT, ESTAB};
+  % légende temps
+  \draw[arrg] (-1.2,-0.6) -- node[lbl, left] {temps} (-1.2,-7.2);
+\end{tikzpicture}

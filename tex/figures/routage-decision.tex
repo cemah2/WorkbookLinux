@@ -1,0 +1,31 @@
+\begin{tikzpicture}[wb]
+  % paquet à émettre
+  \node[boxdark, minimum width=44mm] (pkt) at (0,0) {paquet à émettre\\[-1pt]{\scriptsize dst = 10.10.10.12 \; ou \; dst = 1.1.1.1}};
+  % table de routage
+  \node[boxg, minimum width=72mm, below=6mm of pkt, align=left, text width=70mm] (tbl)
+    {\textbf{table \texttt{main}} (\texttt{ip r}) : le plus long préfixe gagne\\[1pt]
+     {\scriptsize\ttfamily 10.10.10.0/24 dev ens18 scope link}\\[-1pt]
+     {\scriptsize\ttfamily default via 10.10.10.1 dev ens18}};
+  \draw[arr] (pkt) -- node[lbl, right] {\texttt{ip route get <dst>}} (tbl);
+  % décision
+  \node[boxwarn, minimum width=72mm, below=6mm of tbl] (q) {la destination est-elle dans un réseau \textbf{connecté} ?};
+  \draw[arr] (tbl) -- (q);
+  % branche oui (gauche)
+  \node[boxok, minimum width=50mm] (yes) at (-2.9,-4.9)
+    {\textbf{oui} : 10.10.10.12 est dans /24\\[-1pt]{\scriptsize livraison directe}};
+  \node[box, minimum width=50mm, below=4mm of yes] (arp) {ARP « qui a 10.10.10.12 ? »\\[-1pt]{\scriptsize \texttt{ip neigh} → MAC de lab-db}};
+  \node[box2, minimum width=50mm, below=4mm of arp] (fr1) {trame → \textbf{MAC de lab-db}\\[-1pt]{\scriptsize IP dst = 10.10.10.12}};
+  % branche non (droite)
+  \node[boxbad, minimum width=50mm] (no) at (2.9,-4.9)
+    {\textbf{non} : 1.1.1.1 hors du /24\\[-1pt]{\scriptsize seule \texttt{0.0.0.0/0} correspond}};
+  \node[box, minimum width=50mm, below=4mm of no] (gw) {ARP « qui a 10.10.10.1 ? »\\[-1pt]{\scriptsize la passerelle, pas la destination}};
+  \node[box2, minimum width=50mm, below=4mm of gw] (fr2) {trame → \textbf{MAC de la passerelle}\\[-1pt]{\scriptsize IP dst = 1.1.1.1, inchangée}};
+  \draw[arr] (q.south) -- ++(0,-3mm) -| (yes.north);
+  \draw[arr] (q.south) -- ++(0,-3mm) -| (no.north);
+  \draw[arr] (yes) -- (arp);
+  \draw[arr] (arp) -- (fr1);
+  \draw[arr] (no) -- (gw);
+  \draw[arr] (gw) -- (fr2);
+  % morale
+  \node[lbl, below=4mm of $(fr1.south)!0.5!(fr2.south)$, text width=100mm] {L'adresse IP de destination ne change jamais ; seule la MAC du prochain saut varie.\\Aucune route ne correspond → \texttt{Network is unreachable}. Passerelle muette → \texttt{ip neigh} affiche \texttt{FAILED}.};
+\end{tikzpicture}

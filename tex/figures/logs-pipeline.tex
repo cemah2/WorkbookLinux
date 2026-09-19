@@ -1,0 +1,37 @@
+\begin{tikzpicture}[wb]
+  % sources (rangée du haut)
+  \node[boxw, minimum width=28mm] (s1) at (0,0) {service systemd\\[-1pt]{\scriptsize stdout / stderr}};
+  \node[boxw, minimum width=28mm, right=4mm of s1] (s2) {appli via \texttt{syslog(3)}\\[-1pt]{\scriptsize socket \texttt{/dev/log}}};
+  \node[boxw, minimum width=28mm, right=4mm of s2] (s3) {noyau\\[-1pt]{\scriptsize \texttt{/dev/kmsg}}};
+  \node[boxw, minimum width=28mm, right=4mm of s3, draw=orange] (s4) {\texttt{logger -p local0.err}\\[-1pt]{\scriptsize pour tester la chaîne}};
+  % journald
+  \node[box, text width=90mm, below=8mm of $(s2.south)!0.5!(s3.south)$] (jd) {\textbf{journald} — toujours le premier récepteur\\[-1pt]{\scriptsize métadonnées structurées : \texttt{\_SYSTEMD\_UNIT}, \texttt{\_PID}, \texttt{PRIORITY}, \texttt{SYSLOG\_IDENTIFIER}}};
+  \foreach \s in {s1,s2,s3,s4} \draw[arr] (\s.south) -- (jd.north -| \s) ;
+  % stockage du journal, à droite
+  \node[disk, minimum width=18mm, right=8mm of jd.east, yshift=2mm] (jv) {\scriptsize /run/log/journal\\volatile};
+  \node[disk, minimum width=18mm, below=2mm of jv] (jp) {\scriptsize /var/log/journal\\persistant};
+  \draw[arr] (jd.east |- jv) -- (jv.west);
+  \draw[arrg] (jd.east |- jp) -- node[lbl, above] {\texttt{Storage=}} (jp.west);
+  \node[lbl, below=0.5mm of jp, text width=30mm] {\texttt{SystemMaxUse=}, \texttt{--vacuum-*}};
+  % rsyslog
+  \node[box2, text width=90mm, below=10mm of jd] (rs) {\textbf{rsyslog} — règles \texttt{facilité.sévérité \ action} dans \texttt{/etc/rsyslog.d/*.conf}\\[-1pt]{\scriptsize \texttt{stop} coupe la suite ; \texttt{-} devant un fichier = écriture asynchrone}};
+  \draw[arr] (jd) -- node[lbl, right] {\texttt{ForwardToSyslog=yes} ou \texttt{imjournal}} (rs);
+  % lecture du journal, à gauche
+  \coordinate (mid) at ($(jd.south)!0.5!(rs.north)$);
+  % sorties
+  \node[file, minimum width=30mm, anchor=north] (f1) at ([xshift=-34mm,yshift=-8mm]rs.south) {\scriptsize \texttt{auth,authpriv.*}\\[-1pt]{\scriptsize → /var/log/auth.log}};
+  \node[file, minimum width=30mm, anchor=north] (f2) at ([xshift=0mm,yshift=-8mm]rs.south) {\scriptsize \texttt{*.*;auth,authpriv.none}\\[-1pt]{\scriptsize → -/var/log/syslog}};
+  \node[file, minimum width=30mm, anchor=north, draw=orange] (f3) at ([xshift=34mm,yshift=-8mm]rs.south) {\scriptsize \texttt{local0.*}\\[-1pt]{\scriptsize → /var/log/factura.log}};
+  \node[boxdark, minimum width=30mm, anchor=north] (net) at ([xshift=70mm,yshift=-8mm]rs.south) {\scriptsize \texttt{*.* @@lab-ops:10514}\\[-1pt]{\scriptsize TCP (\texttt{@} seul = UDP)}};
+  \foreach \f in {f1,f2,f3,net} \draw[arr2] (rs.south) -- ++(0,-3mm) -| (\f.north);
+  % logrotate
+  \node[boxg, text width=94mm, anchor=north] (lr) at ([yshift=-8mm]f2.south) {\textbf{logrotate} (timer quotidien) — \texttt{rotate 14}, \texttt{compress}, \texttt{delaycompress}, \texttt{postrotate} (HUP) ou \texttt{copytruncate}\\[-1pt]{\scriptsize fichiers plats seulement : jamais le journal binaire}};
+  \foreach \f in {f1,f2,f3} \draw[dlink] (\f.south) -- (\f.south |- lr.north);
+  % collecteur
+  \node[vm, minimum width=30mm, minimum height=11mm, draw=accent2, anchor=north] (ops) at (net |- lr.north) {\textbf{lab-ops} .14\\[-1pt]{\scriptsize \texttt{imtcp}, /var/log/remote/}};
+  \draw[arr2] (net) -- (ops);
+  \node[codel, anchor=north west, align=left] at ([xshift=-2mm,yshift=-3mm]ops.south west) {journalctl -u nginx -p err\\ \ --since "14:00" -o json\\journalctl -k / -f / --disk-usage};
+  % morale
+  \node[lbl, below=3mm of lr.south west, anchor=north west, align=left, text width=94mm]
+    {Un message vit \textbf{deux fois} : structuré dans le journal (\texttt{journalctl}), plat dans \texttt{/var/log} (rsyslog). Un \texttt{stop} rsyslog placé tôt le fait disparaître des fichiers, jamais du journal ; un journal volatile disparaît au reboot, pas les fichiers.};
+\end{tikzpicture}

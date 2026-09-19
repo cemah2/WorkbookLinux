@@ -1,0 +1,31 @@
+\begin{tikzpicture}[wb]
+  % ---- lab-web
+  \node[host, minimum width=134mm, minimum height=64mm, anchor=north west, draw=accent] (h) at (0,0) {};
+  \node[glabel, text=accent] at (h.north west) {lab-web (10.10.10.11)};
+  % nginx
+  \node[box, minimum width=48mm, minimum height=24mm, anchor=north west, align=left, text width=46mm] (ng) at ([xshift=4mm,yshift=-7mm]h.north west) {\textbf{nginx} :80\\[-1pt]{\scriptsize \texttt{factura.conf} :}\\[-2pt]{\scriptsize \ \texttt{proxy\_pass http://factura\_live;}}\\[-1pt]{\scriptsize \texttt{conf.d/factura-upstream.conf}}\\[-2pt]{\scriptsize \ = \textbf{symlink} $\rightarrow$ \texttt{factura/blue.conf}}\\[-1pt]{\scriptsize en-tête \texttt{X-Factura-Color}}\\[-2pt]{\scriptsize \ via \texttt{map \$upstream\_addr}}};
+  % deux fichiers upstream
+  \node[file, minimum width=38mm, minimum height=11mm, anchor=north west, align=left, text width=36mm] (fb) at ([xshift=9mm]ng.north east) {\scriptsize\texttt{factura/blue.conf}\\[-2pt]\scriptsize\texttt{upstream factura\_live \{}\\[-2pt]\scriptsize\texttt{\ server 127.0.0.1:8081; \}}};
+  \node[file, minimum width=38mm, minimum height=11mm, below=3mm of fb, align=left, text width=36mm] (fg) {\scriptsize\texttt{factura/green.conf}\\[-2pt]\scriptsize\texttt{upstream factura\_live \{}\\[-2pt]\scriptsize\texttt{\ server 127.0.0.1:8082; \}}};
+  \draw[arr, line width=1.2pt] (ng.east |- fb.west) -- node[lbl, above, text=accent] {\textbf{actif}} (fb.west);
+  \draw[arrg, dashed] (ng.east |- fg.west) -- node[lbl, below] {\scriptsize inactif} (fg.west);
+  % conteneurs
+  \node[vm, minimum width=24mm, minimum height=11mm, draw=accent, fill=accentsoft, anchor=west] (blue) at ([xshift=9mm]fb.east) {\textbf{blue} :8081\\[-1pt]{\scriptsize \texttt{factura:a1b2c3}}\\[-2pt]{\scriptsize \textbf{live}}};
+  \node[vm, minimum width=24mm, minimum height=11mm, draw=green, fill=greensoft, anchor=west] (green) at ([xshift=9mm]fg.east) {\textbf{green} :8082\\[-1pt]{\scriptsize \texttt{factura:d4e5f6}}\\[-2pt]{\scriptsize inactif, \emph{staged}}};
+  \draw[arr, line width=1.2pt] (fb.east) -- node[lbl, above] {trafic} (blue.west |- fb.east);
+  \draw[arrg, dashed] (fg.east) -- (green.west |- fg.east);
+  \node[lbl, anchor=north west, align=left] at ([yshift=-3mm]fg.south west) {Compose : deux services, deux tags (\texttt{TAG\_BLUE}, \texttt{TAG\_GREEN}),\\[-2pt]ports publiés sur \texttt{127.0.0.1} seulement ;\\[-2pt]les deux conteneurs tournent en permanence.};
+  % ---- procédure de bascule
+  \node[boxdark, minimum width=126mm, minimum height=12mm, anchor=south west, align=left, text width=124mm] (proc) at ([xshift=4mm,yshift=3mm]h.south west) {\scriptsize\texttt{factura-bg switch} = \texttt{ln -sfn ../factura/green.conf conf.d/factura-upstream.conf} $\rightarrow$ \texttt{nginx -t} $\rightarrow$ \texttt{systemctl reload nginx}\\[-1pt]\scriptsize reload : nouveaux workers, anciens finissent leurs requêtes $\rightarrow$ la boucle \texttt{curl} ne voit que des 200. \texttt{blue} tourne toujours : \texttt{back} = même geste en sens inverse.};
+  % ---- séquence à droite / bas
+  \node[title, anchor=north west] (t) at ([yshift=-5mm]h.south west) {Cycle d'une livraison};
+  \node[boxw, minimum width=26mm, minimum height=9mm, anchor=north west, align=center] (s1) at ([yshift=-2mm]t.south west) {1. \texttt{stage <tag>}\\[-1pt]{\scriptsize déploie sur la couleur \textbf{inactive}}};
+  \node[boxw, minimum width=26mm, minimum height=9mm, right=4mm of s1] (s2) {2. smoke test\\[-1pt]{\scriptsize \texttt{curl :8082/version}}};
+  \node[boxok, minimum width=26mm, minimum height=9mm, right=4mm of s2] (s3) {3. \texttt{switch}\\[-1pt]{\scriptsize symlink + reload}};
+  \node[boxw, minimum width=26mm, minimum height=9mm, right=4mm of s3] (s4) {4. smoke test\\[-1pt]{\scriptsize \texttt{curl :80/version}}};
+  \node[boxbad, minimum width=22mm, minimum height=9mm, right=4mm of s4] (s5) {\texttt{back}\\[-1pt]{\scriptsize rebascule : instantané}};
+  \draw[arr] (s1) -- (s2); \draw[arr] (s2) -- node[lbl, above] {\scriptsize OK} (s3); \draw[arr] (s3) -- (s4);
+  \draw[arrbad, dashed] (s4) -- node[lbl, above, text=red] {\scriptsize KO} (s5);
+  \draw[arrbad, dashed, rounded corners=3pt] (s2.south) |- node[lbl, pos=0.25, right, text=red] {\scriptsize KO : la prod n'a jamais servi la version} ([yshift=-5mm]s2.south -| s1.south) -- (s1.south);
+  \node[lbl, anchor=north west, align=left, text=ink] at ([yshift=-8mm]s1.south west) {Ne résout pas : migrations de schéma (les deux versions lisent la même base), sessions en mémoire, coût $\times$2.};
+\end{tikzpicture}

@@ -202,6 +202,8 @@ et tes alertes auront besoin. Les devs ont mis les réponses dans l'en-tête.
    └────────────────────────┘  https://factura-k3s.lab.local  │
 ```
 
+@fig(p2-flux): Le flux DevOps de Factura : Git sur lab-ops, CI par le runner (lint, tests, build, scan, push), OpenTofu qui crée les VM via Proxmox, Ansible qui déploie la stack Compose blue/green en staging puis en prod, observabilité sur lab-ops, k3s en cible finale.
+
 ### Flux autorisés (tout le reste est fermé par ufw)
 
 | Source | Destination | Port | Usage |

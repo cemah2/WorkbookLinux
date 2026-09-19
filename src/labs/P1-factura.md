@@ -145,6 +145,8 @@ par lire ce qu'elle attend de lui.
                                           └─────────────────────────────┘
 ```
 
+@fig(p1-architecture): La plateforme Factura à la main : lab-web (nginx TLS, API Gunicorn, worker), lab-db (PostgreSQL, Redis), lab-ops (rsyslog central, sauvegardes rsync, healthcheck et webhook par timers), lab-adm seule porte d'administration en SSH.
+
 ### Flux autorisés (tout le reste est fermé)
 
 | Source | Destination | Port | Usage |

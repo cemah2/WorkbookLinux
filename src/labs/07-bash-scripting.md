@@ -108,6 +108,8 @@ qu'un bash récent est installé ailleurs que `/bin/bash`) ; `#!/bin/bash` fige
 le chemin. Un shebang sans bit `x` donne `Permission denied` ; un fichier avec
 des fins de ligne Windows donne `bad interpreter: No such file or directory`.
 
+@fig(bash-anatomie): Squelette d'un script robuste, bloc par bloc, et ce que chaque bloc protège.
+
 ### Variables spéciales
 
 | Variable | Contenu |

@@ -1,0 +1,46 @@
+\begin{tikzpicture}[wb]
+  % netns hôte
+  \node[host, minimum width=122mm, minimum height=96mm, anchor=north west] (h) at (0,0) {};
+  \node[glabel, text=accent2] at (h.north west) {netns hôte — lab-adm (10.10.10.10)};
+  % conteneurs
+  \node[vm, minimum width=30mm, minimum height=13mm, anchor=north west] (c1) at ([xshift=6mm,yshift=-8mm]h.north west)
+    {\textbf{netns c1}\\[-1pt]{\scriptsize eth0 172.20.0.11}\\[-1pt]{\scriptsize http.server :8000}};
+  \node[vm, minimum width=30mm, minimum height=13mm, right=8mm of c1] (c2)
+    {\textbf{netns c2}\\[-1pt]{\scriptsize eth0 172.20.0.12}\\[-1pt]{\scriptsize default via .1}};
+  \node[vm, minimum width=30mm, minimum height=13mm, right=8mm of c2] (c3)
+    {\textbf{netns c3}\\[-1pt]{\scriptsize eth0 172.20.0.13}\\[-1pt]{\scriptsize default via .1}};
+  % bridge
+  \node[net, minimum width=106mm, anchor=north] (br) at ([yshift=-12mm]c2.south) {\textbf{br-lab} — 172.20.0.1/24 · commutateur + passerelle des conteneurs};
+  % paires veth
+  \foreach \c/\n in {c1/1,c2/2,c3/3} {
+    \draw[link] (\c.south) -- (\c.south |- br.north);
+    \node[lbl, right=0.5mm of $(\c.south)!0.5!(\c.south |- br.north)$] {veth-c\n};
+  }
+  \node[lbl, left=1mm of $(c1.south)!0.5!(c1.south |- br.north)$, align=right] {paire\\veth};
+  % routage IP de l'hôte
+  \node[boxwarn, minimum width=106mm, below=6mm of br, text width=100mm] (rt)
+    {\textbf{routage IP de l'hôte} — \texttt{net.ipv4.ip\_forward=1}\\[-1pt]{\scriptsize chaîne \texttt{forward} policy drop : accepte br-lab → ens18, \texttt{established,related} et \texttt{ct status dnat}}};
+  \draw[darr] (br) -- (rt);
+  % nat
+  \node[box, minimum width=48mm, below=7mm of rt.south west, anchor=north west] (snat)
+    {\texttt{postrouting} · \textbf{masquerade}\\[-1pt]{\scriptsize src 172.20.0.11 devient 10.10.10.10 (sortie ens18)}};
+  \node[box2, minimum width=48mm, below=7mm of rt.south east, anchor=north east] (dnat)
+    {\texttt{prerouting} · \textbf{dnat}\\[-1pt]{\scriptsize dst 10.10.10.10:8080 devient 172.20.0.11:8000}};
+  \draw[arr] (rt.south -| snat) -- node[lbl, left] {sortant} (snat);
+  \draw[arr2] (dnat) -- node[lbl, right] {entrant, avant routage} (rt.south -| dnat);
+  % ens18
+  \node[boxdark, minimum width=28mm, anchor=south] (ens) at ([yshift=4mm]h.south) {\textbf{ens18} · 10.10.10.10};
+  \draw[arr] (snat.south) -- ++(0,-3mm) -| ([xshift=-6mm]ens.north);
+  \draw[arr2] ([xshift=6mm]ens.north) -- ++(0,3mm) -| (dnat.south);
+  % extérieur
+  \node[net, minimum width=40mm, below=8mm of h.south, anchor=north] (lan) {réseau du lab 10.10.10.0/24};
+  \draw[darr] (ens.south) -- (lan.north);
+  \node[vm, minimum width=24mm, minimum height=10mm, draw=muted, right=10mm of lan] (web) {\textbf{lab-web} .11\\[-1pt]{\scriptsize curl http://10.10.10.10:8080/}};
+  \draw[arr2] (web.west) -- (lan.east);
+  \node[vm, minimum width=24mm, minimum height=10mm, draw=muted, left=10mm of lan] (any) {\textbf{c1 → lab-web}\\[-1pt]{\scriptsize vu comme 10.10.10.10}};
+  \draw[arr] (lan.west) -- (any.east);
+  % légende
+  \node[lbl, below=3mm of lan.south, anchor=north, align=left, text width=140mm]
+    {C'est \texttt{docker0} (\texttt{172.17.0.1}) fait à la main : un bridge, une paire veth par conteneur, masquerade en sortie, DNAT pour \texttt{-p 8080:8000}.\\
+     c1 ↔ c2 : commutation pure par le bridge, sans passer par \texttt{forward} (sauf si \texttt{br\_netfilter} est chargé).};
+\end{tikzpicture}

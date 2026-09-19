@@ -1,0 +1,28 @@
+\begin{tikzpicture}[wb]
+  % ligne de départ
+  \node[boxdark, minimum width=40mm, anchor=west] (in) at (0,0) {ligne lue par bash};
+  \node[code, right=6mm of in, anchor=west] (in-r) {echo \textasciitilde/\{a,b\}/\$x* "\$y"};
+  \node[lbl, below=0.5mm of in-r.south west, anchor=north west] {avec x=f, y='un deux', fichiers a/f1.c et b/foo};
+  % étapes
+  \node[box, minimum width=40mm, below=8mm of in] (s1) {\textbf{1. accolades}\\[-1pt]{\scriptsize \{a,b\} \{1..5\} : texte pur}};
+  \node[box, minimum width=40mm, below=4mm of s1] (s2) {\textbf{2. tilde}\\[-1pt]{\scriptsize \textasciitilde{} \textasciitilde user \textasciitilde-}};
+  \node[box, minimum width=40mm, below=4mm of s2] (s3) {\textbf{3. \$param, \$(cmd), \$((..))}\\[-1pt]{\scriptsize de gauche à droite}};
+  \node[boxwarn, minimum width=40mm, below=4mm of s3] (s4) {\textbf{4. découpage des mots}\\[-1pt]{\scriptsize selon \$IFS, hors quotes}};
+  \node[box, minimum width=40mm, below=4mm of s4] (s5) {\textbf{5. globbing}\\[-1pt]{\scriptsize * ? [a-z] : fichiers existants}};
+  \node[box, minimum width=40mm, below=4mm of s5] (s6) {\textbf{6. suppression des quotes}\\[-1pt]{\scriptsize " ' \textbackslash{} disparaissent}};
+  \node[boxdark, minimum width=40mm, below=8mm of s6] (out) {argv de la commande};
+  % flèches
+  \draw[arr] (in) -- (s1);
+  \foreach \a/\b in {s1/s2,s2/s3,s3/s4,s4/s5,s5/s6} \draw[arr] (\a) -- (\b);
+  \draw[arr] (s6) -- (out);
+  % résultats à droite
+  \node[codel, anchor=west] at ([xshift=6mm]s1.east) {echo \textasciitilde/a/\$x* \textasciitilde/b/\$x* "\$y"};
+  \node[codel, anchor=west] at ([xshift=6mm]s2.east) {echo /home/mt/a/\$x* /home/mt/b/\$x* "\$y"};
+  \node[codel, anchor=west] at ([xshift=6mm]s3.east) {echo /home/mt/a/f* /home/mt/b/f* "un deux"};
+  \node[codel, anchor=west] (r4) at ([xshift=6mm]s4.east) {echo | /home/mt/a/f* | /home/mt/b/f* | "un deux"};
+  \node[lbl, below=0mm of r4.south west, anchor=north west] {4 mots : le résultat quoté n'est pas découpé};
+  \node[codel, anchor=west] at ([xshift=6mm]s5.east) {echo /home/mt/a/f1.c /home/mt/b/foo "un deux"};
+  \node[codel, anchor=west] at ([xshift=6mm]s6.east) {echo /home/mt/a/f1.c /home/mt/b/foo un deux};
+  \node[codel, anchor=west] (o) at ([xshift=6mm]out.east) {[echo] [/home/mt/a/f1.c] [/home/mt/b/foo] [un deux]};
+  \node[lbl, below=0mm of o.south west, anchor=north west] {un seul argument « un deux » : les quotes ont protégé l'espace};
+\end{tikzpicture}

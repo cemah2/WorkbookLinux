@@ -148,6 +148,8 @@ chapitre décrit pas à pas ce que le script fait, pour comprendre.
 
 ### Topologie
 
+@fig(lab-topologie): Le laboratoire : sept VM sur le bridge isolé `vmbr1`, NAT vers ton LAN par `vmbr0`, accès depuis ton poste via le bastion `lab-adm`.
+
 | VM | VMID / IP | Ressources | Rôle |
 |---|---|---|---|
 | `lab-adm` (Ubuntu 24.04) | 9001 / 10.10.10.10 | 2 vCPU, 2 Go, 20 Go | admin, bastion, Ansible |

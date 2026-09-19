@@ -1,0 +1,30 @@
+\begin{tikzpicture}[wb]
+  % hôte Proxmox
+  \node[host, minimum width=150mm, minimum height=62mm, anchor=north west] (pve) at (0,0) {};
+  \node[glabel, text=accent2] at (pve.north west) {Nœud Proxmox VE 8 — KVM/QEMU};
+  % bridges
+  \node[net, minimum width=138mm, anchor=north] (vmbr1) at ([yshift=-8mm]pve.north) {vmbr1 — réseau de lab 10.10.10.0/24 · passerelle, DNS et NAT sur 10.10.10.1};
+  % VMs
+  \node[vm, below=9mm of vmbr1.south west, anchor=north west, xshift=1mm] (adm) {\textbf{lab-adm}\\[-1pt]{\scriptsize .10 · bastion, Ansible}};
+  \node[vm, right=3mm of adm] (web) {\textbf{lab-web}\\[-1pt]{\scriptsize .11 · nginx, API}};
+  \node[vm, right=3mm of web] (db) {\textbf{lab-db}\\[-1pt]{\scriptsize .12 · PostgreSQL, Redis}};
+  \node[vm, right=3mm of db] (rhel) {\textbf{lab-rhel}\\[-1pt]{\scriptsize .13 · Rocky 9}};
+  \node[vm, below=4mm of adm.south west, anchor=north west] (ops) {\textbf{lab-ops}\\[-1pt]{\scriptsize .14 · Docker, CI, monitoring}};
+  \node[vm, right=3mm of ops] (git) {\textbf{lab-git}\\[-1pt]{\scriptsize .15 · Gitea}};
+  \node[vm, right=3mm of git, draw=violet] (virt) {\textbf{lab-virt}\\[-1pt]{\scriptsize .16 · KVM imbriqué}};
+  \node[disk, right=6mm of virt, minimum width=10mm, minimum height=9mm] (sdb) {\scriptsize sdb sdc};
+  \draw[dlink] (db.south) -- ++(0,-2mm) -| (sdb.north);
+  \node[lbl, below=0.5mm of sdb] {2 × 5 Go};
+  % liens vers le bridge
+  \foreach \v in {adm,web,db,rhel} \draw[link] (\v.north) -- (\v.north |- vmbr1.south);
+  \foreach \v in {ops,git,virt} \draw[link] (\v.north) -- ++(0,2mm);
+  \draw[link] ([xshift=-4mm]adm.north west) -- ([xshift=-4mm]adm.north west |- vmbr1.south);
+  \draw[link] ([xshift=-4mm]adm.north west) |- ([xshift=-4mm,yshift=2mm]ops.north west) -- ([yshift=2mm]virt.north);
+  % extérieur
+  \node[cloud, right=34mm of pve.east, anchor=west, yshift=20mm] (lan) {LAN maison\\Internet};
+  \node[net, minimum width=18mm, anchor=west] (vmbr0) at ([xshift=4mm]pve.east |- lan) {vmbr0};
+  \draw[darr] (vmbr0) -- (lan);
+  \draw[arr2] (vmbr1.east) -- node[lbl, above] {NAT} (vmbr0.west);
+  \node[vm, minimum width=22mm, minimum height=10mm, below=14mm of lan, draw=muted] (pc) {\textbf{Poste}\\[-1pt]{\scriptsize Windows / Ubuntu}};
+  \draw[arr] (pc.north) -- node[lbl, right] {ssh -J lab-adm} (lan.south);
+\end{tikzpicture}

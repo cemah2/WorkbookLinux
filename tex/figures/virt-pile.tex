@@ -1,0 +1,36 @@
+\begin{tikzpicture}[wb]
+  % ---- pile hôte, de bas en haut
+  \node[layerg, minimum width=78mm, minimum height=9mm] (hw) at (0,0) {\textbf{Matériel} — CPU avec VT-x / AMD-V (ring $-1$), RAM, NIC, disques};
+  \node[layerd, minimum width=78mm, minimum height=9mm, above=5mm of hw] (kern) {\textbf{Noyau Linux hôte} + module \texttt{kvm} / \texttt{kvm\_intel} $\rightarrow$ \texttt{/dev/kvm}};
+  \node[layer, minimum width=78mm, minimum height=14mm, above=5mm of kern] (qemu) {};
+  \node[lblk, anchor=north] at ([yshift=-1mm]qemu.north) {\textbf{QEMU} — \texttt{qemu-system-x86\_64}, un processus par VM};
+  \node[boxw, minimum width=22mm, minimum height=6mm, inner sep=2pt, anchor=south] at ([xshift=-25mm,yshift=1mm]qemu.south) {\scriptsize vm-01 \ \texttt{-accel kvm}};
+  \node[boxw, minimum width=22mm, minimum height=6mm, inner sep=2pt, anchor=south] at ([yshift=1mm]qemu.south) {\scriptsize vm-02 \ \texttt{-accel kvm}};
+  \node[boxw, minimum width=22mm, minimum height=6mm, inner sep=2pt, anchor=south, draw=muted, dashed] at ([xshift=25mm,yshift=1mm]qemu.south) {\scriptsize sans kvm : TCG (lent)};
+  \node[layer2, minimum width=78mm, minimum height=9mm, above=5mm of qemu] (libv) {\textbf{libvirt} — \texttt{libvirtd}, XML de domaine, API $\leftarrow$ \texttt{virsh}};
+  \node[layerg, minimum width=78mm, minimum height=9mm, above=5mm of libv] (tools) {\textbf{Outils} — \texttt{virt-install}, \texttt{virt-manager}, Cockpit \ $\mid$ \ Proxmox : \texttt{qm}, \texttt{pvesh}, GUI};
+  % flèches gauche : qui parle à qui
+  \draw[arr2] ([xshift=-30mm]tools.south) -- node[lbl, left] {génère le XML} ([xshift=-30mm]libv.north);
+  \draw[arr2] ([xshift=-30mm]libv.south) -- node[lbl, left] {ligne de commande} ([xshift=-30mm]qemu.north);
+  \draw[arr] ([xshift=-30mm]qemu.south) -- node[lbl, left] {\texttt{ioctl}} ([xshift=-30mm]kern.north);
+  \draw[arr] ([xshift=-30mm]kern.south) -- node[lbl, left] {mode non-root} ([xshift=-30mm]hw.north);
+  % Proxmox contourne libvirt
+  \draw[arr, draw=orange, rounded corners=2pt] ([xshift=30mm]tools.south) -- ([xshift=30mm,yshift=-2.5mm]tools.south) -- ([xshift=3mm,yshift=-2.5mm]tools.south east) |- node[lbl, pos=0.3, right, text=orange, align=left] {\texttt{qm} parle à QEMU\\sans libvirt} (qemu.east);
+  % rôles à droite de la pile
+  \node[lbl, anchor=west, align=left] at ([xshift=12mm]kern.east) {exécute le code invité\\directement sur le CPU};
+  \node[lbl, anchor=west, align=left] at ([xshift=18mm]qemu.east) {fournit la « carte mère » :\\chipset q35, disques, NIC, console\\pilotes hôte virtio-net / -blk / -balloon};
+  \node[lbl, anchor=west, align=left] at ([xshift=28mm]libv.east) {réseaux, pools, snapshots,\\cgroups, AppArmor};
+  % ---- VM invitée
+  \node[vm, minimum width=44mm, minimum height=26mm, anchor=south west, draw=violet] (guest) at ([xshift=-2mm,yshift=8mm]tools.north west) {};
+  \node[glabel, text=violet] at (guest.north west) {VM invitée (vm-01)};
+  \node[boxw, minimum width=38mm, minimum height=6mm, inner sep=2pt, anchor=north] at ([yshift=-5mm]guest.north) {\scriptsize noyau invité + \texttt{virtio\_net}, \texttt{virtio\_blk}, \texttt{virtio\_balloon}};
+  \node[lbl, anchor=north] at ([yshift=-12mm]guest.north) {l'invité « sait » qu'il est virtualisé :\\pas d'émulation e1000/IDE, files partagées};
+  \draw[darr, draw=violet] (guest.south) -- node[lbl, right, text=violet] {virtio : E/S paravirtualisées\\vers le processus QEMU} ([yshift=0mm]guest.south |- tools.north);
+  % ---- cas imbriqué
+  \node[host, minimum width=44mm, minimum height=26mm, anchor=south east] (nested) at ([xshift=2mm,yshift=8mm]tools.north east) {};
+  \node[glabel, text=accent2] at (nested.north west) {Imbriqué : lab-virt dans Proxmox};
+  \node[boxg, minimum width=38mm, minimum height=5.5mm, inner sep=1.5pt, anchor=north] (n1) at ([yshift=-5mm]nested.north) {\scriptsize Proxmox : \texttt{kvm\_intel nested=1}, CPU \texttt{host}};
+  \node[box, minimum width=34mm, minimum height=5.5mm, inner sep=1.5pt, below=1.2mm of n1] (n2) {\scriptsize lab-virt voit \texttt{vmx} $\rightarrow$ son \texttt{/dev/kvm}};
+  \node[box2, minimum width=30mm, minimum height=5.5mm, inner sep=1.5pt, below=1.2mm of n2] (n3) {\scriptsize vm-01 (niveau 2)};
+  \draw[arr, draw=violet] (nested.south) -- node[lbl, right, text=violet] {même pile,\\un étage plus bas} (nested.south |- tools.north);
+\end{tikzpicture}

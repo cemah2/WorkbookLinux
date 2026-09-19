@@ -1,0 +1,28 @@
+\begin{tikzpicture}[wb]
+  % ---- ligne principale : code -> plan -> apply -> API -> VM
+  \node[file, minimum width=26mm, minimum height=15mm, align=center] (hcl) at (0,0) {\textbf{code HCL}\\[-1pt]{\scriptsize = état voulu}\\[-2pt]{\scriptsize \texttt{main.tf}, \texttt{variables.tf}}\\[-2pt]{\scriptsize \texttt{resource "proxmox\_…\_vm"}}};
+  \node[box, minimum width=28mm, minimum height=15mm, right=9mm of hcl, align=left] (plan) {\texttt{tofu plan}\\[-1pt]{\scriptsize 1. lit l'état}\\[-2pt]{\scriptsize 2. \emph{refresh} via l'API}\\[-2pt]{\scriptsize 3. diff : \texttt{+ \textasciitilde{} - -/+}}};
+  \node[boxdark, minimum width=28mm, minimum height=15mm, right=9mm of plan, align=left] (apply) {\texttt{tofu apply}\\[-1pt]{\scriptsize exécute le plan validé}\\[-2pt]{\scriptsize par le provider}\\[-2pt]{\scriptsize \texttt{bpg/proxmox}}};
+  \node[net, minimum width=24mm, minimum height=15mm, right=8mm of apply, align=center] (api) {API Proxmox\\[-1pt]{\scriptsize \texttt{pve:8006}}\\[-2pt]{\scriptsize token, rôle limité}};
+  \node[vm, minimum width=22mm, minimum height=15mm, right=8mm of api] (vmn) {\textbf{lab2-web}\\[-1pt]{\scriptsize clone du template}\\[-2pt]{\scriptsize + cloud-init}};
+  \draw[arr] (hcl) -- node[lbl, above, yshift=6mm] {\texttt{init}, \texttt{fmt},\\[-2pt]\texttt{validate}} (plan);
+  \draw[arr] (plan) -- node[lbl, above, yshift=6mm] {\texttt{-out p}\\[-2pt]puis revue} (apply);
+  \draw[arr2] (apply) -- node[lbl, above, yshift=6mm] {HTTPS} (api);
+  \draw[arr2] (api) -- node[lbl, above, yshift=6mm] {\texttt{qm clone}} (vmn);
+  % ---- état
+  \node[disk, minimum width=36mm, minimum height=15mm, anchor=north] (state) at ([yshift=-13mm]$(plan.south)!0.5!(apply.south)$) {\textbf{\texttt{terraform.tfstate}}\\[-1pt]{\scriptsize ressource $\leftrightarrow$ ID réel (\texttt{pve/9004})}\\[-2pt]{\scriptsize contient \textbf{tout}, secrets en clair}};
+  \draw[arr, dashed] ([xshift=-7mm]state.north) -- node[lbl, left, align=right] {lecture\\[-2pt]+ refresh} ([xshift=-7mm]state.north |- plan.south);
+  \draw[arr] ([xshift=7mm]state.north |- apply.south) -- node[lbl, right] {écrit le nouvel état} ([xshift=7mm]state.north);
+  \node[boxg, minimum width=34mm, minimum height=11mm, anchor=east, align=left] (backend) at ([xshift=-7mm]state.west) {\scriptsize \textbf{backend local} : fichier, solo\\[-2pt]\scriptsize \textbf{distant} : MinIO / \texttt{http} (lab-ops)\\[-2pt]\scriptsize + \textbf{verrou} : un \texttt{apply} à la fois};
+  \draw[darr, draw=muted] (backend) -- (state);
+  % ---- drift
+  \node[boxbad, minimum width=40mm, minimum height=12mm, anchor=west, align=left] (drift) at ([xshift=7mm]state.east) {\scriptsize \textbf{Drift} : \texttt{qm set 9004 --cores 4} à la main\\[-2pt]\scriptsize $\rightarrow$ réel $\neq$ état $\neq$ code. Prochain \texttt{plan} :\\[-2pt]\scriptsize \texttt{\textasciitilde{} cores: 4 -> 2} (retour au code)\\[-2pt]\scriptsize ou \texttt{apply -refresh-only} : accepter};
+  \draw[arrbad, dashed, rounded corners=3pt] (vmn.south) |- node[lbl, pos=0.25, left, text=red] {modif manuelle} (drift.east);
+  \draw[arrbad, dashed] (drift.west) -- node[lbl, above] {\scriptsize refresh} (state.east);
+  % ---- handoff Ansible
+  \node[box2, minimum width=42mm, minimum height=11mm, below=8mm of state, align=left] (out) {\scriptsize \texttt{output "ips"} + \texttt{local\_file}\\[-2pt]\scriptsize $\rightarrow$ \texttt{inventory/tofu.yml} généré\\[-2pt]\scriptsize (ou inventaire dynamique \texttt{inventaire.py}, mod. 27)};
+  \node[boxw, minimum width=40mm, minimum height=11mm, right=8mm of out, align=center] (ans) {\textbf{Ansible} (lab-adm)\\[-1pt]{\scriptsize \texttt{-i inventory/tofu.yml site.yml}}\\[-2pt]{\scriptsize configure l'intérieur : paquets, fichiers, services}};
+  \draw[arr] (state.south) -- node[lbl, right] {\texttt{tofu output -json}} (out.north);
+  \draw[arr] (out) -- node[lbl, above] {handoff} (ans);
+  \node[lbl, anchor=north west, align=left, text=ink] at (hcl.west |- out.north) {\textbf{OpenTofu crée} : VM, IP,\\disque, DNS (et détruit)\\[2pt]\textbf{Ansible configure}\\l'intérieur de la VM\\[2pt]cloud-init : 1\textsuperscript{er} démarrage\\seulement};
+\end{tikzpicture}

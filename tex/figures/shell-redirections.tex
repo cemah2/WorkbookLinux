@@ -1,0 +1,56 @@
+\begin{tikzpicture}[wb]
+  % ---------- panneau 1 : les trois descripteurs ----------
+  \node[title, anchor=west] at (0,0) {Un processus naît avec trois descripteurs};
+  \node[vm, minimum width=22mm, minimum height=22mm, anchor=north west] (p) at (38mm,-5mm) {\textbf{cmd}};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, anchor=east] (fd0) at ([yshift=6mm]p.west) {\scriptsize fd 0};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, anchor=west] (fd1) at ([yshift=3mm]p.east) {\scriptsize fd 1};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, anchor=west] (fd2) at ([yshift=-5mm]p.east) {\scriptsize fd 2};
+  \node[boxg, minimum width=18mm, left=9mm of fd0] (kb) {clavier\\[-1pt]{\scriptsize stdin}};
+  \draw[arr] (kb) -- (fd0);
+  \node[boxg, minimum width=18mm, right=14mm of fd1] (scr) {écran\\[-1pt]{\scriptsize terminal}};
+  \node[file, right=14mm of fd2, yshift=-6mm] (f) {\texttt{f}};
+  \draw[arr] (fd1.east) -- node[lbl, above, pos=0.5] {stdout} (scr.west);
+  \draw[arrg] (fd2.east) -- node[lbl, above, pos=0.55] {stderr} (fd2.east -| scr.west);
+  \draw[arr2] (fd2.east) -- node[lbl, below, pos=0.5, text=accent2] {\texttt{2> f}} (f.west);
+  \node[lbl, anchor=north west, align=left] at ([yshift=-1mm]f.south west -| kb.west)
+    {\texttt{> f} rebranche le fd 1, \texttt{2> f} le fd 2 ;\\ \texttt{N>\&M} : « fd N va là où fd M va \textbf{maintenant} ».};
+
+  % ---------- panneau 2 : l'ordre compte ----------
+  \node[title, anchor=north west] (t2) at (0,-46mm) {L'ordre des redirections compte (lues de gauche à droite)};
+  % cas A
+  \node[group, minimum width=64mm, minimum height=34mm, anchor=north west] (ga) at (0,-56mm) {};
+  \node[glabel, text=green] at (ga.north west) {\texttt{cmd > f 2>\&1}};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt] (a1) at ([xshift=12mm,yshift=-12mm]ga.north west) {\scriptsize fd 1};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, below=6mm of a1] (a2) {\scriptsize fd 2};
+  \node[file, minimum width=10mm] (af) at ([xshift=40mm]a1) {\texttt{f}};
+  \node[boxg, minimum width=14mm, minimum height=6mm, inner sep=2pt] (at) at ([xshift=40mm]a2) {\scriptsize écran};
+  \draw[arr] (a1) -- node[chip, above, pos=0.35] {1} (af);
+  \draw[arr] (a2.east) -- node[chip, below, pos=0.35] {2} ++(14mm,0) -- (af.south west);
+  \node[lbl, anchor=south, text=green] at ([yshift=1mm]ga.south) {les deux flux dans \texttt{f}};
+  % cas B
+  \node[group, minimum width=64mm, minimum height=34mm, anchor=north west] (gb) at ([xshift=6mm]ga.north east) {};
+  \node[glabel, text=red] at (gb.north west) {\texttt{cmd 2>\&1 > f}};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt] (b1) at ([xshift=12mm,yshift=-12mm]gb.north west) {\scriptsize fd 1};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, below=6mm of b1] (b2) {\scriptsize fd 2};
+  \node[file, minimum width=10mm] (bf) at ([xshift=40mm]b1) {\texttt{f}};
+  \node[boxg, minimum width=14mm, minimum height=6mm, inner sep=2pt] (bt) at ([xshift=40mm]b2) {\scriptsize écran};
+  \draw[arrbad] (b2) -- node[chip, fill=red, above, pos=0.35] {1} node[lbl, below, pos=0.6] {cible de fd 1 = écran} (bt);
+  \draw[arr] (b1) -- node[chip, above, pos=0.35] {2} (bf);
+  \node[lbl, anchor=south, text=red] at ([yshift=1mm]gb.south) {stderr reste à l'écran, seul stdout va dans \texttt{f}};
+
+  % ---------- panneau 3 : le tube ----------
+  \node[title, anchor=north west] (t3) at (0,-95mm) {Un tube relie le fd 1 de A au fd 0 de B ; stderr n'y passe pas};
+  \node[vm, minimum width=18mm, minimum height=14mm, anchor=north west] (pa) at (0mm,-101mm) {\textbf{A}};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, anchor=west] (pa1) at ([yshift=3mm]pa.east) {\scriptsize fd 1};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, anchor=west] (pa2) at ([yshift=-4mm]pa.east) {\scriptsize fd 2};
+  \node[net, minimum width=22mm, minimum height=8mm, right=10mm of pa1] (pipe) {tube \texttt{|}\\[-1pt]{\scriptsize tampon noyau}};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, right=10mm of pipe] (pb0) {\scriptsize fd 0};
+  \node[vm, minimum width=18mm, minimum height=14mm, anchor=west] (pb) at ([yshift=-3mm]pb0.east) {\textbf{B}};
+  \node[boxw, minimum width=10mm, minimum height=6mm, inner sep=2pt, anchor=west] (pb1) at ([yshift=3mm]pb.east) {\scriptsize fd 1};
+  \node[boxg, minimum width=14mm, minimum height=6mm, inner sep=2pt, right=6mm of pb1] (scr3) {\scriptsize écran};
+  \draw[arr] (pa1) -- (pipe);
+  \draw[arr] (pipe) -- (pb0);
+  \draw[arr] (pb1) -- (scr3);
+  \draw[arrg] (pa2.east) -- ++(4mm,0) |- ([yshift=-6mm]scr3.south west) -- node[lbl, right, pos=0] {} (scr3.south);
+  \node[lbl, anchor=north west, text=muted] at ([xshift=4mm,yshift=-2mm]pa2.south east) {stderr de A : direct à l'écran (\texttt{A 2>\&1 | B} pour l'inclure)};
+\end{tikzpicture}

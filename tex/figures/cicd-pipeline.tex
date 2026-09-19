@@ -1,0 +1,32 @@
+\begin{tikzpicture}[wb, st/.style={box, minimum width=19mm, minimum height=10mm, inner sep=2pt}]
+  % ---- déclencheur
+  \node[vm, minimum width=22mm, minimum height=12mm, draw=violet] (git) at (0,0) {\textbf{lab-git} (Gitea)\\[-1pt]{\scriptsize \texttt{git push} / PR / tag \texttt{v1.4.2}}};
+  % ---- CI (runner lab-ops)
+  \node[host, minimum width=128mm, minimum height=28mm, anchor=west, draw=accent2] (ci) at ([xshift=10mm]git.east) {};
+  \node[glabel, text=accent2] at (ci.north west) {CI — \texttt{act\_runner} sur lab-ops (job = conteneur éphémère, \texttt{.gitea/workflows/ci.yml})};
+  \node[st, anchor=west] (lint) at ([xshift=4mm,yshift=3.5mm]ci.west) {lint\\[-1pt]{\scriptsize ruff, hadolint}};
+  \node[st, minimum height=8mm, anchor=north west] at ([yshift=-2mm]lint.south west) (test) {tests\\[-1pt]{\scriptsize pytest}};
+  \node[st, right=5mm of $(lint.east)!0.5!(test.east)$, anchor=west, minimum height=12mm] (build) {build image\\[-1pt]{\scriptsize \texttt{factura:<sha12>}}\\[-2pt]{\scriptsize \textbf{une seule fois}}};
+  \node[st, right=5mm of build, minimum height=12mm] (scan) {scan\\[-1pt]{\scriptsize trivy : CVE,}\\[-2pt]{\scriptsize secrets}};
+  \node[st, right=5mm of scan, minimum height=12mm, draw=accent2, fill=accent2!12] (push) {push registre\\[-1pt]{\scriptsize lab-ops:5000}\\[-2pt]{\scriptsize + tag \texttt{v1.4.2}}};
+  \draw[arr] (lint.east) -- (build.west |- lint.east) -- (build.west);
+  \draw[arr] (test.east) -- (build.west |- test.east) -- (build.west);
+  \draw[arr] (build) -- (scan); \draw[arr] (scan) -- (push);
+  \draw[arr, draw=violet] (git.east) -- node[lbl, above] {webhook} (ci.west);
+  % ---- CD
+  \node[host, minimum width=128mm, minimum height=24mm, anchor=north west, draw=accent, dashed] (cd) at ([yshift=-13mm]ci.south west) {};
+  \node[glabel, text=accent] at (cd.north west) {CD — même image, promue par re-tag ; jamais de rebuild « pour la prod »};
+  \node[st, anchor=west, minimum height=12mm] (staging) at ([xshift=4mm,yshift=-2mm]cd.west) {déploiement\\[-1pt]{\scriptsize staging (auto)}\\[-2pt]{\scriptsize Ansible / Compose}};
+  \node[st, right=5mm of staging, minimum height=12mm] (smoke) {smoke test\\[-1pt]{\scriptsize \texttt{GET /version}}\\[-2pt]{\scriptsize \texttt{== <sha12>}}};
+  \node[boxwarn, right=5mm of smoke, minimum width=19mm, minimum height=12mm, inner sep=3pt] (gate) {promotion\\[-1pt]{\scriptsize \textbf{manuelle}}\\[-2pt]{\scriptsize environment: prod}};
+  \node[st, right=5mm of gate, minimum height=12mm, draw=green, fill=greensoft] (prod) {prod\\[-1pt]{\scriptsize blue/green}\\[-2pt]{\scriptsize bascule nginx}};
+  \node[boxbad, right=5mm of prod, minimum width=19mm, minimum height=12mm, inner sep=3pt] (rb) {rollback\\[-1pt]{\scriptsize image précédente,}\\[-2pt]{\scriptsize déjà tirée}};
+  \draw[arr] (staging) -- (smoke); \draw[arr] (smoke) -- node[lbl, above] {\scriptsize OK} (gate); \draw[arr] (gate) -- (prod);
+  \draw[arrbad, dashed] (prod) -- node[lbl, above, text=red] {\scriptsize smoke KO} (rb);
+  \draw[arr2, rounded corners=3pt] (push.south) -- node[lbl, left, pos=0.5, align=right] {\texttt{docker pull :<sha12>}\\[-2pt]sur la cible} (push.south |- cd.north) ;
+  \draw[arr2, rounded corners=3pt] (push.south |- cd.north) |- ([yshift=1mm]staging.north west) -- ([xshift=6mm,yshift=1mm]staging.north west);
+  % ---- secrets / notes
+  \node[boxg, minimum width=22mm, minimum height=24mm, anchor=north west, align=left, text width=20mm, inner sep=3pt] (sec) at (git.west |- cd.north) {\scriptsize\textbf{Secrets}\\[-1pt]\scriptsize (Gitea, dépôt $\rightarrow$ Secrets)\\[-2pt]\scriptsize \texttt{REGISTRY\_PASS},\\[-2pt]\scriptsize \texttt{VAULT\_PASS},\\[-2pt]\scriptsize \texttt{SSH\_KEY}\\[-1pt]\scriptsize masqués dans les logs};
+  \node[lbl, anchor=north west, align=left, text=ink, text width=120mm] at ([yshift=-3mm]cd.south west) {\textbf{Ce qui rend le pipeline sûr} : un artefact unique (\texttt{:<sha12>}), un test qui prouve \emph{cette} version, une porte humaine avant la prod, un retour arrière sans rebuild.};
+  \node[lbl, anchor=north west, align=left, text=ink] at ([yshift=-3mm]sec.south west |- cd.south) {\texttt{latest} : pointeur\\mobile, jamais déployé.};
+\end{tikzpicture}

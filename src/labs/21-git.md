@@ -143,6 +143,8 @@ Références : `refs/heads/main` (branche = pointeur mobile),
 distant au dernier `fetch`), `HEAD` (→ la branche courante, ou un commit :
 **detached**).
 
+@fig(git-zones): Les quatre zones de Git et les commandes qui font passer les changements de l'une à l'autre ; `reset` recule HEAD plus ou moins profondément, le reflog garde une porte de sortie.
+
 ```bash
 git cat-file -t <sha>     # type      git cat-file -p <sha>   # contenu
 git rev-parse HEAD~2 main@{upstream} v1.0.0^{commit}
@@ -225,6 +227,8 @@ git tag -a v1.1.0 -m "..." && git push origin v1.1.0   # ou --tags
 des autres ; `--force-with-lease` n'écrase que ce que tu as déjà vu.
 Tag **annoté** (`-a`, objet avec auteur/date/message, signable) pour les
 versions ; tag léger (simple pointeur) pour un repère perso.
+
+@fig(git-merge-rebase): Le même historique divergent intégré par `merge` (commit de fusion à deux parents) et par `rebase` (commits rejoués, nouveaux SHA), puis le `push` qui suit un rebase : `--force-with-lease`, jamais `--force`.
 
 ### Réparer
 

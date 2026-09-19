@@ -295,6 +295,8 @@ ignore_changes, replace_triggered_by }`. Précédence des variables : `-var` >
   appelé par `module "x" { source = "./modules/vm-ubuntu" ... }` ; versionné
   par tag git (`source = "git::ssh://...//modules/vm-ubuntu?ref=v1.2.0"`).
 
+@fig(tofu-cycle): Le cycle OpenTofu : code HCL, `plan` qui compare état et réel via le provider, `apply` qui appelle l'API Proxmox et réécrit le `tfstate` ; le drift d'une modification manuelle, et le handoff vers Ansible par l'inventaire généré.
+
 ### Panorama pour l'entretien
 
 **Packer** fabrique l'image, Terraform la déploie. Un fichier `.pkr.hcl`

@@ -110,6 +110,8 @@ quelque part pour exécuter).
 | `w` | modifier le contenu | créer/supprimer/renommer des entrées |
 | `x` | exécuter | **traverser** : entrer, accéder à un fichier par son nom |
 
+@fig(perm-bits): Les 12 bits de mode, la lecture octale de `4755`, et ce que `r`, `w`, `x` veulent dire sur un fichier et sur un répertoire.
+
 Conséquences qui piègent tout le monde :
 
 * `r` sans `x` sur un répertoire : `ls` donne les noms mais `ls -l` échoue en

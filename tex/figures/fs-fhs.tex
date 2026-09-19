@@ -1,0 +1,39 @@
+\begin{tikzpicture}[wb]
+  \node[boxdark, minimum width=16mm] (root) at (0,5mm) {\texttt{/}};
+  % colonne gauche : persistant
+  \node[lbl, anchor=south] (lg) at (-42mm,-8mm) {\textbf{persistant} (survit au reboot)};
+  \node[box, minimum width=64mm, anchor=north, align=left, text width=60mm] (etc) at (-42mm,-9mm)
+    {\texttt{/etc}\hfill config statique de l'hôte};
+  \node[box, minimum width=64mm, below=2mm of etc, align=left, text width=60mm] (usr)
+    {\texttt{/usr}\hfill code installé par paquets};
+  \node[box, minimum width=64mm, below=2mm of usr, align=left, text width=60mm] (opt)
+    {\texttt{/opt}\hfill logiciels tiers autonomes};
+  \node[box, minimum width=64mm, below=2mm of opt, align=left, text width=60mm] (var)
+    {\texttt{/var}\hfill données variables, logs};
+  \node[box, minimum width=64mm, below=2mm of var, align=left, text width=60mm] (srv)
+    {\texttt{/srv}\hfill données servies (web)};
+  \node[box, minimum width=64mm, below=2mm of srv, align=left, text width=60mm] (home)
+    {\texttt{/home}\hfill répertoires des utilisateurs};
+  \node[box, minimum width=64mm, below=2mm of home, align=left, text width=60mm] (boot)
+    {\texttt{/boot}\hfill noyau, initramfs, GRUB};
+  % colonne droite : volatile + virtuel
+  \node[lbl, anchor=south] (ld) at (42mm,-8mm) {\textbf{volatil} (vidé au boot)};
+  \node[boxwarn, minimum width=64mm, anchor=north, align=left, text width=60mm] (run) at (42mm,-9mm)
+    {\texttt{/run}\hfill pid, sockets, verrous};
+  \node[boxwarn, minimum width=64mm, below=2mm of run, align=left, text width=60mm] (tmp)
+    {\texttt{/tmp}\hfill fichiers temporaires};
+  \node[lbl, anchor=south] (lv) at (42mm,-34mm) {\textbf{virtuel} (vue du noyau, pas sur disque)};
+  \node[boxg, minimum width=64mm, anchor=north, align=left, text width=60mm] (proc) at (42mm,-35mm)
+    {\texttt{/proc}\hfill processus, paramètres noyau};
+  \node[boxg, minimum width=64mm, below=2mm of proc, align=left, text width=60mm] (sys)
+    {\texttt{/sys}\hfill périphériques, pilotes};
+  \node[boxg, minimum width=64mm, below=2mm of sys, align=left, text width=60mm] (dev)
+    {\texttt{/dev}\hfill fichiers de périphériques};
+  % lignes de l'arbre
+  \draw[arrg, -] (root.south) -- ++(0,-3mm) -| ([yshift=1mm]lg.north);
+  \draw[arrg, -] (root.south) -- ++(0,-3mm) -| ([yshift=1mm]ld.north);
+  % sous-arbres utiles
+  \node[lbl, anchor=north west, align=left] at ([yshift=-3mm]boot.south west)
+    {\texttt{/usr/local} : ce que tu compiles toi-même · \texttt{/var/lib} : état · \texttt{/var/log} : journaux\\
+     \texttt{/var/run} et \texttt{/var/lock} ne sont plus que des liens vers \texttt{/run}};
+\end{tikzpicture}

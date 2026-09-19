@@ -196,6 +196,8 @@ correspondant à la location (les deux barres finales comptent).
 `proxy_pass http://b;` transmet l'URI telle quelle ; `proxy_pass http://b/;`
 remplace le préfixe de la location par `/` (interdit dans une location regex).
 
+@fig(nginx-upstream): Client HTTPS → nginx (TLS, `location`, statique) → `upstream factura_api` (deux instances) → PostgreSQL et Redis sur lab-db ; le 502 naît quand nginx ne peut pas parler au backend, le 504 quand le backend ne répond pas à temps.
+
 | Directive | Rôle |
 |---|---|
 | `try_files $uri $uri/ /index.html;` | fichier, puis dossier, puis repli |

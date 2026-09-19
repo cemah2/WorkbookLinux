@@ -49,7 +49,7 @@ Sur Ubuntu 24.04 (ou WSL) :
 
 ```bash
 sudo apt install -y pandoc texlive-xetex texlive-latex-extra \
-  texlive-fonts-recommended fonts-dejavu python3
+  texlive-fonts-recommended fonts-dejavu (les polices du gabarit sont dans fonts/) python3
 make pdf          # les 3 volumes dans build/
 make memo         # le mémo seul
 make check-ids    # chaque identifiant d'énoncé a-t-il son corrigé ?

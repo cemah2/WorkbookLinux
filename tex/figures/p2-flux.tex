@@ -1,0 +1,38 @@
+\begin{tikzpicture}[wb, st/.style={boxw, minimum width=22mm, minimum height=8mm, inner sep=2pt, align=center}]
+  % ---- lab-adm
+  \node[vm, minimum width=34mm, minimum height=16mm, draw=muted] (adm) at (0,0) {\textbf{lab-adm} .10\\[-1pt]{\scriptsize \texttt{~/factura-v2} (mono-repo)}\\[-2pt]{\scriptsize tofu · ansible · vault · kubectl}};
+  % ---- lab-ops : Gitea + CI + registre + observabilité
+  \node[host, minimum width=110mm, minimum height=46mm, anchor=north west, draw=accent2] (ops) at ([xshift=14mm]adm.north east) {};
+  \node[glabel, text=accent2] at (ops.north west) {lab-ops 10.10.10.14};
+  \node[box, minimum width=24mm, minimum height=10mm, anchor=north west, draw=violet, fill=violetsoft] (gitea) at ([xshift=4mm,yshift=-6mm]ops.north west) {\textbf{Gitea} :3000\\[-2pt]{\scriptsize dépôt \texttt{factura}, PR, tags}};
+  \node[box2, minimum width=24mm, minimum height=10mm, right=5mm of gitea] (reg) {\textbf{registre} \texttt{/v2}\\[-2pt]{\scriptsize \texttt{factura:<sha12>}, \texttt{:v1.x}}};
+  \node[box2, minimum width=40mm, minimum height=10mm, right=5mm of reg, align=left, text width=38mm] (obs) {\textbf{observabilité}\\[-2pt]{\scriptsize Prometheus :9090, Alertmanager}\\[-2pt]{\scriptsize Grafana :3001, Loki :3100}};
+  \node[boxg, minimum width=102mm, minimum height=13mm, anchor=north west, align=left, text width=100mm] (ci) at ([yshift=-4mm]gitea.south west) {\scriptsize \textbf{\texttt{act\_runner}} (hôte, label \texttt{ops-host}) — \texttt{.gitea/workflows/} :\\[-1pt]\scriptsize lint (ruff, ansible-lint, tofu fmt) $\rightarrow$ tests (pytest) $\rightarrow$ build \texttt{factura:<sha12>} $\rightarrow$ scan (trivy) $\rightarrow$ push registre $\rightarrow$ \textbf{deploy staging} (auto) $\rightarrow$ smoke $\rightarrow$ \textbf{promotion prod} (manuelle)};
+  \node[boxg, minimum width=102mm, minimum height=6mm, anchor=north west, align=left, text width=100mm] (bkp) at ([yshift=-3mm]ci.south west) {\scriptsize \texttt{/srv/backups/factura/\{staging,prod\}} — reçus par rsync (compte \texttt{backup})};
+  \draw[arr, draw=violet] (adm.east) -- node[lbl, above] {\texttt{git push}} (adm.east -| ops.west);
+  \draw[arr, draw=violet] (gitea.south) -- node[lbl, right] {\scriptsize webhook} ([yshift=0mm]gitea.south |- ci.north);
+  \draw[arr2] (ci.north -| reg.south) -- node[lbl, right] {\scriptsize push} (reg.south);
+  % ---- Proxmox / OpenTofu
+  \node[net, minimum width=34mm, minimum height=12mm, below=12mm of adm] (pve) {Proxmox API :8006\\[-2pt]{\scriptsize template 9000 + snippets cloud-init}};
+  \draw[arr] (adm.south) -- node[lbl, right, align=left] {\texttt{tofu apply}\\[-2pt]workspaces \texttt{staging} / \texttt{prod}} (pve.north);
+  % ---- environnements
+  \node[vm, minimum width=64mm, minimum height=30mm, anchor=north west] (stg) at ([yshift=-10mm]pve.south west) {};
+  \node[glabel, text=accent] at (stg.north west) {staging — \texttt{factura-staging-web} .21 / \texttt{-db} .22};
+  \node[boxw, minimum width=58mm, minimum height=9mm, anchor=north, align=left, text width=56mm] (cmp) at ([yshift=-6mm]stg.north) {\scriptsize \textbf{Compose} : nginx :80 $\rightarrow$ \texttt{api-blue} :8081 (actif) / \texttt{api-green} :8082\\[-2pt]\scriptsize worker, redis ; \texttt{promtail} ; exporters :9100 :9121};
+  \node[boxw, minimum width=58mm, minimum height=7mm, below=2mm of cmp, align=left, text width=56mm] (sdb) {\scriptsize \textbf{-db} : PostgreSQL :5432 (web seulement), \texttt{postgres\_exporter} :9187,\\[-2pt]\scriptsize \texttt{factura-backup.timer} 02:30 $\rightarrow$ rsync lab-ops};
+  \node[vm, minimum width=64mm, minimum height=14mm, anchor=north west, draw=green] (prod) at ([yshift=-6mm]stg.south west) {};
+  \node[glabel, text=green] at (prod.north west) {prod — \texttt{factura-prod-web} .31 / \texttt{-db} .32};
+  \node[lbl, anchor=north west, align=left] at ([xshift=3mm,yshift=-6mm]prod.north west) {même code OpenTofu (workspace \texttt{prod}), même rôle Ansible, même image ;\\[-2pt]bascule bleu/vert après promotion manuelle ; \texttt{back} = rollback instantané};
+  \node[vm, minimum width=64mm, minimum height=14mm, anchor=north west, draw=violet] (k3s) at ([yshift=-6mm]prod.south west) {};
+  \node[glabel, text=violet] at (k3s.north west) {cible finale (PB.10) — \texttt{factura-k3s} .41};
+  \node[lbl, anchor=north west, align=left] at ([xshift=3mm,yshift=-6mm]k3s.north west) {k3s : Deployment api $\times$2 + HPA, Ingress TLS ;\\[-2pt]\texttt{kubectl} depuis lab-adm (:6443)};
+  \draw[arr] (pve.south) -- node[lbl, right] {clone + cloud-init} (stg.north -| pve.south);
+  % ---- CD : Ansible depuis lab-adm et depuis le runner
+  \node[boxdark, minimum width=40mm, minimum height=12mm, anchor=north west, align=left, text width=38mm] (cd) at ([xshift=8mm,yshift=-5mm]stg.north east) {\textbf{CD} — \texttt{ansible-playbook}\\[-2pt]{\scriptsize rôle \texttt{factura\_compose} : pull \texttt{:<sha12>},}\\[-2pt]{\scriptsize \texttt{stage} $\rightarrow$ smoke $\rightarrow$ \texttt{switch} ; secrets Vault}};
+  \draw[arr, draw=violet] (bkp.south -| cd.north) -- node[lbl, right, align=left, pos=0.8] {\scriptsize runner : ssh \texttt{deploy}} (cd.north);
+  \draw[arr] (cd.west |- cmp.east) -- node[lbl, above] {\scriptsize ssh 22} (cmp.east);
+  \draw[arr, rounded corners=3pt] (cd.south) |- node[lbl, pos=0.25, right] {\scriptsize idem prod} ([yshift=-3mm]prod.east |- prod.north);
+  \draw[arr, dashed, rounded corners=3pt] (adm.west) -- ++(-4mm,0) |- node[lbl, pos=0.3, sloped, below] {\scriptsize baseline Ansible (ufw, users, docker)} ([yshift=3mm]stg.west |- sdb.west);
+  % ---- observabilité : scrape / push
+  \draw[arr2, dashed, rounded corners=3pt] (obs.south) -- ([yshift=-4mm]obs.south |- ops.south) -| ([xshift=6mm]cd.east |- k3s.east) -- node[lbl, above, align=center] {\scriptsize scrape :9100 :9121 :9187 · promtail $\rightarrow$ Loki :3100} (k3s.east);
+\end{tikzpicture}

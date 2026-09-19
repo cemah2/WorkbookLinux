@@ -1,0 +1,36 @@
+\begin{tikzpicture}[wb, ln/.style={font=\scriptsize\ttfamily, text=codeink, anchor=west, inner sep=1pt}]
+  % ---- arborescence du projet
+  \node[group, minimum width=50mm, minimum height=44mm, anchor=north west] (tree) at (0,0) {};
+  \node[glabel] at (tree.north west) {dépôt \texttt{sante/} (Git)};
+  \node[ln] (l1) at ([xshift=3mm,yshift=-7mm]tree.north west) {pyproject.toml};
+  \node[lbl, anchor=west] at ([xshift=24mm]l1.west) {\scriptsize deps, \texttt{[project.scripts]}};
+  \node[ln] (l2) at ([yshift=-4.5mm]l1.west) {src/sante/};
+  \node[ln] (l3) at ([xshift=5mm,yshift=-4mm]l2.west) {\_\_init\_\_.py};
+  \node[ln] (l4) at ([yshift=-4mm]l3.west) {cli.py};
+  \node[lbl, anchor=west] at ([xshift=19mm]l4.west) {\scriptsize \texttt{main()} : argparse, logging};
+  \node[ln] (l5) at ([yshift=-4mm]l4.west) {checks.py};
+  \node[lbl, anchor=west] at ([xshift=19mm]l5.west) {\scriptsize fonctions pures, testables};
+  \node[ln] (l6) at ([xshift=-5mm,yshift=-4.5mm]l5.west) {tests/test\_checks.py};
+  \node[lbl, anchor=west] at ([xshift=30mm]l6.west) {\scriptsize pytest};
+  \node[ln] (l7) at ([yshift=-4mm]l6.west) {.venv/};
+  \node[lbl, anchor=west] at ([xshift=24mm]l7.west) {\scriptsize dev, jamais commité};
+  % ---- qualité
+  \node[boxw, minimum width=46mm, minimum height=9mm, anchor=north west, align=left, text width=44mm] (qa) at ([yshift=-5mm]tree.south west) {\scriptsize \textbf{avant chaque commit / en CI}\\[-2pt]\scriptsize \texttt{ruff check --fix . \&\& ruff format .}\\[-2pt]\scriptsize \texttt{mypy src/} \ · \ \texttt{pytest -q}};
+  \draw[arrg] (qa.north) -- (tree.south);
+  % ---- installation
+  \node[box, minimum width=34mm, minimum height=12mm, anchor=west, align=left, text width=32mm] (pipx) at ([xshift=17mm]tree.east) {\texttt{pipx install .}\\[-2pt]{\scriptsize venv isolé + lien dans}\\[-2pt]{\scriptsize \texttt{~/.local/bin/sante}}\\[-2pt]{\scriptsize (serveur : venv sous \texttt{/opt/factura})}};
+  \draw[arr] (tree.east |- pipx) -- node[lbl, below, align=center, yshift=-1.5mm] {\tiny \texttt{[project.scripts]}\\[-3pt]\tiny \texttt{sante = "sante.cli:main"}} (pipx.west);
+  \node[boxw, minimum width=34mm, minimum height=7mm, below=4mm of pipx, align=center] (bin) {\scriptsize\texttt{…/venv/bin/sante}\\[-2pt]{\scriptsize un exécutable comme un autre}};
+  \draw[arr] (pipx) -- (bin);
+  % ---- systemd
+  \node[host, minimum width=58mm, minimum height=46mm, anchor=north west, draw=violet] (sd) at ([xshift=8mm]pipx.east |- tree.north) {};
+  \node[glabel, text=violet] at (sd.north west) {systemd (lab-web)};
+  \node[file, minimum width=52mm, minimum height=12mm, anchor=north, align=left, text width=50mm] (timer) at ([yshift=-6mm]sd.north) {\scriptsize\texttt{sante.timer}\\[-2pt]\scriptsize\texttt{OnCalendar=*:0/5} \ \texttt{Persistent=true}\\[-2pt]\scriptsize\texttt{RandomizedDelaySec=30}};
+  \node[file, minimum width=52mm, minimum height=14mm, below=4mm of timer, align=left, text width=50mm] (svc) {\scriptsize\texttt{sante.service} \ (\texttt{Type=oneshot})\\[-2pt]\scriptsize\texttt{ExecStart=/opt/factura/venv/bin/sante}\\[-2pt]\scriptsize\texttt{User=factura}\\[-2pt]\scriptsize\texttt{Environment=PYTHONUNBUFFERED=1}\\[-2pt]\scriptsize\texttt{StandardError=journal}\\[-2pt]\scriptsize\texttt{SuccessExitStatus=1 2}};
+  \draw[arr, draw=violet] (timer) -- node[lbl, right] {\scriptsize déclenche} (svc);
+  \draw[arr, rounded corners=3pt] (bin.east) -| node[lbl, pos=0.15, above] {\scriptsize exécuté par} ([xshift=-4mm]svc.west |- bin.east) |- (svc.west);
+  % ---- journald
+  \node[box2, minimum width=52mm, minimum height=12mm, anchor=north, align=left, text width=50mm] (jd) at ([yshift=-7mm]sd.south) {\textbf{journald}\\[-2pt]{\scriptsize \texttt{logging} sur stderr $\rightarrow$ \texttt{journalctl -u sante}}\\[-2pt]{\scriptsize sortie 0/1/2 = OK/WARN/CRIT (Nagios)}};
+  \draw[arr2] (svc.south) -- node[lbl, right] {\scriptsize stderr, \texttt{\$?}} (jd.north);
+    \node[lbl, anchor=north west, align=left, text=ink, text width=132mm] at ([yshift=-4mm]tree.west |- jd.south) {Pièges : \texttt{python3} du système $\neq$ celui du venv ; \texttt{cwd} et \texttt{\$PATH} vides sous le timer ; \texttt{print()} bufferisé sans \texttt{PYTHONUNBUFFERED}.};
+\end{tikzpicture}

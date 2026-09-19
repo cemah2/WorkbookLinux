@@ -1,0 +1,30 @@
+\begin{tikzpicture}[wb]
+  % ---- nœud de contrôle
+  \node[vm, minimum width=56mm, minimum height=58mm, anchor=north west] (ctl) at (0,0) {};
+  \node[glabel, text=accent] at (ctl.north west) {lab-adm — nœud de contrôle (aucun démon)};
+  \node[file, minimum width=50mm, minimum height=7mm, anchor=north, align=left, text width=48mm] (inv) at ([yshift=-7mm]ctl.north) {\scriptsize\texttt{inventory/hosts.yml} — groupes \texttt{web}, \texttt{db}, \texttt{rhel} ; \texttt{group\_vars/}, \texttt{host\_vars/}};
+  \node[file, minimum width=50mm, minimum height=7mm, below=2mm of inv, align=left, text width=48mm] (pb) {\scriptsize\texttt{site.yml} — plays : hosts $\rightarrow$ rôles/tâches, handlers};
+  \node[file, minimum width=50mm, minimum height=7mm, below=2mm of pb, align=left, text width=48mm] (roles) {\scriptsize\texttt{roles/nginx/} — \texttt{tasks/}, \texttt{templates/}, \texttt{handlers/}, \texttt{defaults/}};
+  \node[file, minimum width=50mm, minimum height=7mm, below=2mm of roles, align=left, text width=48mm, draw=orange] (vault) {\scriptsize\texttt{group\_vars/all/vault.yml} — chiffré (\texttt{ansible-vault}), clé hors dépôt};
+  \node[boxdark, minimum width=50mm, minimum height=7mm, below=3mm of vault] (run) {\scriptsize\texttt{ansible-playbook site.yml --diff}};
+  % ---- cibles
+  \node[vm, minimum width=46mm, minimum height=24mm, anchor=north west] (web) at ([xshift=36mm]ctl.north east) {};
+  \node[glabel, text=accent] at (web.north west) {lab-web (.11) — groupe \texttt{web}};
+  \node[boxg, minimum width=34mm, minimum height=5.5mm, inner sep=1.5pt, anchor=north] (w1) at ([yshift=-6mm]web.north) {\scriptsize sshd + \texttt{python3} (seul prérequis)};
+  \node[boxw, minimum width=40mm, minimum height=6mm, inner sep=1.5pt, below=1.5mm of w1, align=left, text width=38mm] (w2) {\scriptsize \texttt{~/.ansible/tmp/} : module copié,\\[-2pt]\scriptsize exécuté, effacé};
+  \node[vm, minimum width=46mm, minimum height=24mm, anchor=north west] (db) at ([yshift=-8mm]web.south west) {};
+  \node[glabel, text=accent] at (db.north west) {lab-db (.12) — groupe \texttt{db}};
+  \node[boxg, minimum width=34mm, minimum height=5.5mm, inner sep=1.5pt, anchor=north] (d1) at ([yshift=-6mm]db.north) {\scriptsize sshd + \texttt{python3}};
+  \node[boxw, minimum width=40mm, minimum height=6mm, inner sep=1.5pt, below=1.5mm of d1, align=left, text width=38mm] (d2) {\scriptsize modules \texttt{apt}, \texttt{postgresql\_db},\\[-2pt]\scriptsize \texttt{template} $\rightarrow$ retour JSON};
+  % SSH
+  \draw[arr] (ctl.east |- w1) -- node[lbl, above, align=center] {SSH (clé, \texttt{become: sudo})\\[-2pt]envoie le module Python + ses arguments} (web.west |- w1);
+  \draw[arr2, dashed] (web.west |- w2) -- node[lbl, below, align=center] {retour JSON : \texttt{changed},\\[-2pt]\texttt{msg}, \texttt{diff}, \texttt{rc}} (ctl.east |- w2);
+  \draw[arr] (ctl.east |- d1) -- node[lbl, above, align=center] {une connexion par hôte,\\[-2pt]\texttt{forks} en parallèle} (db.west |- d1);
+  \draw[arr2, dashed] (db.west |- d2) -- (ctl.east |- d2);
+  % ---- résultats : deux runs
+  \node[title, anchor=north west] (t) at ([yshift=-5mm]ctl.south west) {Idempotence : le module compare l'état voulu à l'état réel, pas le playbook};
+  \node[boxw, minimum width=60mm, minimum height=13mm, anchor=north west, align=left, text width=57mm] (r1) at ([yshift=-2mm]t.south west) {\scriptsize\textbf{1\textsuperscript{er} run} — \texttt{PLAY RECAP}\\[-1pt]\scriptsize lab-web : \textcolor{green}{ok=9} \textcolor{orange}{changed=5} \textcolor{red}{failed=0}\\[-1pt]\scriptsize \textit{nginx installé, vhost déployé, handler \texttt{reload nginx} notifié}};
+  \node[boxok, minimum width=60mm, minimum height=13mm, right=9mm of r1, align=left, text width=57mm] (r2) {\scriptsize\textbf{2\textsuperscript{e} run} (rien n'a bougé) — \texttt{PLAY RECAP}\\[-1pt]\scriptsize lab-web : \textcolor{green}{ok=9} \textbf{changed=0} \textcolor{red}{failed=0}\\[-1pt]\scriptsize \textit{aucun handler : le playbook est idempotent, on peut le relancer en boucle}};
+  \draw[arr] (r1) -- node[lbl, above] {relance} (r2);
+  \node[lbl, anchor=north west, align=left] at ([yshift=-2mm]r1.south west) {\texttt{changed} à chaque run = \texttt{command}/\texttt{shell} sans \texttt{creates:}/\texttt{changed\_when} ; \texttt{failed} = arrêt pour cet hôte, les autres continuent (\texttt{--limit @site.retry})};
+\end{tikzpicture}

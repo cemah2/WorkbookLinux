@@ -1,0 +1,33 @@
+\begin{tikzpicture}[wb]
+  % rangée du milieu : entrée, prerouting, décision
+  \node[boxdark, minimum width=16mm] (in) at (0,0) {paquet\\entrant};
+  \node[box2, minimum width=26mm, right=4mm of in] (pre) {\texttt{prerouting}\\[-1pt]{\scriptsize conntrack (-200)}\\[-1pt]{\scriptsize \textbf{DNAT} (-100)}};
+  \node[boxwarn, minimum width=22mm, right=4mm of pre] (rd) {décision de\\routage};
+  % rangée du haut : processus local
+  \node[box, minimum width=24mm, above=9mm of rd] (inp) {\texttt{input}\\[-1pt]{\scriptsize \textbf{filtrage} (0)}};
+  \node[proc, minimum size=15mm, right=4mm of inp] (proc) {processus\\local};
+  \node[box, minimum width=24mm, right=4mm of proc] (out) {\texttt{output}\\[-1pt]{\scriptsize conntrack, DNAT,}\\[-1pt]{\scriptsize filtrage}};
+  \node[boxwarn, minimum width=18mm, right=4mm of out] (rd2) {routage};
+  % rangée du bas : forward, postrouting, sortie
+  \coordinate (fy) at ([yshift=-14mm]rd.south);
+  \node[box, minimum width=24mm] (fwd) at (proc |- fy) {\texttt{forward}\\[-1pt]{\scriptsize \textbf{filtrage} (0)}\\[-1pt]{\scriptsize si \texttt{ip\_forward=1}}};
+  \node[box2, minimum width=28mm] (post) at (rd2 |- fwd) {\texttt{postrouting}\\[-1pt]{\scriptsize \textbf{SNAT / masquerade} (100)}};
+  \node[boxdark, minimum width=16mm, right=4mm of post] (outp) {paquet\\sortant};
+  % flèches
+  \draw[arr] (in) -- (pre);
+  \draw[arr] (pre) -- (rd);
+  \draw[arr] (rd.north) -- node[lbl, left] {pour l'hôte} (inp.south);
+  \draw[arr] (rd.south) |- node[lbl, left, pos=0.25] {pour un\\autre} (fwd.west);
+  \draw[arr] (inp) -- (proc);
+  \draw[arr] (proc) -- (out);
+  \draw[arr] (out) -- (rd2);
+  \draw[arr] (rd2) -- node[lbl, right] {émis par l'hôte} (post);
+  \draw[arr] (fwd) -- (post);
+  \draw[arr] (post) -- (outp);
+  % légende
+  \node[lbl, below=5mm of fwd.south, anchor=north, align=left, text width=128mm, xshift=4mm]
+    {\textbf{Un paquet, un seul chemin} : entrant pour l'hôte → \texttt{prerouting}, \texttt{input} ; relayé → \texttt{prerouting}, \texttt{forward}, \texttt{postrouting} ; émis → \texttt{output}, \texttt{postrouting}.\\
+     Le DNAT agit \emph{avant} la décision de routage (c'est lui qui la change), le SNAT \emph{après}, au dernier moment : le filtrage voit l'adresse déjà DNATée, pas encore SNATée.\\
+     \textbf{conntrack} enregistre chaque flux dès \texttt{prerouting} / \texttt{output} ; le NAT décidé au premier paquet s'applique aux suivants et aux réponses,
+     d'où \texttt{ct state established,related accept} en tête de chaîne. \texttt{nft monitor trace} suit un paquet hook par hook.};
+\end{tikzpicture}

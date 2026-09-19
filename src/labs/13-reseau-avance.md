@@ -190,6 +190,8 @@ l'extérieur : `sysctl -w net.ipv4.ip_forward=1` + `masquerade`. Si le module
 même bridge** passe aussi par la chaîne `forward` de netfilter
 (`net.bridge.bridge-nf-call-iptables=1`) : sans lui, non.
 
+@fig(netns-bridge-nat): Le mini-Docker du lab L13.1 : trois netns reliés par des paires veth à `br-lab` 172.20.0.1/24, `ip_forward`, masquerade en sortie par `ens18` et DNAT du port 8080 vers c1.
+
 ### Routage en profondeur
 
 ```bash
@@ -261,6 +263,8 @@ bridge fdb show dev vxlan0            # 00:00:00:00:00:00 dst 10.10.10.12
 ip -d link show vxlan0
 ```
 
+@fig(vxlan-overlay): lab-web et lab-db sur l'underlay 10.10.10.0/24, `vxlan0` (VNI 42, UDP 4789) formant l'overlay 192.168.42.0/24, et la pile d'encapsulation qui explique le MTU 1450.
+
 VXLAN encapsule une **trame Ethernet** complète dans UDP : c'est un L2 étendu
 sur un réseau L3. flannel (backend `vxlan`) crée exactement un `flannel.1`
 de ce type sur chaque nœud Kubernetes ; Calico utilise IPIP ou VXLAN ; Cilium
@@ -321,6 +325,8 @@ apporte OpenFlow, VXLAN intégré, mirroring — c'est ce que pilote OpenStack.
 Cinq hooks : `prerouting`, `input`, `forward`, `output`, `postrouting`. Une
 **chaîne de base** s'accroche à un hook avec un type et une priorité ; les
 chaînes régulières sont appelées par `jump`/`goto`.
+
+@fig(netfilter-hooks): Le chemin d'un paquet dans netfilter : DNAT avant la décision de routage, filtrage en `input` ou `forward`, SNAT/masquerade en `postrouting`, conntrack qui suit tout le flux.
 
 ```bash
 nft list ruleset ; nft -a list ruleset            # -a : handles
@@ -390,6 +396,8 @@ l'administrateur et survit aux redémarrages du démon.
 
 CoreDNS (Kubernetes) est un autoritaire pour `cluster.local` **et** un forwarder
 pour le reste : un serveur, deux rôles, comme Unbound + stub-zone ici.
+
+@fig(dns-resolution): Le chemin réel de `curl lab-web.lab.local` : stub `systemd-resolved`, récursif Unbound (cache, `stub-zone`), autoritaire BIND9 ns1 et son secondaire par AXFR ; `.local` n'existe pas en public.
 
 Unbound (`/etc/unbound/unbound.conf.d/*.conf`) : `interface:`,
 `access-control:`, `stub-zone:` (délègue une zone à un autoritaire),

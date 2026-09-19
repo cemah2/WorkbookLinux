@@ -1,0 +1,36 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % pile de bas en haut : du disque physique au point de montage
+  \node[layerg, minimum width=58mm, minimum height=9mm, anchor=south west] (disk) at (0,0)
+    {\textbf{disque} \ \texttt{/dev/sdb} \ {\tiny (\texttt{vda}, \texttt{nvme0n1}) — ordre de détection, pas une identité}};
+  \node[layerg, minimum width=58mm, minimum height=9mm, above=3mm of disk] (ptable)
+    {\textbf{table de partitions} \ GPT \ {\tiny (MBR : 4 primaires, 2 Tio)}};
+  \node[layer, minimum width=58mm, minimum height=9mm, above=3mm of ptable] (pv)
+    {\textbf{partition} \texttt{/dev/sdb1} → \textbf{PV} \ {\tiny type \texttt{8e00}, en-tête LVM}};
+  \node[layer, minimum width=58mm, minimum height=9mm, above=3mm of pv] (vg)
+    {\textbf{VG} \texttt{vg\_data} \ {\tiny réserve d'extents (PE 4 Mio), plusieurs PV possibles}};
+  \node[layer, minimum width=58mm, minimum height=9mm, above=3mm of vg] (lv)
+    {\textbf{LV} \texttt{/dev/vg\_data/lv\_pgdata} \ {\tiny = \texttt{/dev/mapper/vg\_data-lv\_pgdata}}};
+  \node[layer2, minimum width=58mm, minimum height=9mm, above=3mm of lv] (fs)
+    {\textbf{système de fichiers} \ ext4 / XFS \ {\tiny \texttt{UUID=} écrit ici par \texttt{mkfs}}};
+  \node[layerd, minimum width=58mm, minimum height=9mm, above=3mm of fs] (mnt)
+    {\textbf{point de montage} \ \texttt{/var/lib/postgresql} \ {\tiny \texttt{/etc/fstab} avec \texttt{UUID=}}};
+  % flèches de construction
+  \foreach \a/\b in {disk/ptable, ptable/pv, pv/vg, vg/lv, lv/fs, fs/mnt} \draw[arr] (\a.north) -- (\b.south);
+  % commandes à droite : ce qui agit à chaque niveau
+  \foreach \n/\c/\v in {
+    disk/{lsblk -f, blkid}/{lsblk},
+    ptable/{parted mklabel gpt}/{parted -s /dev/sdb print},
+    pv/{parted mkpart ; pvcreate /dev/sdb1}/{pvs},
+    vg/{vgcreate vg\_data /dev/sdb1}/{vgs ; vgextend},
+    lv/{lvcreate -L 3G -n lv\_pgdata vg\_data}/{lvs ; lvextend -r},
+    fs/{mkfs.ext4 /dev/vg\_data/lv\_pgdata}/{resize2fs, xfs\_growfs},
+    mnt/{mount ; fstab ; systemctl daemon-reload}/{findmnt, df -h}}
+    {\node[code, anchor=west] (c\n) at ([xshift=5mm]\n.east) {\c};
+     \node[code, anchor=west, text=muted] at ([xshift=64mm]\n.east) {\v};}
+  \node[glabel, text=accent, anchor=south west] at ([xshift=5mm,yshift=0.5mm]mnt.east |- mnt.north) {créer};
+  \node[glabel, anchor=south west] at ([xshift=64mm,yshift=0.5mm]mnt.east |- mnt.north) {vérifier};
+  % accolade LVM
+  \draw[decorate, decoration={brace, amplitude=3pt}, draw=accent] ([xshift=-2mm]lv.north west) -- ([xshift=-2mm]pv.south west)
+    node[midway, left=4pt, lbl, text=accent, rotate=90, anchor=south] {LVM : redimensionnable à chaud};
+  \node[lbl, anchor=north west, align=left] at ([yshift=-3mm]disk.south west) {Chaque couche ne voit que celle du dessous : \texttt{lvextend -r} agrandit le LV \textbf{et} le FS ; jamais \texttt{/dev/sdX} dans \texttt{fstab}.};
+\end{tikzpicture}

@@ -134,6 +134,8 @@ sur plus d'une machine. Bascule vers Terraform quand l'objet à gérer est une
 ressource *créée* par une API (VM Proxmox, enregistrement DNS, bucket) dont il
 faut suivre le cycle de vie, y compris la destruction.
 
+@fig(ansible-push): Ansible en mode push : lab-adm ouvre une session SSH par hôte, envoie le module Python, lit le JSON de retour ; un second run sans changement donne `changed=0` — c'est l'idempotence.
+
 ### `ansible.cfg` de projet (le premier trouvé : `ANSIBLE_CONFIG`, `./ansible.cfg`, `~/.ansible.cfg`, `/etc/ansible/ansible.cfg`)
 
 ```ini

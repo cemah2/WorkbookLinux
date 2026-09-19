@@ -266,6 +266,8 @@ n'interroge que le fichier local. Sur une machine jointe à un annuaire
 (LDAP/SSSD/AD), un compte peut exister pour le système sans figurer dans
 `/etc/passwd` : `getent` est le seul verdict qui compte.
 
+@fig(users-auth-flow): Ouvrir une session (sshd, PAM, NSS, fichiers de comptes ou SSSD) et élever ses droits (`sudo`, PAM, `sudoers`, commande en root) : deux chaînes à connaître avant de dépanner un « accès refusé ».
+
 ---
 
 ## 4.3 Quiz — QCM

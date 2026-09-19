@@ -52,10 +52,10 @@ def raw(latex):
     return "\n```{=latex}\n" + latex + "\n```\n\n"
 
 
-def cover(title, subtitle, desc, rows):
+def cover(title, subtitle, desc, rows, badge):
     tab = "\\begin{tabular}{@{}ll@{}}" + "".join(
-        f"\\textbf{{{tex_escape(k)}}} & {tex_escape(v)}\\\\" for k, v in rows) + "\\end{tabular}"
-    return raw(f"\\coverpage{{{tex_escape(title)}}}{{{tex_escape(subtitle)}}}{{{desc}}}{{{tab}}}")
+        f"\\textbf{{{tex_escape(k)}}} & {tex_escape(v)}\\\\[2pt]" for k, v in rows) + "\\end{tabular}"
+    return raw(f"\\coverpage{{{tex_escape(title)}}}{{{tex_escape(subtitle)}}}{{{desc}}}{{{tab}}}{{{tex_escape(badge)}}}")
 
 
 def part(num, title, desc, mods, kind):
@@ -66,7 +66,8 @@ def part(num, title, desc, mods, kind):
         items.append(f"\\item {tex_escape(first)}")
     body = (f"{tex_escape(desc)}\\par\\vspace{{10pt}}\\begin{{itemize}}[nosep]\\normalsize"
             + "".join(items) + "\\end{itemize}")
-    return raw(f"\\partpage{{{tex_escape(num)}}}{{{tex_escape(title)}}}{{{body}}}")
+    big = num.split()[-1]
+    return raw(f"\\partpage{{{tex_escape(num)}}}{{{tex_escape(title)}}}{{{body}}}{{{tex_escape(big)}}}")
 
 
 def clean_md(text):
@@ -82,10 +83,14 @@ def assemble(kind):
             "27 modules et 3 projets fil rouge pour devenir opérationnel sur Linux "
             "puis sur le socle DevOps : Git, Docker, Ansible, OpenTofu, CI/CD, Kubernetes, "
             "observabilité. Chaque module se joue sur ton laboratoire Proxmox et se corrige "
-            "avec le volume \\emph{Corrigés \\& explications}.",
+            "avec le volume \\emph{Corrigés \\& explications}.\\par\\vspace{8pt}"
+            "\\textbf{Partie I} Fondamentaux · \\textbf{Partie II} Administration système · "
+            "\\textbf{Partie III} Exploitation, sécurité, incidents · \\textbf{Projet A} Factura à la main · "
+            "\\textbf{Partie IV} Socle DevOps · \\textbf{Projet B} Factura industrialisée · "
+            "\\textbf{Projet C} Une semaine d'astreinte · \\textbf{Annexes} progression, certifications, modèles.",
             [("Volume", "1 / 3 — Énoncés"), ("Niveau", "Intermédiaire → confirmé"),
              ("Durée conseillée", "14 à 19 semaines"),
-             ("Compagnons", "Corrigés & explications · Mémo · scripts.zip")]))
+             ("Compagnons", "Corrigés & explications · Mémo · scripts.zip")], "VOLUME 1 / 3"))
         parts.append(raw("\\tableofcontents\\clearpage"))
         parts.append(clean_md((SRC / "00-mise-en-place.md").read_text(encoding="utf-8")))
         for num, title, desc, mods in PARTS:
@@ -103,7 +108,7 @@ def assemble(kind):
             "pas avant.",
             [("Volume", "2 / 3 — Corrigés"),
              ("Identifiants", "Q7.3 · QO7.1 · E7.12 · L7.2 · BF7.1 · D7"),
-             ("Compagnons", "Énoncés · Mémo · scripts.zip")]))
+             ("Compagnons", "Énoncés · Mémo · scripts.zip")], "VOLUME 2 / 3"))
         parts.append(raw("\\tableofcontents\\clearpage"))
         for num, title, desc, mods in PARTS:
             parts.append(part(num, title + " — corrigés", desc, mods, "solutions"))
@@ -116,7 +121,7 @@ def assemble(kind):
             "Les commandes, options et fichiers de configuration qui servent vraiment, module "
             "par module, plus les tableaux de référence (signaux, codes de sortie, ports, "
             "permissions, codes HTTP, états TCP) et la checklist des 60 secondes.",
-            [("Volume", "3 / 3 — Mémo"), ("Usage", "À imprimer et garder à côté du clavier")]))
+            [("Volume", "3 / 3 — Mémo"), ("Usage", "À imprimer et garder à côté du clavier")], "VOLUME 3 / 3"))
         parts.append(raw("\\tableofcontents\\clearpage"))
         parts.append(clean_md((SRC / "memo.md").read_text(encoding="utf-8")))
         title, foot = "Mémo Linux \\& DevOps", "Mémo"
@@ -132,13 +137,14 @@ def build(kind, name, a5=False):
         md, kind = md2, f"{kind}-a5"
     tex = BUILD / f"{kind}.tex"
     import os
-    env = dict(os.environ, WB_INDEX="1" if kind == "labs" else "0",
+    env = dict(os.environ, LANG="C.UTF-8", LC_ALL="C.UTF-8", WB_INDEX="1" if kind == "labs" else "0",
                WB_INDEX_FILE=str(TEX / "index-commands.txt"))
     subprocess.run(
         ["pandoc", str(md), "-f", "markdown+fenced_divs+pipe_tables+smart+raw_attribute-yaml_metadata_block-tex_math_dollars",
          "--lua-filter", str(TEX / "divs.lua"), "--template", str(TEX / "template.tex"),
          "--top-level-division=chapter", "--highlight-style=pygments",
-         "-V", f"footer-title={foot}", "-V", f"title={title}", "-o", str(tex)]
+         "-V", f"footer-title={foot}", "-V", f"title={title}",
+         "-V", f"fontdir={ROOT / 'fonts'}", "-V", f"texdir={TEX}", "-o", str(tex)]
         + (["-V", "index=true"] if kind == "labs" else [])
         + (["-V", "a5=true"] if a5 else []),
         check=True, env=env)

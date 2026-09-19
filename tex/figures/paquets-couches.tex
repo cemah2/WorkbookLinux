@@ -1,0 +1,34 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % ---- colonne Debian / Ubuntu
+    \node[layer, minimum width=62mm, minimum height=13mm, anchor=north west] (apt) at (0,0)
+    {\textbf{apt} / \texttt{apt-get}\\[-1pt]{\tiny dépôts, téléchargement, \textbf{résolution des dépendances}, ordre des opérations}};
+  \node[layer2, minimum width=62mm, minimum height=13mm, below=4mm of apt] (dpkg)
+    {\textbf{dpkg}\\[-1pt]{\tiny déballe, configure, tient la base ; \textbf{ne résout rien}}};
+  \node[layerg, minimum width=62mm, minimum height=9mm, below=4mm of dpkg] (fs)
+    {\textbf{fichiers installés} — \texttt{/usr}, \texttt{/etc}, \texttt{/var}};
+  \draw[arr] (apt.south) -- node[lbl, right] {appelle avec les \texttt{.deb} triés} (dpkg.north);
+  \draw[arr2] (dpkg.south) -- node[lbl, right] {écrit} (fs.north);
+  % base dpkg à gauche
+  \node[disk, minimum width=16mm, minimum height=11mm, anchor=east] (dbase) at ([xshift=-6mm]dpkg.west) {\tiny\texttt{/var/lib/dpkg}\\[-2pt]{\tiny status, *.list}};
+  \draw[darr] (dpkg.west) -- (dbase.east);
+  \node[lbl, anchor=north, align=center] at ([yshift=-1mm]dbase.south) {\texttt{dpkg -l}, \texttt{-L}, \texttt{-S}\\lisent ici};
+  % dépôts et clés au-dessus d'apt
+  \node[cloud, minimum width=26mm, anchor=south] (repo) at ([xshift=-16mm,yshift=9mm]apt.north) {dépôts\\[-1pt]{\tiny \texttt{Packages}, \texttt{.deb}}};
+  \node[file, minimum width=30mm, anchor=south] (src) at ([xshift=16mm,yshift=9mm]apt.north) {\texttt{sources.list.d/*.sources}\\[-1pt]{\tiny deb822 : \texttt{URIs}, \texttt{Suites}, \texttt{Signed-By}}};
+  \node[file, minimum width=26mm, anchor=west] (key) at ([xshift=4mm]src.east) {\texttt{/etc/apt/keyrings/}\\[-1pt]{\tiny une clé par dépôt}};
+  \draw[arrg] (src.east) -- (key.west);
+  \node[title, anchor=south west] at ([yshift=2mm]apt.west |- repo.north) {Debian / Ubuntu};
+  \draw[arr] (repo.south) -- node[lbl, left] {\texttt{apt update}} (repo.south |- apt.north);
+  \draw[arrg] (src.south) -- node[lbl, right] {où et signé par qui} (src.south |- apt.north);
+  \node[file, minimum width=22mm, anchor=east, draw=accent] (cache) at ([xshift=-6mm]apt.west) {\tiny cache\\[-2pt]{\tiny\texttt{/var/cache/apt/}}\\[-2pt]{\tiny\texttt{/var/lib/apt/lists}}};
+  \draw[darr] (apt.west) -- (cache.east);
+  % ---- miroir RHEL / Rocky
+  \node[title, anchor=south west, text=accent2] at ([yshift=-11mm]fs.south west) {RHEL / Rocky : mêmes couches, autres noms};
+  \node[layer, minimum width=62mm, minimum height=9mm, anchor=north west] (dnf) at ([yshift=-13mm]fs.south west)
+    {\textbf{dnf} \ {\tiny dépôts \texttt{/etc/yum.repos.d/*.repo}, \texttt{gpgkey=}, \texttt{dnf history undo}}};
+  \node[layer2, minimum width=62mm, minimum height=9mm, below=3mm of dnf] (rpm)
+    {\textbf{rpm} \ {\tiny base \texttt{/var/lib/rpm}, \texttt{rpm -qa}, \texttt{-ql}, \texttt{-qf}, \texttt{-V}}};
+  \draw[arr] (dnf.south) -- (rpm.north);
+  \node[lbl, anchor=west, align=left] at ([xshift=4mm]dnf.east) {≈ \texttt{apt} + \texttt{sources} + \texttt{keyrings}};
+  \node[lbl, anchor=west, align=left] at ([xshift=4mm]rpm.east) {≈ \texttt{dpkg}};
+\end{tikzpicture}

@@ -1,0 +1,29 @@
+\begin{tikzpicture}[wb]
+  % colonne cron
+  \node[title, anchor=west] (tc) at (0,0) {cron};
+  \node[boxw, minimum width=52mm, anchor=north west, align=left, text width=48mm] (c1) at ([yshift=-2mm]tc.south west)
+    {\texttt{crontab -e} / \texttt{/etc/cron.d/x}\\[-1pt]{\scriptsize\ttfamily 30 2 * * *  root  /opt/x/sauv.sh}\\[-1pt]{\scriptsize cinq champs, une ligne, lisible en 3 s}};
+  \node[box, minimum width=52mm, below=5mm of c1] (c2) {démon \textbf{cron}\\[-1pt]{\scriptsize relit les tables, réveil chaque minute}};
+  \node[boxwarn, minimum width=52mm, below=5mm of c2, align=left, text width=48mm] (c3)
+    {\textbf{environnement minimal}\\[-1pt]{\scriptsize \texttt{PATH=/usr/bin:/bin}, \texttt{SHELL=/bin/sh}, pas de \texttt{HOME} utile, pas de \texttt{.bashrc}, \texttt{\%} = saut de ligne}};
+  \node[boxg, minimum width=52mm, below=5mm of c3] (c4) {\texttt{sauv.sh} s'exécute\\[-1pt]{\scriptsize pas de verrou, pas de délai max}};
+  \node[boxw, minimum width=52mm, below=5mm of c4, align=left, text width=48mm] (c5)
+    {\textbf{sortie → mail} local (\texttt{MAILTO=}), sinon perdue\\[-1pt]{\scriptsize trace dans \texttt{/var/log/syslog} : \texttt{CRON[…] (root) CMD (…)} — ni le code retour, ni la durée}};
+  \foreach \a/\b in {c1/c2,c2/c3,c3/c4,c4/c5} \draw[arr] (\a) -- (\b);
+  \node[lbl, below=1.5mm of c5, text width=50mm] {échéance ratée (machine éteinte) : \textbf{perdue}, sauf \texttt{anacron} pour les cron.\{daily,weekly\}};
+  % colonne timer
+  \node[title, anchor=west] (tt) at (7.4,0) {timer systemd};
+  \node[box2, minimum width=52mm, anchor=north west, align=left, text width=48mm] (t1) at ([yshift=-2mm]tt.south west)
+    {\texttt{x.timer}\\[-1pt]{\scriptsize\ttfamily [Timer] OnCalendar=*-*-* 02:30:00}\\[-1pt]{\scriptsize\ttfamily Persistent=true  RandomizedDelaySec=5m}\\[-1pt]{\scriptsize \texttt{systemctl enable --now x.timer}}};
+  \node[box2, minimum width=52mm, below=5mm of t1] (t2) {\textbf{systemd} (PID 1)\\[-1pt]{\scriptsize \texttt{list-timers} : NEXT, LAST, PASSED}};
+  \node[box2, minimum width=52mm, below=5mm of t2, align=left, text width=48mm] (t3)
+    {\texttt{x.service} (\texttt{Type=oneshot})\\[-1pt]{\scriptsize \texttt{After=network-online.target}, \texttt{User=}, \texttt{WorkingDirectory=}, \texttt{Environment=}}\\[-1pt]{\scriptsize \texttt{TimeoutStartSec=}, \texttt{MemoryMax=}, \texttt{OnFailure=alerte@\%n}}};
+  \node[boxg, minimum width=52mm, below=5mm of t3] (t4) {\texttt{sauv.sh} s'exécute\\[-1pt]{\scriptsize une seule instance à la fois, cgroup dédié}};
+  \node[box2, minimum width=52mm, below=5mm of t4, align=left, text width=48mm] (t5)
+    {\textbf{sortie → journal}\\[-1pt]{\scriptsize \texttt{journalctl -u x.service} : début, fin, code retour, durée}\\[-1pt]{\scriptsize \texttt{systemctl status x.service} : dernier résultat}};
+  \foreach \a/\b in {t1/t2,t2/t3,t3/t4,t4/t5} \draw[arr2] (\a) -- (\b);
+  \node[lbl, below=1.5mm of t5, text width=50mm] {échéance ratée : \textbf{rattrapée} au démarrage si \texttt{Persistent=true}};
+  % arbitrage
+  \node[boxwarn, text width=112mm, anchor=north] (arb) at ($(c5.south)!0.5!(t5.south)+(0,-16mm)$)
+    {\textbf{l'arbitrage} : dépendance, quota, délai max, action sur échec ou journal structuré → \textbf{timer} ; une ligne que tout le monde lit en trois secondes → \textbf{cron}.\\[-1pt]{\scriptsize Dans les deux cas : chemins absolus, \texttt{set -euo pipefail}, verrou \texttt{flock} côté cron, et tester la ligne \texttt{systemd-analyze calendar} avant de l'activer.}};
+\end{tikzpicture}

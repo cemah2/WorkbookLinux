@@ -1,0 +1,33 @@
+\begin{tikzpicture}[wb]
+  % hôtes
+  \node[vm, minimum width=44mm, minimum height=30mm, anchor=north west] (web) at (0,0) {};
+  \node[glabel, text=accent] at (web.north west) {lab-web};
+  \node[vm, minimum width=44mm, minimum height=30mm, right=40mm of web] (db) {};
+  \node[glabel, text=accent] at (db.north west) {lab-db};
+  % interfaces overlay et underlay
+  \node[box2, minimum width=34mm, anchor=north] (vw) at ([yshift=-7mm]web.north) {\textbf{vxlan0} 192.168.42.11/24\\[-1pt]{\scriptsize VNI 42 · MTU 1450}};
+  \node[box, minimum width=34mm, below=4mm of vw] (ew) {\textbf{ens18} 10.10.10.11\\[-1pt]{\scriptsize MTU 1500}};
+  \node[box2, minimum width=34mm, anchor=north] (vd) at ([yshift=-7mm]db.north) {\textbf{vxlan0} 192.168.42.12/24\\[-1pt]{\scriptsize VNI 42 · MTU 1450}};
+  \node[box, minimum width=34mm, below=4mm of vd] (ed) {\textbf{ens18} 10.10.10.12\\[-1pt]{\scriptsize MTU 1500}};
+  \draw[arr] (vw) -- node[lbl, right] {encapsule} (ew);
+  \draw[arr] (ed) -- node[lbl, left] {décapsule} (vd);
+  % overlay et underlay
+  \draw[darr, draw=accent2, dashed] (vw.east) -- node[lbl, above, align=center] {\textbf{overlay} 192.168.42.0/24\\L2 étendu : \texttt{ping 192.168.42.12}} (vd.west);
+  \node[net, minimum width=30mm, anchor=north] (phy) at ($(ew.south)!0.5!(ed.south)+(0,-7mm)$) {\textbf{underlay} 10.10.10.0/24};
+  \draw[link] (ew.south) |- (phy.west);
+  \draw[link] (ed.south) |- (phy.east);
+  \node[lbl, below=1mm of phy] {UDP 4789 de 10.10.10.11 vers 10.10.10.12 (\texttt{bridge fdb show dev vxlan0})};
+  % pile d'encapsulation
+  \node[title, anchor=north west] (pt) at ([yshift=-18mm]web.south west) {la trame sur le fil, de l'extérieur vers l'intérieur};
+  \node[layerg, minimum width=112mm, anchor=north west, minimum height=6.5mm] (l1) at ([yshift=-1mm]pt.south west) {Ethernet externe · MAC ens18 lab-web → MAC ens18 lab-db};
+  \node[layerg, minimum width=112mm, below=0mm of l1, minimum height=6.5mm] (l2) {IP externe · 10.10.10.11 → 10.10.10.12};
+  \node[layer, minimum width=112mm, below=0mm of l2, minimum height=6.5mm] (l3) {UDP · port destination 4789};
+  \node[layer, minimum width=112mm, below=0mm of l3, minimum height=6.5mm] (l4) {en-tête VXLAN · VNI 42};
+  \node[layer2, minimum width=112mm, below=0mm of l4, minimum height=6.5mm] (l5) {Ethernet interne · MAC vxlan0 → MAC vxlan0 : la trame d'origine, entière};
+  \node[layer2, minimum width=112mm, below=0mm of l5, minimum height=6.5mm] (l6) {IP interne · 192.168.42.11 → 192.168.42.12, puis TCP/UDP et données};
+  \foreach \l/\t in {l1/14 o,l2/20 o,l3/8 o,l4/8 o,l5/14 o,l6/≤ 1450 o} \node[lbl, right=2mm of \l.east, anchor=west] {\t};
+  \draw[decorate, decoration={brace, amplitude=3pt, mirror}, draw=muted] ([xshift=-2mm]l1.north west) -- ([xshift=-2mm]l4.south west) node[lbl, midway, left=3pt, align=right] {50 o de\\surcoût};
+  \node[lbl, below=2mm of l6.south west, anchor=north west, align=left, text width=112mm]
+    {1500 − 50 = \textbf{1450} : sans ce MTU sur \texttt{vxlan0}, les petits paquets passent (ping) et les gros fichiers gèlent.
+     Preuve : \texttt{ping -M do -s 1422 192.168.42.12} passe, \texttt{-s 1423} non.};
+\end{tikzpicture}

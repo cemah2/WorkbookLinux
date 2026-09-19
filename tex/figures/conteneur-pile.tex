@@ -1,0 +1,27 @@
+\begin{tikzpicture}[wb]
+  % ---- chaîne Docker (colonne gauche)
+  \node[boxw, minimum width=58mm] (cli) at (0,0) {\texttt{docker} CLI\\[-1pt]{\scriptsize \texttt{docker run -d nginx}}};
+  \node[box, minimum width=58mm, below=6mm of cli] (dockerd) {\texttt{dockerd}\\[-1pt]{\scriptsize images, volumes, réseaux, API}};
+  \node[box2, minimum width=58mm, below=6mm of dockerd] (ctd) {\texttt{containerd}\\[-1pt]{\scriptsize cycle de vie, snapshots, plugin CRI}};
+  \node[box2, minimum width=58mm, below=6mm of ctd] (shim) {\texttt{containerd-shim-runc-v2}\\[-1pt]{\scriptsize un par conteneur, garde stdio et le code de sortie}};
+  \node[boxwarn, minimum width=58mm, below=6mm of shim] (runc) {\texttt{runc}\\[-1pt]{\scriptsize crée ns + cgroup, \texttt{execve()}, puis \textbf{disparaît}}};
+  \draw[arr] (cli) -- node[lbl, right, align=left] {API REST\\[-2pt]\texttt{/var/run/docker.sock}} (dockerd);
+  \draw[arr] (dockerd) -- node[lbl, right, align=left] {gRPC\\[-2pt]\texttt{/run/containerd/containerd.sock}} (ctd);
+  \draw[arr2] (ctd) -- node[lbl, right, align=left] {lance le shim\\[-2pt](adopté par PID 1)} (shim);
+  \draw[arr2] (shim) -- node[lbl, right, align=left] {\texttt{runc create} / \texttt{start}\\[-2pt]bundle OCI : \texttt{config.json} + \texttt{rootfs/}} (runc);
+  % ---- le processus conteneur (bas)
+  \node[host, minimum width=112mm, minimum height=28mm, anchor=north west, draw=accent, dashed] (proc) at ([xshift=-4mm,yshift=-10mm]runc.south west |- runc.south) {};
+  \node[glabel, text=accent] at (proc.north west) {le conteneur = un processus ordinaire du noyau hôte (PPID = le shim, pas \texttt{dockerd})};
+  \node[proc, minimum size=12mm, anchor=west] (p) at ([xshift=4mm,yshift=-2.5mm]proc.west) {\textbf{nginx}\\[-2pt]{\tiny PID 1 dans son ns}};
+  \node[box, minimum width=16mm, minimum height=20mm, inner sep=2pt, align=left, right=6mm of p] (ns) {\textbf{namespaces}\\[-1pt]{\scriptsize \texttt{pid} \ PID 1, \texttt{ps} vide}\\[-2pt]{\scriptsize \texttt{net} \ eth0, routes}\\[-2pt]{\scriptsize \texttt{mnt} \ racine = overlay}\\[-2pt]{\scriptsize \texttt{uts} \ hostname}\\[-2pt]{\scriptsize \texttt{ipc} \ shm, sémaphores}\\[-2pt]{\scriptsize \texttt{user} \ UID remappés}};
+  \node[boxwarn, minimum width=24mm, minimum height=20mm, inner sep=2pt, align=left, right=4mm of ns] (cg) {\textbf{cgroup v2}\\[-1pt]{\scriptsize \texttt{docker-<ID>.scope}}\\[-2pt]{\scriptsize \texttt{memory.max}}\\[-2pt]{\scriptsize \texttt{cpu.max}}\\[-2pt]{\scriptsize \texttt{pids.max}}\\[-2pt]{\scriptsize \texttt{io.max}}\\[-2pt]{\scriptsize \texttt{memory.events} : oom}};
+  \node[box2, minimum width=26mm, minimum height=20mm, inner sep=2pt, align=left, right=4mm of cg] (ov) {\textbf{overlayfs}\\[-1pt]{\scriptsize couches image (\emph{lower}, ro)}\\[-2pt]{\scriptsize + couche conteneur (\emph{upper})}\\[-2pt]{\scriptsize = \emph{merged} montée sur \texttt{/}}\\[-2pt]{\scriptsize capabilities, seccomp,}\\[-2pt]{\scriptsize AppArmor \texttt{docker-default}}};
+  \draw[arr2] (runc.south) -- node[lbl, right] {\texttt{execve()}} (runc.south |- proc.north);
+  \draw[arrg] (p.east) -- (ns.west);
+  % ---- voie Kubernetes (colonne droite)
+  \node[boxg, minimum width=30mm, anchor=west] (kubelet) at ([xshift=44mm]cli.east) {kubelet (k3s)\\[-1pt]{\scriptsize Kubernetes n'exécute rien lui-même}};
+  \node[boxg, minimum width=30mm, anchor=west] (crictl) at ([xshift=44mm]dockerd.east) {\texttt{crictl} / \texttt{nerdctl} / \texttt{ctr}\\[-1pt]{\scriptsize sans \texttt{dockerd}}};
+  \draw[arr, draw=violet] (kubelet.south) -- node[lbl, right, text=violet, align=left] {CRI (gRPC)\\[-2pt]\texttt{dockershim} retiré en 1.24} (crictl.north);
+  \draw[arr, draw=violet, rounded corners=3pt] (crictl.south) |- node[lbl, pos=0.75, above] {mêmes images OCI, un démon de moins} ([yshift=1mm]ctd.east);
+  \node[lbl, anchor=north west, align=left, text=ink] at ([yshift=-3mm]crictl.south west |- shim.north) {\textbf{live-restore} : \texttt{dockerd} peut\\redémarrer, les shims survivent,\\les conteneurs aussi.\\[3pt]\texttt{ps -o pid,ppid,args -p \$(docker}\\\texttt{ inspect web -f '\{\{.State.Pid\}\}')}};
+\end{tikzpicture}

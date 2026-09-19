@@ -1,0 +1,29 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % deux disques physiques
+  \node[disk] (sdb) at (0,0) {\texttt{sdb1}\\[-2pt]{\tiny type \texttt{fd00}}};
+  \node[disk, right=12mm of sdb] (sdc) {\texttt{sdc1}\\[-2pt]{\tiny type \texttt{fd00}}};
+  % le miroir
+  \node[box2, minimum width=40mm, minimum height=11mm] (md) at ([yshift=16mm]$(sdb)!0.5!(sdc)$) {\textbf{\texttt{/dev/md0}} — RAID1 (miroir)\\[-1pt]{\tiny chaque écriture va sur les deux ; \texttt{/proc/mdstat} : \texttt{[UU]}}};
+  \draw[arr2] (sdb.north) -- (md.south -| sdb.north);
+  \draw[arr2] (sdc.north) -- (md.south -| sdc.north);
+  \node[lbl, anchor=north] at ([yshift=-1mm]sdb.south) {\texttt{mdadm --create /dev/md0 -l 1 -n 2 /dev/sdb1 /dev/sdc1}};
+  % pile LVM au-dessus
+  \node[layer, minimum width=40mm, above=4mm of md] (pv) {\textbf{PV} \texttt{/dev/md0} \ {\tiny \texttt{pvcreate /dev/md0}}};
+  \node[layer, minimum width=40mm, above=3mm of pv] (vg) {\textbf{VG} \texttt{vg\_mir} \ {\tiny \texttt{vgcreate vg\_mir /dev/md0}}};
+  \node[layer2, minimum width=40mm, above=3mm of vg] (lv) {\textbf{LV} \texttt{lv\_data} → ext4 → \texttt{/srv/data}};
+  \draw[arr] (md.north) -- node[lbl, right, align=left] {un seul périphérique\\bloc, stable} (pv.south);
+  \draw[arr] (pv.north) -- (vg.south);
+  \draw[arr] (vg.north) -- (lv.south);
+  % scénario de panne, à droite
+  \node[disk, draw=red, fill=redsoft] (sdbbad) at ([xshift=70mm]sdb) {\texttt{sdb1}\\[-2pt]{\tiny \textbf{en panne}}};
+  \node[disk, right=12mm of sdbbad] (sdcok) {\texttt{sdc1}\\[-2pt]{\tiny seul}};
+  \node[boxwarn, minimum width=40mm, minimum height=11mm] (mddeg) at ([yshift=16mm]$(sdbbad)!0.5!(sdcok)$) {\textbf{\texttt{md0} dégradé} — \texttt{[U\_]}\\[-1pt]{\tiny les données restent servies, LVM ne voit rien}};
+  \draw[arrbad, dashed] (sdbbad.north) -- node[lbl, right, text=red, align=left] {\texttt{--fail}\\\texttt{--remove}} (mddeg.south -| sdbbad.north);
+  \draw[arr2] (sdcok.north) -- (mddeg.south -| sdcok.north);
+  \node[disk, draw=green, fill=greensoft] (sdd) at ([yshift=-20mm]sdbbad) {\texttt{sdd1}\\[-2pt]{\tiny neuf}};
+  \draw[arr, draw=green] (sdd.north) -- node[lbl, right, align=left, text=green] {\texttt{mdadm /dev/md0 --add /dev/sdd1}\\reconstruction : \texttt{recovery = 42\%}\\puis \texttt{[UU]}} (sdbbad.south);
+  \node[lbl, anchor=south, align=center] at ([yshift=1mm]mddeg.north) {\textbf{Perte d'un disque}\\\texttt{mdadm --detail /dev/md0} ; alerte \texttt{mdmonitor}};
+  % lien conceptuel : même LVM au-dessus
+  \draw[arrg, dashed] (mddeg.west) -- node[lbl, above] {même pile LVM} node[lbl, below] {au-dessus} (md.east);
+  \node[lbl, anchor=north west, align=left] at ([yshift=-3mm]sdd.south -| sdb.west) {Persistance : \texttt{mdadm --detail --scan >> /etc/mdadm/mdadm.conf} puis \texttt{update-initramfs -u} (sinon \texttt{md127} au reboot).};
+\end{tikzpicture}

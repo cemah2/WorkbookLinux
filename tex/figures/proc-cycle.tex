@@ -1,0 +1,34 @@
+\begin{tikzpicture}[wb]
+  % ligne 1 : naissance, exécution, mort
+  \node[proc, minimum size=11mm] (pere) at (0,0) {\textbf{père}\\[-2pt]{\tiny PID 100}};
+  \node[proc, minimum size=11mm, right=17mm of pere] (fils) {\textbf{fils}\\[-2pt]{\tiny PID 101}};
+  \node[proc, minimum size=11mm, right=17mm of fils, draw=accent2, fill=accent2!12] (exec) {\textbf{prog}\\[-2pt]{\tiny PID 101}};
+  \node[box, minimum width=18mm, right=8mm of exec] (run) {\textbf{s'exécute}\\[-1pt]{\scriptsize R / S / D / T}};
+  \node[boxbad, minimum width=18mm, right=13mm of run] (zomb) {\textbf{zombie}\\[-1pt]{\scriptsize état Z}};
+  \node[boxg, minimum width=16mm, right=13mm of zomb] (fin) {disparaît};
+  \draw[arr] (pere) -- node[lbl, above] {\texttt{fork()}} node[lbl, below] {copie,\\nouveau PID} (fils);
+  \draw[arr2] (fils) -- node[lbl, above] {\texttt{execve()}} node[lbl, below] {même PID,\\autre image} (exec);
+  \draw[arr] (exec) -- (run);
+  \draw[arrbad] (run) -- node[lbl, above] {\texttt{exit(3)}} (zomb);
+  \draw[arr] (zomb) -- node[lbl, above] {\texttt{wait()}} node[lbl, below] {du père} (fin);
+  % le père doit lire le code de sortie
+  \draw[arr, dashed] (zomb.south) -- ++(0,-9mm) -| node[lbl, pos=0.25, below, text=ink]
+    {le père lit le code de sortie avec \texttt{wait()} ; tant qu'il ne le fait pas, l'entrée reste en table : \textbf{zombie}}
+    (pere.south);
+  % ligne 2 : le père meurt avant le fils -> orphelin
+  \node[boxg, minimum width=18mm, text=muted] (peremort) at ([yshift=-27mm]pere.south) {père mort\\[-1pt]{\scriptsize avant le fils}};
+  \node[proc, minimum size=11mm, draw=violet, fill=violetsoft] (init) at (peremort -| run) {\textbf{PID 1}\\[-2pt]{\tiny systemd}};
+  \draw[arrbad, dashed] (pere.south west) -- node[lbl, pos=0.5, left] {ou bien :\\meurt} (pere.south west |- peremort.north);
+  \draw[arr, draw=violet] (peremort.east) -- node[lbl, above] {le fils vivant devient \textbf{orphelin}} node[lbl, below] {ré-adopté : PPID = 1, et PID 1 fera le \texttt{wait()}} (init.west);
+  % états ps en marge
+  \node[anchor=north west, text=ink, font=\scriptsize\sffamily, align=left] (et) at ([xshift=8mm,yshift=3mm]init.east |- peremort.north) {
+    \texttt{R} \ en cours ou prêt\\
+    \texttt{S} \ sommeil interruptible (attend)\\
+    \texttt{D} \ sommeil non interruptible (E/S)\\
+    \texttt{T} \ stoppé (\texttt{SIGSTOP}, Ctrl-Z)\\
+    \texttt{Z} \ zombie : \texttt{kill} inutile, viser le père};
+  \begin{scope}[on background layer]
+    \node[group, fit=(et), inner sep=4pt] (etats) {};
+  \end{scope}
+  \node[glabel] at (etats.north west) {états \texttt{ps}};
+\end{tikzpicture}

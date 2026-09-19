@@ -111,6 +111,8 @@ dès L9.1, **avant** d'en avoir besoin.
                       matériel (ou l'hyperviseur qui l'imite)
 ```
 
+@fig(noyau-espaces): Espace utilisateur, frontière des appels système, espace noyau et matériel ; `/proc`, `/sys`, `/dev` comme fenêtres, `sysctl` qui écrit dans `/proc/sys`.
+
 Un appel système est la **seule** porte d'entrée normale dans le noyau. La libc
 enveloppe chaque appel (`open()` → `openat`), et parfois l'évite (`printf`
 tamponne, `gettimeofday` passe par la vDSO sans changer de mode). Un processus
@@ -133,6 +135,8 @@ firmware (BIOS ou UEFI) -> ESP /boot/efi (UEFI) ou MBR+BIOS boot (BIOS)
   -> noyau : pilotes, montage de la racine par l'initramfs
   -> /sbin/init = systemd -> default.target -> getty / sshd
 ```
+
+@fig(boot-chaine): La chaîne de démarrage du micrologiciel à la connexion, avec le fichier ou la commande qui agit à chaque étape.
 
 | Élément | Ubuntu 24.04 | Rocky 9 |
 |---|---|---|

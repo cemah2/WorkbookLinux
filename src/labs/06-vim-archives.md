@@ -262,6 +262,8 @@ rsync -a /src  /dst/   ->  /dst/src/...   (copie le RÉPERTOIRE)
 rsync -a /src/ /dst/   ->  /dst/...       (copie son CONTENU)
 ```
 
+@fig(rsync-linkdest): Trois sauvegardes `rsync --link-dest` : les fichiers inchangés partagent leurs inodes par liens durs, seuls les fichiers modifiés sont copiés.
+
 `scp` est figé et déconseillé depuis OpenSSH 9 (protocole SFTP en dessous, pas
 de reprise, sémantique de chemins douteuse). Pour un fichier ponctuel : `scp` ou
 `sftp` ; pour une arborescence ou un lien instable : `rsync -aP`, qui reprend où

@@ -1,0 +1,36 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % racine
+  \node[boxdark, minimum width=34mm] (root) at (0,0) {\texttt{/sys/fs/cgroup}\\[-1pt]{\tiny racine cgroup v2 (\texttt{cgroup2fs})}};
+  % slices de premier niveau
+  \node[box, minimum width=32mm] (sys) at (-42mm,-17mm) {\texttt{system.slice}\\[-1pt]{\tiny services système}};
+  \node[box, minimum width=32mm] (user) at (0,-17mm) {\texttt{user.slice}\\[-1pt]{\tiny sessions humaines}};
+  \node[boxwarn, minimum width=32mm] (batch) at (42mm,-17mm) {\texttt{batch.slice}\\[-1pt]{\tiny slice maison, à la racine}};
+  % enfants
+  \node[box2, minimum width=26mm] (nginx) at (-42mm,-34mm) {\texttt{nginx.service}};
+  \node[box2, minimum width=26mm] (pg) at (-42mm,-47mm) {\texttt{postgresql.service}};
+  \node[boxg, minimum width=26mm] (u1000) at (0,-34mm) {\texttt{user-1000.slice}};
+  \node[boxg, minimum width=26mm] (sess) at (0,-47mm) {\texttt{session-3.scope}\\[-1pt]{\tiny ta session SSH}};
+  \node[box2, minimum width=26mm] (lot) at (42mm,-34mm) {\texttt{lot.service}\\[-1pt]{\tiny \texttt{Slice=batch.slice}}};
+  % arêtes : un répertoire = un cgroup enfant
+  \draw[arr] (root.south) -- ++(0,-5mm) -| (sys.north);
+  \draw[arr] (root.south) -- (user.north);
+  \draw[arr] (root.south) -- ++(0,-5mm) -| (batch.north);
+  \draw[arr] (sys.south) -- (nginx.north);
+  \draw[arr] (sys.south) -- ++(0,-3mm) -| ([xshift=-3mm]pg.north west) |- (pg.west);
+  \draw[arr] (user.south) -- (u1000.north);
+  \draw[arr] (u1000.south) -- (sess.north);
+  \draw[arr] (batch.south) -- (lot.north);
+  % fichiers de contrôle du slice batch
+  \node[codel, anchor=north, fill=white, draw=orange, rounded corners=2pt, inner sep=4pt] (ctl) at ([yshift=-5mm]lot.south) {
+    memory.max \ \ \ 512M\\
+    cpu.max \ \ \ \ \ \ 50000 100000\\
+    pids.max \ \ \ \ \ 200\\
+    memory.current \ memory.events\\
+    cpu.stat \ \ \ \ \ \ pids.current};
+  \draw[arrg, dashed] (batch.east) -- ++(3mm,0) |- (ctl.east);
+  \node[lbl, anchor=north, align=center] (ctln) at ([yshift=-1mm]ctl.south) {fichiers dans \texttt{/sys/fs/cgroup/batch.slice/} :\\plafond \textbf{commun} à tout ce qui est dessous,\\l'OOM ne tue que dans le slice};
+  % annotations
+  \node[lbl, anchor=north west, align=left, text=ink] at ([xshift=-16mm,yshift=-4mm]pg.south west |- ctln.south) {
+    \texttt{systemd-cgls} affiche l'arbre avec les PID ; \texttt{cat /proc/PID/cgroup} → \texttt{0::/user.slice/user-1000.slice/session-3.scope}\\
+    \texttt{systemctl set-property batch.slice MemoryMax=512M CPUQuota=50\%{} TasksMax=200} écrit les fichiers du cadre orange};
+\end{tikzpicture}

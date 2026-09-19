@@ -111,6 +111,8 @@ Bash traite chaque ligne **dans cet ordre**, une seule passe :
 6. suppression des quotes
 ```
 
+@fig(shell-expansion): Les six étapes d'expansion de bash, dans l'ordre, et ce que devient la ligne `echo ~/{a,b}/$x* "$y"` à chaque étape.
+
 Conséquences directes :
 
 * `n=5; echo {1..$n}` n'imprime pas `1 2 3 4 5` : les accolades passent avant `$n`.
@@ -182,6 +184,8 @@ Tout ce que tu écris après cette garde n'existe pas pour un shell non interact
 `2>&1` signifie « fais pointer le fd 2 vers **la cible actuelle** du fd 1 ».
 C'est une copie de destination faite au moment où le shell la lit, de gauche à
 droite, pas un alias permanent.
+
+@fig(shell-redirections): Les descripteurs 0/1/2 d'un processus, pourquoi `> f 2>&1` et `2>&1 > f` ne donnent pas le même résultat, et ce qu'un tube relie vraiment.
 
 ### Navigation et documentation
 

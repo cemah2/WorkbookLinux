@@ -1,0 +1,32 @@
+\begin{tikzpicture}[wb,
+  bar/.style={draw=red, line width=1.2pt},
+  forbid/.style={->, draw=red, line width=0.8pt, dashed}]
+  % extérieur
+  \node[cloud, minimum width=24mm] (inet) at (0,0) {Internet /\\LAN maison};
+  % machines : grille 2 x 2
+  \node[vm, minimum width=36mm, minimum height=15mm] (web) at (5.0,0) {\textbf{lab-web} .11\\[-1pt]{\scriptsize entrée : 80, 443 de partout}\\[-1pt]{\scriptsize 22 depuis .10 seulement}};
+  \node[vm, minimum width=36mm, minimum height=15mm] (db) at (10.6,0) {\textbf{lab-db} .12\\[-1pt]{\scriptsize entrée : 5432, 6379 depuis .11}\\[-1pt]{\scriptsize 22 depuis .10 seulement}};
+  \node[vm, minimum width=36mm, minimum height=15mm, draw=accent2] (adm) at (5.0,-4.2) {\textbf{lab-adm} .10 — bastion\\[-1pt]{\scriptsize entrée : 22 depuis 10.10.10.0/24}\\[-1pt]{\scriptsize sortie : 22 vers toutes}};
+  \node[vm, minimum width=36mm, minimum height=15mm, draw=accent2] (ops) at (10.6,-4.2) {\textbf{lab-ops} .14 — collecte\\[-1pt]{\scriptsize entrée : 10514 (rsyslog TCP)}\\[-1pt]{\scriptsize sortie : scrape 9100 vers toutes}};
+  % flux autorisés
+  \draw[arr] (inet) -- node[lblk, above] {80, 443} (web);
+  \draw[arr] (web) -- node[lblk, above] {5432, 6379} node[lbl, below] {\texttt{from 10.10.10.11}} (db);
+  \draw[arr2] ([xshift=-12mm]adm.north) -- node[lblk, left] {22} ([xshift=-12mm]web.south);
+  \draw[arr2] ([xshift=-12mm]adm.north) -- ++(0,6mm) -| node[lblk, above, pos=0.3] {22 : le bastion vers toutes} ([xshift=-12mm]db.south);
+  \draw[arr2] (adm) -- node[lblk, above] {22} (ops);
+  \draw[arr, draw=violet] ([xshift=4mm]web.south) -- ++(0,-12mm) -| node[lblk, below, pos=0.3, text=violet] {10514 : journaux de web, db, adm} ([xshift=-4mm]ops.north);
+  \draw[arr, draw=violet] ([xshift=8mm]ops.north) -- node[lblk, right, text=violet, align=left] {9100 : scrape\\node\_exporter} ([xshift=8mm]ops.north |- db.south);
+  % flux interdits, au-dessus
+  \draw[forbid] ([yshift=2mm]inet.north east) to[bend left=25] node[pos=0.5] (x1) {} node[lblk, above, text=red, pos=0.5] {22 depuis l'extérieur} ([xshift=-4mm]web.north);
+  \draw[forbid] ([yshift=1mm]inet.north) -- ++(0,20mm) -| node[pos=0.5] (x2) {} node[lblk, above, pos=0.5, text=red] {5432 direct depuis l'extérieur : seul .11 entre sur lab-db} ([xshift=4mm]db.north);
+  \foreach \x in {x1,x2} {
+    \draw[bar] ([xshift=-2mm,yshift=-2mm]\x.center) -- ([xshift=2mm,yshift=2mm]\x.center);
+    \draw[bar] ([xshift=-2mm,yshift=2mm]\x.center) -- ([xshift=2mm,yshift=-2mm]\x.center);
+  }
+  \node[lblk, text=red, anchor=north, align=center] at ([yshift=-1mm]inet.south) {\textbf{×} 22 sur le bastion :\\seulement depuis le lab};
+  % légende
+  \node[lbl, below=6mm of adm.south west, anchor=north west, align=left, text width=132mm]
+    {Sur chaque machine : \texttt{default deny incoming}, \texttt{allow outgoing}, puis \textbf{uniquement} les lignes ci-dessus (\texttt{ufw allow from 10.10.10.10 to any port 22 proto tcp}, ou une rich rule firewalld sur lab-rhel).
+     Ordre de pose : d'abord la règle SSH depuis le bastion, \emph{ensuite} \texttt{ufw enable}, et on vérifie la reconnexion depuis lab-adm avant de fermer sa session.
+     Preuve : \texttt{nc -zv} pour chaque case de la matrice, trois flux qui \textbf{doivent} échouer compris.};
+\end{tikzpicture}

@@ -274,6 +274,8 @@ test ──┘                                                        │ échec
 * Rollback = redéployer l'image précédente, connue et déjà tirée. Pas de
   rebuild.
 
+@fig(cicd-pipeline): Le pipeline de référence : une seule image `:<sha12>` construite, scannée et poussée par le runner de lab-ops, déployée en staging, promue à la main vers la prod en blue/green, rollback sans rebuild.
+
 ### Stratégies de déploiement
 
 | Stratégie | Coupure | Coût | Retour arrière |
@@ -287,6 +289,8 @@ test ──┘                                                        │ échec
 l'exécution (config, %, groupe d'utilisateurs). Découple *déployer* de
 *livrer*. Blue/green derrière nginx : deux `upstream`, un `include` qui pointe
 via symlink sur l'un des deux, `nginx -t && systemctl reload nginx`.
+
+@fig(bluegreen): Blue/green derrière nginx : deux upstreams, un symlink de configuration, `nginx -t` puis `reload` ; l'ancienne couleur reste en service, prête pour `back`.
 
 ### Secrets : les cinq fuites qui reviennent
 

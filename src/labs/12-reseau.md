@@ -98,6 +98,8 @@ automatique au bout de 120 s) et garde une console Proxmox ouverte
 
 Règle : on ne monte d'un étage qu'une fois l'étage du dessous **prouvé**.
 
+@fig(diag-couches): L'échelle « le site ne répond pas » : à chaque barreau, la commande qui tranche et le symptôme typique, sans jamais sauter un barreau.
+
 ### iproute2 — l'essentiel
 
 ```bash
@@ -235,6 +237,8 @@ lsof -i -P -n      # tous les sockets, sans résolution
 Poignée de main : `SYN` → `SYN,ACK` → `ACK`. Fermeture : `FIN` → `ACK` →
 `FIN` → `ACK`.
 
+@fig(tcp-poignee): Ouverture en trois temps, fermeture en quatre : les états que `ss` affiche à chaque étape, et pourquoi `TIME-WAIT` est normal alors que `CLOSE-WAIT` qui s'accumule est un bug applicatif.
+
 | État | Signification | Ce qu'il révèle |
 |---|---|---|
 | `LISTEN` | socket serveur ouvert | le service est bien démarré |
@@ -313,6 +317,8 @@ Une route `default via 10.10.10.1 dev ens18 proto static metric 100` : plus la
 même métrique = comportement aléatoire, c'est un incident, pas une redondance.
 Le NAT côté Linux (`MASQUERADE`) et le filtrage sont au module 18 : ici, retiens
 qu'une machine ne relaie **rien** tant que `net.ipv4.ip_forward=1` n'est pas posé.
+
+@fig(routage-decision): Décision de routage d'un paquet : réseau connecté → ARP de la destination et livraison directe ; sinon plus long préfixe → ARP de la passerelle, l'IP de destination restant inchangée.
 
 ### Les cinq `sysctl` réseau qui servent vraiment
 

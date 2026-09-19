@@ -1,0 +1,51 @@
+% Styles TikZ partagés par tous les schémas du workbook.
+% Palette : accent (bleu), accent2 (sarcelle), orange, green, red, violet, muted, line.
+\tikzset{
+  wb/.style={font=\small\sffamily, >=Latex, line width=0.7pt, node distance=8mm and 10mm},
+  % boîtes
+  box/.style={draw=accent, fill=accentsoft, rounded corners=2pt, minimum height=8mm,
+    minimum width=20mm, inner sep=4pt, align=center, text=ink},
+  box2/.style={box, draw=accent2, fill=accent2!12},
+  boxw/.style={box, draw=muted, fill=white},
+  boxg/.style={box, draw=muted, fill=greysoft},
+  boxwarn/.style={box, draw=orange, fill=orangesoft},
+  boxok/.style={box, draw=green, fill=greensoft},
+  boxbad/.style={box, draw=red, fill=redsoft},
+  boxdark/.style={box, draw=accent, fill=accent, text=white},
+  % machines et réseau
+  vm/.style={draw=accent, fill=white, rounded corners=3pt, minimum width=26mm, minimum height=12mm,
+    inner sep=4pt, align=center, text=ink, drop shadow={opacity=0.15, shadow xshift=0.6pt, shadow yshift=-0.8pt}},
+  host/.style={vm, draw=accent2, fill=accent2!8, dashed},
+  net/.style={draw=accent2, fill=accent2!10, rounded corners=6pt, minimum height=7mm, inner sep=5pt, align=center, text=ink},
+  cloud/.style={ellipse, draw=muted, fill=greysoft, minimum width=22mm, minimum height=10mm, align=center, text=ink},
+  disk/.style={cylinder, shape border rotate=90, draw=accent, fill=accentsoft, aspect=0.25,
+    minimum width=14mm, minimum height=11mm, align=center, text=ink, inner sep=2pt},
+  file/.style={draw=muted, fill=white, minimum width=16mm, minimum height=8mm, align=center, text=ink},
+  proc/.style={circle, draw=accent, fill=accentsoft, minimum size=9mm, inner sep=1pt, align=center, text=ink},
+  % couches (piles)
+  layer/.style={draw=accent, fill=accentsoft, minimum width=60mm, minimum height=7.5mm, align=center, text=ink},
+  layer2/.style={layer, fill=accent2!12, draw=accent2},
+  layerg/.style={layer, fill=greysoft, draw=muted},
+  layerd/.style={layer, fill=accent, draw=accent, text=white},
+  % flèches
+  arr/.style={->, draw=accent, line width=0.8pt},
+  arr2/.style={->, draw=accent2, line width=0.8pt},
+  arrg/.style={->, draw=muted, line width=0.7pt},
+  arrbad/.style={->, draw=red, line width=0.8pt},
+  darr/.style={<->, draw=accent, line width=0.8pt},
+  link/.style={draw=accent2, line width=1pt},
+  dlink/.style={draw=muted, line width=0.7pt, dashed},
+  % étiquettes
+  lbl/.style={font=\scriptsize\sffamily, text=muted, align=center},
+  lblk/.style={font=\scriptsize\sffamily, text=ink, align=center},
+  code/.style={font=\scriptsize\ttfamily, text=codeink},
+  codel/.style={font=\scriptsize\ttfamily, text=codeink, align=left},
+  title/.style={font=\small\sffamily\bfseries, text=accent},
+  chip/.style={draw=none, fill=accent, text=white, font=\tiny\sffamily\bfseries, rounded corners=1.5pt, inner sep=2pt},
+  chip2/.style={chip, fill=accent2},
+  chipo/.style={chip, fill=orange},
+  % groupes
+  group/.style={draw=line, fill=stripe, rounded corners=4pt, inner sep=6pt},
+  group2/.style={draw=accent2, fill=accent2!5, rounded corners=4pt, inner sep=6pt, dashed},
+  glabel/.style={font=\scriptsize\sffamily\bfseries, text=muted, anchor=south west, inner sep=2pt},
+}

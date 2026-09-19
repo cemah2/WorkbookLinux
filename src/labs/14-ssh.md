@@ -226,6 +226,8 @@ tunnel silencieusement inexistant. Côté serveur, `AllowTcpForwarding` autorise
 `-L`/`-D`, `GatewayPorts` décide si un `-R` peut écouter ailleurs que sur la
 boucle locale.
 
+@fig(ssh-bastion-tunnels): Poste → `ProxyJump lab-adm` → lab-db, puis les trois tunnels : `-L` ouvre un port chez moi vers le serveur, `-R` ouvre un port sur le serveur vers moi, `-D` est un `-L` dynamique (SOCKS5).
+
 ### Exécution distante
 
 ```bash

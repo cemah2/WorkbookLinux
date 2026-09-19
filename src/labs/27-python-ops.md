@@ -268,6 +268,8 @@ StandardError=journal
 SuccessExitStatus=1 2
 ```
 
+@fig(python-outil): De l'outil Python d'exploitation à son exécution : dépôt avec `pyproject.toml`, `src/`, `tests/`, qualité par ruff/mypy/pytest, installation par `pipx`, puis un timer systemd qui lance le service et journald qui reçoit stderr et le code de sortie.
+
 ### Quand quoi — prolongement du module 07
 
 | Critère | bash | Python | Ansible |

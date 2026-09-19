@@ -1,0 +1,38 @@
+\begin{tikzpicture}[wb]
+  % colonnes : poste | bastion | cible
+  \node[vm, minimum width=40mm, minimum height=88mm, anchor=north west, draw=muted] (pc) at (0,0) {};
+  \node[glabel, text=muted] at (pc.north west) {mon poste};
+  \node[vm, minimum width=40mm, minimum height=88mm, right=32mm of pc] (adm) {};
+  \node[glabel, text=accent] at (adm.north west) {lab-adm .10 — bastion};
+  \node[vm, minimum width=40mm, minimum height=88mm, right=26mm of adm] (db) {};
+  \node[glabel, text=accent] at (db.north west) {lab-db .12};
+  % 1. ProxyJump
+  \node[boxw, minimum width=34mm, anchor=north] (pj1) at ([yshift=-8mm]pc.north) {\texttt{ssh lab-db}\\[-1pt]{\scriptsize ma clé, mon agent}};
+  \node[boxw, minimum width=34mm] (pj2) at (adm |- pj1) {sshd :22\\[-1pt]{\scriptsize relais, rien de déchiffré}};
+  \node[boxw, minimum width=34mm] (pj3) at (db |- pj1) {sshd :22\\[-1pt]{\scriptsize authentifie mon poste}};
+  \draw[arr] (pj1) -- node[lbl, above] {1. \texttt{ProxyJump lab-adm}} node[lbl, below] {session 1} (pj2);
+  \draw[arr] (pj2) -- node[lbl, above] {session 2, dans la 1} node[lbl, below] {sans transfert d'agent} (pj3);
+  % 2. -L
+  \node[box, minimum width=34mm, below=11mm of pj1] (l1) {écoute \textbf{:15432} local\\[-1pt]{\scriptsize psql -h localhost -p 15432}};
+  \node[box, minimum width=34mm] (l2) at (adm |- l1) {sshd\\[-1pt]{\scriptsize ouvre la connexion}};
+  \node[box, minimum width=34mm] (l3) at (db |- l1) {PostgreSQL \textbf{:5432}\\[-1pt]{\scriptsize voit la source .10}};
+  \draw[arr] (l1) -- node[lbl, above] {2. \texttt{-L 15432:lab-db:5432}} node[lbl, below] {chiffré, port 22} (l2);
+  \draw[arr] (l2) -- node[lbl, above] {en clair} (l3);
+  \node[lbl, below=0.5mm of l1, text width=36mm] {\textbf{-L} : le port s'ouvre \textbf{chez moi}, le flux part vers le serveur};
+  % 3. -R
+  \node[box2, minimum width=34mm, below=13mm of l1] (r1) {mon appli \textbf{:3000}\\[-1pt]{\scriptsize à montrer à un collègue}};
+  \node[box2, minimum width=34mm] (r2) at (adm |- r1) {sshd écoute \textbf{:8080}\\[-1pt]{\scriptsize GatewayPorts yes → 0.0.0.0}};
+  \draw[arr2] (r2) -- node[lbl, above] {3. \texttt{-R 8080:localhost:3000}} node[lbl, below] {à rebours dans ma session} (r1);
+  \node[lbl, below=0.5mm of r2, text width=36mm] {\textbf{-R} : le port s'ouvre \textbf{sur le serveur}, le flux revient vers moi};
+  % 4. -D
+  \node[boxwarn, minimum width=34mm, below=13mm of r1] (d1) {SOCKS5 \textbf{:1080} local\\[-1pt]{\scriptsize navigateur, curl --socks5}};
+  \node[boxwarn, minimum width=34mm] (d2) at (adm |- d1) {sshd\\[-1pt]{\scriptsize connecte à la demande}};
+  \node[cloud, minimum width=30mm, minimum height=10mm] (d3) at (db |- d1) {toute destination\\du lab};
+  \draw[arr] (d1) -- node[lbl, above] {4. \texttt{-D 1080}} node[lbl, below] {cible choisie par l'appli} (d2);
+  \draw[arr] (d2) -- node[lbl, above] {lab-web:80, :5432…} (d3);
+  \node[lbl, below=0.5mm of d1, text width=36mm] {\textbf{-D} : un \texttt{-L} dynamique, une destination par requête};
+  % bas de page
+  \node[lbl, below=5mm of pc.south west, anchor=north west, align=left, text width=140mm]
+    {Toujours \texttt{-N} (pas de shell) et \texttt{-o ExitOnForwardFailure=yes} (port déjà pris = échec bruyant, jamais un tunnel fantôme) ; on ferme le \texttt{ssh} avec \texttt{kill}, pas \texttt{-9}.\\
+     Côté serveur : \texttt{AllowTcpForwarding} gouverne \texttt{-L}/\texttt{-D}, \texttt{GatewayPorts} l'adresse d'écoute d'un \texttt{-R}. \texttt{ss -tlnp} montre qui écoute où, des deux côtés.};
+\end{tikzpicture}

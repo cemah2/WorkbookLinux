@@ -232,6 +232,8 @@ Avant de redémarrer après `fstab` : `findmnt --verify --verbose`, `sudo mount 
 /dev/sdb1 /dev/sdc1 (PV) -> vg_data (VG, PE 4 Mio) -> lv_pgdata, lv_sauv (LV)
 ```
 
+@fig(stockage-pile): La pile de stockage du disque au point de montage, et la commande qui agit à chaque couche.
+
 ```bash
 sudo pvcreate /dev/sdb1 /dev/sdc1 ; sudo vgcreate vg_data /dev/sdb1
 sudo lvcreate -L 3G -n lv_pgdata vg_data
@@ -272,7 +274,11 @@ Vitesse de reconstruction : `/proc/sys/dev/raid/speed_limit_min` et `_max`.
 LVM par-dessus : `pvcreate /dev/md0`, le PV est stable quel que soit le disque
 perdu. Membres en type `fd00` par convention, `--metadata=1.2` par défaut.
 
+@fig(raid-lvm): Deux disques en miroir `md0` sous LVM ; perte d'un disque, ajout d'un disque neuf et reconstruction.
+
 ### NFS
+
+@fig(nfs-iscsi): NFS partage des fichiers (le serveur tient le système de fichiers) ; iSCSI exporte un bloc (l'initiateur voit un disque et y met LVM).
 
 Serveur (`nfs-kernel-server`, `nfs-server.service`) :
 

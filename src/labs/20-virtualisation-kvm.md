@@ -171,6 +171,8 @@ garde une console Proxmox (`qm terminal 9007`) sous la main.
 * **Imbriqué** : `kvm_intel nested=1` sur l'hôte + CPU `host` exposé à la VM
   → la VM voit `vmx`/`svm` et a son propre `/dev/kvm`.
 
+@fig(virt-pile): La pile de virtualisation : du VT-x du processeur au module KVM, au processus QEMU par VM, à libvirt et aux outils ; Proxmox parle à QEMU sans libvirt, et lab-virt rejoue la même pile un étage plus bas.
+
 ```bash
 ls -l /dev/kvm ; kvm-ok ; lscpu | grep -iE 'virtualization|hypervisor'
 grep -cE 'vmx|svm' /proc/cpuinfo ; lsmod | grep '^kvm'
@@ -288,6 +290,8 @@ ip -br link show type bridge ; bridge link ; iptables -t nat -L LIBVIRT_PRT -nv
 Un bridge Netplan sur `lab-virt` (`bridges: br0: interfaces: [eth0]`) est
 exactement ce que Proxmox appelle `vmbr0`/`vmbr1` dans
 `/etc/network/interfaces`.
+
+@fig(virt-reseau): NAT contre bridge : avec `virbr0` la VM sort par masquerade mais reste injoignable depuis le LAN ; avec `br0` elle est un hôte du LAN comme les autres.
 
 ### Stockage libvirt
 

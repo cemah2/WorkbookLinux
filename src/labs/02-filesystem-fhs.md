@@ -101,6 +101,8 @@ c'est le sujet du module 11.
 | `/dev` | fichiers de périphériques (`devtmpfs`, peuplé par udev) | n/a |
 | `/boot` | noyaux, initramfs, GRUB — souvent une petite partition | oui |
 
+@fig(fs-fhs): L'arbre FHS en un coup d'œil : ce qui survit au reboot, ce qui est vidé au boot, ce qui n'est qu'une vue du noyau.
+
 Règle de décision pour une appli maison `factura` :
 
 ```text
@@ -146,6 +148,8 @@ ET qu'aucun processus n'a le fichier ouvert**.
 Un lien symbolique **relatif** est résolu par rapport au répertoire qui contient
 le lien, pas par rapport au répertoire courant : il survit à un déplacement de
 l'arborescence entière, et casse si on déplace seulement le lien.
+
+@fig(fs-inodes-liens): Entrée de répertoire, inode et blocs : un lien dur est un second nom pour le même inode, un lien symbolique est un inode à part qui contient un chemin.
 
 ### Espace disque
 

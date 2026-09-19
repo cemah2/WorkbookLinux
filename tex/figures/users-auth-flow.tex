@@ -1,0 +1,39 @@
+\begin{tikzpicture}[wb]
+  % ================= colonne gauche : ouverture de session =================
+  \node[title, anchor=west] at (0,0) {Ouvrir une session};
+  \node[box, minimum width=52mm, anchor=north west] (app) at (0,-4mm) {\textbf{login / sshd / su}\\[-1pt]{\scriptsize l'application demande « qui est-ce ? »}};
+  \node[box2, minimum width=52mm, below=6mm of app, align=left, text width=48mm, inner sep=5pt] (pam)
+    {\textbf{PAM} \hfill {\scriptsize\texttt{/etc/pam.d/sshd}}\\[1pt]
+     {\scriptsize \texttt{auth} \quad\ mot de passe, clé, faillock\\
+      \texttt{account} compte valide, non expiré ?\\
+      \texttt{session} limits, home, journal}};
+  \draw[arr] (app) -- node[lbl, right] {pile de modules, lue dans l'ordre} (pam);
+  \node[box2, minimum width=52mm, below=6mm of pam] (nss)
+    {\textbf{NSS} \quad {\scriptsize\texttt{/etc/nsswitch.conf}}\\[-1pt]{\scriptsize\texttt{passwd: files sss} · \texttt{group: files sss}}};
+  \draw[arr] (pam) -- node[lbl, right, align=left] {« à quoi ressemble\\ ce compte ? » (\texttt{getent})} (nss);
+  % sources
+  \node[file, minimum width=22mm, minimum height=16mm, anchor=north east, align=left, text width=19mm] (files) at ([xshift=-2mm,yshift=-8mm]nss.south) {\scriptsize\texttt{files}\\ \texttt{/etc/passwd}\\ \texttt{/etc/group}\\ \texttt{/etc/shadow}};
+  \node[boxg, minimum width=22mm, minimum height=16mm, anchor=north west, align=center] (sss) at ([xshift=2mm,yshift=-8mm]nss.south) {\scriptsize\texttt{sss}\\ SSSD $\to$\\ LDAP / AD};
+  \draw[arr2] (nss.south) -- ++(0,-4mm) -| (files.north);
+  \draw[arr2] (nss.south) -- ++(0,-4mm) -| (sss.north);
+  \node[lbl, anchor=north, text width=52mm] at ([yshift=-2mm]files.south -| nss) {l'ordre des sources est celui de la ligne ; \texttt{shadow} reste \texttt{files} et n'est lu que par PAM};
+  % résultat
+  \node[boxok, minimum width=52mm, anchor=north] (sess) at ([yshift=-14mm]files.south -| nss) {\textbf{session ouverte}\\[-1pt]{\scriptsize uid, gid, groupes, shell de \texttt{passwd}}};
+
+  % ================= colonne droite : sudo =================
+  \node[title, anchor=west] at (74mm,0) {Élever ses droits};
+  \node[box, minimum width=52mm, anchor=north west] (sudo) at (74mm,-4mm) {\textbf{\texttt{sudo cmd}}\\[-1pt]{\scriptsize binaire SUID root, uid réel = toi}};
+  \node[box2, minimum width=52mm, below=6mm of sudo] (pam2) {\textbf{PAM} {\scriptsize\texttt{/etc/pam.d/sudo}}\\[-1pt]{\scriptsize \texttt{auth} : \textbf{ton} mot de passe (cache 15 min)}};
+  \draw[arr] (sudo) -- (pam2);
+  \node[boxwarn, minimum width=52mm, below=6mm of pam2, align=left, text width=48mm, inner sep=5pt] (rules)
+    {\textbf{\texttt{/etc/sudoers}} + \texttt{sudoers.d/*}\\[1pt]
+     {\scriptsize qui \ \ hôte = (en tant que) \ commande\\
+      \texttt{\%ops ALL=(root) /usr/bin/systemctl}\\
+      la \textbf{dernière} règle qui correspond gagne}};
+  \draw[arr] (pam2) -- node[lbl, right] {identité confirmée} (rules);
+  \node[boxok, minimum width=52mm, below=6mm of rules] (root) {\textbf{\texttt{cmd} s'exécute en root}\\[-1pt]{\scriptsize uid 0, env épuré, ligne dans \texttt{auth.log} / journal}};
+  \draw[arr] (rules) -- node[lbl, right] {règle trouvée} (root);
+  \node[boxbad, minimum width=52mm, below=4mm of root] (deny) {\scriptsize\texttt{user is not in the sudoers file}\\[-1pt]{\scriptsize refus journalisé, mail à root}};
+  \draw[arrbad] (rules.east) -- ++(3mm,0) |- node[lbl, right, pos=0.25, align=left] {aucune\\ règle} (deny.east);
+  \node[lbl, anchor=north, text width=52mm] at ([yshift=-2mm]deny.south) {\texttt{sudo} lit aussi NSS : le \texttt{\%ops} d'une règle peut venir de LDAP};
+\end{tikzpicture}

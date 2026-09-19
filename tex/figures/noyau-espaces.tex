@@ -1,0 +1,37 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % --- espace utilisateur
+  \node[group, minimum width=92mm, minimum height=24mm, anchor=north west] (us) at (0,0) {};
+  \node[glabel, text=accent, anchor=north west] at ([xshift=1mm,yshift=-1mm]us.north west) {Espace utilisateur (mode non privilégié)};
+  \node[proc, minimum size=10mm] (p1) at ([xshift=12mm,yshift=-15mm]us.north west) {\texttt{ls}};
+  \node[proc, minimum size=10mm, right=4mm of p1] (p2) {\texttt{nginx}};
+  \node[proc, minimum size=10mm, right=4mm of p2] (p3) {\texttt{psql}};
+  \node[box, minimum width=34mm, minimum height=9mm, right=8mm of p3] (libc) {\textbf{libc}\\[-1pt]{\tiny \texttt{open()} → \texttt{openat}, \texttt{printf} tamponne}};
+  \draw[arrg] (p3) -- (libc);
+  % --- frontière
+  \node[layerd, minimum width=92mm, minimum height=6mm, anchor=north west, fill=orange, draw=orange] (front) at ([yshift=-3mm]us.south west)
+    {\textbf{appels système} — instruction \texttt{syscall} : seule porte, changement de mode CPU};
+  \draw[arr, draw=orange, line width=1.2pt] (libc.south) -- node[lbl, right, text=orange] {\texttt{sys\_openat}, \texttt{sys\_write}\ldots} (libc.south |- front.north);
+  \draw[arr, draw=orange, line width=1.2pt] (p1.south) -- (p1.south |- front.north);
+  % --- espace noyau
+  \node[group, minimum width=92mm, minimum height=26mm, anchor=north west] (ks) at ([yshift=-3mm]front.south west) {};
+  \node[glabel, text=accent, anchor=north west] at ([xshift=1mm,yshift=-1mm]ks.north west) {Espace noyau (mode privilégié, un seul pour tous)};
+  \node[box2, minimum width=20mm] (sched) at ([xshift=13mm,yshift=-16mm]ks.north west) {ordonnanceur};
+  \node[box2, minimum width=20mm, right=2.5mm of sched] (vfs) {VFS\\[-1pt]{\tiny ext4, XFS, NFS}};
+  \node[box2, minimum width=20mm, right=2.5mm of vfs] (net) {pile réseau\\[-1pt]{\tiny TCP/IP, netfilter}};
+  \node[box2, minimum width=20mm, right=2.5mm of net] (drv) {pilotes\\[-1pt]{\tiny modules \texttt{.ko}}};
+  % --- matériel
+  \node[layerg, minimum width=92mm, minimum height=7mm, anchor=north west] (hw) at ([yshift=-3mm]ks.south west)
+    {\textbf{matériel} — CPU, RAM, disques, cartes réseau (ou l'hyperviseur qui les imite)};
+  \draw[darr, draw=muted] (drv.south) -- (drv.south |- hw.north);
+  \draw[darr, draw=muted] (sched.south) -- node[lbl, right] {interruptions} (sched.south |- hw.north);
+  % --- fenêtres sur le noyau, à droite
+  \node[file, minimum width=18mm, draw=accent2, anchor=west] (proc) at ([xshift=10mm,yshift=8mm]ks.east) {\texttt{/proc}\\[-1pt]{\tiny processus, \texttt{/proc/sys}}};
+  \node[file, minimum width=18mm, draw=accent2, below=2mm of proc] (sys) {\texttt{/sys}\\[-1pt]{\tiny périphériques, pilotes}};
+  \node[file, minimum width=18mm, draw=accent2, below=2mm of sys] (dev) {\texttt{/dev}\\[-1pt]{\tiny nœuds : \texttt{sda}, \texttt{ttyS0}}};
+  \node[glabel, text=accent2, anchor=west, align=left] at ([xshift=1mm]proc.east) {fenêtres\\virtuelles};
+  \foreach \f in {proc,sys,dev} \draw[arr2, dashed] (ks.east |- \f) -- (\f.west);
+  \node[lbl, anchor=north, align=center] at ([yshift=-1.5mm]dev.south) {aucun octet sur disque :\\le noyau répond à chaque \texttt{cat}};
+  % sysctl
+  \node[box, minimum width=18mm] (sysctl) at (proc.north |- us.center) {\texttt{sysctl -w}\\[-1pt]{\tiny \texttt{/etc/sysctl.d/*.conf}}};
+  \draw[arr] (sysctl.south) -- node[lbl, right, align=left] {écrit\\\texttt{/proc/sys/vm/swappiness}} (proc.north);
+\end{tikzpicture}

@@ -122,6 +122,8 @@ systemd ; rsyslog ne lit plus `/dev/log` sur Ubuntu, il reçoit de journald via 
 module `imjournal` ou le socket de forward. `logrotate` ne concerne **que** les
 fichiers plats : le journal binaire se gère avec `journalctl --vacuum-*`.
 
+@fig(logs-pipeline): De l'application à `/var/log` et au collecteur : journald d'abord (volatile ou persistant), rsyslog ensuite (règles facilité.sévérité, fichiers, envoi TCP `@@lab-ops:10514`), logrotate uniquement sur les fichiers plats.
+
 ### Facilités syslog
 
 | Code | Nom | Usage typique |

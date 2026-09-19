@@ -1,0 +1,39 @@
+\begin{tikzpicture}[wb, svc/.style={boxw, minimum width=62mm, minimum height=6mm, inner sep=2pt, align=left, text width=60mm, font=\scriptsize\sffamily}]
+  % ---- clients
+  \node[cloud, minimum width=26mm, minimum height=10mm] (pc) at (0,0) {réseau PME\\[-2pt]{\scriptsize postes, 10.10.10.0/24}};
+  \node[vm, minimum width=28mm, minimum height=13mm, draw=muted, right=52mm of pc] (adm) {\textbf{lab-adm} .10\\[-1pt]{\scriptsize poste d'admin, CA de lab,}\\[-2pt]{\scriptsize runbook, journal de bord}};
+  % ---- lab-web
+  \node[vm, minimum width=70mm, minimum height=42mm, anchor=north west] (web) at ([xshift=-4mm,yshift=-12mm]pc.south west) {};
+  \node[glabel, text=accent] at (web.north west) {lab-web 10.10.10.11};
+  \node[svc, anchor=north, draw=accent, fill=accentsoft] (ng) at ([yshift=-6mm]web.north) {\textbf{nginx} :443 TLS (PKI de lab), en-têtes, journaux\\[-2pt]\texttt{/} $\rightarrow$ www \ · \ \texttt{/api/} $\rightarrow$ \texttt{proxy\_pass 127.0.0.1:8000}};
+  \node[svc, below=1.5mm of ng] (api) {\textbf{factura-api.service} — Gunicorn :8000\\[-2pt]user \texttt{factura}, durci (\texttt{ProtectSystem}, …)};
+  \node[svc, below=1.5mm of api] (wk) {\textbf{factura-worker.service} — file Redis $\rightarrow$ PDF\\[-2pt]\texttt{/srv/factura/exports}};
+  \node[svc, below=1.5mm of wk, draw=accent2] (wx) {\texttt{node\_exporter} :9100 \ · \ rsyslog $\rightarrow$ lab-ops};
+  \draw[arr, draw=muted] (ng.south) -- (api.north); \draw[arr, draw=muted] (api.south) -- (wk.north);
+  % ---- lab-db
+  \node[vm, minimum width=70mm, minimum height=30mm, anchor=north west] (db) at ([yshift=-12mm]web.south west) {};
+  \node[glabel, text=accent] at (db.north west) {lab-db 10.10.10.12};
+  \node[svc, anchor=north] (pg) at ([yshift=-6mm]db.north) {\textbf{PostgreSQL 16} :5432 — LV \texttt{vg\_data/lv\_pg}\\[-2pt]\texttt{pg\_hba} : lab-web seulement, \texttt{scram-sha-256}};
+  \node[svc, below=1.5mm of pg] (rd) {\textbf{Redis} :6379 — file du worker, \texttt{requirepass}};
+  \node[svc, below=1.5mm of rd, draw=accent2] (dx) {\texttt{node\_exporter} :9100 \ · \ rsyslog $\rightarrow$ lab-ops};
+  % ---- lab-ops
+  \node[vm, minimum width=70mm, minimum height=42mm, anchor=north west, draw=accent2] (ops) at ([xshift=18mm]web.north east) {};
+  \node[glabel, text=accent2] at (ops.north west) {lab-ops 10.10.10.14};
+  \node[svc, anchor=north, draw=accent2, fill=accent2!12] (rs) at ([yshift=-6mm]ops.north) {\textbf{rsyslog collecteur} tcp :10514\\[-2pt]\texttt{/var/log/remote/<hôte>/} + logrotate};
+  \node[svc, below=1.5mm of rs, draw=accent2, fill=accent2!12] (bk) {\textbf{sauvegardes} \texttt{/srv/backups/factura/<hôte>}\\[-2pt]reçues par \texttt{rsync}/ssh, rétention, restauration testée};
+  \node[svc, below=1.5mm of bk, draw=orange, fill=orangesoft] (hc) {\textbf{factura-healthcheck.timer} (5 min)\\[-2pt]\texttt{curl https://factura.lab.local/api/health}};
+  \node[svc, below=1.5mm of hc, draw=orange, fill=orangesoft] (wh) {\texttt{factura-webhook} :9999 — reçoit l'alerte, écrit \texttt{/var/log/factura/alerts.log}};
+  \draw[arr, draw=orange] (hc.south) -- (wh.north);
+  % ---- flux
+  \draw[arr] (pc.south) -- node[lbl, right] {https 443 \texttt{factura.lab.local}} (pc.south |- web.north);
+  \draw[arr, draw=muted] (adm.south) -- node[lbl, right, align=left] {ssh 22 vers web, db, ops} (adm.south |- ops.north);
+  \draw[arr] ([xshift=-10mm]web.south) -- node[lbl, left] {5432} ([xshift=-10mm]web.south |- db.north);
+  \draw[arr] ([xshift=10mm]web.south) -- node[lbl, right] {6379} ([xshift=10mm]web.south |- db.north);
+  \draw[arr2, rounded corners=3pt] (wx.east) -| ([xshift=8mm]wx.east |- rs.west);
+  \draw[arr2, rounded corners=3pt] (dx.east) -| node[lbl, pos=0.2, above] {\scriptsize tcp 10514} ([xshift=8mm]dx.east |- rs.west) -- (rs.west);
+  \draw[arr, draw=orange, dashed, rounded corners=3pt] (hc.west) -- ([xshift=-12mm]hc.west) |- node[lbl, pos=0.25, left, align=right, text=orange] {443\\[-2pt]\texttt{/api/health}} ([yshift=-2mm]ng.east);
+  % timers de sauvegarde
+  \node[boxwarn, minimum width=70mm, minimum height=8mm, anchor=north west, align=left, text width=68mm] (bt) at ([yshift=-5mm]db.south west) {\scriptsize \textbf{factura-backup.timer} 02:30 sur lab-db et lab-web :\\[-2pt]\scriptsize \texttt{pg\_dump -Fc} / tar de \texttt{/srv/factura} $\rightarrow$ \texttt{rsync} vers lab-ops (ssh 22)};
+  \draw[arr, draw=orange, rounded corners=3pt] (bt.east) -| node[lbl, pos=0.2, above] {\scriptsize rsync / ssh 22} ([xshift=-8mm]bk.south) -- ([xshift=-8mm]bk.south);
+  \node[lbl, anchor=north west, align=left, text=ink, text width=150mm] at ([yshift=-4mm]bt.south west) {Tout le reste est fermé par le pare-feu (tableau des flux ci-dessus). Ce que le projet DevOps (P2) automatisera : ici tout est fait \textbf{à la main}, documenté dans le runbook.};
+\end{tikzpicture}

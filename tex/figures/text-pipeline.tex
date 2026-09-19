@@ -1,0 +1,30 @@
+\begin{tikzpicture}[wb]
+  \node[code, anchor=west, font=\small\ttfamily\bfseries, text=accent] at (0,0) {grep ' 500 ' access.log | awk '\{print \$1\}' | sort | uniq -c | sort -rn | head -2};
+  \node[lbl, anchor=west] at (0,-5mm) {chaque maillon lit des lignes sur stdin, écrit des lignes sur stdout ; ce qui circule entre deux tubes est montré à droite};
+  % étages
+  \node[file, minimum width=34mm, anchor=north west] (s0) at (0,-10mm) {\texttt{access.log}\\[-1pt]{\scriptsize une ligne par requête}};
+  \node[box, minimum width=34mm, below=5mm of s0] (s1) {\texttt{grep ' 500 '}\\[-1pt]{\scriptsize filtre : garde les lignes}};
+  \node[box, minimum width=34mm, below=5mm of s1] (s2) {\texttt{awk '\{print \$1\}'}\\[-1pt]{\scriptsize projette : 1 champ}};
+  \node[box, minimum width=34mm, below=5mm of s2] (s3) {\texttt{sort}\\[-1pt]{\scriptsize regroupe les identiques}};
+  \node[box, minimum width=34mm, below=5mm of s3] (s4) {\texttt{uniq -c}\\[-1pt]{\scriptsize compte les voisins}};
+  \node[box, minimum width=34mm, below=5mm of s4] (s5) {\texttt{sort -rn}\\[-1pt]{\scriptsize classe par nombre}};
+  \node[boxok, minimum width=34mm, below=5mm of s5] (s6) {\texttt{head -2}\\[-1pt]{\scriptsize tronque}};
+  \foreach \a/\b in {s0/s1,s1/s2,s2/s3,s3/s4,s4/s5,s5/s6} \draw[arr] (\a) -- node[lbl, right] {\texttt{|}} (\b);
+  % données à droite
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s0.east)
+    {10.0.0.5 - - [19/Sep:10:01] "GET /api" \textbf{500} 512\\10.0.0.9 - - [19/Sep:10:01] "GET /login" \textbf{200} 1024\\10.0.0.9 - - [19/Sep:10:02] "POST /api" \textbf{500} 87\\\ldots\ (6 lignes en 500, 2 en 200)};
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s1.east)
+    {10.0.0.5 - - [19/Sep:10:01] "GET /api" 500 512\\10.0.0.9 - - [19/Sep:10:02] "POST /api" 500 87\\\ldots\ (6 lignes complètes)};
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s2.east)
+    {10.0.0.5 \ 10.0.0.9 \ 10.0.0.5 \ 10.0.0.9 \ 10.0.0.7 \ 10.0.0.9 \quad {\rmfamily\sffamily\color{muted}(6 lignes, 1 IP par ligne)}};
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s3.east)
+    {10.0.0.5 \ 10.0.0.5 \ 10.0.0.7 \ 10.0.0.9 \ 10.0.0.9 \ 10.0.0.9 \quad {\sffamily\color{muted}(triées : les doublons sont adjacents)}};
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s4.east)
+    {2 10.0.0.5\\1 10.0.0.7\\3 10.0.0.9 \quad {\sffamily\color{muted}(compteur en tête de ligne)}};
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s5.east)
+    {3 10.0.0.9\\2 10.0.0.5\\1 10.0.0.7 \quad {\sffamily\color{muted}(-n numérique, -r décroissant)}};
+  \node[codel, anchor=west, text width=74mm] at ([xshift=8mm]s6.east)
+    {3 10.0.0.9\\2 10.0.0.5 \quad {\sffamily\color{muted}(le top 2 des IP en erreur 500)}};
+  \node[lbl, anchor=north west, align=left] at ([yshift=-4mm]s6.south west)
+    {\texttt{uniq} ne compte que des lignes \textbf{adjacentes} : sans le \texttt{sort} juste avant, les comptes sont faux.};
+\end{tikzpicture}

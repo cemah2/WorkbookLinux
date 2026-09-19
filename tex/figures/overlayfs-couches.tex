@@ -1,0 +1,21 @@
+\begin{tikzpicture}[wb, f/.style={font=\scriptsize\ttfamily, text=codeink, anchor=west}]
+  % ---- pile de couches (gauche) : de bas en haut
+  \node[layerg, minimum width=70mm, text width=66mm, minimum height=10mm, align=left, inner sep=3pt] (l1) at (0,0) {\scriptsize\textbf{lower 1} — \texttt{FROM alpine:3.20}\\[-1pt]\texttt{\scriptsize /bin/sh \ /etc/passwd \ /etc/nginx/nginx.conf}};
+  \node[layerg, minimum width=70mm, text width=66mm, minimum height=10mm, align=left, inner sep=3pt, above=1.5mm of l1] (l2) {\scriptsize\textbf{lower 2} — \texttt{RUN apk add nginx}\\[-1pt]\texttt{\scriptsize /usr/sbin/nginx \ /var/log/nginx/}};
+  \node[layerg, minimum width=70mm, text width=66mm, minimum height=10mm, align=left, inner sep=3pt, above=1.5mm of l2] (l3) {\scriptsize\textbf{lower 3} — \texttt{COPY site/ /srv/site/}\\[-1pt]\texttt{\scriptsize /srv/site/index.html \ /srv/site/old.html}};
+  \node[boxwarn, minimum width=70mm, text width=66mm, minimum height=13mm, above=3mm of l3, align=left, inner sep=3pt] (up) {\scriptsize\textbf{upper} — couche conteneur, lecture/écriture (\texttt{docker diff})\\[-1pt]\texttt{\scriptsize\color{orange} /etc/nginx/nginx.conf} {\scriptsize\color{orange}(copie modifiée)}\\[-1pt]\texttt{\scriptsize\color{red} /srv/site/.wh.old.html} {\scriptsize\color{red}(whiteout : \texttt{c 0,0})}};
+  \node[box2, minimum width=70mm, minimum height=9mm, above=5mm of up] (mg) {\textbf{merged} — ce que le processus voit monté sur \texttt{/}};
+  % accolades
+  \draw[decorate, decoration={brace, amplitude=3pt}, draw=muted] ([xshift=-2mm]l1.south west) -- node[lbl, left, xshift=-3pt, align=right] {\textbf{image}\\lecture seule\\partagée entre\\tous les\\conteneurs} ([xshift=-2mm]l3.north west);
+  \node[lbl, left=2mm of up, align=right] {\textbf{conteneur}\\un \emph{upper}\\par conteneur\\détruit avec lui};
+  \draw[arr2] (up.north) -- node[lbl, right, align=left] {vue fusionnée : upper prime\\[-2pt]sur lower 3, lower 3 sur lower 2…} (mg.south);
+  \draw[arrg] (l3.north) -- (up.south);
+  % ---- copy-on-write (droite)
+  \node[title, anchor=north west] (t) at ([xshift=10mm]mg.north east) {Modifier un fichier de l'image : copy-up};
+  \node[boxg, minimum width=30mm, minimum height=8mm, below=3mm of t.south west, anchor=north west, align=left] (c1) {\scriptsize 1. \texttt{lower} : \texttt{nginx.conf} d'origine};
+  \node[boxwarn, minimum width=30mm, minimum height=8mm, below=3mm of c1, align=left] (c2) {\scriptsize 2. \texttt{open(O\_WRONLY)} $\rightarrow$ copie entière\\[-2pt]\scriptsize \phantom{2. }dans \texttt{upper}, puis écriture};
+  \node[box2, minimum width=30mm, minimum height=8mm, below=3mm of c2, align=left] (c3) {\scriptsize 3. \texttt{merged} montre la copie ;\\[-2pt]\scriptsize \phantom{3. }l'image n'a pas bougé};
+  \draw[arr] (c1) -- (c2); \draw[arr] (c2) -- (c3);
+  \node[lbl, below=1.5mm of c3, align=left, anchor=north west] at (c3.south west) {\textbf{Supprimer} \texttt{old.html} : rien n'est effacé,\\un \emph{whiteout} \texttt{.wh.old.html} le masque.\\L'image ne perd jamais un octet :\\\texttt{RUN rm} dans un Dockerfile n'allège rien.};
+  \node[lbl, anchor=north west, align=left, text=ink] at ([yshift=-3mm]l1.south west) {\texttt{docker inspect web -f '\{\{json .GraphDriver.Data\}\}'} $\rightarrow$ \texttt{LowerDir:UpperDir:MergedDir} \ · \ \texttt{mount | grep overlay}};
+\end{tikzpicture}

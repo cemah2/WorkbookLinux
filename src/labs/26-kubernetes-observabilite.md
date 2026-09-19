@@ -137,6 +137,8 @@ l'état observé à l'état désiré et corrigent l'écart : c'est la
 **réconciliation**. Rien n'est « exécuté » par `kubectl` : il écrit un objet,
 puis quelqu'un d'autre réagit.
 
+@fig(k8s-architecture): Control plane et nœud : tout passe par l'API server, les contrôleurs réconcilient ; `kubectl apply` écrit un Deployment, le ReplicaSet crée les Pods, le Service leur donne une IP stable, l'Ingress route depuis l'extérieur.
+
 **k3s** : un seul binaire, un seul service `k3s.service`. Il embarque containerd,
 flannel (CNI), CoreDNS, **Traefik** (Ingress, classe `traefik`), ServiceLB
 (`LoadBalancer` sur l'IP du nœud), `local-path` (StorageClass par défaut,
@@ -346,6 +348,8 @@ Collecte : Alloy (Promtail est en fin de vie). LogQL :
 {job="varlogs"} |~ "5[0-9]{2} " | logfmt | duree_ms > 100
 sum by (host) (rate({job="systemd-journal"} |= "oom" [5m]))
 ```
+
+@fig(observabilite-pile): La pile d'observabilité sur lab-ops : Prometheus scrape les exporters et la sonde blackbox, évalue les règles et pousse les alertes à Alertmanager qui les route ; Promtail/Alloy poussent les logs vers Loki ; Grafana lit les deux ; le SLO fixe le budget d'erreur.
 
 Traces : OpenTelemetry (SDK + collecteur + protocole OTLP) produit des
 *spans* reliés par un `trace_id`, propagé en HTTP par l'en-tête

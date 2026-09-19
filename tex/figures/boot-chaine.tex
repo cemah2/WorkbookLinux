@@ -1,0 +1,37 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % la chaîne, de gauche à droite sur deux rangées
+  \node[boxg, minimum width=24mm, minimum height=11mm] (fw) at (0,0) {\textbf{UEFI / BIOS}\\[-1pt]{\tiny micrologiciel, NVRAM}};
+  \node[box, minimum width=26mm, minimum height=11mm, right=12mm of fw] (grub) {\textbf{ESP → GRUB2}\\[-1pt]{\tiny \texttt{shimx64.efi}, \texttt{grubx64.efi}}};
+  \node[box, minimum width=28mm, minimum height=11mm, right=12mm of grub] (kern) {\textbf{vmlinuz + initramfs}\\[-1pt]{\tiny pilotes virtio, LVM, LUKS, RAID}};
+  \node[box2, minimum width=24mm, minimum height=11mm, right=12mm of kern] (rootfs) {\textbf{montage de /}\\[-1pt]{\tiny \texttt{root=UUID=…} puis \texttt{switch\_root}}};
+  \node[boxdark, minimum width=24mm, minimum height=11mm] (init) at ([yshift=-26mm]rootfs.center) {\textbf{systemd}\\[-1pt]{\tiny \texttt{/sbin/init}, PID 1}};
+  \node[box, minimum width=28mm, minimum height=11mm, left=12mm of init] (target) {\textbf{default.target}\\[-1pt]{\tiny → \texttt{multi-user.target}}};
+  \node[box2, minimum width=26mm, minimum height=11mm, left=12mm of target] (svc) {\textbf{services}\\[-1pt]{\tiny \texttt{sshd}, \texttt{nginx}, \texttt{getty}}};
+  \node[boxok, minimum width=24mm, minimum height=11mm, left=12mm of svc] (login) {\textbf{connexion}\\[-1pt]{\tiny console ou SSH}};
+  % flèches annotées
+  \draw[arr] (fw) -- node[lbl, above] {lit l'ESP} (grub);
+  \draw[arr] (grub) -- node[lbl, above] {charge} (kern);
+  \draw[arr] (kern) -- node[lbl, above] {trouve /} (rootfs);
+  \draw[arr] (rootfs.east) -- ++(4mm,0) |- node[lbl, pos=0.25, right, align=left] {\texttt{exec}\\du vrai\\init} (init.east);
+  \draw[arr] (init) -- node[lbl, above] {active} (target);
+  \draw[arr] (target) -- node[lbl, above] {démarre} (svc);
+  \draw[arr] (svc) -- node[lbl, above] {} (login);
+  % sous chaque étape : où agir
+  \foreach \n/\t in {
+    fw/{\texttt{efibootmgr -v}\\\texttt{/sys/firmware/efi}},
+    grub/{\texttt{/etc/default/grub}\\\texttt{update-grub} → \texttt{grub.cfg}\\menu : \texttt{e}, \texttt{Ctrl-x}},
+    kern/{\texttt{update-initramfs -u}\\\texttt{dracut -f} (Rocky)\\\texttt{lsinitramfs}, \texttt{/proc/cmdline}},
+    rootfs/{\texttt{/etc/fstab} (\texttt{UUID=})\\\texttt{rd.break}, \texttt{init=/bin/bash}}}
+    {\node[lbl, anchor=north, align=center, text=ink] at ([yshift=-1.5mm]\n.south) {\t};}
+  \foreach \n/\t in {
+    init/{\texttt{systemd-analyze}\\\texttt{critical-chain}, \texttt{blame}},
+    target/{\texttt{systemctl get-default}\\\texttt{systemd.unit=rescue.target}},
+    svc/{\texttt{systemctl enable}\\\texttt{journalctl -b}},
+    login/{\texttt{who -b}, \texttt{uptime}\\\texttt{last reboot}}}
+    {\node[lbl, anchor=north, align=center, text=ink] at ([yshift=-1.5mm]\n.south) {\t};}
+  % repère : ce qui est encore dans l'initramfs
+  \begin{scope}[on background layer]
+    \node[group2, fit=(kern)(rootfs), inner sep=3pt, yshift=0mm] (initrd) {};
+  \end{scope}
+  \node[glabel, text=accent2, anchor=south west] at ([yshift=0mm]initrd.north west) {tourne depuis l'initramfs (racine en RAM)};
+\end{tikzpicture}

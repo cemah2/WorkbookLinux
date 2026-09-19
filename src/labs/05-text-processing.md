@@ -151,6 +151,8 @@ tee >(gzip > copie.gz) > sortie.txt
 | `set -o pipefail` | le pipeline renvoie le dernier code non nul rencontré |
 | `\| tee f` / `\| tee -a f` | duplique le flux vers l'écran et le fichier |
 
+@fig(text-pipeline): Un pipeline classique d'analyse de journal, avec la forme des lignes qui circulent entre chaque maillon.
+
 `xargs` : `-n N` (N arguments par appel), `-I{}` (placeholder, implique `-n 1`),
 `-P N` (N processus parallèles), `-0` avec `find -print0` (noms à espaces),
 `-r` (ne rien lancer si l'entrée est vide), `-t` (trace la commande).

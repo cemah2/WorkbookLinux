@@ -1,0 +1,48 @@
+\begin{tikzpicture}[wb, c/.style={circle, draw=accent, fill=accentsoft, minimum size=6.5mm, inner sep=0pt, font=\scriptsize\ttfamily, text=ink},
+  cf/.style={c, draw=violet, fill=violetsoft}, cmg/.style={c, draw=green, fill=greensoft}, cn/.style={c, draw=orange, fill=orangesoft},
+  ref/.style={font=\tiny\sffamily\bfseries, text=white, fill=accent, rounded corners=1.5pt, inner sep=2pt}]
+  % ---------- 1. point de départ : historique divergent
+  \node[title, anchor=west] (t1) at (0,0) {1. Historique divergent (\texttt{git status -sb} : ahead 2, behind 1)};
+  \node[c] (a) at (0,-16mm) {A};
+  \node[c, right=6mm of a] (b) {B};
+  \node[c, right=6mm of b] (c) {C};
+  \node[cf, ] (d) at ([xshift=9mm,yshift=8mm]b) {D};
+  \node[cf, right=6mm of d] (e) {E};
+  \draw[arrg] (b) -- (a); \draw[arrg] (c) -- (b); \draw[arrg] (d) -- (b); \draw[arrg] (e) -- (d);
+  \node[ref, right=2mm of c] {main = origin/main};
+  \node[ref, fill=violet, right=2mm of e] {feature (HEAD)};
+  \node[lbl, anchor=north west, align=left] at ([yshift=-3mm]a.south west) {les flèches pointent vers le parent : chaque commit contient le SHA du précédent};
+  % ---------- 2. merge
+  \node[title, anchor=west] (t2) at (0,-34mm) {2. \texttt{git merge feature} (depuis main) — historique conservé, commit de fusion};
+  \node[c] (a2) at (0,-50mm) {A};
+  \node[c, right=6mm of a2] (b2) {B};
+  \node[c, right=6mm of b2] (c2) {C};
+  \node[cf, ] (d2) at ([xshift=9mm,yshift=8mm]b2) {D};
+  \node[cf, right=6mm of d2] (e2) {E};
+  \node[cmg, right=16mm of c2] (m2) {M};
+  \draw[arrg] (b2) -- (a2); \draw[arrg] (c2) -- (b2); \draw[arrg] (d2) -- (b2); \draw[arrg] (e2) -- (d2);
+  \draw[arr, draw=green] (m2) -- (c2); \draw[arr, draw=green] (m2) -- node[lbl, above right, text=green, xshift=-1mm] {2 parents} (e2);
+  \node[ref, fill=green, right=2mm of m2] {main (HEAD)};
+  \node[lbl, anchor=north west, align=left] at ([yshift=-3mm]a2.south west) {D et E gardent leur SHA ; \texttt{--no-ff} force M même si un fast-forward était possible ; \texttt{git log --graph} montre la branche};
+  % ---------- 3. rebase
+  \node[title, anchor=west] (t3) at (0,-68mm) {3. \texttt{git rebase main} (depuis feature) — commits rejoués, historique linéaire};
+  \node[c] (a3) at (0,-84mm) {A};
+  \node[c, right=6mm of a3] (b3) {B};
+  \node[c, right=6mm of b3] (c3) {C};
+  \node[cn, right=6mm of c3] (d3) {D'};
+  \node[cn, right=6mm of d3] (e3) {E'};
+  \node[cf, draw=muted, fill=greysoft, text=muted, dashed] (dold) at ([xshift=9mm,yshift=8mm]b3) {D};
+  \node[cf, right=6mm of dold, draw=muted, fill=greysoft, text=muted, dashed] (eold) {E};
+  \draw[arrg] (b3) -- (a3); \draw[arrg] (c3) -- (b3); \draw[arr, draw=orange] (d3) -- (c3); \draw[arr, draw=orange] (e3) -- (d3);
+  \draw[dlink] (dold) -- (b3); \draw[dlink] (eold) -- (dold);
+  \node[lbl, right=2mm of eold, text=muted, align=left] {anciens : plus référencés,\\[-2pt]encore dans \texttt{reflog}};
+  \node[ref] at ([yshift=-5.5mm]c3.south) {main};
+  \node[ref, fill=violet] at ([yshift=-5.5mm]e3.south) {feature (HEAD)};
+  \node[lbl, anchor=north west, align=left] at ([yshift=-8mm]a3.south west) {D' et E' = même contenu, \textbf{nouveaux SHA} (parent différent). Conflit possible à chaque commit rejoué : \texttt{add} puis \texttt{rebase --continue}};
+  % ---------- 4. push après rebase
+  \node[boxbad, anchor=north west, minimum width=50mm, minimum height=13mm, align=left] (bad) at ([yshift=-4mm]$(a3.south west)+(0,-14mm)$) {\texttt{git push} $\rightarrow$ \textbf{rejected}\\[-1pt]{\scriptsize origin/feature contient D et E,}\\[-2pt]{\scriptsize qui ne sont pas ancêtres de E'}};
+  \node[boxok, right=6mm of bad, minimum width=62mm, minimum height=13mm, align=left] (ok) {\texttt{git push --force-with-lease}\\[-1pt]{\scriptsize remplace D,E par D',E' \textbf{seulement si}}\\[-2pt]{\scriptsize origin/feature est encore à E (vu au dernier fetch)}};
+  \node[boxbad, right=12mm of ok, minimum width=30mm, minimum height=13mm, draw=muted, fill=greysoft, align=left] (force) {\texttt{--force}\\[-1pt]{\scriptsize écrase aveuglément,}\\[-2pt]{\scriptsize même le travail d'un autre}};
+  \draw[arr] (bad) -- (ok);
+  \draw[arrbad, dashed] (ok) -- node[lbl, above, text=red, align=center, yshift=0.5mm] {jamais sur\\[-2pt]une branche\\[-2pt]partagée} (force);
+\end{tikzpicture}

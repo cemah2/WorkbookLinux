@@ -223,6 +223,8 @@ de CPU, d'un délai maximum d'exécution, d'une action automatique en cas d'éch
 ou d'un journal structuré ? **Timer.** Une ligne dans un fichier texte que
 n'importe qui doit pouvoir lire en trois secondes ? **cron.**
 
+@fig(cron-vs-timer): La même tâche des deux côtés : cron (une ligne, environnement minimal, sortie par mail, échéance ratée perdue) et timer systemd (`.timer` + `.service`, dépendances, quotas, journal, `Persistent=`).
+
 ---
 
 ## 17.3 Quiz — QCM

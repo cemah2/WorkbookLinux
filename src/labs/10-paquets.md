@@ -106,6 +106,8 @@ dpkg              déballe, configure, tient la base /var/lib/dpkg ;
 .deb              ar(1) : debian-binary + control.tar.* + data.tar.*
 ```
 
+@fig(paquets-couches): `apt` résout et télécharge, `dpkg` installe et tient la base ; dépôts et clés en amont, miroir `dnf`/`rpm` côté Rocky.
+
 `apt` (2014) est la surface *humaine* : couleurs, barre de progression, sortie
 qui change entre versions. `apt-get`/`apt-cache` ont une interface **stable**,
 garantie scriptable. En script, `apt-get` ; au clavier, `apt`. `apt` le dit

@@ -1,0 +1,34 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % ===== NFS : partage de FICHIERS
+  \node[title, anchor=south west] at (0,1mm) {NFS — partage de \textbf{fichiers}};
+  \node[vm, minimum width=50mm, minimum height=26mm, anchor=north west] (nsrv) at (0,0) {};
+  \node[glabel, text=accent, anchor=north west] at ([xshift=1mm,yshift=-1mm]nsrv.north west) {serveur lab-ops (\texttt{nfs-server})};
+  \node[layer2, minimum width=42mm, minimum height=7mm] (nfs1) at ([yshift=-11mm]nsrv.north) {ext4 sur LV → \texttt{/srv/nfs/partage}};
+  \node[file, minimum width=42mm, minimum height=7mm, below=2mm of nfs1] (exports) {\texttt{/etc/exports} : \texttt{rw,sync,root\_squash}};
+  \draw[arr2] (nfs1.south) -- (exports.north);
+  \node[vm, minimum width=50mm, minimum height=22mm, anchor=north west] (ncli) at ([yshift=-20mm]nsrv.south west) {};
+  \node[glabel, text=accent, anchor=north west] at ([xshift=1mm,yshift=-1mm]ncli.north west) {client lab-web};
+  \node[layer, minimum width=42mm, minimum height=7mm] (nmnt) at ([yshift=-10mm]ncli.north) {\texttt{/mnt/p} — arborescence, pas de disque};
+  \node[lbl, anchor=north, align=center] at ([yshift=-1mm]nmnt.south) {\texttt{lsblk} ne montre rien ; les UID doivent correspondre};
+  \draw[arr] ([xshift=-17mm]exports.south) -- node[lbl, right, align=left] {\texttt{mount -t nfs4 lab-ops:/srv/nfs/partage /mnt/p}\\TCP 2049 · \texttt{open/read/write} voyagent\\sur le réseau, le serveur tient le FS}
+    ([xshift=-17mm]nmnt.north);
+  \node[lbl, anchor=north west, align=left] at ([yshift=-2mm]ncli.south west) {le serveur gère le FS : plusieurs clients à la fois\\
+    \texttt{fstab} : \texttt{\_netdev,nofail,hard,x-systemd.automount}};
+  % ===== iSCSI : partage de BLOCS
+  \node[title, anchor=south west, text=accent2] at (80mm,1mm) {iSCSI — export d'un \textbf{bloc}};
+  \node[vm, minimum width=50mm, minimum height=26mm, anchor=north west, draw=accent2] (isrv) at (80mm,0) {};
+  \node[glabel, text=accent2, anchor=north west] at ([xshift=1mm,yshift=-1mm]isrv.north west) {target lab-ops (\texttt{targetcli})};
+  \node[layer2, minimum width=42mm, minimum height=7mm] (bs) at ([yshift=-11mm]isrv.north) {backstore \texttt{fileio} \texttt{disque0.img} 2G};
+  \node[file, minimum width=42mm, minimum height=7mm, below=2mm of bs] (lun) {\texttt{iqn…:ops.disque0} / \texttt{tpg1} / \texttt{lun0} + ACL CHAP};
+  \draw[arr2] (bs.south) -- (lun.north);
+  \node[vm, minimum width=50mm, minimum height=22mm, anchor=north west, draw=accent2] (icli) at ([yshift=-20mm]isrv.south west) {};
+  \node[glabel, text=accent2, anchor=north west] at ([xshift=1mm,yshift=-1mm]icli.north west) {initiateur lab-db (\texttt{iscsid})};
+  \node[disk, minimum width=12mm, minimum height=9mm] (sdd) at ([xshift=-17mm,yshift=-11mm]icli.north) {\texttt{sdd}};
+  \node[layer, minimum width=26mm, minimum height=7mm, anchor=west] (ilvm) at ([xshift=4mm]sdd.east) {PV → VG → LV → FS};
+  \draw[arr] (sdd.east) -- (ilvm.west);
+  \node[lbl, anchor=north, align=center] at ([yshift=-1mm]ilvm.south) {le client gère le FS : \textbf{un seul} initiateur};
+  \draw[arr] ([xshift=-17mm]lun.south) -- node[lbl, right, align=left] {\texttt{iscsiadm -m discovery -t st -p lab-ops}\\\texttt{iscsiadm -m node --login} · TCP 3260\\commandes SCSI dans TCP, secteurs bruts}
+    (sdd.north);
+  \node[lbl, anchor=north west, align=left] at ([yshift=-2mm]icli.south west) {un vrai disque pour l'OS (\texttt{lsblk} : VENDOR \texttt{LIO-ORG})\\
+    \texttt{node.startup=automatic} + \texttt{\_netdev} ; jamais \texttt{/dev/sdd} en dur};
+\end{tikzpicture}

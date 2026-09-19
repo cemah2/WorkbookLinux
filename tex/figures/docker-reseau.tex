@@ -1,0 +1,34 @@
+\begin{tikzpicture}[wb]
+  % ---- hôte lab-ops
+  \node[host, minimum width=118mm, minimum height=82mm, anchor=north west, draw=accent2] (h) at (0,0) {};
+  \node[glabel, text=accent2] at (h.north west) {lab-ops (10.10.10.14) — le noyau hôte fait tout le routage};
+  % réseau bridge utilisateur
+  \node[group2, minimum width=62mm, minimum height=34mm, anchor=north west] (unet) at ([xshift=4mm,yshift=-7mm]h.north west) {};
+  \node[glabel, text=accent2] at (unet.north west) {\texttt{docker network create factura-net} (bridge utilisateur)};
+  \node[vm, minimum width=18mm, minimum height=10mm, anchor=north west] (web) at ([xshift=3mm,yshift=-7mm]unet.north west) {\textbf{web}\\[-1pt]{\scriptsize 172.18.0.2:80}};
+  \node[vm, minimum width=18mm, minimum height=10mm, right=5mm of web] (api) {\textbf{api}\\[-1pt]{\scriptsize 172.18.0.3:8000}};
+  \node[vm, minimum width=18mm, minimum height=10mm, right=5mm of api] (cache) {\textbf{cache}\\[-1pt]{\scriptsize 172.18.0.4:6379}};
+  \node[net, minimum width=56mm, minimum height=6mm, below=4mm of api] (br) {\texttt{br-xxxx} 172.18.0.1 · DNS interne \texttt{127.0.0.11}};
+  \foreach \c in {web,api,cache} \draw[link] (\c.south) -- (\c.south |- br.north);
+  \node[lbl, below=1mm of br] {\texttt{api} résout \texttt{cache} $\rightarrow$ 172.18.0.4 : par nom, sans \texttt{-p}};
+  \draw[arr2, dashed] (api.east) -- (cache.west);
+  \node[lbl, right=1mm of unet.north east, anchor=north west, align=left, xshift=-1mm, yshift=-3mm] {};
+  % host network
+  \node[vm, minimum width=26mm, minimum height=10mm, anchor=north west, draw=violet] (hostnet) at ([xshift=8mm]unet.north east) {\textbf{\texttt{--network host}}\\[-1pt]{\scriptsize node\_exporter :9100}};
+  \node[lbl, below=1mm of hostnet, align=left, anchor=north west] at (hostnet.south west) {pas de netns : écoute directement\\sur les interfaces de l'hôte,\\pas de \texttt{-p}, pas de DNAT ;\\\texttt{ufw} le voit comme un service local};
+  % netfilter : chaînes
+  \node[boxwarn, minimum width=54mm, minimum height=9mm, anchor=north west, align=left] (nat) at ([yshift=-5mm]unet.south west) {\scriptsize \texttt{nat} PREROUTING $\rightarrow$ chaîne \textbf{DOCKER} :\\[-2pt]\scriptsize \texttt{DNAT tcp dpt:8080 to:172.18.0.2:80} \ (\texttt{-p 8080:80})};
+  \node[boxwarn, minimum width=54mm, minimum height=9mm, align=left, anchor=north west] (fwd) at ([yshift=-3mm]nat.south west) {\scriptsize \texttt{filter} FORWARD $\rightarrow$ \textbf{DOCKER-USER} (à toi) puis \textbf{DOCKER} :\\[-2pt]\scriptsize \texttt{ACCEPT} vers 172.18.0.2:80 \ — inséré \textbf{avant} les chaînes \texttt{ufw-*}};
+  \draw[arr, draw=orange] (nat.north) -- ([yshift=0mm]nat.north |- br.south);
+  % ufw en marge
+  \node[boxbad, minimum width=34mm, minimum height=9mm, align=left, anchor=north west] (ufw) at ([xshift=6mm]fwd.north east |- nat.north) {\scriptsize \texttt{ufw deny 8080} : \textbf{sans effet}\\[-2pt]\scriptsize ses règles sont dans INPUT / ufw-user-forward,\\[-2pt]\scriptsize après DOCKER ; le paquet est déjà accepté};
+  \node[boxok, minimum width=34mm, minimum height=7mm, align=left, below=2mm of ufw.south west, anchor=north west] (fix) {\scriptsize la bonne place : \texttt{iptables -I DOCKER-USER}\\[-2pt]\scriptsize ou publier sur \texttt{127.0.0.1:8080:80}};
+  \draw[arrg] (fwd.east) -- (fwd.east -| fix.west);
+  % interface hôte
+  \node[net, minimum width=30mm, minimum height=6mm, anchor=south west] (ens) at ([xshift=4mm,yshift=3mm]h.south west) {\texttt{ens18} 10.10.10.14};
+  \draw[arr, draw=orange] (ens.north) -- node[lbl, right] {paquet vers :8080} (ens.north |- fwd.south) ;
+  % client
+  \node[vm, minimum width=22mm, minimum height=9mm, draw=muted, anchor=north] (pc) at ([yshift=-8mm]ens.south) {\textbf{lab-adm}\\[-1pt]{\scriptsize \texttt{curl 10.10.10.14:8080}}};
+  \draw[arr] (pc.north) -- (ens.south);
+  \node[lbl, anchor=north west, align=left, text=ink, text width=84mm] at ([xshift=6mm]pc.north east) {trajet : ens18 $\rightarrow$ PREROUTING/DOCKER (DNAT :8080 $\rightarrow$ 172.18.0.2:80) $\rightarrow$ FORWARD/DOCKER-USER $\rightarrow$ DOCKER (ACCEPT) $\rightarrow$ br-xxxx $\rightarrow$ web.\\Le bridge par défaut \texttt{docker0} ne résout \textbf{pas} les noms ; un bridge créé par toi (ou Compose) le fait via \texttt{127.0.0.11}.};
+\end{tikzpicture}

@@ -1,0 +1,28 @@
+\begin{tikzpicture}[wb]
+  % chaîne de résolution, de haut en bas
+  \node[boxdark, minimum width=44mm] (app) at (0,0) {\texttt{curl http://lab-web.lab.local/}\\[-1pt]{\scriptsize getaddrinfo() · nsswitch : files, puis dns}};
+  \node[box, minimum width=44mm, below=8mm of app] (stub) {\textbf{stub} systemd-resolved\\[-1pt]{\scriptsize 127.0.0.53 · cache local · domaine de recherche lab.local}};
+  \node[box2, minimum width=44mm, below=8mm of stub] (rec) {\textbf{récursif} Unbound sur lab-ops\\[-1pt]{\scriptsize 10.10.10.53 · cache · DNSSEC}};
+  \node[box2, minimum width=44mm, below=8mm of rec] (auth) {\textbf{autoritaire} BIND9 ns1 sur lab-ops\\[-1pt]{\scriptsize 10.10.10.14 · zone lab.local · \texttt{recursion no}}};
+  \node[boxw, minimum width=44mm, below=9mm of auth] (ns2) {\textbf{secondaire} ns2 sur lab-adm\\[-1pt]{\scriptsize 10.10.10.10 · copie de la zone}};
+  % flèches descendantes (question)
+  \draw[arr] ([xshift=-6mm]app.south) -- node[lbl, left] {\texttt{/etc/hosts} ?\\non} ([xshift=-6mm]stub.south |- stub.north);
+  \draw[arr] ([xshift=-6mm]stub.south) -- node[lbl, left] {cache ?\\non → UDP 53} ([xshift=-6mm]rec.north);
+  \draw[arr] ([xshift=-6mm]rec.south) -- node[lbl, left] {\texttt{stub-zone lab.local}\\droit à ns1, sans racine} ([xshift=-6mm]auth.north);
+  \draw[arr] (auth.south) -- node[lbl, left, align=right] {NOTIFY puis \textbf{AXFR} (TCP 53)\\seulement si le serial a augmenté} (ns2.north);
+  % réponse remontante
+  \draw[arr2] ([xshift=6mm]auth.north) -- node[lbl, right] {réponse \texttt{aa} : A 10.10.10.11, TTL 3600} ([xshift=6mm]rec.south);
+  \draw[arr2] ([xshift=6mm]rec.north) -- node[lbl, right] {mise en cache jusqu'au TTL} ([xshift=6mm]stub.south);
+  \draw[arr2] ([xshift=6mm]stub.north) -- node[lbl, right] {10.10.10.11} ([xshift=6mm]app.south);
+  % Internet
+  \node[cloud, minimum width=30mm, right=44mm of stub, yshift=-3mm] (root) {racine → \texttt{.org} →\\autoritaire public};
+  \draw[arr] ([yshift=2mm]rec.east) -- ++(6mm,0) |- (root.west);
+  \node[lbl, anchor=south west, align=left] at ([xshift=10mm,yshift=1mm]rec.east |- root.west) {tout autre nom (debian.org) :\\récursion depuis la racine, DNSSEC};
+  \node[lbl, below=1mm of root, align=center, text width=44mm] {\texttt{.local} n'existe pas en public (NXDOMAIN) : sans la \texttt{stub-zone}, lab.local est introuvable.};
+  % outils de diagnostic
+  \node[title, anchor=north west] (t) at ([xshift=14mm,yshift=-2mm]auth.east |- auth.south) {qui interroge quoi};
+  \node[codel, anchor=north west, align=left] at ([yshift=-1mm]t.south west)
+    {getent hosts x  → nsswitch + stub\\dig x            → serveur de resolv.conf\\dig @10.10.10.14 +norecurse x → ns1\\resolvectl query x ; resolvectl flush-caches};
+  \node[lbl, anchor=north west, align=left, text width=56mm] at ([xshift=14mm,yshift=-16mm]ns2.east |- ns2.north)
+    {Un écart entre ces réponses désigne l'étage fautif. Après édition de zone : serial +1, \texttt{rndc reload}, puis \texttt{unbound-control flush\_zone lab.local}.};
+\end{tikzpicture}

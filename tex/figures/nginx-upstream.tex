@@ -1,0 +1,40 @@
+\begin{tikzpicture}[wb]
+  % lab-web : cadre
+  \node[vm, minimum width=74mm, minimum height=66mm, anchor=north west] (web) at (0,0) {};
+  \node[glabel, text=accent] at (web.north west) {lab-web .11};
+  % nginx
+  \node[box, minimum width=68mm, anchor=north] (ngx) at ([yshift=-7mm]web.north) {\textbf{nginx} :443 — vhost, terminaison TLS\\[-1pt]{\scriptsize \texttt{location} : \texttt{=} exact > préfixe le plus long > \texttt{\textasciitilde} regex}};
+  \node[boxg, minimum width=30mm] (stat) at ([xshift=-18mm,yshift=-11mm]ngx.south) {\texttt{location /}\\[-1pt]{\scriptsize \texttt{root} /srv/www · statique}};
+  \node[box2, minimum width=30mm] (api) at ([xshift=18mm,yshift=-11mm]ngx.south) {\texttt{location /api/}\\[-1pt]{\scriptsize \texttt{proxy\_pass http://factura\_api}}};
+  \node[boxw, minimum width=68mm] (up) at ([yshift=-11mm]api.south -| ngx) {\texttt{upstream factura\_api} — round-robin, \texttt{keepalive}\\[-1pt]{\scriptsize \texttt{max\_fails=2 fail\_timeout=10s} : l'instance HS est écartée 10 s}};
+  \node[proc, minimum size=12mm] (g1) at ([xshift=-14mm,yshift=-11mm]up.south) {\scriptsize mini-api\\:8001};
+  \node[proc, minimum size=12mm] (g2) at ([xshift=14mm,yshift=-11mm]up.south) {\scriptsize mini-api\\:8002};
+  \draw[arr] (ngx.south) -- ++(0,-3mm) -| (stat.north);
+  \draw[arr] (ngx.south) -- ++(0,-3mm) -| (api.north);
+  \draw[arr2] (api.south) -- node[lbl, right] {HTTP en clair, \texttt{X-Forwarded-For}} (api.south |- up.north);
+  \draw[arr2] (up.south) -- ++(0,-3mm) -| (g1.north);
+  \draw[arr2] (up.south) -- ++(0,-3mm) -| (g2.north);
+  % client
+  \node[boxdark, minimum width=22mm, left=10mm of web.west, yshift=0mm] (cli) at (web.west |- ngx) {client\\[-1pt]{\scriptsize curl -v https://…}};
+  \draw[arr] (cli.east) -- node[lbl, above] {HTTPS 443} (web.west |- ngx);
+  % lab-db
+  \node[vm, minimum width=34mm, minimum height=32mm, anchor=north west] (db) at ([xshift=18mm]web.north east |- up.north) {};
+  \node[glabel, text=accent] at (db.north west) {lab-db .12};
+  \node[disk, minimum width=24mm, anchor=north] (pg) at ([yshift=-6mm]db.north) {\scriptsize PostgreSQL\\:5432};
+  \node[box, minimum width=24mm, below=3mm of pg] (rd) {Redis :6379\\[-1pt]{\scriptsize sessions, cache}};
+  \draw[arr] (g2.east) -- ++(6mm,0) |- (pg.west);
+  \draw[dlink] (web.east |- pg.west) -- (pg.west);
+  \draw[arr] (g2.east) -- ++(6mm,0) |- (rd.west);
+  \node[lbl, anchor=south west, align=left] at ([xshift=1mm,yshift=0.5mm]web.east |- pg.west) {\texttt{pg\_hba},\\\texttt{listen\_addresses}};
+  \node[lbl, anchor=north west, align=left] at ([xshift=1mm,yshift=-0.5mm]web.east |- rd.west) {\texttt{bind},\\\texttt{requirepass}};
+  % erreurs
+  \node[boxbad, minimum width=56mm, anchor=north west, align=left, text width=54mm] (e502) at ([yshift=-7mm]web.south west)
+    {\textbf{502 Bad Gateway} — nginx n'a \emph{pas pu parler} au backend : instance morte, mauvais port dans \texttt{upstream}, socket refusé.\\[-1pt]{\scriptsize error.log : \texttt{connect() failed (111: Connection refused) while connecting to upstream}}};
+  \node[boxwarn, minimum width=56mm, anchor=north east, align=left, text width=54mm] (e504) at (db.east |- e502.north)
+    {\textbf{504 Gateway Time-out} — le backend a accepté mais \emph{n'a pas répondu à temps} : requête lente, base verrouillée.\\[-1pt]{\scriptsize error.log : \texttt{upstream timed out (110)} ; réglé par \texttt{proxy\_read\_timeout}}};
+  \draw[arrbad] (e502.north -| g1) -- node[lbl, left] {naît ici} (g1.south);
+  \draw[arrbad, draw=orange] (e504.north -| db) -- node[lbl, right] {naît ici} (db.south);
+  \node[lbl, below=2mm of e502.south west, anchor=north west, align=left, text width=124mm]
+    {Le code vient de nginx, la cause est derrière lui : \texttt{\$upstream\_addr} et \texttt{\$upstream\_response\_time} dans le \texttt{log\_format} disent quelle instance a répondu et en combien de temps.
+     Une seule instance morte ne donne pas de 502 : l'upstream bascule sur l'autre.};
+\end{tikzpicture}

@@ -1,0 +1,31 @@
+\begin{tikzpicture}[wb]
+  % colonne de gauche : les blocs du script, dans l'ordre
+  \node[layerg, minimum width=58mm, anchor=north west, font=\scriptsize\ttfamily, text=codeink] (b1) at (0,0)
+    {\#!/usr/bin/env bash};
+  \node[layer, minimum width=58mm, below=1.5mm of b1, font=\scriptsize\ttfamily, text=codeink] (b2)
+    {set -euo pipefail};
+  \node[layer, minimum width=58mm, below=1.5mm of b2, font=\scriptsize\ttfamily, text=codeink] (b3)
+    {readonly SCRIPT=\$\{0\#\#*/\} \ \ VERSION=1.0};
+  \node[layer2, minimum width=58mm, below=1.5mm of b3, minimum height=13mm, font=\scriptsize\ttfamily, text=codeink] (b4)
+    {log() \{ \ldots \} \ \ usage() \{ \ldots \}\\[-1pt]nettoyage() \{ rm -rf -- "\$TRAVAIL"; \}};
+  \node[layerg, minimum width=58mm, below=1.5mm of b4, draw=orange, fill=orangesoft, font=\scriptsize\ttfamily, text=codeink] (b5)
+    {trap nettoyage EXIT};
+  \node[layer, minimum width=58mm, below=1.5mm of b5, minimum height=13mm, font=\scriptsize\ttfamily, text=codeink] (b6)
+    {while getopts ":hvn:" opt; do \ldots done\\[-1pt]shift \$((OPTIND-1))};
+  \node[layerd, minimum width=58mm, below=1.5mm of b6, font=\scriptsize\ttfamily, text=white] (b7)
+    {main "\$@"};
+  % lecture de haut en bas
+  \draw[arrg] ([xshift=-4mm]b1.west) -- node[lbl, left, rotate=90, anchor=south, yshift=1mm] {lu de haut en bas} ([xshift=-4mm]b7.west);
+  \node[glabel, text=accent, anchor=south west] at ([yshift=1mm]b1.north west) {Squelette d'un script robuste};
+  % colonne de droite : ce que chaque bloc protège
+  \foreach \b/\t in {
+    b1/{interpréteur trouvé via le PATH, pas un chemin figé},
+    b2/{erreur = arrêt ; variable absente = arrêt ;\\un étage de pipe qui échoue = arrêt},
+    b3/{valeurs fixées une fois, impossibles à écraser par erreur},
+    b4/{messages horodatés, aide à jour, nettoyage\\écrit avant d'être utilisé},
+    b5/{fichiers temporaires et verrous libérés\\même sur Ctrl-C ou sur \texttt{exit 1}},
+    b6/{options validées avant tout effet ;\\usage incorrect = code 2},
+    b7/{rien ne s'exécute avant que tout soit défini ;\\le script se lit comme un programme}}
+    {\node[lbl, anchor=west, text=ink, align=left] (t\b) at ([xshift=6mm]\b.east) {\t};
+     \draw[arrg] (\b.east) -- (t\b.west);}
+\end{tikzpicture}

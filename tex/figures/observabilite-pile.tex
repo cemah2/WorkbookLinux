@@ -1,0 +1,30 @@
+\begin{tikzpicture}[wb, ex/.style={boxw, minimum width=34mm, minimum height=8mm, inner sep=2pt, align=left, text width=32mm}]
+  % ---- sources (VM)
+  \node[vm, minimum width=40mm, minimum height=42mm, anchor=north west] (vms) at (0,0) {};
+  \node[glabel, text=accent] at (vms.north west) {chaque VM (lab-web, lab-db…)};
+  \node[ex, anchor=north] (ne) at ([yshift=-6mm]vms.north) {\scriptsize\texttt{node\_exporter} :9100\\[-2pt]\scriptsize CPU, RAM, disque, réseau};
+  \node[ex, below=2mm of ne] (app) {\scriptsize \texttt{postgres\_exporter}, nginx,\\[-2pt]\scriptsize l'API elle-même : \texttt{/metrics}};
+  \node[ex, below=2mm of app] (logs) {\scriptsize journald, \texttt{/var/log/nginx/}\\[-2pt]\scriptsize lus par \texttt{promtail} / Alloy};
+  % blackbox
+  \node[ex, anchor=north west, minimum width=40mm, text width=38mm] (bb) at ([yshift=-4mm]vms.south west) {\scriptsize\texttt{blackbox\_exporter} (sur lab-ops)\\[-2pt]\scriptsize sonde HTTP/TCP/ICMP \emph{vue de dehors}\\[-2pt]\scriptsize $\rightarrow$ \texttt{probe\_success}, \texttt{probe\_duration}};
+  % ---- lab-ops
+  \node[host, minimum width=104mm, minimum height=64mm, anchor=north west, draw=accent2] (ops) at ([xshift=18mm]vms.north east) {};
+  \node[glabel, text=accent2] at (ops.north west) {lab-ops (10.10.10.14) — pile Compose};
+  \node[box, minimum width=48mm, minimum height=16mm, anchor=north west, align=left, text width=46mm] (prom) at ([xshift=4mm,yshift=-6mm]ops.north west) {\textbf{Prometheus} :9090\\[-2pt]{\scriptsize \textbf{scrape} : pull HTTP / 15 s, \texttt{up\{\}} = 1 ou 0}\\[-2pt]{\scriptsize \textbf{TSDB} : séries \texttt{nom\{labels\}}, 15 j}\\[-2pt]{\scriptsize \textbf{règles} : recording + alerting (\texttt{for: 5m})}};
+  \node[boxwarn, minimum width=48mm, minimum height=14mm, below=5mm of prom, align=left, text width=46mm] (am) {\textbf{Alertmanager} :9093\\[-2pt]{\scriptsize \textbf{routage} par labels (\texttt{severity}, \texttt{team})}\\[-2pt]{\scriptsize groupage, \textbf{silences} (\texttt{amtool}), inhibition}};
+  \node[box2, minimum width=48mm, minimum height=13mm, below=5mm of am, align=left, text width=46mm] (loki) {\textbf{Loki} :3100\\[-2pt]{\scriptsize index par labels seulement ; LogQL :}\\[-2pt]{\scriptsize \texttt{\{host="lab-web"\} |= "500"}}};
+  \node[boxdark, minimum width=44mm, minimum height=22mm, anchor=north west, align=left, text width=42mm] (graf) at ([xshift=8mm]prom.north east) {\textbf{Grafana} :3000\\[-2pt]{\scriptsize lit Prometheus (PromQL) et Loki (LogQL)}\\[-2pt]{\scriptsize dashboards provisionnés en Git}\\[-2pt]{\scriptsize (\texttt{provisioning/*.yaml})}\\[-2pt]{\scriptsize corrélation : pic de p95 $\rightarrow$}\\[-2pt]{\scriptsize logs de la même minute}};
+  \node[boxg, minimum width=44mm, minimum height=12mm, anchor=north west, align=left, text width=42mm] (recv) at ([yshift=-4mm]graf.south west) {\scriptsize \textbf{récepteurs} : webhook (\texttt{sante.py},\\[-2pt]\scriptsize Mattermost), mail via postfix ;\\[-2pt]\scriptsize \texttt{amtool silence add alertname=…}};
+  % flèches
+  \draw[arr] (prom.west) -- node[lbl, above, align=center] {scrape\\[-2pt]\texttt{GET /metrics}} (prom.west -| vms.east);
+  \draw[arr, rounded corners=3pt] (bb.east) -| node[lbl, pos=0.2, above] {\scriptsize scrape} ([xshift=-8mm,yshift=-5mm]prom.west) -- ([yshift=-5mm]prom.west);
+  \draw[arr2] (logs.east) -- node[lbl, above, align=center, pos=0.4] {push HTTP\\[-2pt]lignes + labels} (loki.west |- logs.east);
+  \draw[arr, draw=orange] (prom.south) -- node[lbl, right] {alertes \texttt{firing}} (am.north);
+  \draw[arr, draw=orange, rounded corners=3pt] (am.east) -| node[lbl, pos=0.25, above] {\scriptsize route} ([xshift=-2mm]recv.south west |- am.east) -- ([xshift=-2mm]recv.south west |- recv.west) -- (recv.west);
+  \draw[arr, dashed, draw=muted] (graf.west |- prom.east) -- node[lbl, above] {\scriptsize PromQL} (prom.east);
+  \draw[arr, dashed, draw=muted, rounded corners=3pt] (loki.east) -| node[lbl, pos=0.3, above] {\scriptsize LogQL} ([xshift=-4mm]graf.south west);
+  % ---- encart SLO (sous les VM)
+  \node[lbl, anchor=north west, align=left, text=ink, text width=40mm] (slot) at ([yshift=-9mm]bb.south west) {\textbf{SLI} : part des requêtes < 300 ms sans 5xx\\[1pt]\textbf{SLO} : 99,9 \% sur 30 jours\\[1pt]\textbf{budget d'erreur} : 0,1 \% = \textbf{43,2 min}\\[1pt]\textbf{burn rate} : vitesse à laquelle on le brûle ; on alerte sur un burn rate élevé, pas sur chaque 500};
+  \begin{scope}[on background layer]\node[group, fit=(slot), inner sep=4pt] (slo) {};\end{scope}
+  \node[glabel] at ([yshift=1pt]slo.north west) {SLO / budget d'erreur};
+\end{tikzpicture}

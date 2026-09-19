@@ -1,0 +1,38 @@
+\begin{tikzpicture}[wb]
+  % ================= NAT (gauche)
+  \node[host, minimum width=60mm, minimum height=55mm, anchor=north west] (hnat) at (0,0) {};
+  \node[glabel, text=accent2] at (hnat.north west) {Mode NAT — réseau libvirt \texttt{default}};
+  \node[vm, minimum width=22mm, minimum height=10mm, anchor=north west] (vmn1) at ([xshift=4mm,yshift=-7mm]hnat.north west) {\textbf{vm-01}\\[-1pt]{\scriptsize 192.168.122.50}};
+  \node[vm, minimum width=22mm, minimum height=10mm, right=6mm of vmn1] (vmn2) {\textbf{vm-02}\\[-1pt]{\scriptsize 192.168.122.51}};
+  \node[net, minimum width=54mm, below=6mm of $(vmn1.south)!0.5!(vmn2.south)$] (virbr) {\texttt{virbr0} — 192.168.122.1/24};
+  \draw[link] (vmn1.south) -- node[lbl, left, xshift=-1mm] {\scriptsize vnet0} (vmn1.south |- virbr.north);
+  \draw[link] (vmn2.south) -- node[lbl, right, xshift=1mm] {\scriptsize vnet1} (vmn2.south |- virbr.north);
+  \node[boxw, minimum width=22mm, minimum height=7mm, inner sep=2pt, below=5mm of virbr.south west, anchor=north west] (dnsm) {\scriptsize \texttt{dnsmasq}\\[-2pt]\scriptsize DHCP + DNS};
+  \node[boxwarn, minimum width=26mm, minimum height=7mm, inner sep=2pt, below=5mm of virbr.south east, anchor=north east] (masq) {\scriptsize netfilter \texttt{MASQUERADE}\\[-2pt]\scriptsize chaîne \texttt{LIBVIRT\_PRT}};
+  \draw[arrg] (dnsm.north) -- node[lbl, right] {\scriptsize bail} (dnsm.north |- virbr.south);
+  \draw[arr, draw=orange] (masq.north |- virbr.south) -- node[lbl, left] {\scriptsize src $\rightarrow$ IP hôte} (masq.north);
+  \node[net, minimum width=18mm, minimum height=6mm, anchor=north] (ens18n) at ([yshift=-5mm]masq.south) {\texttt{ens18} — 10.10.10.16};
+  \draw[arr, draw=orange] (masq.south) -- (ens18n.north);
+  % ================= BRIDGE (droite)
+  \node[host, minimum width=60mm, minimum height=55mm, anchor=north west] (hbr) at ([xshift=6mm]hnat.north east) {};
+  \node[glabel, text=accent2] at (hbr.north west) {Mode bridge — \texttt{br0} (Netplan) $\equiv$ \texttt{vmbr1} Proxmox};
+  \node[vm, minimum width=22mm, minimum height=10mm, anchor=north west] (vmb1) at ([xshift=4mm,yshift=-7mm]hbr.north west) {\textbf{vm-lan}\\[-1pt]{\scriptsize 10.10.10.60}};
+  \node[vm, minimum width=22mm, minimum height=10mm, right=6mm of vmb1] (vmb2) {\textbf{vm-lan2}\\[-1pt]{\scriptsize 10.10.10.61}};
+  \node[net, minimum width=54mm, below=6mm of $(vmb1.south)!0.5!(vmb2.south)$] (br0) {\texttt{br0} — 10.10.10.16 (IP de l'hôte)};
+  \draw[link] (vmb1.south) -- node[lbl, left, xshift=-1mm] {\scriptsize vnet2} (vmb1.south |- br0.north);
+  \draw[link] (vmb2.south) -- node[lbl, right, xshift=1mm] {\scriptsize vnet3} (vmb2.south |- br0.north);
+  \node[net, minimum width=18mm, minimum height=6mm, below=11mm of br0] (ens18b) {\texttt{ens18} (esclave, sans IP)};
+  \draw[link] (br0.south) -- node[lbl, left, align=right] {commutation L2 :\\pas de NAT,\\pas de DHCP libvirt} (ens18b.north);
+  \node[lbl, anchor=north west, align=left] at ([xshift=4mm,yshift=-1mm]br0.south west) {};
+  % ================= LAN commun en bas
+  \node[net, minimum width=126mm, minimum height=7mm, anchor=north] (lan) at ([yshift=-7mm]$(hnat.south)!0.5!(hbr.south)$) {LAN de lab 10.10.10.0/24 — DHCP et DNS de la passerelle 10.10.10.1};
+  \draw[link] (ens18n.south) -- (ens18n.south |- lan.north);
+  \draw[link] (ens18b.south) -- (ens18b.south |- lan.north);
+  \node[vm, minimum width=22mm, minimum height=9mm, below=9mm of lan, draw=muted] (adm) {\textbf{lab-adm}\\[-1pt]{\scriptsize 10.10.10.10}};
+  \draw[link] (adm.north) -- (adm.north |- lan.south);
+  % verdicts
+  \draw[arrbad, dashed, rounded corners=3pt] (adm.west) -| node[lbl, pos=0.35, below, text=red, align=center] {\texttt{ssh 192.168.122.50} :\\injoignable, réseau privé de l'hôte} ([xshift=-14mm]ens18n.south |- lan.south) ;
+  \draw[arr, draw=green, dashed, rounded corners=3pt] (adm.east) -| node[lbl, pos=0.35, below, text=green, align=center] {\texttt{ssh 10.10.10.60} :\\direct, la VM est un hôte du LAN} ([xshift=14mm]ens18b.south |- lan.south);
+  \node[lbl, anchor=north west, align=left, text=ink, text width=58mm] at ([yshift=-3mm]hnat.south west |- adm.south) {\textbf{NAT} : sortie vers l'extérieur OK, entrée impossible sans règle DNAT. Bien pour un poste de travail.};
+  \node[lbl, anchor=north west, align=left, text=ink, text width=58mm] at ([yshift=-3mm]hbr.south west |- adm.south) {\textbf{Bridge} : la VM prend une IP du LAN, visible par l'équipe. Ce qu'un serveur veut (\texttt{--network bridge=br0}).};
+\end{tikzpicture}

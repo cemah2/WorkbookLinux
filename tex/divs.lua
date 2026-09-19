@@ -27,14 +27,80 @@ function Div(el)
   return el.content
 end
 
--- Un seul H1 par fichier -> \chapter ; H2 -> section, etc. (pandoc le fait via --top-level-division)
--- Cases à cocher
-function Str(s)
-  if s.text:find("☐") then
-    local t = s.text:gsub("☐", "\\checkbox{}")
-    return pandoc.RawInline("latex", t)
+-- H1 "Module 07 — Titre" -> ouverture de chapitre stylée
+local function texesc(str)
+  return (str:gsub("\\", "\\textbackslash{}"):gsub("([&%%$#_{}])", "\\%1"))
+end
+function Header(h)
+  if h.level ~= 1 then return h end
+  local full = pandoc.utils.stringify(h.content)
+  local kicker, num, title = "", "", full
+  local k, n, t = full:match("^(Module)%s+(%d+)%s+[—%-]+%s+(.+)$")
+  if k then kicker, num, title = k, n, t
+  else
+    k, n, t = full:match("^(Projet)%s+(%a)%s+[—%-]+%s+(.+)$")
+    if k then kicker, num, title = k, n, t
+    else
+      k, n, t = full:match("^(Chapitre)%s+(%d+)%s+[—%-]+%s+(.+)$")
+      if k then kicker, num, title = k, n, t end
+    end
   end
+  local toc = texesc(full)
+  local set = "\\wbchapterset{" .. texesc(kicker) .. "}{" .. texesc(num) .. "}"
+  -- le titre garde les inlines (code, etc.) : on passe par pandoc pour le rendu
+  local tt = pandoc.write(pandoc.Pandoc({pandoc.Plain(pandoc.Inlines(title))}), "latex"):gsub("\n$", "")
+  return pandoc.RawBlock("latex", set .. "\\chapter[" .. toc .. "]{" .. tt .. "}\\markboth{" .. tt .. "}{}")
+end
+
+-- Cases à cocher, étoiles de difficulté
+function Str(s)
+  local changed = false
+  local t = s.text
+  if t:find("☐") then t = t:gsub("☐", "\\checkbox{}"); changed = true end
+  if t:find("★") then t = t:gsub("★", "\\wbstar{}"); changed = true end
+  if changed then return pandoc.RawInline("latex", t) end
   return s
+end
+
+-- **Q7.3** en début de ligne -> pastille
+function Strong(el)
+  local txt = pandoc.utils.stringify(el.content)
+  if txt:match("^%u%u?%d+%.%d+$") or txt:match("^D%d+$") or txt:match("^P[ABC]%.%d+$") or txt:match("^PC%.%d+%.%d+$") then
+    return pandoc.RawInline("latex", "\\wbid{" .. txt .. "}")
+  end
+  return el
+end
+
+-- Blocs de code : cadre avec étiquette de langage
+function CodeBlock(cb)
+  local lang = cb.classes[1] or ""
+  local label = ({bash="bash", sh="sh", ini="ini", yaml="yaml", yml="yaml", json="json", python="python",
+    nginx="nginx", sql="sql", hcl="hcl", terraform="hcl", dockerfile="Dockerfile", toml="toml",
+    text="", console="console", diff="diff", xml="xml", conf="conf", jinja="jinja2", makefile="make"})[lang] or lang
+  return { pandoc.RawBlock("latex", "\\begin{codeframe}{" .. texesc(label) .. "}"), cb,
+           pandoc.RawBlock("latex", "\\end{codeframe}") }
+end
+
+-- Figures : un paragraphe "@fig(nom): légende"
+function Para(p)
+  local txt = pandoc.utils.stringify(p.content)
+  local name, cap = txt:match("^@fig%(([%w%-_]+)%)%s*:%s*(.*)$")
+  if name then
+    -- garder la mise en forme de la légende : retirer le marqueur des inlines
+    local inl = pandoc.List()
+    local skipping = true
+    for _, x in ipairs(p.content) do
+      if skipping then
+        if x.t == "Str" and x.text:match(":$") then skipping = false end
+      else
+        inl:insert(x)
+      end
+    end
+    if #inl > 0 and inl[1].t == "Space" then inl:remove(1) end
+    local capl = pandoc.write(pandoc.Pandoc({pandoc.Plain(inl)}), "latex"):gsub("\n$", "")
+    return pandoc.RawBlock("latex", "\\wbfigure{" .. name .. "}{" .. capl .. "}")
+  end
+  return p
 end
 
 -- Tables : longtable de pandoc, forcer des largeurs de colonnes proportionnelles
@@ -78,6 +144,14 @@ function Table(t)
     for i = 1, ncols do s = s + t.colspecs[i][2] end
     for i = 1, ncols do t.colspecs[i] = {t.colspecs[i][1], t.colspecs[i][2] / s * 0.97} end
   end
+  -- en-tête : gras + couleur
+  for _, row in ipairs(t.head.rows) do
+    for _, cell in ipairs(row.cells) do
+      if #cell.contents > 0 and cell.contents[1].t == "Plain" then
+        table.insert(cell.contents[1].content, 1, pandoc.RawInline("latex", "\\bfseries\\color{accent}"))
+      end
+    end
+  end
   return t
 end
 
@@ -119,4 +193,4 @@ function Code(el)
   return r
 end
 
-return { {Table = fixpipes}, {Table = Table, Div = Div, Str = Str, Code = Code} }
+return { {Table = fixpipes}, {Table = Table, Div = Div, Str = Str, Code = Code, Header = Header, Strong = Strong, CodeBlock = CodeBlock, Para = Para} }

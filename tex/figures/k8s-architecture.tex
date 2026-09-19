@@ -1,0 +1,32 @@
+\begin{tikzpicture}[wb, comp/.style={boxw, minimum width=48mm, minimum height=8mm, inner sep=2pt, align=left, text width=46mm}]
+  % ---- kubectl
+  \node[vm, minimum width=24mm, minimum height=12mm, draw=muted] (kc) at (0,0) {\texttt{kubectl}\\[-1pt]{\scriptsize \texttt{apply -f}, \texttt{get}, \texttt{describe}}\\[-2pt]{\scriptsize \texttt{~/.kube/config}}};
+  % ---- control plane
+  \node[host, minimum width=56mm, minimum height=50mm, anchor=north west, draw=accent] (cp) at ([xshift=10mm,yshift=8mm]kc.north east) {};
+  \node[glabel, text=accent] at (cp.north west) {control plane (k3s : un binaire, \texttt{k3s.service})};
+  \node[comp, anchor=north, draw=accent, fill=accentsoft] (api) at ([yshift=-6mm]cp.north) {\textbf{kube-apiserver} :6443\\[-2pt]{\scriptsize REST, RBAC, admission — \textbf{tout y passe}}};
+  \node[comp, below=2mm of api] (etcd) {\textbf{etcd} (k3s : SQLite via kine)\\[-2pt]{\scriptsize état désiré + observé ; seul l'API y parle}};
+  \node[comp, below=2mm of etcd] (sched) {\textbf{scheduler}\\[-2pt]{\scriptsize Pod \texttt{Pending} $\rightarrow$ choisit un nœud}};
+  \node[comp, below=2mm of sched] (ctrl) {\textbf{controller-manager}\\[-2pt]{\scriptsize boucles : Deployment $\rightarrow$ RS $\rightarrow$ Pods}};
+  \draw[arr] (kc.east) -- node[lbl, above] {REST} (kc.east -| cp.west);
+  \draw[darr, draw=muted] (api.south) -- (etcd.north);
+  % ---- nœud
+  \node[host, minimum width=56mm, minimum height=50mm, anchor=north west, draw=accent2] (nd) at ([xshift=12mm]cp.north east) {};
+  \node[glabel, text=accent2] at (nd.north west) {nœud (lab-ops ; agents : \texttt{k3s-agent})};
+  \node[comp, anchor=north, draw=accent2, fill=accent2!12] (kubelet) at ([yshift=-6mm]nd.north) {\textbf{kubelet}\\[-2pt]{\scriptsize lance les Pods assignés, probes, status}};
+  \node[comp, below=2mm of kubelet] (ctd) {\textbf{containerd} (CRI), CNI flannel\\[-2pt]{\scriptsize \texttt{crictl ps} ; Pods en 10.42.0.0/16}};
+  \node[comp, below=2mm of ctd] (kp) {\textbf{kube-proxy}\\[-2pt]{\scriptsize ClusterIP $\rightarrow$ Pods : iptables / ipvs}};
+  \node[comp, below=2mm of kp] (dns) {\textbf{CoreDNS}, Traefik, metrics-server\\[-2pt]{\scriptsize \texttt{<svc>.<ns>.svc.cluster.local}}};
+  \draw[darr, draw=accent2] (cp.east |- kubelet) -- node[lbl, above] {watch /\\[-2pt]status} (kubelet.west);
+  % ---- objets
+  \node[title, anchor=north west] (t) at ([yshift=-7mm]kc.west |- cp.south) {Objets : tu déclares, les contrôleurs réconcilient};
+  \node[box, minimum width=23mm, minimum height=9mm, anchor=north west] (dep) at ([yshift=-2mm]t.south west) {\textbf{Deployment}\\[-2pt]{\scriptsize \texttt{replicas: 3}, image}};
+  \node[box, minimum width=23mm, minimum height=9mm, right=7mm of dep] (rs) {\textbf{ReplicaSet}\\[-2pt]{\scriptsize un par version}};
+  \node[box, minimum width=23mm, minimum height=9mm, right=7mm of rs] (pods) {\textbf{Pods} $\times$3\\[-2pt]{\scriptsize IP éphémères 10.42.x.y}};
+  \node[box2, minimum width=23mm, minimum height=9mm, right=7mm of pods] (svc) {\textbf{Service} ClusterIP\\[-2pt]{\scriptsize IP stable + DNS}};
+  \node[box2, minimum width=23mm, minimum height=9mm, right=7mm of svc] (ing) {\textbf{Ingress} (Traefik)\\[-2pt]{\scriptsize hôte/chemin, TLS}};
+  \draw[arr] (dep) -- node[lbl, above] {\scriptsize crée} (rs); \draw[arr] (rs) -- node[lbl, above] {\scriptsize maintient} (pods);
+  \draw[arr2] (svc) -- node[lbl, above] {\scriptsize sélecteur} (pods); \draw[arr2] (ing) -- node[lbl, above] {\scriptsize route} (svc);
+  \draw[arr2] ([xshift=8mm]ing.east) -- node[lbl, above] {\scriptsize :443} (ing.east);
+  \node[lbl, anchor=north west, align=left, text=ink, text width=140mm] at ([yshift=-3mm]dep.south west) {\texttt{kubectl apply} n'exécute rien : il écrit l'objet dans l'API. Le controller-manager crée le ReplicaSet, qui crée les Pods ; le scheduler leur choisit un nœud ; le kubelet y lance les conteneurs. Un Pod qui meurt est remplacé : c'est la \textbf{réconciliation}.};
+\end{tikzpicture}

@@ -1,0 +1,33 @@
+\begin{tikzpicture}[wb]
+  % la boucle, de haut en bas
+  \node[boxdark, minimum width=44mm] (sym) at (0,0) {\textbf{symptôme}\\[-1pt]{\scriptsize « le site est lent » — quoi, mesuré comment ?}};
+  \node[boxwarn, minimum width=44mm, below=6mm of sym, text width=42mm] (del) {\textbf{délimiter}\\[-1pt]{\scriptsize quoi ? quand, depuis quand ? qui est touché ? \textbf{qu'est-ce qui a changé} (déploiement, cron, mise à jour) ?}};
+  \node[box, minimum width=44mm, below=6mm of del, text width=42mm] (use) {\textbf{mesurer chaque ressource (USE)}\\[-1pt]{\scriptsize les 60 premières secondes : \texttt{uptime}, \texttt{dmesg -T | tail}, \texttt{vmstat 1}, \texttt{mpstat -P ALL 1}, \texttt{free -m}, \texttt{iostat -xz 1}, \texttt{sar -n DEV 1}, \texttt{top}}};
+  \node[box2, minimum width=44mm, below=6mm of use, text width=42mm] (hyp) {\textbf{hypothèse falsifiable}\\[-1pt]{\scriptsize « si X, alors je dois voir Y » — ex. : disque saturé → \texttt{await} élevé et \%iowait > 20}};
+  \node[box2, minimum width=44mm, below=6mm of hyp, text width=42mm] (tst) {\textbf{test}\\[-1pt]{\scriptsize \textbf{une seule variable} à la fois ; \texttt{strace -c}, \texttt{perf top}, \texttt{iotop}, \texttt{ss -tanp}}};
+  \node[boxok, minimum width=44mm, below=6mm of tst, text width=42mm] (fix) {\textbf{correctif}\\[-1pt]{\scriptsize minimal, réversible, noté avec l'heure ; on remet en place ce qui n'a rien changé}};
+  \node[boxg, minimum width=44mm, below=6mm of fix, text width=42mm] (pm) {\textbf{post-mortem}\\[-1pt]{\scriptsize chronologie, cause racine, ce qui a manqué, actions ; sans blâme}};
+  \foreach \a/\b in {sym/del,del/use,use/hyp,hyp/tst,tst/fix,fix/pm} \draw[arr] (\a) -- (\b);
+  \draw[arrbad, draw=muted] (tst.east) -- ++(4mm,0) |- node[lbl, right, pos=0.25, align=left] {hypothèse\\réfutée :\\on note,\\on relance} (hyp.east);
+  % grille USE, à droite
+  \node[title, anchor=north west] (t) at ([xshift=16mm]use.north east |- sym.north) {USE — pour chaque ressource, trois questions};
+  \node[layerd, minimum width=22mm, minimum height=7mm, anchor=north west] (h0) at ([yshift=-2mm]t.south west) {ressource};
+  \node[layerd, minimum width=30mm, minimum height=7mm, right=0mm of h0] (h1) {\textbf{U}tilisation};
+  \node[layerd, minimum width=34mm, minimum height=7mm, right=0mm of h1] (h2) {\textbf{S}aturation};
+  \node[layerd, minimum width=30mm, minimum height=7mm, right=0mm of h2] (h3) {\textbf{E}rreurs};
+  \foreach \i/\r/\u/\s/\e in {
+    1/CPU/{\%usr+\%sys · \texttt{mpstat}}/{\texttt{r} > nb cœurs (\texttt{vmstat}), \%st}/{MCE · \texttt{dmesg}},
+    2/mémoire/{\texttt{available} · \texttt{free -m}}/{\texttt{si/so} (\texttt{vmstat}), OOM, PSI}/{ECC · \texttt{dmesg}},
+    3/disque/{\%util · \texttt{iostat -xz}}/{\texttt{aqu-sz}, \texttt{await}, \%iowait}/{I/O error · \texttt{dmesg}},
+    4/réseau/{débit · \texttt{sar -n DEV}}/{\texttt{drop}, retrans. · \texttt{ss -s}}/{\texttt{ip -s link}}} {
+    \node[layerg, minimum width=22mm, minimum height=9mm, anchor=north west] (r\i0) at ([yshift=-9mm*(\i-1)]h0.south west) {\textbf{\r}};
+    \node[layer, minimum width=30mm, minimum height=9mm, right=0mm of r\i0, font=\scriptsize\sffamily] (r\i1) {\u};
+    \node[layer, minimum width=34mm, minimum height=9mm, right=0mm of r\i1, font=\scriptsize\sffamily, fill=orangesoft, draw=orange] (r\i2) {\s};
+    \node[layer, minimum width=30mm, minimum height=9mm, right=0mm of r\i2, font=\scriptsize\sffamily, fill=redsoft, draw=red] (r\i3) {\e};
+  }
+  \node[lbl, anchor=north west, align=left, text width=116mm] at ([yshift=-3mm]r40.south west)
+    {\textbf{Utilisation} haute n'est pas un problème ; la \textbf{saturation} (une file d'attente) en est un ; une \textbf{erreur} l'est toujours.
+     USE lit la machine par-dessous ; les quatre signaux dorés (latence, trafic, erreurs, saturation) lisent le service par-dessus : « la latence a triplé » \emph{parce que} « le disque est saturé ».\\
+     \texttt{vmstat 1} et \texttt{iostat -xz 1} en 10 s, avec \texttt{top} trié par \texttt{\%CPU} puis \texttt{\%MEM}, couvrent 80 \% des cas.};
+  \draw[dlink] (use.east) -- ++(10mm,0) |- ([xshift=-1mm]r10.west);
+\end{tikzpicture}

@@ -1,0 +1,24 @@
+\begin{tikzpicture}[wb, every node/.append style={font=\scriptsize\sffamily}]
+  % cible finale en haut, socle en bas : une flèche se lit « a besoin de »
+  \node[boxdark, minimum width=34mm] (mu) at (0,0) {\texttt{multi-user.target}\\[-1pt]{\tiny default.target d'un serveur}};
+  \node[box2, minimum width=28mm] (nginx) at (-50mm,-17mm) {\texttt{nginx.service}\\[-1pt]{\tiny WantedBy=multi-user.target}};
+  \node[box, minimum width=28mm] (basic) at (0,-17mm) {\texttt{basic.target}};
+  \node[box, minimum width=30mm] (netonline) at (-50mm,-34mm) {\texttt{network-online.target}};
+  \node[box, minimum width=28mm] (sysinit) at (0,-34mm) {\texttt{sysinit.target}};
+  \node[box, minimum width=28mm] (sockets) at (38mm,-34mm) {\texttt{sockets.target}\\[-1pt]{\tiny *.socket activés}};
+  \node[box, minimum width=28mm] (localfs) at (0,-51mm) {\texttt{local-fs.target}\\[-1pt]{\tiny fstab monté}};
+  % Wants (pointillé) : souhait, l'échec n'empêche rien
+  \draw[arr, dashed] (mu.west) -| node[lbl, pos=0.25, above] {Wants=} node[lbl, pos=0.25, below] {lien dans \texttt{.wants/}} (nginx.north);
+  \draw[arr, dashed] (nginx.south) -- node[lbl, right, align=left] {Wants=\\After=} (netonline.north);
+  \draw[arr, dashed] (basic.east) -| node[lbl, pos=0.25, above] {Wants=} node[lbl, pos=0.25, below] {After=} (sockets.north);
+  \draw[arr, dashed] (sysinit.south) -- node[lbl, right, align=left] {Wants=\\After=} (localfs.north);
+  % Requires / After (plein) : obligation et ordre stricts
+  \draw[arr] (mu.south) -- node[lbl, right, align=left] {Requires=\\After=} (basic.north);
+  \draw[arr] (basic.south) -- node[lbl, right, align=left] {Requires=\\After=} (sysinit.north);
+  \draw[arrg] (nginx.east) -- node[lbl, above] {After= implicite} node[lbl, below] {\tiny DefaultDependencies=yes} (basic.west);
+  % légende
+  \node[lbl, text=ink, align=left, anchor=north west] (leg) at (-66mm,-62mm) {
+    \tikz\draw[arr] (0,0) -- (6mm,0); \ \texttt{Requires=} + \texttt{After=} : obligation \textbf{et} ordre \qquad
+    \tikz\draw[arr, dashed] (0,0) -- (6mm,0); \ \texttt{Wants=} : souhait, son échec n'arrête rien\\[2pt]
+    Lire une flèche « a besoin de » : l'unité pointée démarre \textbf{avant}. \texttt{Requires=} sans \texttt{After=} lance les deux en parallèle.};
+\end{tikzpicture}

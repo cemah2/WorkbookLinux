@@ -140,6 +140,8 @@ Trois règles non négociables : **une seule modification à la fois** (sinon on
 sait plus ce qui a corrigé), **on note tout** (heure, commande, résultat), et
 **on remet en place** ce qu'on a changé pour rien.
 
+@fig(diag-use): La boucle de diagnostic, du symptôme au post-mortem, et la grille USE (Utilisation, Saturation, Erreurs) par ressource avec l'outil qui la mesure.
+
 ### USE et les quatre signaux dorés
 
 | Méthode | Pour quoi | Les axes |

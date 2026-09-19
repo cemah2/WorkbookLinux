@@ -126,6 +126,8 @@ père --fork()--> fils (copie)  --execve()--> autre programme
        si le père meurt avant : ORPHELIN --> ré-adopté par PID 1
 ```
 
+@fig(proc-cycle): Cycle de vie d'un processus : fork, exec, exit, zombie tant que le père n'a pas fait `wait()`, orphelin ré-adopté par PID 1.
+
 | État `ps` | Signification | Ce qu'on en fait |
 |---|---|---|
 | `R` | en cours ou prêt à tourner | normal |
@@ -249,6 +251,8 @@ Ubuntu 24.04 et Rocky 9 sont en v2 pur (`stat -fc %T /sys/fs/cgroup` →
 └── machine.slice/           VM et conteneurs
 ```
 
+@fig(cgroups-arbre): Hiérarchie cgroup v2 : un répertoire par unité, un plafond commun par slice.
+
 ```bash
 systemd-cgls                                  # l'arbre, avec les PID
 systemd-cgls /system.slice/factura-api.service
@@ -312,6 +316,8 @@ systemd-analyze blame ; systemd-analyze critical-chain
 
 `Requires=` sans `After=` lance les deux **en parallèle** : c'est la panne la
 plus fréquente des unités maison.
+
+@fig(systemd-cibles): Graphe de dépendances autour de `multi-user.target` : `Wants=` en pointillé, `Requires=`/`After=` en trait plein.
 
 | `Type=` | systemd considère le service démarré… |
 |---|---|

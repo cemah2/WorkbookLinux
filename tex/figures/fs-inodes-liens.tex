@@ -1,0 +1,40 @@
+\begin{tikzpicture}[wb]
+  % ---- répertoire : table nom -> inode ----
+  \node[title, anchor=south west] at (0,2mm) {Répertoire \texttt{/data} : table nom $\to$ n° d'inode};
+  \node[boxg, minimum width=44mm, minimum height=7mm, anchor=north west, align=left, text width=40mm] (h) at (0,0)
+    {\scriptsize\textbf{nom \hfill inode}};
+  \node[boxw, minimum width=44mm, minimum height=7mm, below=0mm of h, align=left, text width=40mm] (e1)
+    {\texttt{rapport.txt} \hfill \texttt{1042}};
+  \node[boxw, minimum width=44mm, minimum height=7mm, below=0mm of e1, align=left, text width=40mm] (e2)
+    {\texttt{copie.txt} \hfill \texttt{1042}};
+  \node[boxw, minimum width=44mm, minimum height=7mm, below=0mm of e2, align=left, text width=40mm] (e3)
+    {\texttt{lien.txt} \hfill \texttt{2077}};
+  \node[chip2, anchor=east] at ([xshift=-2mm]e2.west) {ln rapport.txt copie.txt};
+  \node[chipo, anchor=east] at ([xshift=-2mm]e3.west) {ln -s rapport.txt lien.txt};
+
+  % ---- inode 1042 ----
+  \node[box, minimum width=44mm, anchor=north west, align=left, text width=40mm, inner sep=5pt] (i1) at ([xshift=22mm]h.north east)
+    {\textbf{inode 1042}\\[1pt]
+     {\scriptsize type : fichier ordinaire\\ mode 0644 · uid 1001 · gid 1001\\ taille 4 096 o · atime/mtime/ctime\\
+      \textbf{liens : 2}\\ pointeurs vers les blocs $\to$}};
+  % ---- blocs de données ----
+  \node[disk, anchor=west, minimum width=16mm, minimum height=12mm] (d) at ([xshift=9mm]i1.east) {\scriptsize blocs\\ données};
+  \draw[arr] (i1.east) -- (d.west);
+
+  \node[lbl, anchor=north, text width=30mm, align=center] at ([yshift=-2mm]d.south)
+    {aucun nom ici : \texttt{rm} d'une entrée décrémente le compteur ; les blocs partent à 0 lien et 0 ouverture};
+  % ---- inode 2077 ----
+  \node[boxwarn, minimum width=44mm, anchor=north west, align=left, text width=40mm, inner sep=5pt] (i2) at ([yshift=-22mm]i1.south west)
+    {\textbf{inode 2077}\\[1pt]
+     {\scriptsize type : \textbf{lien symbolique}\\ mode 0777 · liens : 1\\
+      contenu : le chemin \texttt{"rapport.txt"}\\ (résolu par le nom, relatif au répertoire du lien)}};
+  \node[lbl, anchor=north west, text width=44mm, align=left] at ([yshift=-1mm]i2.south west)
+    {si \texttt{rapport.txt} disparaît, le lien reste et pointe dans le vide (dangling)};
+
+  % ---- flèches entrées -> inodes ----
+  \draw[arr] (e1.east) -- ++(6mm,0) |- ([yshift=2mm]i1.west);
+  \draw[arr2] (e2.east) -- ++(6mm,0) |- ([yshift=-2mm]i1.west);
+  \node[lbl, text=accent2, anchor=west] at ([xshift=8mm, yshift=-0.5mm]e2.east) {2 noms,\\ même inode};
+  \draw[arr, draw=orange] (e3.east) -- ++(10mm,0) |- (i2.west);
+  \draw[dlink, ->] (i2.north) -- node[lbl, right, align=left, pos=0.4] {résolution : le noyau rouvre\\ le nom \texttt{rapport.txt} $\to$ inode 1042} (i1.south -| i2.north);
+\end{tikzpicture}

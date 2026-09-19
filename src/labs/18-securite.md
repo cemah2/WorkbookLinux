@@ -684,6 +684,8 @@ Politique cible :
 | `lab-web` → `lab-db` | 5432/tcp |
 | toute autre combinaison | refusée |
 
+@fig(parefeu-lab): La politique de flux du lab en un schéma : ce qui entre sur lab-web, lab-db, lab-adm et lab-ops, le bastion en 22 partout, la collecte vers lab-ops, et en rouge barré ce qui doit être refusé.
+
 1. Sur `lab-web` : politique par défaut refus en entrée, autorisation en sortie,
    ouverture de 80 et 443 depuis n'importe où, et de 22 depuis 10.10.10.10 seulement.
    Active ufw sans te couper — et vérifie depuis `lab-adm` que tu peux te reconnecter

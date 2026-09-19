@@ -231,6 +231,8 @@ restent les mêmes : ce qui change, c'est un démon de moins et `crictl` à la
 place de `docker ps` sur un nœud. Sur `lab-ops`, le paquet `containerd.io` de
 Docker livre `/etc/containerd/config.toml` avec `disabled_plugins = ["cri"]`.
 
+@fig(conteneur-pile): La chaîne d'un `docker run` : CLI, `dockerd`, `containerd`, un shim par conteneur, `runc` qui crée namespaces et cgroup puis disparaît ; à côté, `crictl`/`nerdctl` parlent à containerd sans `dockerd`, comme le kubelet.
+
 Mécanismes noyau, vus de l'hôte (`ID` = `docker inspect --format '{{.Id}}'`) :
 
 ```bash
@@ -249,6 +251,8 @@ docker run --security-opt seccomp=unconfined \
 docker run --cap-drop ALL --cap-add NET_BIND_SERVICE … capsh --print
 # /etc/docker/daemon.json : "userns-remap": "default"  -> root = UID 100000
 ```
+
+@fig(overlayfs-couches): overlayfs : les couches d'image en lecture seule empilées, une couche d'écriture par conteneur, la vue fusionnée montée sur `/` ; modifier un fichier le copie dans l'upper, le supprimer pose un whiteout.
 
 ### Installation et démon
 
@@ -404,6 +408,8 @@ Le bridge par défaut (`docker0`, `172.17.0.0/16`) **ne résout pas les noms**.
 Publier un port ajoute des règles `iptables` dans les chaînes `DOCKER`
 (`nat` et `filter`) **avant** celles d'`ufw` : seule la chaîne `DOCKER-USER`
 est respectée.
+
+@fig(docker-reseau): Le réseau d'un conteneur : bridge utilisateur avec DNS interne, publication de port par DNAT dans la chaîne DOCKER (avant `ufw`), chaîne DOCKER-USER pour tes règles, et `--network host` qui court-circuite tout.
 
 ### Compose v2
 
