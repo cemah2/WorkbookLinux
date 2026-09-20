@@ -193,4 +193,47 @@ function Code(el)
   return r
 end
 
-return { {Table = fixpipes}, {Table = Table, Div = Div, Str = Str, Code = Code, Header = Header, Strong = Strong, CodeBlock = CodeBlock, Para = Para} }
+
+-- Cartes : un item (**Q7.3** … / **E7.2** … / **BF7.1** …) et les blocs qui le suivent
+-- jusqu'au prochain item, titre ou règle horizontale forment une carte.
+local function is_item_para(b)
+  if b.t ~= "Para" and b.t ~= "Plain" then return false end
+  local first = b.content[1]
+  if not first or first.t ~= "Strong" then return false end
+  local txt = pandoc.utils.stringify(first.content)
+  return txt:match("^%u%u?%d+%.%d+$") or txt:match("^D%d+$") or txt:match("^P[ABC]%.%d+$") or txt:match("^PC%.%d+%.%d+$")
+end
+local function is_break(b)
+  return b.t == "Header" or b.t == "HorizontalRule"
+end
+local function cardify(blocks)
+  local out, card = pandoc.List(), nil
+  local function flush()
+    if card then
+      out:insert(pandoc.RawBlock("latex", "\\begin{wbcard}"))
+      for _, x in ipairs(card) do out:insert(x) end
+      out:insert(pandoc.RawBlock("latex", "\\end{wbcard}"))
+      card = nil
+    end
+  end
+  for _, b in ipairs(blocks) do
+    if is_item_para(b) then
+      flush(); card = pandoc.List({b})
+    elseif card and is_break(b) then
+      flush(); out:insert(b)
+    elseif card then
+      -- un encadré "pourquoi/piege/repondre/check" reste dans la carte ; un autre Div aussi
+      card:insert(b)
+    else
+      out:insert(b)
+    end
+  end
+  flush()
+  return out
+end
+local function Cards(doc)
+  doc.blocks = cardify(doc.blocks)
+  return doc
+end
+
+return { {Table = fixpipes}, {Pandoc = Cards}, {Table = Table, Div = Div, Str = Str, Code = Code, Header = Header, Strong = Strong, CodeBlock = CodeBlock, Para = Para} }
