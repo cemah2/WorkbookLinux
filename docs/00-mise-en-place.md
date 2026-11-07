@@ -5,7 +5,7 @@
 # Chapitre 0 — Mise en place du laboratoire
 
 Ce chapitre ne t'apprend pas Linux. Il te donne un laboratoire reproductible,
-une méthode de travail et les réflexes qui te serviront pendant les 27 modules
+une méthode de travail et les réflexes qui te serviront pendant les 33 modules
 et les 3 projets. Compte une demi-journée pour tout monter, et fais-le
 sérieusement : chaque module suppose que ces sept VM existent, avec ces noms,
 ces IP et ce snapshot `snap-clean`.
@@ -86,7 +86,7 @@ Tu peux lire le code des `break` **après** avoir résolu la panne, pas avant.
 
 ### Le planning
 
-Environ 285 heures de travail (210 h de modules, 75 h de projets). À 12 h par semaine, compte 24 semaines. Le tableau ci-dessous découpe le parcours en 19 étapes : celles qui dépassent 12 h ( les étapes 5, 6, 7, 8, 13, 15, 16 et les trois projets) s'étalent sur deux, voire trois semaines réelles.
+Environ 347 heures de travail (272 h de modules, 75 h de projets). À 12 h par semaine, compte 29 semaines. Le tableau ci-dessous découpe le parcours en 22 étapes : celles qui dépassent 12 h (les étapes 5, 6, 7, 8, 13, 15, 16, 19, 20, 21 et les trois projets) s'étalent sur deux, voire trois semaines réelles.
 
 | Étape | Modules / projets | Heures | Jalon |
 |---|---|---|---|
@@ -98,7 +98,6 @@ Environ 285 heures de travail (210 h de modules, 75 h de projets). À 12 h par s
 | 6 | 10 paquets, 11 stockage et LVM | 18 | disque de VM agrandi à chaud |
 | 7 | 12 réseau, 13 réseau avancé | 21 | deux netns qui se parlent via VXLAN |
 | 8 | 14 SSH, 15 services applicatifs | 15 | bastion + PostgreSQL sauvegardé |
-| **Étape** | **Modules / projets** | **Heures** | **Jalon** |
 | 9 | 16 logs et supervision, 17 planification | 11 | logs centralisés |
 | 10 | 18 sécurité | 8 | pare-feu multi-machines |
 | 11 | 19 dépannage et incident | 11 | premier post-mortem |
@@ -109,7 +108,10 @@ Environ 285 heures de travail (210 h de modules, 75 h de projets). À 12 h par s
 | 16 | 25 CI/CD Gitea Actions, 26 k3s + observabilité | 22 | pipeline vert |
 | 17 | 27 Python pour l'ops | 9 | outil packagé sous timer |
 | 18 | P2 « Factura » industrialisée | 30 à 40 | `git push` → prod |
-| 19 | P3 une semaine d'astreinte | 12 à 16 | 5 incidents résolus |
+| 19 | 28 identité centralisée, 29 haute disponibilité | 20 | connexion Kerberos sans mot de passe, bascule mesurée |
+| 20 | 30 sauvegarde et reprise, 31 observer le noyau | 21 | restauration à la seconde, flame graph d'un incident |
+| 21 | 32 systèmes de fichiers avancés, 33 construire et distribuer | 21 | pool ZFS répliqué, dépôts apt et dnf signés |
+| 22 | P3 une semaine d'astreinte | 12 à 16 | 5 incidents résolus |
 
 Les heures sont celles des `Temps estimé` des modules et des projets. Si tu débordes de
 30 %, c'est normal. Si tu débordes de 100 %, tu ne respectes pas la règle
@@ -178,6 +180,19 @@ Un nœud avec 16 Go de RAM et un SSD suffit ; les VM n'ont pas besoin de
 tourner toutes en même temps avant le module 12 — sauf `lab-git`, qui
 héberge ton dépôt (§0.8) et reste allumée en permanence. `lab-virt` ne sert
 qu'au module 20 : laisse-la éteinte le reste du temps (elle seule pèse 6 Go).
+
+La Partie V (modules 28 à 33) demande un peu plus, module par module :
+
+| Module | Besoin supplémentaire | Mis en place |
+|---|---|---|
+| 28 | `lab-rhel` à 4 Go de mémoire (serveur FreeIPA) | `qm set 9004 --memory 4096`, pour la durée du module |
+| 29 | deux VM `lab-ha1` et `lab-ha2` (9021, 9022 ; 10.10.10.21 et .22 ; 1 vCPU, 1 Go, 20 Go chacune) et deux IP virtuelles, `lab-vip` (.20) et `lab-batch` (.25) | clones du template 9000, décrits au § 29.1 |
+| 30 | un pont isolé `vmbr9` sur le nœud, pour démarrer des VM restaurées sans collision d'adresses | § 30.1 et corrigé de L30.4 |
+| 32 | quatre disques de 3 Go sur `lab-db`, avec un numéro de série | `qm set 9003 --scsiN local-lvm:3,discard=on,ssd=1,serial=lab32-N` |
+
+Avec `lab-virt` éteinte, un nœud de 16 Go suffit toujours : aucun module de
+la Partie V ne dépasse 12 Go de mémoire allouée aux VM allumées, `lab-git`
+comprise.
 
 `lab-virt` est un hyperviseur **dans** l'hyperviseur : elle a besoin de la
 **virtualisation imbriquée**. Deux réglages sur le nœud, à faire une fois :
@@ -1003,7 +1018,7 @@ wiki, *releases*, *Actions*) qui tient dans un binaire Go et une base
 SQLite. Trois usages :
 
 1. **Sauvegarde continue de ton travail** : tout ce que tu écris pendant
-   les 27 modules est poussé à chaque séance ; les VM de lab sont
+   les 33 modules est poussé à chaque séance ; les VM de lab sont
    jetables, `lab-git` ne l'est pas.
 2. **Portfolio** : le dépôt `workbook/linux-devops-workbook` devient, au
    fil des modules, la preuve de ce que tu sais faire (annexe C). Tu le

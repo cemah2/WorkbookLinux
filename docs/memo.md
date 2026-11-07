@@ -17,6 +17,7 @@ Référence : Ubuntu 24.04 ; variantes Rocky 9 en ligne (`apt` / `dnf`).
 | `lab-ops` (9005) | 10.10.10.14 | Docker, runner CI, Prometheus, registre |
 | `lab-git` (9006) | 10.10.10.15 | Gitea (binaire + SQLite), dépôt du workbook |
 | `lab-virt` (9007) | 10.10.10.16 | KVM/QEMU/libvirt imbriqués (module 20), `cpu=host` |
+| `lab-ha1`, `lab-ha2` (9021, 9022) | 10.10.10.21, .22 | nœuds de cluster (module 29) ; IP virtuelles `lab-vip` .20, `lab-batch` .25 |
 
 Utilisateur `mathieu` partout, réseau `10.10.10.0/24`, passerelle et DNS
 `10.10.10.1`, domaine `lab.local`, snapshot propre `snap-clean`.
@@ -4130,6 +4131,388 @@ SuccessExitStatus=1 2    # un code verdict n'est pas une panne
 > * `python3 -X dev script.py` : avertit sur les fichiers non fermés.
 > * `ruff check --select ALL --statistics .` pour voir ce que tu ignores.
 > * `ls -l /proc/PID/fd | wc -l` : combien de fichiers ouverts, en direct.
+
+---
+
+## 28 · Identité centralisée (LDAP, Kerberos, SSSD, FreeIPA)
+
+### LDAP
+
+| Commande | Effet |
+|---|---|
+| `ldapsearch -x -H ldap://lab-rhel.lab.local -b dc=lab,dc=local '(uid=alice)' uid` | recherche anonyme (bind simple) |
+| `ldapsearch -Y GSSAPI -H ldap://lab-rhel.lab.local -b cn=users,cn=accounts,dc=lab,dc=local '(uid=alice)' memberOf` | recherche authentifiée par ticket Kerberos |
+| `-s base \| one \| sub` | portée : l'entrée, ses enfants, tout le sous-arbre |
+| `'(&(objectClass=posixAccount)(uid=a*))'` | filtre préfixé : `&` et, `\|` ou, `!` non |
+| `ldaps://…:636` ou `-ZZ` (StartTLS) | obligatoire dès qu'un mot de passe circule |
+
+DN lu de la feuille vers la racine : `uid=alice,cn=users,cn=accounts,dc=lab,dc=local`.
+
+### Kerberos
+
+| Commande | Effet |
+|---|---|
+| `kinit alice` / `klist` / `kdestroy` | obtenir un TGT / voir le cache / le vider |
+| `kvno host/lab-db.lab.local` | forcer un ticket de service, version de clé |
+| `sudo klist -k /etc/krb5.keytab` | principaux d'un keytab |
+| `kinit -k -t /etc/svc.keytab svc-sauvegarde` | TGT sans mot de passe (compte de service) |
+| `KRB5_TRACE=/dev/stderr kinit alice` | déroulé détaillé : KDC, enctypes, erreurs |
+| `chronyc tracking` | l'horloge : tolérance Kerberos de 5 min |
+
+Un ticket est émis pour un **nom** : `host/lab-db.lab.local`, pas pour
+`10.10.10.12` ni pour `lab-db`. DNS direct et inverse justes, FQDN partout.
+
+### SSSD et FreeIPA
+
+| Commande | Effet |
+|---|---|
+| `sudo ipa-client-install --domain=lab.local --server=lab-rhel.lab.local --mkhomedir` | inscrire un client |
+| `sudo ipactl status` | services du serveur FreeIPA |
+| `ipa user-add alice --first=Alice --last=Martin --password` | créer un utilisateur |
+| `ipa group-add-member admins-lab --users=alice` | appartenance à un groupe |
+| `ipa user-mod alice --sshpubkey="$(cat alice.pub)"` | clé SSH dans l'annuaire |
+| `ipa user-status alice` / `ipa user-unlock alice` | verrouillage après échecs |
+| `ipa sudorule-add` · `-add-user` · `-add-host` · `-add-allow-command` | sudo centralisé |
+| `ipa hbacrule-add` … ; `ipa hbactest --user=alice --host=lab-db.lab.local --service=sshd` | qui peut se connecter où, et le tester |
+| `ipa service-add` / `ipa-getkeytab -p <principal> -k <fichier>` | service et keytab (**régénère** les clés) |
+| `sssctl domain-status lab.local` | domaine en ligne ? quel serveur ? |
+| `sssctl user-checks alice -s sshd` | rejoue PAM comme sshd |
+| `sudo sss_cache -E` | invalide le cache SSSD |
+| `getent passwd alice` / `id alice` | NSS : le compte est-il vu ? |
+| `/var/log/sssd/sssd_lab.local.log`, `krb5_child.log` | journaux, avec `debug_level = 6` |
+
+> [!WARNING]
+> **Piège**
+>
+> * Désactiver `allow_all` avant d'avoir écrit et testé (`ipa hbactest`) les
+>   règles HBAC de remplacement : plus personne n'entre.
+> * `sssd.conf` pas en 0600 root:root : sssd refuse de démarrer.
+> * `ipa-getkeytab` sur un principal existant invalide l'ancien keytab
+>   (`-r` pour récupérer les clés si la politique l'autorise).
+> * Un changement de groupe ne vaut qu'à la session suivante, après
+>   expiration du cache.
+> * `.local` est réservé à mDNS : en production, un vrai sous-domaine.
+
+---
+
+## 29 · Haute disponibilité (HAProxy, keepalived, Pacemaker)
+
+| Disponibilité | par an | par mois |
+|---|---|---|
+| 99,9 % | 8 h 46 min | 43 min |
+| 99,99 % | 52 min 36 s | 4 min 19 s |
+
+En série, les disponibilités se multiplient ; en parallèle, les
+indisponibilités (si les pannes sont indépendantes). Disponibilité ≈
+MTBF / (MTBF + MTTR).
+
+### HAProxy
+
+| Commande / directive | Effet |
+|---|---|
+| `server app1 10.10.10.11:8029 check inter 2s fall 3 rise 2` | serveur avec contrôle de santé |
+| `option httpchk` + `http-check send meth GET uri /sante` | contrôle HTTP (niveau 7) |
+| `balance roundrobin \| leastconn \| source` | répartition |
+| `option forwardfor` | `X-Forwarded-For` vers l'application |
+| `sudo haproxy -c -f /etc/haproxy/haproxy.cfg` | valider avant de recharger |
+| `sudo systemctl reload haproxy` | recharger sans couper |
+| `echo "show stat" \| sudo socat stdio /run/haproxy/admin.sock` | état des serveurs |
+| `echo "set server app/app1 state drain" \| sudo socat …` | vider un serveur pour maintenance |
+
+### keepalived (VRRP)
+
+| Élément | Rôle |
+|---|---|
+| `virtual_router_id 29` | unique sur le segment ; MAC virtuelle `00:00:5e:00:01:1d` |
+| `priority` / `advert_int` | élection du maître / fréquence des annonces |
+| `nopreempt` / `preempt_delay` | pas de retour immédiat du nœud prioritaire |
+| `vrrp_script` + `track_script` | la santé du service fait varier la priorité |
+| `ip -br addr show ens18` | qui porte l'IP virtuelle |
+| `sudo tcpdump -ni ens18 vrrp` | annonces VRRP (protocole IP 112) |
+
+### Pacemaker / Corosync
+
+| Commande | Effet |
+|---|---|
+| `sudo pcs status --full` | nœuds, quorum, ressources, fencing |
+| `sudo crm_mon -1Af` | vue compacte, compteurs d'échecs |
+| `sudo corosync-quorumtool -s` | votes et quorum (qdevice compris) |
+| `sudo pcs quorum device add model net host=lab-adm algorithm=ffsplit` | arbitre qnetd : 3e vote |
+| `sudo pcs stonith create fence-pve fence_pve …` | fencing par l'API Proxmox |
+| `sudo pcs resource create vip-batch ocf:heartbeat:IPaddr2 ip=10.10.10.25 cidr_netmask=24 --group grp-batch` | ressource dans un groupe |
+| `sudo pcs resource move grp-batch lab-ha2` puis `pcs resource clear grp-batch` | déplacer, puis retirer la contrainte créée |
+| `sudo pcs node standby lab-ha1` / `unstandby` | maintenance d'un nœud |
+| `sudo pcs resource cleanup` | oublier les échecs |
+| `sudo pcs stonith history` | qui a été fencé, quand |
+
+> [!WARNING]
+> **Piège**
+>
+> * Deux nœuds sans arbitre : impossible de distinguer « mort » et
+>   « injoignable ». Quorum (qdevice) **et** fencing.
+> * `stonith-enabled=false` oublié en production : *split-brain* au premier
+>   incident réseau.
+> * `pcs resource move` laisse une contrainte `cli-prefer` : `pcs resource clear`.
+> * Une bascule qui n'a jamais été mesurée ne marche pas.
+> * La HA ne protège pas d'une erreur répliquée partout : sauvegardes (30).
+
+---
+
+## 30 · Sauvegarde et reprise (restic, borg, PITR, Proxmox)
+
+**3-2-1-1-0** : 3 copies, 2 supports, 1 hors site, 1 hors ligne ou
+immuable, 0 erreur à la restauration. **RPO** = données perdues (en
+arrière), **RTO** = durée d'arrêt (en avant). RAID, instantané, réplication :
+pas des sauvegardes.
+
+### restic
+
+| Commande | Effet |
+|---|---|
+| `export RESTIC_REPOSITORY=sftp:restic@lab-ops.lab.local:/lab-web RESTIC_PASSWORD_FILE=/etc/restic/mot-de-passe` | dépôt et mot de passe |
+| `restic init` / `restic backup /etc /var/www --tag quotidien` | créer / sauvegarder |
+| `restic snapshots` / `restic ls latest /etc/nginx` | instantanés / contenu |
+| `restic diff <id> latest` / `restic find nginx.conf` | différences / où est ce fichier |
+| `restic restore latest --target /tmp/restau --include /etc/nginx` | restaurer à côté |
+| `restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune` | rétention |
+| `restic check --read-data-subset=10%` | relire une partie des données |
+
+### borg
+
+| Commande | Effet |
+|---|---|
+| `borg init --encryption=repokey-blake2` | dépôt chiffré |
+| `borg key export :: cle.txt` | **la clé, hors de la machine** |
+| `borg create --stats --compression zstd,6 ::'{hostname}-{now}' /etc` | archive |
+| `borg list` / `borg info ::<archive>` / `borg extract ::<archive> etc/x` | lister / détailler / extraire |
+| `borg prune --keep-daily 7 --keep-weekly 4` (+ `borg compact`) | rétention |
+| `command="borg serve --append-only --restrict-to-path /srv/borg/lab-db",restrict ssh-ed25519 …` | côté serveur : ajout seul |
+
+### PostgreSQL : sauvegarde continue et PITR
+
+| Élément | Rôle |
+|---|---|
+| `archive_mode = on`, `archive_command`, `archive_timeout = 300` | archivage des WAL, RPO borné |
+| `pg_basebackup -D … -Ft -z -X stream -c fast` | sauvegarde de base |
+| `restore_command`, `recovery_target_time`, `recovery_target_inclusive` | restauration à la seconde |
+| `touch $PGDATA/recovery.signal` | démarrer en mode restauration |
+| `SELECT * FROM pg_stat_archiver;` | archivage en échec ? |
+| `SELECT pg_switch_wal();` | forcer un changement de segment |
+
+### Proxmox
+
+| Commande | Effet |
+|---|---|
+| `vzdump 9002 --storage local --mode snapshot --compress zstd` | sauvegarde d'une VM |
+| `qmrestore <fichier>.vma.zst 9102 --unique 1 --storage local-lvm` | restaurer sous un autre VMID, MAC neuves |
+| `qm set 9102 --net0 virtio,bridge=vmbr9` | **isoler** avant de démarrer |
+| `pvesm prune-backups local --vmid 9002 --keep-last 3 --dry-run 1` | rétention |
+
+> [!WARNING]
+> **Piège**
+>
+> * Le travail est vert, la sauvegarde est vide : seule une restauration
+>   prouve quelque chose.
+> * La clé de chiffrement n'existe que sur la machine sauvegardée.
+> * La machine sauvegardée peut effacer ses sauvegardes (pas d'ajout seul).
+> * Une VM restaurée démarrée sur le réseau de production avec l'IP de
+>   l'originale.
+
+---
+
+## 31 · Observer le noyau (perf, flame graphs, ftrace, eBPF)
+
+| Question | Outil |
+|---|---|
+| où passe le CPU ? | `perf top`, `perf record -g`, flame graph, `profile-bpfcc` |
+| le code est-il efficace ? | `perf stat -e cycles,instructions,cache-misses` (IPC) |
+| pourquoi ça attend ? | `offcputime-bpfcc`, `biolatency-bpfcc`, `ext4slower-bpfcc`, `runqlat-bpfcc`, `/proc/pressure/*` |
+| quels processus, fichiers, appels ? | `execsnoop-bpfcc`, `opensnoop-bpfcc -x`, `perf trace -s`, bpftrace |
+| quel chemin dans le noyau ? | `trace-cmd -p function_graph`, `bpftrace kprobe:` |
+
+### perf
+
+| Commande | Effet |
+|---|---|
+| `perf stat -p PID -- sleep 10` | compteurs d'un processus |
+| `perf record -F 99 -g -p PID -- sleep 30` | échantillons avec piles (pointeurs de cadre) |
+| `perf record -F 99 --call-graph dwarf -p PID -- sleep 10` | piles par DWARF |
+| `perf report --stdio --no-children \| head -40` | fonctions les plus coûteuses |
+| `perf annotate --stdio -s fonction` | instructions chaudes |
+| `perf script \| stackcollapse-perf.pl \| flamegraph.pl > cpu.svg` | flame graph |
+| `perf trace -s -p PID` | appels système, à faible coût |
+
+Flame graph : largeur = part des échantillons, hauteur = profondeur ; l'axe
+horizontal n'est pas le temps. Chercher les plateaux larges au sommet.
+
+### bpftrace
+
+| Commande | Effet |
+|---|---|
+| `bpftrace -l 'tracepoint:syscalls:sys_enter_open*'` / `-lv …` | sondes, arguments |
+| `bpftrace -e 'tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }'` | appels par programme |
+| `bpftrace -e 'tracepoint:syscalls:sys_enter_write /comm == "x"/ { @t = hist(args.count); }'` | histogramme des tailles |
+| `bpftrace -e 'kprobe:vfs_read { @d[tid] = nsecs; } kretprobe:vfs_read /@d[tid]/ { @us = hist((nsecs - @d[tid]) / 1000); delete(@d[tid]); }'` | latence d'une fonction du noyau |
+| `interval:s:5 { print(@); clear(@); }` | affichage périodique |
+| `uprobe:/chemin/binaire:fonction` | sonde dans un programme |
+
+Préférer les **tracepoints** (stables) aux kprobes (liées à la version du noyau).
+
+### ftrace et PSI
+
+| Commande | Effet |
+|---|---|
+| `sudo trace-cmd record -p function_graph -g do_sys_openat2 -F cat /etc/hostname` | graphe d'appels d'une fonction |
+| `sudo trace-cmd report \| head -40` | lecture |
+| `cat /proc/pressure/{cpu,io,memory}` | `some` = au moins une tâche attend ; `full` = toutes |
+
+> [!WARNING]
+> **Piège**
+>
+> * La charge (*load average*) compte les tâches en état `D` : elle ne dit
+>   pas que le CPU est saturé.
+> * Un profil CPU ne voit pas un processus qui attend : analyse hors CPU.
+> * Piles `[unknown]` : pas de symboles ou pas de pointeurs de cadre.
+> * `strace` sur la production : arrêt à chaque appel système (ptrace).
+
+---
+
+## 32 · Systèmes de fichiers avancés (intégrité, Btrfs, ZFS)
+
+| Étape | Survit à une coupure ? |
+|---|---|
+| `write()` revient (cache de pages) | non |
+| `fsync(fd)` revient | oui (données et métadonnées du fichier) |
+| `rename()` sans `fsync` du répertoire | pas garanti |
+
+Mise à jour atomique : écrire `f.tmp` → `fsync(f.tmp)` → `rename` →
+`fsync(répertoire)`. ext4 (`data=ordered`) ne **vérifie** pas les données
+relues ; Btrfs et ZFS si (sommes de contrôle, copie sur écriture).
+
+### Btrfs
+
+| Commande | Effet |
+|---|---|
+| `mkfs.btrfs -L donnees -d raid1 -m raid1 "$B" "$C"` | miroir données et métadonnées |
+| `mount -o compress=zstd:3,noatime "$B" /srv/btrfs` | compression transparente |
+| `btrfs subvolume create` / `snapshot -r src dst` | sous-volume / instantané en lecture seule |
+| `btrfs send -p <parent> <inst> \| btrfs receive /dest` | réplication incrémentale |
+| `btrfs filesystem usage /srv/btrfs` | la vraie répartition de l'espace |
+| `btrfs device stats /srv/btrfs` / `btrfs scrub start -B /srv/btrfs` | erreurs par disque / vérification complète |
+| `mount -o degraded …` ; `btrfs replace start <id> <nouveau> /srv/btrfs` | disque absent ; remplacement |
+
+### ZFS
+
+| Commande | Effet |
+|---|---|
+| `zpool create -o ashift=12 tank mirror /dev/disk/by-id/…-a /dev/disk/by-id/…-b` | pool en miroir (noms stables) |
+| `zfs create -o compression=zstd -o atime=off tank/donnees` | dataset |
+| `zfs set recordsize=16K tank/pg` · `quota=1G` · `reservation=200M` | réglages par dataset |
+| `zfs snapshot tank/donnees@j` / `zfs rollback` / `zfs clone` | instantanés |
+| `zfs list -o space` · `zfs list -t snapshot -o name,used,refer` | où est l'espace |
+| `zfs send -i @hier tank/d@auj \| zfs receive sauve/d` | réplication incrémentale |
+| `zpool status -v` / `zpool scrub tank` / `zpool iostat -v 1` | santé, vérification, activité |
+| `arc_summary \| head -40` | cache ARC |
+
+### Allocation fine et mesures
+
+| Commande | Effet |
+|---|---|
+| `qm set 9003 --scsi3 local-lvm:3,discard=on,ssd=1` | disque qui transmet le TRIM |
+| `sudo fstrim -av` / `systemctl status fstrim.timer` | rendre les blocs libérés à l'hôte |
+| `lvs -o lv_name,data_percent,metadata_percent` (nœud) | remplissage du thin pool |
+| `fio --name=b --filename=/p/essai --size=1G --direct=1 --ioengine=libaio --rw=randwrite --bs=8k --iodepth=1 --fsync=1 --runtime=60 --time_based` | charge « base de données » |
+
+> [!WARNING]
+> **Piège**
+>
+> * Un instantané oublié retient l'espace des blocs remplacés : `du` ne le
+>   voit pas, `zfs list -o space` si.
+> * `ashift` se choisit à la création, pour toujours.
+> * Mesurer le cache au lieu du disque ; retenir la moyenne et oublier p99.
+> * RAID 5/6 de Btrfs : encore déconseillé pour des données.
+
+---
+
+## 33 · Construire et distribuer (paquets, dépôts signés)
+
+### Compiler
+
+| Commande | Effet |
+|---|---|
+| `make PREFIX=/usr DESTDIR="$PWD/transit" install` | arborescence de transit pour un paquet |
+| `strings -a binaire \| grep '\.conf$'` | chemins compilés dans le binaire |
+| `eval "$(DEB_BUILD_MAINT_OPTIONS=hardening=+all dpkg-buildflags --export=sh)"` | options de la distribution |
+| `hardening-check binaire` | PIE, canari, FORTIFY, RELRO, BIND_NOW, CET |
+| `readelf -d binaire \| grep -E 'NEEDED\|FLAGS'` ; `ldd binaire` | bibliothèques, drapeaux |
+
+`PREFIX` = où le programme **croira** vivre (compilé dedans) ; `DESTDIR` =
+où on copie maintenant. Le même `PREFIX` à la compilation **et** à
+l'installation.
+
+### Paquet Debian
+
+| Commande / fichier | Effet |
+|---|---|
+| `debian/control`, `rules`, `changelog`, `copyright`, `source/format` | le minimum |
+| `rules` : `%:` → `dh $@` ; `override_dh_auto_build: dh_auto_build -- PREFIX=/usr` | séquence debhelper, surcharges |
+| `Build-Depends: debhelper-compat (= 13), dh-sequence-installsysusers` | sysusers en compat 13 |
+| `override_dh_installsystemd: dh_installsystemd lab33-sante.timer` | n'activer que le minuteur |
+| `dch --create -v 1.0-1 --package x -D noble "…"` · `dch -v 1.1-1 "…"` | changelog |
+| `dpkg-buildpackage -us -uc` · `lintian -i -I ../x_1.0-1_amd64.changes` | construire, contrôler |
+| `dpkg-deb -I x.deb` · `-c` · `-e x.deb ctrl/` | en-têtes, contenu, scriptlets |
+| `dpkg -S /usr/bin/ssh` · `dpkg -L x` · `sudo dpkg --verify x` | à qui, quoi, modifié ? |
+| `apt-get install -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold …` | garder la configuration locale (`.dpkg-dist`) |
+| `Replaces:` + `Breaks: x (<< 1.2)` | un fichier change de paquet |
+
+### Paquet RPM
+
+| Commande / macro | Effet |
+|---|---|
+| `rpmdev-setuptree` · `rpmbuild -ba x.spec` · `rpmlint x.spec x.rpm` | arborescence, construction, contrôle |
+| `%set_build_flags` · `%make_build PREFIX=%{_prefix}` · `%make_install PREFIX=%{_prefix}` | compilation et installation |
+| `%config(noreplace)` · `%license` · `%doc` · `%{_unitdir}` | `%files` exhaustif |
+| `%sysusers_create_compat %{SOURCE1}` · `%systemd_post x.timer` | utilisateur, activation (presets) |
+| `rpm -qp --requires x.rpm` · `--scripts` · `rpm -V x` | dépendances, scriptlets, vérification |
+| `rpm --eval '%{_bindir} %{?dist}'` | valeur d'une macro |
+
+### Dépôts signés
+
+| Commande | Effet |
+|---|---|
+| `gpg --quick-generate-key 'Dépôt lab33 <depot@lab.local>' rsa4096 cert 2y` + `gpg --quick-add-key "$FPR" rsa3072 sign 2y` | clé principale + sous-clé de signature |
+| `~/.gnupg/openpgp-revocs.d/<FPR>.rev` | certificat de révocation : **hors ligne** |
+| `reprepro -b ~/lab33/reprepro includedeb lab33 x.deb` · `list lab33` · `export lab33` | dépôt apt (`conf/distributions` : `SignWith:`, `ValidFor:`) |
+| `rpmsign --define "_gpg_name $SUB" --addsign *.rpm` | signer les RPM |
+| `createrepo_c --update dir` + `gpg --detach-sign --armor -u "$SUB!" repodata/repomd.xml` | dépôt dnf et sa signature |
+| `gpgv --keyring lab33.gpg InRelease` · `rpmkeys --dbpath db -K x.rpm` | vérifier **avant** de publier |
+| `command="/usr/bin/rrsync -wo /srv/depot",restrict ssh-ed25519 …` | publication en écriture seule |
+| `Signed-By: /etc/apt/keyrings/lab33.gpg` (fichier `.sources`, deb822) | client apt : clé limitée au dépôt |
+| `gpgcheck=1` + `repo_gpgcheck=1` + `gpgkey=…` | client dnf : paquets **et** métadonnées |
+| `rpm -q gpg-pubkey --qf '%{VERSION} %{SUMMARY}\n'` | clés importées dans RPM |
+
+### DKMS
+
+| Commande | Effet |
+|---|---|
+| `dkms status` | modules, noyaux, état (`added`, `built`, `installed`) |
+| `dkms autoinstall -k <version>` | construire pour un autre noyau installé |
+| `/var/lib/dkms/<m>/<v>/build/make.log` | journal d'une construction en échec |
+| `Build-Depends: dh-sequence-dkms` + `debian/<paquet>.dkms` | empaqueter (`Architecture: all`) |
+| `mokutil --import /var/lib/shim-signed/mok/MOK.der` | Secure Boot : enregistrer la clé de signature |
+
+> [!WARNING]
+> **Piège**
+>
+> * `make install` dans `/usr` : fichiers inconnus de dpkg, aucune
+>   désinstallation possible.
+> * `PREFIX` différent entre compilation et installation : le paquet
+>   s'installe, le programme cherche `/usr/local/etc`.
+> * `apt-key add`, `[trusted=yes]`, `gpgcheck=0` : la signature ne protège
+>   plus rien.
+> * Changer la clé du dépôt sans l'avoir d'abord distribuée aux clients :
+>   `NO_PUBKEY`, plus aucune mise à jour.
+> * Signer un RPM change son empreinte : régénérer les métadonnées après.
 
 ---
 

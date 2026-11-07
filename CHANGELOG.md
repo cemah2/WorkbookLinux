@@ -8,6 +8,20 @@ correctif = erreurs corrigées.
 ## [Non publié]
 
 ### Ajouté
+- **Partie V — Expertise système**, six modules entre le projet B et le
+  projet C (62 h) : 28 identité centralisée (LDAP, Kerberos, SSSD,
+  FreeIPA), 29 haute disponibilité (HAProxy, keepalived, Pacemaker,
+  Corosync), 30 sauvegarde et reprise (restic, borg, PITR PostgreSQL,
+  Proxmox), 31 observer le noyau (perf, flame graphs, ftrace, eBPF),
+  32 systèmes de fichiers avancés (intégrité, Btrfs, ZFS, `fio`),
+  33 construire et distribuer (paquets `.deb` et `.rpm`, dépôts signés,
+  DKMS). Chacun : 16 QCM, 8 questions ouvertes, 12 exercices, 4 labs,
+  3 Break & Fix, un défi, et ses scripts (6 `setup`, 24 `check`,
+  18 `break`).
+- Mémo (sections 28 à 33), grille de progression, correspondance avec les
+  examens EX362, EX436, EX442 et LPIC-3 306, planning en 22 étapes,
+  besoins du laboratoire pour la Partie V (nœuds `lab-ha1`/`lab-ha2`).
+- CI : validation des diagrammes Mermaid (`tools/check_mermaid.mjs`).
 - Dépôt GitHub : un dossier par module (`modules/NN-sujet/README.md` pour
   l'énoncé, `corrige.md` pour le corrigé), `projets/`, `docs/`.
 - Identifiants cliquables : chaque item de l'énoncé mène à son corrigé, et

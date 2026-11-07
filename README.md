@@ -1,6 +1,6 @@
 # Workbook Linux & DevOps
 
-**Devenir expert Linux en pratiquant : 27 modules, 3 projets fil rouge et plus de 1 500 exercices corrigés et expliqués, joués sur un vrai laboratoire de sept machines virtuelles.**
+**Devenir expert Linux en pratiquant : 33 modules, 3 projets fil rouge et plus de 1 700 exercices corrigés et expliqués, joués sur un vrai laboratoire de machines virtuelles.**
 
 [![CI](https://github.com/cemah2/WorkbookLinux/actions/workflows/ci.yml/badge.svg)](https://github.com/cemah2/WorkbookLinux/actions/workflows/ci.yml)
 [![Licence du contenu : CC BY-NC-SA 4.0](https://img.shields.io/badge/contenu-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
@@ -18,14 +18,14 @@ lab se vérifie par un script.
 
 | | |
 |---|---|
-| **Modules** | 27 modules, de la ligne de commande à Kubernetes, en quatre parties |
+| **Modules** | 33 modules, de la ligne de commande à Kubernetes puis à l'expertise système (identité, haute disponibilité, sauvegarde, eBPF, ZFS, empaquetage), en cinq parties |
 | **Projets fil rouge** | Factura à la main (A), Factura industrialisée (B), une semaine d'astreinte (C) |
-| **Exercices** | 498 QCM · 247 questions ouvertes · 465 exercices guidés · 133 labs · 117 Break & Fix · 27 défis |
+| **Exercices** | 594 QCM · 295 questions ouvertes · 537 exercices guidés · 157 labs · 135 Break & Fix · 33 défis |
 | **Corrigés** | chaque item a sa réponse, l'explication du mécanisme (« Pourquoi ») et l'erreur classique (« Piège ») |
-| **Scripts** | 31 `setup`, 198 `check` qui vérifient le résultat, 142 `break` qui installent une panne |
-| **Laboratoire** | 7 VM sur Proxmox VE (Ubuntu 24.04 + Rocky 9), déployables en une commande |
+| **Scripts** | 37 `setup`, 222 `check` qui vérifient le résultat, 160 `break` qui installent une panne |
+| **Laboratoire** | 7 VM sur Proxmox VE (Ubuntu 24.04 + Rocky 9), déployables en une commande, et 2 nœuds de cluster pour la haute disponibilité |
 | **Mémo** | l'aide-mémoire de tous les modules, à garder ouvert ([docs/memo.md](docs/memo.md)) |
-| **Schémas** | 48 schémas en images SVG, et des diagrammes Mermaid rendus par GitHub |
+| **Schémas** | 48 schémas en images SVG, et des diagrammes Mermaid rendus par GitHub (validés en CI) |
 
 ## Comment ça marche
 
@@ -77,8 +77,8 @@ Break & Fix. Chaque énoncé liste ses scripts en tête de page.
    Les scripts sont alors dans `~/workbook/scripts/`, là où les énoncés les
    attendent (`bootstrap-lab.sh` fait ce clone pour toi).
 3. **Commencer par le [module 01](modules/01-shell-bases/README.md)** et
-   suivre le [parcours](docs/parcours.md) : environ 285 heures, soit
-   24 semaines à 12 heures par semaine.
+   suivre le [parcours](docs/parcours.md) : environ 347 heures, soit
+   29 semaines à 12 heures par semaine.
 4. **Garder une trace** : fais un *fork* du dépôt et range tes réponses dans
    [`reponses/`](reponses/) (un fichier par lab, nommé par son identifiant).
    C'est aussi ton portfolio.
@@ -94,6 +94,7 @@ Break & Fix. Chaque énoncé liste ses scripts en tête de page.
 | `lab-ops` (Ubuntu 24.04) | 9005 / 10.10.10.14 | 2 vCPU, 4 Go, 40 Go | Docker, CI, supervision |
 | `lab-git` (Ubuntu 24.04) | 9006 / 10.10.10.15 | 1 vCPU, 1 Go, 15 Go | forge Gitea |
 | `lab-virt` (Ubuntu 24.04) | 9007 / 10.10.10.16 | 4 vCPU, 6 Go, 40 Go | KVM imbriqué (module 20) |
+| `lab-ha1`, `lab-ha2` (Ubuntu 24.04) | 9021, 9022 / 10.10.10.21, .22 | 1 vCPU, 1 Go, 20 Go | nœuds de cluster (module 29), créés au début du module |
 
 <p align="center"><img src="assets/figures/lab-topologie.svg" alt="Topologie du laboratoire"></p>
 
@@ -110,7 +111,8 @@ flowchart LR
     III --> A(["Projet A<br/>Factura à la main"])
     A --> IV["Partie IV<br/>Socle DevOps<br/>20–27"]
     IV --> B(["Projet B<br/>Factura industrialisée"])
-    B --> C(["Projet C<br/>Une semaine d'astreinte"])
+    B --> V["Partie V<br/>Expertise système<br/>28–33"]
+    V --> C(["Projet C<br/>Une semaine d'astreinte"])
 ```
 
 <!-- parcours:début -->

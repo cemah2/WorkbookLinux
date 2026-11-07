@@ -6,8 +6,8 @@
 
 Le workbook se suit dans l'ordre : chaque module suppose les précédents, et
 les projets fil rouge réutilisent tout ce qui les précède. Environ
-**285 heures** de travail (210 h de modules, 75 h de projets) : à 12 h par
-semaine, compte 24 semaines ; à 6 h, une petite année.
+**347 heures** de travail (272 h de modules, 75 h de projets) : à 12 h par
+semaine, compte 29 semaines ; à 6 h, un peu plus d'un an.
 
 ```mermaid
 flowchart LR
@@ -16,12 +16,13 @@ flowchart LR
     III --> A(["Projet A<br/>Factura à la main"])
     A --> IV["Partie IV<br/>Socle DevOps<br/>20–27"]
     IV --> B(["Projet B<br/>Factura industrialisée"])
-    B --> C(["Projet C<br/>Une semaine d'astreinte"])
+    B --> V["Partie V<br/>Expertise système<br/>28–33"]
+    V --> C(["Projet C<br/>Une semaine d'astreinte"])
 ```
 
-## Planning en 19 étapes
+## Planning en 22 étapes
 
-Les étapes qui dépassent 12 h (5, 6, 7, 8, 13, 15, 16 et les trois projets)
+Les étapes qui dépassent 12 h (5, 6, 7, 8, 13, 15, 16, 19, 20, 21 et les trois projets)
 s'étalent sur deux, voire trois semaines réelles. Les heures sont celles des
 « Temps estimé » des modules ; un dépassement de 30 % est normal, un
 dépassement de 100 % signifie en général que la
@@ -48,7 +49,10 @@ respectée.
 | 16 | [25](../modules/25-cicd/README.md) CI/CD Gitea Actions, [26](../modules/26-kubernetes-observabilite/README.md) k3s + observabilité | 22 | pipeline vert |
 | 17 | [27](../modules/27-python-ops/README.md) Python pour l'ops | 9 | outil packagé sous timer |
 | 18 | [Projet B](../projets/P2-factura-devops/README.md) « Factura » industrialisée | 30 à 40 | `git push` → prod |
-| 19 | [Projet C](../projets/P3-astreinte/README.md) une semaine d'astreinte | 12 à 16 | 5 incidents résolus |
+| 19 | [28](../modules/28-identite-centralisee/README.md) identité centralisée, [29](../modules/29-haute-disponibilite/README.md) haute disponibilité | 20 | connexion Kerberos sans mot de passe, bascule mesurée |
+| 20 | [30](../modules/30-sauvegarde-pra/README.md) sauvegarde et reprise, [31](../modules/31-tracage-ebpf-perf/README.md) observer le noyau | 21 | restauration à la seconde, flame graph d'un incident |
+| 21 | [32](../modules/32-fs-avances/README.md) systèmes de fichiers avancés, [33](../modules/33-packaging-build/README.md) construire et distribuer | 21 | pool ZFS répliqué, dépôts apt et dnf signés |
+| 22 | [Projet C](../projets/P3-astreinte/README.md) une semaine d'astreinte | 12 à 16 | 5 incidents résolus |
 
 ## Les niveaux
 
@@ -73,9 +77,10 @@ Garde toujours la Partie I : tout le reste s'appuie dessus.
 | Objectif | Modules | Remarque |
 |---|---|---|
 | **LFCS / RHCSA (EX200)** | 01 à 14, 16 à 18, 20 | Rocky 9 (`lab-rhel`) pour chaque variante RHEL ; détail des objectifs dans les [annexes](annexes.md#annexe-b--correspondance-certifications) |
+| **Spécialités Red Hat (EX362, EX436, EX442)** | RHCSA, puis 28, 29, 31, 32 | labs à refaire sur Rocky ; écarts listés dans les [annexes](annexes.md#partie-v--spécialisations-red-hat-et-lpic-3) |
 | **Premier poste DevOps** | 01 à 08, 10, 12, 14, 15, 19, 21 à 26, projets A et B | 22 à 26 sont le cœur ; le projet B est la pièce maîtresse du portfolio |
-| **Expertise système** | 01 à 20, 27, projets A et C | 09, 11, 13 et 19 vont au-delà de ce que demandent les certifications |
-| **Astreinte et exploitation** | 08, 12, 15 à 19, 22, 26, projet C | à faire après le reste : le projet C mélange tout |
+| **Expertise système** | 01 à 20, 27, 28 à 33, projets A et C | la Partie V et les modules 09, 11, 13 et 19 vont au-delà de ce que demandent les certifications |
+| **Astreinte et exploitation** | 08, 12, 15 à 19, 22, 26, 29 à 31, projet C | à faire après le reste : le projet C mélange tout |
 
 ## Tous les modules
 

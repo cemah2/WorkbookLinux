@@ -42,6 +42,12 @@ trois semaines est un signal, pas un détail.
 | 25 CI/CD Gitea Actions | pipeline build/test/deploy, runner, secrets | ☐ ☐ ☐ | |
 | 26 k3s et observabilité | déploiement, ingress, Prometheus, Loki | ☐ ☐ ☐ | |
 | 27 Python pour l'ops | outils d'exploitation, API, tests, packaging | ☐ ☐ ☐ | |
+| 28 Identité centralisée | LDAP, Kerberos, SSSD, FreeIPA : sudo et HBAC centralisés, keytabs | ☐ ☐ ☐ | |
+| 29 Haute disponibilité | HAProxy, keepalived, Pacemaker/Corosync, quorum, fencing, bascule mesurée | ☐ ☐ ☐ | |
+| 30 Sauvegarde et reprise | restic, borg en ajout seul, PITR PostgreSQL, restauration de VM, PRA | ☐ ☐ ☐ | |
+| 31 Observer le noyau | perf, flame graphs, analyse hors CPU, bpftrace, ftrace, PSI | ☐ ☐ ☐ | |
+| 32 Systèmes de fichiers avancés | `fsync`, Btrfs, ZFS, instantanés, scrub, allocation fine, `fio` | ☐ ☐ ☐ | |
+| 33 Construire et distribuer | `PREFIX`/`DESTDIR`, `.deb`, `.rpm`, dépôts signés, DKMS | ☐ ☐ ☐ | |
 | P1 Factura à la main | déployer et documenter une app 3 tiers | ☐ — ☐ | |
 | P2 Factura industrialisée | la même en code : Ansible, CI, conteneurs | ☐ — ☐ | |
 | P3 Semaine d'astreinte | 5 incidents, 5 post-mortem, 1 runbook | ☐ — ☐ | |
@@ -80,14 +86,12 @@ Le niveau E vient avec les années de production, pas avec un workbook.
 | Configurer un accès SSH par bastion sans transfert d'agent | ☐ ☐ ☐ ☐ | 14 |
 | Durcir `sshd` sans se verrouiller dehors | ☐ ☐ ☐ ☐ | 14 |
 | Centraliser des logs et écrire une rotation | ☐ ☐ ☐ ☐ | 16 |
-| Interpréter charge, `%wa`, `%st`, mémoire | ☐ ☐ ☐ ☐ |  |
-| `available` | ☐ ☐ ☐ ☐ | 16, 19 |
+| Interpréter charge, `%wa`, `%st`, mémoire `available` | ☐ ☐ ☐ ☐ | 16, 19, 31 |
 | Détecter qu'une tâche planifiée n'a **pas** tourné | ☐ ☐ ☐ ☐ | 17 |
 | Écrire une politique de pare-feu multi-machines | ☐ ☐ ☐ ☐ | 13, 18 |
 | Résoudre un refus SELinux sans passer en `disabled` | ☐ ☐ ☐ ☐ | 18 |
 | Produire et vérifier un certificat TLS, configurer HTTPS | ☐ ☐ ☐ ☐ | 15, 18 |
 | Gérer des secrets (droits, vault, rotation, jamais en Git) | ☐ ☐ ☐ ☐ | 18, 23, 25 |
-| **Compétence** | **Niveau D A C E** | **Modules** |
 | Appliquer la méthode USE et les 60 premières secondes | ☐ ☐ ☐ ☐ | 19 |
 | Remonter une machine qui ne boote plus | ☐ ☐ ☐ ☐ | 09, 19 |
 | Écrire un post-mortem blameless avec actions datées | ☐ ☐ ☐ ☐ | 19, P3 |
@@ -99,6 +103,12 @@ Le niveau E vient avec les années de production, pas avec un workbook.
 | Déployer et exposer une application sur Kubernetes | ☐ ☐ ☐ ☐ | 26 |
 | Définir des SLI/alertes utiles et lire un tableau de bord | ☐ ☐ ☐ ☐ | 16, 26 |
 | Documenter pour quelqu'un d'autre (README, runbook) | ☐ ☐ ☐ ☐ | P1, P2, P3 |
+| Diagnostiquer un refus de connexion Kerberos / SSSD de bout en bout | ☐ ☐ ☐ ☐ | 28 |
+| Concevoir une bascule (IP virtuelle, cluster) et en mesurer la durée | ☐ ☐ ☐ ☐ | 29 |
+| Prouver une restauration : RPO et RTO mesurés, restauration à la seconde | ☐ ☐ ☐ ☐ | 15, 30 |
+| Profiler le CPU et l'attente sans perturber la production | ☐ ☐ ☐ ☐ | 19, 31 |
+| Choisir un système de fichiers et ses réglages d'après une mesure | ☐ ☐ ☐ ☐ | 11, 32 |
+| Empaqueter un logiciel et le distribuer par un dépôt signé | ☐ ☐ ☐ ☐ | 10, 33 |
 
 ---
 
@@ -188,6 +198,25 @@ Où trouver ce qui manque :
   sur RHEL, à la place de `/etc/default/grub` + `update-grub` d'Ubuntu
   (les deux sont en 09).
 
+### Partie V : spécialisations Red Hat et LPIC-3
+
+Les modules 28 à 33 recoupent les examens de spécialité qui suivent le
+RHCSA et le RHCE. Ces examens portent sur RHEL et ses outils (`pcs`, IdM,
+`tuned`) : refais les labs concernés sur `lab-rhel` ou sur deux clones
+Rocky, et lis les objectifs officiels, qui changent avec chaque version de
+RHEL.
+
+| Examen | Modules | Ce que le workbook couvre | Ce qu'il faut ajouter |
+|---|---|---|---|
+| **EX362** — Identity Management (RHEL 9, IdM 4.8) | 28 | serveur IdM, clients, utilisateurs, groupes, politiques, sudo, HBAC, keytabs, SSSD | réplica IdM, confiance Active Directory, installation par Ansible, certificats émis par l'autorité d'IdM |
+| **EX436** — High Availability Clustering | 29 | cluster Pacemaker/Corosync, quorum et arbitre, fencing, ressources, groupes, contraintes, bascule | le stockage en cluster (objectif « Configure storage » : LVM partagé, GFS2), l'installation par Ansible, la journalisation et la supervision du cluster |
+| **EX442** — Performance Tuning (RHEL 10) | 31, 32, 19 | `perf`, eBPF, analyse hors CPU, PSI, E/S et systèmes de fichiers, `fio` | `tuned` et ses profils, `sar`/PCP, réglages mémoire (*huge pages*, NUMA), cgroups appliqués à la performance |
+| **LPIC-3 306** — High Availability and Storage Clusters (306-300) | 29, 32, 11 | concepts de disponibilité, HAProxy, keepalived, Pacemaker, RAID et LVM avancés | DRBD, GFS2/OCFS2, GlusterFS, Ceph |
+
+Les modules 30 (sauvegarde) et 33 (empaquetage) n'ont pas d'examen dédié :
+ils servent dans tous les entretiens d'administrateur confirmé, et
+l'empaquetage RPM apparaît dans plusieurs parcours Red Hat.
+
 ### CKA et Terraform Associate : couverture partielle
 
 Le workbook s'arrête volontairement avant ces deux certifications ; les
@@ -211,9 +240,9 @@ met en confiance avec `kubectl`, il ne te prépare pas à l'examen.
 
 | Profil | Ce qu'on te demande | Modules qui pèsent le plus |
 |---|---|---|
-| **SRE** | fiabilité mesurée (SLI/SLO), astreinte, post-mortem, capacité, automatisation des toils | 08, 12, 16, 17, 19, 26, P3 |
+| **SRE** | fiabilité mesurée (SLI/SLO), astreinte, post-mortem, capacité, automatisation des toils | 08, 12, 16, 17, 19, 26, 29, 30, 31, P3 |
 | **DevOps / Platform** | chaîne de livraison, conteneurs, IaC, plateforme interne pour les devs | 07, 21, 22, 23, 24, 25, 26, P2 |
-| **Ops cloud / système** | parc de VM, patching, stockage, réseau, sécurité, coût | 04, 10, 11, 12, 14, 18, 20, 23, 24, P1 |
+| **Ops cloud / système** | parc de VM, patching, stockage, réseau, sécurité, coût | 04, 10, 11, 12, 14, 18, 20, 23, 24, 28, 30, 32, 33, P1 |
 
 Les frontières sont floues et dépendent de la taille de l'entreprise : dans
 une PME, un seul poste fait les trois. Le socle **système** (01 à 19) est
