@@ -33,7 +33,7 @@ cat > "$SRC/lab31-calcul.c" <<'C'
 #define TAILLE (8u << 20)
 
 /* compte les occurrences de motif en comparant à CHAQUE position */
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static unsigned long compte_naif(const char *texte, size_t n, const char *motif, size_t m)
 {
     unsigned long c = 0;
@@ -48,7 +48,7 @@ static unsigned long compte_naif(const char *texte, size_t n, const char *motif,
 }
 
 /* même résultat, avec memmem() de la glibc */
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static unsigned long compte_rapide(const char *texte, size_t n, const char *motif, size_t m)
 {
     unsigned long c = 0;
@@ -60,7 +60,7 @@ static unsigned long compte_rapide(const char *texte, size_t n, const char *moti
     return c;
 }
 
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static unsigned long analyse(const char *texte, int rapide)
 {
     static const char motif[] = "aaaaaaaaaaac";   /* 'c' n'apparaît jamais */
@@ -68,7 +68,7 @@ static unsigned long analyse(const char *texte, int rapide)
                   : compte_naif(texte, TAILLE, motif, sizeof motif - 1);
 }
 
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static unsigned long traite_documents(const char *texte, int rapide)
 {
     return analyse(texte, rapide);
@@ -83,7 +83,7 @@ static void prepare(char *t, size_t n)
     }
 }
 
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static void boucle(const char *texte, int rapide)
 {
     unsigned long passes = 0, dernier = 0;
@@ -179,7 +179,7 @@ static double maintenant(void)
     return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
 }
 
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static void calcul(void)            /* quelques dizaines de microsecondes de « métier » */
 {
     volatile unsigned long x = 0;
@@ -187,7 +187,7 @@ static void calcul(void)            /* quelques dizaines de microsecondes de « 
         x += i * i;
 }
 
-__attribute__((noinline))
+__attribute__((noinline, noclone))
 static int enregistre(int fd, unsigned long n, unsigned groupe)
 {
     char ligne[96];

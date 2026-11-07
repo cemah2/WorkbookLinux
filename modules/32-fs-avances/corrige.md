@@ -951,16 +951,24 @@ sudo dd if=/dev/urandom of=/srv/btrfs/@donnees/temoin.bin bs=1M count=32 status=
 sha256sum /srv/btrfs/@donnees/temoin.bin
 L=$(sudo filefrag -v /srv/btrfs/@donnees/temoin.bin | awk '$1=="0:"{print $4}' | tr -d '.')
 sudo btrfs-map-logical -l $(( (L + 4096) * 4096 )) "$B"
-#   mirror 1 logical 1103101952 physical 1094713344 device /dev/sde
-#   mirror 2 logical 1103101952 physical 1073741824 device /dev/sdf
-sudo dd if=/dev/urandom of="$B" bs=4096 seek=$((1094713344 / 4096)) count=1 conv=notrunc oflag=direct
+#   mirror 1 logical 479985664 physical 459014144 device /dev/sdf
+#   mirror 2 logical 479985664 physical 479985664 device /dev/sde
+# la position physique de la copie qui est sur $B (pas forcément le miroir 1) :
+P=$(sudo btrfs-map-logical -l $(( (L + 4096) * 4096 )) "$B" |
+    awk -v d="$(readlink -f "$B")" '$NF==d {print $6; exit}')
+sudo dd if=/dev/urandom of="$B" bs=4096 seek=$((P / 4096)) count=1 conv=notrunc oflag=direct
 echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
 sha256sum /srv/btrfs/@donnees/temoin.bin        # empreinte INCHANGÉE
-sudo dmesg | grep -i btrfs | tail -3
-#   BTRFS warning (device sde): csum failed root 256 ino 2581 off 16777216 csum 0x… expected csum 0x… mirror 1
-#   BTRFS info (device sde): read error corrected: ino 2581 off 16777216 (dev /dev/sde sector 2138112)
 sudo btrfs scrub start -B /srv/btrfs
+#   WARNING: errors detected during scrubbing, corrected
+#   Error summary:    csum=1
+#     Corrected:      1
+#     Uncorrectable:  0
+sudo dmesg | grep -i btrfs | tail -2
+#   BTRFS error (device sde): scrub: fixed up error at logical 479985664 on dev /dev/sde physical 479985664
+#   BTRFS error (device sde): bdev /dev/sde errs: wr 0, rd 0, flush 0, corrupt 1, gen 0
 sudo btrfs device stats /srv/btrfs | grep -v ' 0$'
+#   [/dev/sde].corruption_errs  1
 ```
 
 > [!NOTE]
@@ -969,10 +977,17 @@ sudo btrfs device stats /srv/btrfs | grep -v ' 0$'
 > Sur Btrfs, `filefrag` donne des adresses **logiques** du système de fichiers,
 > pas des positions sur un disque : avec un miroir, chaque adresse logique
 > existe à deux endroits physiques, sur deux disques. `btrfs-map-logical`
-> fait la traduction. On ne corrompt qu'une copie : à la lecture, Btrfs détecte
-> l'écart, lit l'autre copie, rend la bonne donnée et réécrit la mauvaise
-> (*read repair*). L'application ne voit rien ; seul le journal noyau et les
-> compteurs en gardent la trace.
+> fait la traduction, et la copie qui se trouve sur `$B` n'est pas forcément
+> le « miroir 1 », d'où le filtre sur le nom du disque. On ne corrompt qu'une
+> copie : si une lecture tombe dessus, Btrfs détecte l'écart de somme de
+> contrôle, lit l'autre copie, rend la bonne donnée et réécrit la mauvaise
+> (*read repair*, `csum failed` puis `read error corrected` dans le journal).
+> Mais Btrfs choisit le miroir lu selon le numéro du processus : la lecture
+> de `sha256sum` peut très bien passer par la copie saine et ne rien
+> remarquer. Seul `scrub`, qui relit **toutes** les copies, garantit de
+> trouver la corruption. L'application ne voit rien ; le journal noyau et les
+> compteurs (`device stats`) en gardent la trace, d'où l'intérêt d'un `scrub`
+> régulier et d'une alerte sur ces compteurs.
 
 **Étape 5 — Perte d'un disque et remplacement**
 
@@ -983,7 +998,8 @@ sudo btrfs filesystem show /srv/btrfs        # *** Some devices missing
 sudo umount /srv/btrfs
 sudo mount /srv/btrfs                        # échec : refuse de monter sans tous ses disques
 sudo mount -o degraded "$B" /srv/btrfs
-ID=$(sudo btrfs filesystem show /srv/btrfs | awk '/missing/{print $2}')
+sudo btrfs filesystem show /srv/btrfs        # devid 2 size 0 used 0 path  MISSING
+ID=$(sudo btrfs filesystem show /srv/btrfs | awk '/MISSING/{print $2}')
 sudo btrfs replace start -B "$ID" "$D" /srv/btrfs
 sudo btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft /srv/btrfs
 sudo btrfs filesystem usage /srv/btrfs | grep -E 'RAID1|single'

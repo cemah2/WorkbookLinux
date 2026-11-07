@@ -26,7 +26,7 @@ for s in latence-open processus-courts compte-naif; do
     latence-open) charge "$f" sshd ;;
     *)            charge "$f" ;;
   esac && ok "$s.bt se charge sans erreur" || ko "$s.bt ne se charge pas (bpftrace $f)"
-  head -15 "$f" | grep -qi 'surco[uû]t' && ok "$s.bt documente son surcoût" \
+  head -15 "$f" | grep -Eqi 'surco(u|û)t' && ok "$s.bt documente son surcoût" \
                                        || ko "$s.bt : pas de ligne « Surcoût » en tête"
 done
 grep -qs 'hist(' "$H/latence-open.bt" && grep -qs 'interval:s:10' "$H/latence-open.bt" \

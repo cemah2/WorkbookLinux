@@ -752,6 +752,18 @@ sudo bpftrace -e 'uprobe:/usr/local/bin/lab31-calcul:compte_naif { @appels = cou
 
 Le compte correspond au débit affiché dans le journal (une passe = un appel).
 
+> [!WARNING]
+> **Piège**
+>
+> Le setup compile les programmes avec `__attribute__((noinline, noclone))`
+> sur leurs fonctions. Sans `noclone`, GCC en `-O2` remplace `compte_naif`
+> par une copie spécialisée, `compte_naif.constprop.0` (la longueur du motif
+> est une constante) : une sonde posée sur `compte_naif` se charge sans
+> erreur et ne se déclenche jamais. Sur un binaire optimisé qui n'est pas le
+> tien, commence par regarder les noms réellement présents :
+> `nm /usr/local/bin/lab31-calcul | grep compte` (ou `perf report`, qui
+> affiche le nom du clone).
+
 ---
 
 <a id="e31-12"></a>**[E31.12](README.md#e31-12)** — *Surcoût de `strace` et de `bpftrace`.*
@@ -1158,7 +1170,7 @@ tracepoint:sched:sched_process_exec
 }
 
 tracepoint:sched:sched_process_exit
-/ @debut[pid] && args.pid == args.tgid /
+/ @debut[pid] && pid == tid /
 {
     $vie_ms = (nsecs - @debut[pid]) / 1000000;
     if ($vie_ms < 100) {
@@ -1174,8 +1186,12 @@ END { clear(@debut); clear(@cmd); }
 
 On part de `exec` (et non de `fork`) pour ne compter que les programmes
 lancés, et l'on ne retient la sortie que pour le thread principal
-(`pid == tgid`) : la fin d'un thread secondaire n'est pas la fin du
-processus. `curtask->real_parent->tgid` lit le parent dans la structure du
+(`pid == tid`) : la fin d'un thread secondaire n'est pas la fin du
+processus. Dans bpftrace, `pid` est l'identifiant du **processus** (le
+`tgid` du noyau) et `tid` celui du thread ; le tracepoint
+`sched_process_exit` lui-même n'a pas de champ `tgid` (`bpftrace -lv
+tracepoint:sched:sched_process_exit` : `comm`, `pid`, `prio`), d'où l'usage
+des variables intégrées plutôt que de `args`. `curtask->real_parent->tgid` lit le parent dans la structure du
 noyau grâce à BTF.
 
 **`compte-naif.bt`**

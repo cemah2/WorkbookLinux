@@ -30,7 +30,7 @@ lab-web)
     age=$(( $(date +%s) - $(date -d "$der" +%s) ))
     [ "$age" -le 93600 ] && ok "dernier instantané il y a $((age / 3600)) h" \
                          || ko "dernier instantané il y a $((age / 3600)) h (plus de 26 h)"
-    restic ls latest /etc/nginx/nginx.conf 2>/dev/null | grep -q 'nginx.conf' \
+    restic ls latest /etc/nginx/nginx.conf 2>/dev/null | grep -qxF /etc/nginx/nginx.conf \
       && ok "/etc/nginx/nginx.conf est dans le dernier instantané" \
       || ko "/etc/nginx/nginx.conf absent du dernier instantané"
     restic ls latest /var/www 2>/dev/null | grep -q 'cache/a-ne-pas-sauvegarder.bin' \

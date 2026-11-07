@@ -103,11 +103,12 @@
 > **nouveaux** segments : une suppression d'archive devient une transaction
 > supplémentaire qui dit « cette archive n'existe plus », mais les segments
 > qui contiennent les données ne sont ni réécrits ni compactés (`borg compact`
-> est refusé). Le fichier `transactions` du dépôt garde l'historique daté de
+> n'efface rien, sans même le signaler). Le fichier `transactions` du dépôt garde l'historique daté de
 > chaque transaction : l'administrateur du serveur supprime les segments
 > postérieurs à l'attaque et retrouve le dépôt tel qu'il était (L30.2).
 >
-> La suppression du dépôt entier est, elle, refusée. Le prix du mode : la place
+> La suppression du dépôt entier est, elle, refusée (`… is in append-only
+> mode`). Le prix du mode : la place
 > ne diminue jamais d'elle-même ; un administrateur doit compacter
 > périodiquement, depuis le serveur, avec un accès qui n'est pas en ajout seul.
 
@@ -1003,8 +1004,8 @@ sudo install -d -m 700 /root/.config/borg /etc/borg
 sudo sh -c 'umask 077; head -c 32 /dev/urandom | base64 > /root/.config/borg/phrase'
 sudo tee /etc/borg/lab-db.env >/dev/null <<'EOF'
 BORG_REPO=ssh://borg@lab-ops.lab.local/srv/borg/lab-db
-BORG_PASSCOMMAND=cat /root/.config/borg/phrase
-BORG_RSH=ssh -i /root/.ssh/id_borg -o BatchMode=yes
+BORG_PASSCOMMAND="cat /root/.config/borg/phrase"
+BORG_RSH="ssh -i /root/.ssh/id_borg -o BatchMode=yes"
 EOF
 sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a;
   borg init --encryption=repokey-blake2;
@@ -1012,6 +1013,13 @@ sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a;
 # copier /root/borg-cle-lab-db.papier et la phrase vers lab-adm (puis coffre), puis :
 sudo shred -u /root/borg-cle-lab-db.papier
 ```
+
+Les guillemets du fichier d'environnement sont indispensables : il est lu à
+la fois par systemd (`EnvironmentFile=`, qui les retire) et par bash
+(`set -a; . fichier`). Sans eux, bash comprend
+`BORG_PASSCOMMAND=cat /root/.config/borg/phrase` comme « lancer
+`/root/.config/borg/phrase` avec la variable `BORG_PASSCOMMAND=cat` » :
+*Permission denied*, puis `borg` qui demande la phrase.
 
 **Étape 4 — Unité et timer**
 
@@ -1043,30 +1051,37 @@ sudo du -s /srv/borg/lab-db; sudo tail -3 /srv/borg/lab-db/transactions
 sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a;
   for a in $(borg list --short); do borg delete ::"$a"; done; borg list'   # plus rien
 sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a; borg compact'
-#   Error: … append-only …                                # refusé
+#   (aucun message, code 0)                               # l'attaquant croit avoir tout effacé
 # lab-ops : place occupée après
 sudo du -s /srv/borg/lab-db                               # pas moins qu'avant
+sudo tail -3 /srv/borg/lab-db/transactions                # les transactions de l'attaque
 ```
+
+En ajout seul, `borg compact` ne signale rien et n'efface rien : le serveur
+enregistre une transaction de plus, sans supprimer un seul segment. Les
+suppressions d'archives ne font qu'ajouter des enregistrements « supprimé »
+au journal ; les données sont toujours là.
 
 **Étape 6 — Le retour arrière (administrateur de lab-ops)**
 
 ```bash
 cd /srv/borg/lab-db
 sudo cat transactions
-#   transaction 2, UTC time 2026-11-09T00:30:12.441022
-#   transaction 4, UTC time 2026-11-09T09:12:40.018237
-#   transaction 6, UTC time 2026-11-09T10:41:03.552910   <- suppressions de l'attaque
-#   transaction 8, UTC time 2026-11-09T10:41:05.103377
+#   transaction 5, UTC time 2026-11-09T00:30:12.441022   <- sauvegarde de la nuit
+#   transaction 9, UTC time 2026-11-09T09:12:40.018237   <- sauvegarde manuelle de 9 h 12
+#   transaction 13, UTC time 2026-11-09T10:41:03.552910  <- suppressions de l'attaque
+#   transaction 17, UTC time 2026-11-09T10:41:04.371620
+#   transaction 20, UTC time 2026-11-09T10:41:05.103377  <- son « borg compact »
 ```
 
-On repère la dernière transaction **légitime** (ici 4, la sauvegarde de
+On repère la dernière transaction **légitime** (ici 9, la sauvegarde de
 9 h 12), puis, en tant que `borg` et sans client connecté :
 
 ```bash
 sudo -u borg bash -c '
   cd /srv/borg/lab-db
   ls data/0/                                    # segments numérotés
-  for f in data/*/*; do n=$(basename "$f"); [ "$n" -gt 4 ] && rm -v "$f"; done
+  for f in data/*/*; do n=$(basename "$f"); [ "$n" -gt 9 ] && rm -v "$f"; done
   rm -fv hints.* index.* integrity.*            # seront reconstruits
   borg check --repository-only /srv/borg/lab-db'
 ```
@@ -1077,9 +1092,18 @@ protection contre le rejeu d'un vieux dépôt par un attaquant. Une fois la
 manœuvre faite en connaissance de cause :
 
 ```bash
-sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a;
-  id=$(borg config :: id); rm -rf /root/.cache/borg/$id /root/.config/borg/security/$id;
-  borg list'                                   # les archives sont revenues
+# lab-db : le refus
+sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a; borg list'
+#   Cache, or information obtained from the security directory is newer than repository -
+#   this is either an attack or unsafe (multiple repos with same ID)
+# lab-ops : l'identifiant du dépôt (borg config ne fonctionne qu'en local)
+sudo -u borg borg config /srv/borg/lab-db id
+#   d6ad3639df07a1651dde691c324da22d17a5d94e1d27f6bfe9794a24465409a3
+# lab-db : oublier l'état mémorisé de CE dépôt, et seulement de lui
+id=d6ad3639df07a1651dde691c324da22d17a5d94e1d27f6bfe9794a24465409a3
+sudo cat /root/.config/borg/security/$id/location     # ssh://borg@lab-ops.lab.local/srv/borg/lab-db
+sudo rm -rf /root/.cache/borg/$id /root/.config/borg/security/$id
+sudo -i bash -c 'set -a; . /etc/borg/lab-db.env; set +a; borg list; borg check'   # les archives sont revenues
 ```
 
 > [!NOTE]
@@ -1138,6 +1162,7 @@ sudo tee /usr/local/bin/archive-wal >/dev/null <<'EOF'
 # archive-wal %p %f — archive un segment WAL sur lab-ops (module 30, L30.3)
 # Appelé par PostgreSQL (utilisateur postgres). Code 0 = segment en sécurité.
 set -euo pipefail
+trap 'exit 1' ERR   # tout échec = code 1 (au-delà de 125, PostgreSQL relance l'archiveur)
 src=$1 nom=$2
 tmp=/var/lib/postgresql/archive-tmp
 mkdir -p "$tmp"
@@ -1164,6 +1189,11 @@ sleep 5; sudo -u postgres psql -x -c "SELECT * FROM pg_stat_archiver;"
 >
 > * `set -euo pipefail` : chaque étape qui échoue fait sortir le script avec
 >   un code non nul, et PostgreSQL garde le segment pour réessayer.
+> * `trap 'exit 1' ERR` ramène tout échec au code 1. Sans lui, un échec SSH
+>   de `rsync` sort avec le code 255 : au-delà de 125, PostgreSQL considère que
+>   la commande a été tuée, journalise un `FATAL` et relance tout le processus
+>   d'archivage. Le segment est gardé quand même, mais le journal devient
+>   trompeur.
 > * `--ignore-existing` : on n'écrase jamais un segment déjà archivé. La
 >   documentation de PostgreSQL recommande même d'échouer si le fichier existe
 >   avec un contenu différent ; avec une clé en écriture seule, on ne peut pas
@@ -1211,17 +1241,23 @@ sudo -u postgres psql -d lab30 -c 'DROP TABLE factures;'
 sudo grep 'DROP TABLE factures' /var/log/postgresql/postgresql-16-main.log
 #   2026-11-09 10:42:17.481 CET [24113] postgres@lab30 LOG:  statement: DROP TABLE factures;
 sudo -u postgres psql -Atc "SELECT pg_switch_wal();"    # pousser le segment de l'accident
-# lab-ops : la transaction dans les WAL archivés
-mkdir -p /tmp/wal && cd /srv/pgwal
-for f in *.zst; do zstd -q -d -f "$f" -o /tmp/wal/"${f%.zst}"; done
-/usr/lib/postgresql/16/bin/pg_waldump -p /tmp/wal \
-  "$(ls /tmp/wal | grep -v history | tail -3 | head -1)" 2>/dev/null | grep 'COMMIT.*rels:'
+# lab-ops : la transaction dans les WAL archivés (postgres est dans le groupe pgwal)
+sudo -u postgres bash -c 'mkdir -p /tmp/wal && cd /srv/pgwal &&
+  for f in *.zst; do zstd -q -d -f "$f" -o /tmp/wal/"${f%.zst}"; done'
+segs=$(sudo -u postgres ls /tmp/wal | grep -E '^[0-9A-F]{24}$')
+sudo -u postgres /usr/lib/postgresql/16/bin/pg_waldump -p /tmp/wal \
+  "$(head -1 <<<"$segs")" "$(tail -1 <<<"$segs")" 2>/dev/null | grep 'COMMIT.*rels:'
 #   rmgr: Transaction len (rec/tot): 405/405, tx: 1071, lsn: 0/24015F30, prev 0/24015EF0,
 #   desc: COMMIT 2026-11-09 10:42:17.502314 CET; rels: base/16388/16391 base/16388/16394 …
 ```
 
 La validation (*COMMIT*) qui **supprime des fichiers de relations**
 (`rels:`) est celle du `DROP TABLE` : transaction 1071, LSN `0/24015F30`.
+
+`pg_waldump` reçoit le premier **et** le dernier segment : avec un seul
+segment, il s'arrête à la fin de celui-ci. Les fichiers `.backup` et
+`.history` de l'archive ne sont pas des segments, d'où le filtre sur les
+24 caractères hexadécimaux.
 
 **Étape 6 — Restaurer sur `lab-ops`**
 
@@ -1249,6 +1285,11 @@ sudo tail -5 /var/log/postgresql/postgresql-16-restau.log
 sudo -u postgres psql -p 5439 -d lab30 -Atc "SELECT pg_is_in_recovery(), count(*) FROM factures;"
 #   f|1000
 ```
+
+Dans le journal, des lignes `zstd: can't stat /srv/pgwal/00000002.history.zst`
+sont normales : avant de choisir une nouvelle ligne temporelle, PostgreSQL
+demande à `restore_command` des fichiers d'historique qui n'existent pas, et
+un échec de la commande signifie simplement « pas dans l'archive ».
 
 > [!NOTE]
 > **Pourquoi**
@@ -1403,9 +1444,9 @@ journée perdue (RPO = âge de la sauvegarde).
 sudo -i
 set -a; . /etc/restic/lab-web.env; set +a
 restic snapshots --compact
-restic ls latest /etc/nginx                    # rien
+restic ls latest /etc/nginx                    # seulement l'en-tête « snapshot … filtered by [/etc/nginx] »
 for s in $(restic snapshots --json | jq -r '.[].short_id'); do
-  printf '%s ' "$s"; restic ls "$s" /etc/nginx/nginx.conf 2>/dev/null | grep -c nginx.conf
+  printf '%s ' "$s"; restic ls "$s" /etc/nginx/nginx.conf 2>/dev/null | grep -cxF /etc/nginx/nginx.conf
 done                                           # 1 1 1 … 0 : depuis quand ça manque
 restic diff <dernier-bon> <premier-mauvais> | grep nginx | head -3
 #   -    /etc/nginx/
@@ -1433,13 +1474,35 @@ systemctl start restic-sauvegarde.service
 restic ls latest /etc/nginx/nginx.conf
 ```
 
-**Prévention** : un contrôle de **contenu** après chaque sauvegarde, dans
-l'unité elle-même :
+**Prévention** : un contrôle de **contenu** après chaque sauvegarde, lancé
+par l'unité elle-même :
 
-```ini
-ExecStartPost=/bin/sh -c 'for f in /etc/nginx/nginx.conf /etc/ssh/sshd_config /var/www/lab30/index.html; do \
-  restic ls latest "$f" | grep -q . || { echo "ABSENT DE LA SAUVEGARDE : $f" >&2; exit 1; }; done'
+```bash
+sudo tee /usr/local/sbin/restic-verifie >/dev/null <<'EOF'
+#!/bin/bash
+# restic-verifie — échoue si un fichier témoin manque dans le dernier instantané (module 30, BF30.1)
+# Lancé par restic-sauvegarde.service (ExecStartPost), avec l'environnement du dépôt.
+set -uo pipefail
+manque=0
+for f in /etc/nginx/nginx.conf /etc/ssh/sshd_config /var/www/lab30/index.html; do
+  # restic ls écrit d'abord une ligne d'en-tête : on cherche la ligne EXACTE du fichier
+  restic ls latest "$f" 2>/dev/null | grep -qxF "$f" || { echo "ABSENT DE LA SAUVEGARDE : $f" >&2; manque=1; }
+done
+exit "$manque"
+EOF
+sudo chmod 755 /usr/local/sbin/restic-verifie
+sudo systemctl edit restic-sauvegarde.service     # [Service] ExecStartPost=/usr/local/sbin/restic-verifie
 ```
+
+> [!WARNING]
+> **Piège**
+>
+> `restic ls latest "$f" | grep -q .` semble faire l'affaire, mais `restic ls`
+> écrit toujours une ligne d'en-tête (`snapshot … filtered by […]`) sur sa
+> sortie standard, même quand le fichier est absent : le contrôle serait
+> toujours vert. Et une boucle shell écrite directement dans `ExecStartPost=`
+> se heurte à la substitution de variables de systemd (`$f` devrait s'écrire
+> `$$f`) : un script à part est plus simple à tester.
 
 plus une alerte sur la variation de taille d'un instantané à l'autre
 (`restic stats latest --json` comparé au précédent : −20 % = alerte), et le
@@ -1472,10 +1535,11 @@ sudo -u postgres psql -x -c "SELECT last_archived_wal, last_archived_time,
   failed_count, last_failed_wal, last_failed_time FROM pg_stat_archiver;"
 #   last_archived_time | 2026-11-08 17:05:12      <- hier
 #   failed_count       | 1214
-sudo grep -A2 'archive command failed' /var/log/postgresql/postgresql-16-main.log | tail -4
+sudo grep -B2 'archive command failed' /var/log/postgresql/postgresql-16-main.log | tail -4
 #   Warning: Identity file /var/lib/postgresql/.ssh/id_archive not accessible: No such file or directory.
 #   pgwal@lab-ops.lab.local: Permission denied (publickey).
-#   LOG:  archive command failed with exit code 255
+#   LOG:  archive command failed with exit code 1
+#   DETAIL:  The failed archive command was: /usr/local/bin/archive-wal pg_wal/0000000100000000000000A5 …
 sudo ls -l /var/lib/postgresql/.ssh/ /var/lib/postgresql/.ssh/ancien/
 ```
 
@@ -1495,8 +1559,13 @@ sudo -u postgres /usr/local/bin/archive-wal \
 # PostgreSQL rattrape seul, au rythme d'un segment par appel :
 watch -n 5 "sudo -u postgres psql -Atc 'SELECT failed_count, last_archived_wal FROM pg_stat_archiver;';
   sudo ls /var/lib/postgresql/16/main/pg_wal/archive_status | grep -c ready"
-sudo -u postgres psql -c 'CHECKPOINT;'        # libère les segments archivés et recyclables
+sudo -u postgres psql -c 'CHECKPOINT;'        # les segments archivés deviennent recyclables
 ```
+
+Après le point de contrôle, `pg_wal` cesse de grossir mais ne maigrit pas
+forcément tout de suite : PostgreSQL renomme les segments recyclables pour
+les réutiliser (dans la limite de `max_wal_size`) et ne supprime que
+l'excédent, au fil des points de contrôle suivants.
 
 Le test manuel écrit un fichier `test-manuel.zst` dans l'archive : on le
 supprime ensuite sur `lab-ops`. Si la clé avait réellement fuité (raison

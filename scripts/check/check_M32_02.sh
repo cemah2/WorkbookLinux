@@ -18,7 +18,7 @@ findmnt -no OPTIONS "$M" | grep -q 'compress=zstd' && ok "compression zstd activ
 findmnt -no OPTIONS "$M" | grep -q 'degraded' && ko "monté en degraded" || ok "pas monté en degraded"
 
 S=$(btrfs filesystem show "$M" 2>/dev/null)
-grep -q 'missing' <<<"$S" && ko "un disque manque au volume" || ok "aucun disque manquant"
+grep -qi 'missing' <<<"$S" && ko "un disque manque au volume" || ok "aucun disque manquant"
 devs=$(awk '/devid/{print $NF}' <<<"$S" | xargs -n1 readlink -f | sort | paste -sd' ' -)
 b=$(readlink -f "$B"); d=$(readlink -f "$D")
 grep -qw "$b" <<<"$devs" && grep -qw "$d" <<<"$devs" \
