@@ -194,6 +194,7 @@ Ce qui fait passer d'administrateur à expert : identité centralisée, haute di
 | **28** | Identité centralisée : LDAP, Kerberos, SSSD et FreeIPA | 10 h | [énoncé](modules/28-identite-centralisee/README.md) | [corrigé](modules/28-identite-centralisee/corrige.md) |
 | **29** | Haute disponibilité : HAProxy, keepalived, Pacemaker et Corosync | 10 h | [énoncé](modules/29-haute-disponibilite/README.md) | [corrigé](modules/29-haute-disponibilite/corrige.md) |
 | **30** | Sauvegarde et reprise d'activité : restic, borg, PostgreSQL PITR, Proxmox | 11 h | [énoncé](modules/30-sauvegarde-pra/README.md) | [corrigé](modules/30-sauvegarde-pra/corrige.md) |
+| **31** | Observer le noyau : perf, flame graphs, ftrace et eBPF | 10 h | [énoncé](modules/31-tracage-ebpf-perf/README.md) | [corrigé](modules/31-tracage-ebpf-perf/corrige.md) |
 
 ### Projet C — Une semaine d'astreinte
 

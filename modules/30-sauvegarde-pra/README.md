@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 30**  
-[← Module 29](../29-haute-disponibilite/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md)
+[← Module 29](../29-haute-disponibilite/README.md) · [Corrigé](corrige.md) · [Module 31 →](../31-tracage-ebpf-perf/README.md)
 
 <details><summary>Scripts du module (8)</summary>
 
@@ -749,5 +749,5 @@ Pour aller plus loin :
 <!-- nav:début -->
 ---
 
-[← Module 29](../29-haute-disponibilite/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 29](../29-haute-disponibilite/README.md) · [Corrigé](corrige.md) · [Module 31 →](../31-tracage-ebpf-perf/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

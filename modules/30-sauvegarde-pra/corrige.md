@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 30** · corrigé  
-[← Module 29](../29-haute-disponibilite/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md)
+[← Module 29](../29-haute-disponibilite/corrige.md) · [Énoncé](README.md) · [Module 31 →](../31-tracage-ebpf-perf/corrige.md)
 
 > [!TIP]
 > Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
@@ -1761,5 +1761,5 @@ Automatique chaque lundi (exercice-pra.sh), complet chaque trimestre.
 <!-- nav:début -->
 ---
 
-[← Module 29](../29-haute-disponibilite/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 29](../29-haute-disponibilite/corrige.md) · [Énoncé](README.md) · [Module 31 →](../31-tracage-ebpf-perf/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->
