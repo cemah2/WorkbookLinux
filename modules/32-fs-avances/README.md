@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 32**  
-[← Module 31](../31-tracage-ebpf-perf/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md)
+[← Module 31](../31-tracage-ebpf-perf/README.md) · [Corrigé](corrige.md) · [Module 33 →](../33-packaging-build/README.md)
 
 <details><summary>Scripts du module (8)</summary>
 
@@ -739,5 +739,5 @@ Pour aller plus loin :
 <!-- nav:début -->
 ---
 
-[← Module 31](../31-tracage-ebpf-perf/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 31](../31-tracage-ebpf-perf/README.md) · [Corrigé](corrige.md) · [Module 33 →](../33-packaging-build/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

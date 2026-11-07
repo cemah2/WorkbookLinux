@@ -162,6 +162,7 @@ Ce qui fait passer d'administrateur à expert : identité centralisée, haute di
 | **30** | Sauvegarde et reprise d'activité : restic, borg, PostgreSQL PITR, Proxmox | 11 h | [énoncé](../modules/30-sauvegarde-pra/README.md) | [corrigé](../modules/30-sauvegarde-pra/corrige.md) |
 | **31** | Observer le noyau : perf, flame graphs, ftrace et eBPF | 10 h | [énoncé](../modules/31-tracage-ebpf-perf/README.md) | [corrigé](../modules/31-tracage-ebpf-perf/corrige.md) |
 | **32** | Systèmes de fichiers avancés : intégrité, Btrfs, ZFS et mesures | 10 h | [énoncé](../modules/32-fs-avances/README.md) | [corrigé](../modules/32-fs-avances/corrige.md) |
+| **33** | Construire et distribuer : compilation, paquets .deb et .rpm, dépôts signés | 11 h | [énoncé](../modules/33-packaging-build/README.md) | [corrigé](../modules/33-packaging-build/corrige.md) |
 
 ### Projet C — Une semaine d'astreinte
 

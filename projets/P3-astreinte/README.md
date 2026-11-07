@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet C — Une semaine d'astreinte › **Projet C**  
-[← Module 32](../../modules/32-fs-avances/README.md) · [Corrigé](corrige.md)
+[← Module 33](../../modules/33-packaging-build/README.md) · [Corrigé](corrige.md)
 
 <details><summary>Scripts du module (37)</summary>
 
@@ -909,5 +909,5 @@ comme en entretien, en 2 à 3 minutes chacune.
 <!-- nav:début -->
 ---
 
-[← Module 32](../../modules/32-fs-avances/README.md) · [Corrigé](corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 33](../../modules/33-packaging-build/README.md) · [Corrigé](corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

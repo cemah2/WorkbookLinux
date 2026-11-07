@@ -43,7 +43,7 @@ PARTS = [
      "disponibilité, sauvegarde et reprise, traçage du noyau, systèmes de fichiers "
      "avancés, empaquetage.",
      ["28-identite-centralisee", "29-haute-disponibilite", "30-sauvegarde-pra",
-      "31-tracage-ebpf-perf", "32-fs-avances"]),
+      "31-tracage-ebpf-perf", "32-fs-avances", "33-packaging-build"]),
     ("Projet C", "Une semaine d'astreinte",
      "Examen final : cinq journées de tickets, d'incidents et de "
      "post-mortems sur la plateforme Factura.",
