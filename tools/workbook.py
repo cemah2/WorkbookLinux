@@ -38,6 +38,11 @@ PARTS = [
      "La même plateforme, reconstruite par le code : OpenTofu, Ansible, "
      "Compose, CI/CD, observabilité, k3s.",
      ["P2-factura-devops"]),
+    ("Partie V", "Expertise système",
+     "Ce qui fait passer d'administrateur à expert : identité centralisée, haute "
+     "disponibilité, sauvegarde et reprise, traçage du noyau, systèmes de fichiers "
+     "avancés, empaquetage.",
+     ["28-identite-centralisee"]),
     ("Projet C", "Une semaine d'astreinte",
      "Examen final : cinq journées de tickets, d'incidents et de "
      "post-mortems sur la plateforme Factura.",

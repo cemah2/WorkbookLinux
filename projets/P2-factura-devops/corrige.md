@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet B — Factura v2 : industrialisation DevOps › **Projet B** · corrigé  
-[← Module 27](../../modules/27-python-ops/corrige.md) · [Énoncé](README.md) · [Projet C →](../P3-astreinte/corrige.md)
+[← Module 27](../../modules/27-python-ops/corrige.md) · [Énoncé](README.md) · [Module 28 →](../../modules/28-identite-centralisee/corrige.md)
 
 > [!TIP]
 > Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
@@ -6188,5 +6188,5 @@ curl -s http://10.10.10.21/health
 <!-- nav:début -->
 ---
 
-[← Module 27](../../modules/27-python-ops/corrige.md) · [Énoncé](README.md) · [Projet C →](../P3-astreinte/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 27](../../modules/27-python-ops/corrige.md) · [Énoncé](README.md) · [Module 28 →](../../modules/28-identite-centralisee/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

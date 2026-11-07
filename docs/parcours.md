@@ -151,6 +151,14 @@ La même plateforme, reconstruite par le code : OpenTofu, Ansible, Compose, CI/C
 |---|---|---|---|---|
 | **B** | Factura v2 : industrialisation DevOps | 30 à 40 h | [énoncé](../projets/P2-factura-devops/README.md) | [corrigé](../projets/P2-factura-devops/corrige.md) |
 
+### Partie V — Expertise système
+
+Ce qui fait passer d'administrateur à expert : identité centralisée, haute disponibilité, sauvegarde et reprise, traçage du noyau, systèmes de fichiers avancés, empaquetage.
+
+| | Module | Durée | Énoncé | Corrigé |
+|---|---|---|---|---|
+| **28** | Identité centralisée : LDAP, Kerberos, SSSD et FreeIPA | 10 h | [énoncé](../modules/28-identite-centralisee/README.md) | [corrigé](../modules/28-identite-centralisee/corrige.md) |
+
 ### Projet C — Une semaine d'astreinte
 
 Examen final : cinq journées de tickets, d'incidents et de post-mortems sur la plateforme Factura.

@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet B — Factura v2 : industrialisation DevOps › **Projet B**  
-[← Module 27](../../modules/27-python-ops/README.md) · [Corrigé](corrige.md) · [Projet C →](../P3-astreinte/README.md)
+[← Module 27](../../modules/27-python-ops/README.md) · [Corrigé](corrige.md) · [Module 28 →](../../modules/28-identite-centralisee/README.md)
 
 <details><summary>Scripts du module (15)</summary>
 
@@ -1450,5 +1450,5 @@ PostgreSQL en réplication vers le staging (RPO < 1 h).
 <!-- nav:début -->
 ---
 
-[← Module 27](../../modules/27-python-ops/README.md) · [Corrigé](corrige.md) · [Projet C →](../P3-astreinte/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 27](../../modules/27-python-ops/README.md) · [Corrigé](corrige.md) · [Module 28 →](../../modules/28-identite-centralisee/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->
