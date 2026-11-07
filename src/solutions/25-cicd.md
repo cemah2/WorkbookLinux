@@ -62,9 +62,9 @@ travaille.*
 Un job n'est pas « envoyé » à un runner : chaque runner **interroge** Gitea
 (`fetch_interval`) en présentant ses labels, et Gitea lui remet un job dont
 `runs-on` figure dans ces labels. Un job dont aucun runner ne porte le label
-n'est proposé à personne ; il reste `waiting` sans message d'erreur, parce
+n'est proposé à personne ; il reste `waiting` (jusqu'à l'annulation automatique au bout de `ABANDONED_JOB_TIMEOUT`, 24 h par défaut), parce
 que du point de vue de Gitea la situation n'est pas anormale — un runner
-avec ce label pourrait apparaître plus tard. Le runner, lui, ne voit même
+avec ce label pourrait apparaître plus tard. Seul indice dans l'interface : l'onglet *Actions* signale « No matching online runner with label :… » en face du workflow. Le runner, lui, ne voit même
 pas ce job : ses logs restent silencieux.
 :::
 
@@ -531,8 +531,7 @@ différentes, d'où deux stratégies qu'on combine souvent.
    `curl -s localhost:8080/version`. On obtient un digest et une version.
 2. **Ce qui a été construit** : sur `lab-ops`, dans le run vert, le SHA du
    commit et le tag poussé ; sur le registre,
-   `curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json'
-   http://10.10.10.14:5000/v2/factura/manifests/<tag>` →
+   `curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json' -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' http://10.10.10.14:5000/v2/factura/manifests/<tag>` →
    `Docker-Content-Digest`. Comparer avec l'étape 1.
 3. **Ce qui a été demandé** : `cat /srv/factura/.env` sur `lab-web`, le
    journal du step `deploy`, `journalctl -u ssh` pour voir la commande reçue.
@@ -705,7 +704,7 @@ changement) et s'y tenir.
 ```bash
 cd ~/lab25/forge
 docker compose ps --format 'table {{.Name}}\t{{.Image}}\t{{.Ports}}'
-grep -nE 'ACTIONS__ENABLED|INSTALL_LOCK|docker.sock' compose.yaml
+grep -nE 'actions^_ENABLED|INSTALL_LOCK|docker\.sock' compose.yaml
 ls -la runner/data/.runner
 ```
 
@@ -744,7 +743,8 @@ curl -s -H "Authorization: token $TOKEN" \
 
 cd ~/lab25/factura
 git config credential.helper "store --file $HOME/lab25/.git-credentials"
-printf 'http://mathieu:%s@10.10.10.14\n' "$TOKEN" > ~/lab25/.git-credentials
+printf 'http://mathieu:%s@10.10.10.14:3000\n' "$TOKEN" \
+  > ~/lab25/.git-credentials
 chmod 600 ~/lab25/.git-credentials
 git push            # « Everything up-to-date », sans demande de mot de passe
 ```
@@ -755,7 +755,7 @@ Un jeton d'accès personnel remplace le mot de passe sur HTTP : l'en-tête
 Git. Le helper `store` garde l'identifiant en clair dans un fichier — c'est
 acceptable pour un jeton de lab, pas pour un mot de passe. En production on
 préfère SSH (clé) ou un helper chiffré. Le setup a déjà posé ce helper ;
-l'exercice te le fait refaire pour que tu saches où il est.
+l'exercice te le fait refaire pour que tu saches où il est. Le port (`:3000`) fait partie de l'hôte pour Git : sans lui, l'entrée ne correspond pas au remote et Git redemande le mot de passe.
 :::
 
 ::: piege
@@ -903,15 +903,15 @@ sont des chaînes courtes ; un fichier passe par un artefact.
 ```
 
 Après renommage (`date > rapport-final.txt` sans changer `path`),
-`upload-artifact` échoue dans le job **producteur** :
-`Error: No files were found with the provided path: rapport.txt`. Le job
-`consommer` est sauté.
+`upload-artifact` ne fait qu'**avertir** (`if-no-files-found` :
+`warn` par défaut) : `Warning: No files were found with the provided path: rapport.txt`. `No artifacts will be uploaded.` — le job
+producteur reste **vert**. C' est le job **consommateur** qui échoue : `Error: Unable to download artifact(s): Artifact not found for name: rapport`. Mettre `if-no-files-found: error` sur l'upload déplace l'échec là où est la cause.
 
 ::: pourquoi
 L'artefact est téléversé vers Gitea à la fin du step d'upload, puis
 téléchargé par l'autre job : c'est le seul canal de fichiers entre jobs,
 puisque chaque job a son propre conteneur et son propre workspace. `path`
-est relatif à `GITHUB_WORKSPACE`. Gitea 1.22+ implémente l'API artefacts
+est relatif à `GITHUB_ WORKSPACE`. Gitea 1.22+ implémente l'API artefacts
 v4 ; avec une version plus ancienne, utiliser `@v3`. Les artefacts ont une
 rétention (`retention-days`, défaut 90 sur Gitea) et pèsent sur le disque
 de la forge.
@@ -1011,7 +1011,7 @@ curl -s -X PUT -H "Authorization: token $TOKEN" \
 ```
 
 Journal : `longueur = 12` ; `***` pour le premier `echo` ; la ligne base64
-`czNjcjN0LWxhYjIxCg==` en clair ; la trace `+ curl -s -o /dev/null -u u:***`
+`czNjcjN0LWxhYjI1Cg==` en clair ; la trace `+ curl -s -o /dev/null -u u:***`
 masquée, car `set -x` développe la valeur exacte. Le vecteur qui fuit ici
 est **l'encodage**, pas la trace.
 
@@ -1019,7 +1019,7 @@ est **l'encodage**, pas la trace.
 Le masquage compare des chaînes : la valeur exacte est remplacée partout où
 elle apparaît, y compris dans la trace de `set -x`. Ce qui passe est ce
 qui n'est plus la valeur exacte. `curl -v` aurait fuité de la même façon
-(`Authorization: Basic dTpzM2NyM3QtbGFiMjE=`). Règle : un secret ne sort
+(`Authorization: Basic dTpzM2NyM3QtbGFiMjU=`). Règle : un secret ne sort
 jamais d'une variable, sous aucune forme.
 :::
 
@@ -1044,6 +1044,7 @@ curl -s -u mathieu:Factura-Reg-2026 http://10.10.10.14:5000/v2/factura/tags/list
 docker inspect --format '{{index .RepoDigests 0}}' "$IMG:$SHA"
 curl -sI -u mathieu:Factura-Reg-2026 \
   -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
   "http://10.10.10.14:5000/v2/factura/manifests/$SHA" \
   | grep -i docker-content-digest
 ```
@@ -1107,9 +1108,10 @@ Sur `lab-web`, en tant que `mathieu` :
 ```bash
 sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 PUB='<contenu de deploy.pub>'
-printf 'command="/usr/local/bin/factura-deploy",from="10.10.10.14",\
-no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty %s\n' \
-  "$PUB" | sudo tee /home/deploy/.ssh/authorized_keys
+OPTS='command="/usr/local/bin/factura-deploy",from="10.10.10.14"'
+OPTS="$OPTS,no-port-forwarding,no-agent-forwarding"
+OPTS="$OPTS,no-X11-forwarding,no-pty"
+printf '%s %s\n' "$OPTS" "$PUB" | sudo tee /home/deploy/.ssh/authorized_keys
 sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 sudo chmod 600 /home/deploy/.ssh/authorized_keys
 sudo tee /usr/local/bin/factura-deploy >/dev/null <<'EOF'
@@ -1212,6 +1214,7 @@ git push origin v0.1.0
 for t in "$SHA" v0.1.0; do
   curl -sI -u mathieu:Factura-Reg-2026 \
     -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+    -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
     "http://10.10.10.14:5000/v2/factura/manifests/$t" \
     | grep -i docker-content-digest
 done
@@ -1320,7 +1323,7 @@ docker compose logs --tail 20 runner | grep -iE 'labels|listen|cache'
 **3. Protection de branche** — *Dépôt → Paramètres → Branches → Ajouter
 une règle* : nom `main`, « Activer la protection des push » avec liste
 blanche `mathieu`, « Exiger des approbations » = 1, « Vérification de
-statut » = `ci / lint` (visible après un premier run). Par l'API :
+statut » = `ci / lint` (`*)` (le statut réel s'appelle `ci / lint (push)` ou `ci / lint (pull_request)` ; Gitea compare les contextes requis en glob). Par l'API :
 
 ```bash
 TOKEN=$(cat ~/lab25/.gitea-token); API=http://10.10.10.14:3000/api/v1
@@ -1330,7 +1333,7 @@ curl -s -X POST -H "Authorization: token $TOKEN" \
   "branch_name": "main", "enable_push": true,
   "enable_push_whitelist": true, "push_whitelist_usernames": ["mathieu"],
   "required_approvals": 1, "enable_status_check": true,
-  "status_check_contexts": ["ci / lint"] }'
+  "status_check_contexts": ["ci / lint (*)"] }'
 ```
 
 **4. `.yamllint` puis `.gitea/workflows/ci.yaml`.**
@@ -1420,7 +1423,7 @@ on en a besoin **surtout** quand ils échouent.
 `yamllint -s` traite les avertissements comme des erreurs ; sans le
 `.yamllint`, la règle `truthy` refuse la clé `on` et le job est rouge avant
 même d'avoir regardé tes fichiers. Second piège : `status_check_contexts`
-attend le nom exact `workflow / job` (`ci / lint`) ; une faute de frappe
+compare en glob au nom réel du statut, `workflow / job` (`événement)` — d'où `ci / lint` `(*`) ; un motif qui ne correspond à rien (`ci / lint` seul, ou une faute de frappe)
 rend la PR à jamais « en attente de vérification ».
 :::
 
@@ -1735,6 +1738,9 @@ build:
   image: docker:27
   services: [docker:27-dind]
   needs: [lint, hadolint, test]
+  before_script:
+    - printf '%s' "$REGISTRY_PASSWORD" | docker login 10.10.10.14:5000
+        -u "$REGISTRY_USER" --password-stdin
   script:
     - docker build --build-arg "APP_VERSION=$TAG" -t "$IMAGE:$TAG" .
     - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
@@ -1775,7 +1781,7 @@ deploy:
 Correspondances : `stages` + `stage:` remplacent `needs` pour l'ordre
 (et `needs:` GitLab permet de démarrer dès que les dépendances sont
 finies, sans attendre tout le stage) ; `rules:` remplace `if:` ;
-`resource_group` remplace `concurrency` ; `when: manual` + `environment`
+`resource_group` remplace `concurrency` ; attention, `CI_COMMIT_SHORT_SHA` ne fait que 8 caractères : la regex de `factura-deploy` en attend 12, donc calcule `${CI_COMMIT_SHA:0:12}` dans le script ou élargis la regex; `when: manual` + `environment`
 donnent l'approbation native ; les variables masquées sont déclarées
 *masked* et *protected* dans les réglages CI/CD, `$DEPLOY_SSH_KEY` de
 type *file* évite même le `printf`. Le rollback est dans le `script`,
@@ -2339,7 +2345,7 @@ tofu version
 `plan` seul.
 
 **6.** Protection de `main` sur `factura-infra` avec
-`status_check_contexts: ["ansible / lint", "tofu / plan"]`.
+`status_check_contexts: ["ansible / lint (*)", "tofu / plan (*)"]`.
 
 ::: pourquoi
 Le principe des deux workflows est identique : **en PR, on montre ; au
@@ -2387,8 +2393,7 @@ manuel ; le runner est Idle.*
 1. L'onglet *Actions* du dépôt est vide pour ce commit : ce n'est pas un
    job en attente (il serait listé), c'est un run **jamais créé**. Gitea ne
    crée pas de run pour un workflow qu'il ne sait pas lire.
-2. Où Gitea le dit : le bouton *Run workflow* n'énumère plus `ci` (la liste
-   ne contient que les workflows parsés). Et dans le journal de Gitea :
+2. Où Gitea le dit : dans l'onglet *Actions*, la **liste des workflows** (colonne de gauche) affiche `ci.yaml` avec une alerte « Workflow config file is invalid. Please check your config file :… » — pas dans la liste des runs, où l'on regarde d'abord. Le bouton *Run workflow* n'apparaît plus non plus (il dépend du `on:` parsé). Et dans le journal de Gitea :
 
 ```bash
 cd ~/lab25/forge
@@ -2438,10 +2443,8 @@ signal qu'on cherchait).
 Le mécanisme : Gitea, à la réception d'un push, lit chaque fichier de
 `.gitea/workflows/`, le parse, évalue `on:` et **seulement alors** crée un
 run par workflow concerné. Un fichier illisible est écarté à la première
-étape ; l'erreur va dans le journal du serveur, pas dans l'interface du
-dépôt, parce qu'il n'existe aucun objet « run » auquel l'attacher. C'est
-le cas d'école du « silence de l'automate » : l'absence de résultat est
-le seul symptôme.
+étape : aucun objet « run » n'est créé, donc aucune trace dans la liste des runs — l'erreur de parsing va dans le journal du serveur et, dans l'interface, dans la liste des workflows de l'onglet *Actions*. C'est
+le cas d'école du « silence de l'automate » : il faut savoir où l'outil range ce qu'il n'a pas pu exécuter.
 :::
 
 ---
@@ -2494,8 +2497,8 @@ Un runner tire ses labels de `config.yaml` (`runner.labels`) s'ils y sont
 définis, sinon de `.runner` (enregistrement initial). Il les envoie à
 Gitea à chaque démarrage (`declare`). Gitea assigne un job à un runner si
 **la valeur de `runs-on`** figure dans les labels de ce runner. Il n'y a
-ni message d'erreur ni délai d'expiration : du point de vue de la forge,
-un runner adéquat peut apparaître à tout moment. `timeout-minutes` ne
+pas d'erreur côté run : seul l'onglet *Actions* affiche, en face du workflow,
+« No matching online runner with label : build-docker », et le job finit annulé après `ABANDONED_JOB_TIMEOUT` (24 h). `timeout-minutes` ne
 s'applique qu'à un job **démarré**.
 :::
 
@@ -2511,13 +2514,12 @@ labels.
 
 ### **BF25.3** — *« Le mot de passe du registre est dans les logs »*
 
-*Le secret apparaît en `***` mais l'auditeur a trouvé de quoi se
-connecter.*
+*Le secret apparaît en `*`*`/*` *mais l'auditeur a trouvé de quoi se connecter.*
 
 **Diagnostic.**
 
 1. Ouvrir le journal du step incriminé (« debug push registre »). Les
-   lignes avec `***` prouvent que le masquage fonctionne pour la chaîne
+   lignes avec `*/*` prouvent que le masquage fonctionne pour la chaîne
    exacte. Chercher ce qui **n'est pas** la chaîne exacte :
 
 ```bash
@@ -2525,19 +2527,19 @@ cd ~/lab25/factura
 git show HEAD -- .gitea/workflows/ci.yaml
 ```
 
-   Le commit ajoute dans le step `Login registre` :
+   Le commit ajoute au job `build`, juste après le checkout, un step « Debug push registre » :
 
 ```yaml
         run: |
           set -x
           auth=$(printf '%s:%s' "$REG_USER" "$REG_PASS" | base64 -w0)
-          curl -v -H "Authorization: Basic $auth" \
+          curl -sv -H "Authorization: Basic $auth" \
             http://10.10.10.14:5000/v2/ -o /dev/null
           echo "$REG_PASS" | sed 's/./& /g'
 ```
 
 2. Vecteur 1 : `set -x` + `base64`. La trace affiche
-   `+ curl -v -H 'Authorization: Basic bWF0aGlldTpGYWN0dXJhLVJlZy0yMDI2'`
+   `+ curl -sv -H 'Authorization: Basic bWF0aGlldTpGYWN0dXJhLVJlZy0yMDI`
    — la valeur base64 n'est pas la chaîne du secret, elle n'est pas
    masquée ; `echo … | base64 -d` la restitue. `curl -v` répète le même
    en-tête dans `> Authorization: Basic …`.
@@ -2548,7 +2550,7 @@ git show HEAD -- .gitea/workflows/ci.yaml
 **Cause racine.** Deux transformations du secret avant impression :
 encodage et espacement. Le masquage ne connaît que la chaîne exacte.
 
-**Correctif.**
+**Correctif.** Supprimer le step de debug ; le seul usage légitime du secret reste le step de connexion :
 
 ```yaml
       - name: Login registre
@@ -2625,6 +2627,7 @@ curl -s -u mathieu:Factura-Reg-2026 http://10.10.10.14:5000/v2/factura/tags/list
 for t in latest $(git -C ~/lab25/factura rev-parse --short=12 HEAD); do
   printf '%s ' "$t"; curl -sI -u mathieu:Factura-Reg-2026 \
    -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+   -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
    "http://10.10.10.14:5000/v2/factura/manifests/$t" | grep -i content-digest
 done
 ```
@@ -2633,16 +2636,16 @@ done
    image plus ancienne, poussée par « quelqu'un » (le break le fait depuis
    `lab-ops`, comme le ferait un poste de dev).
 
-3. Ce qui a été demandé : `git show HEAD -- .gitea/workflows/ci.yaml`.
-   Trois changements :
+3. Ce qui a été demandé : `git show HEAD -- .gitea/workflows/ci.yaml` sur `lab-ops`, puis `diff` de `/usr/local/bin/factura-deploy` avec ta version sur `lab-web`.
+   Trois changements, deux dans le commit et un sur la cible :
    * `deploy` : `$SSH "deploy $TAG"` → `$SSH "deploy latest"` ;
-   * `build` : le `docker push` ne pousse plus `latest` (le commit « a
-     simplifié ») — donc rien ne réécrase le `latest` étranger ;
    * smoke test : `[ "$v" = "$TAG" ]` remplacé par un simple
-     `curl -fsS …/health` : un 200 suffit, n'importe quelle version passe.
+     `curl -fsS …/health` : un 200 suffit, n'importe quelle version passe ;
+   * `factura-deploy` accepte `latest` parce que sa regex a été
+     élargie (`== latest ||`) « pour que ça passe ».
 
-   Et `factura-deploy` acceptait `latest` parce que sa regex avait été
-   élargie (`|latest`) dans le même mouvement.
+   Le pipeline, lui, n'a jamais poussé `latest` : ce tag a été posé par
+   « quelqu'un » depuis un poste, et rien ne le réécrase.
 
 **Cause racine.** Le déploiement désigne un **pointeur mobile** dont le
 pipeline n'est plus le seul écrivain, et la vérification a été affaiblie
@@ -2683,7 +2686,7 @@ inutile tant que les deux autres tenaient.
 **D25** — *Chaîne de release : tag SemVer → promotion sans rebuild →
 changelog → release → approbation → prod.*
 
-**1. `release.yaml`, job `guard`.**
+**1–2. `release`**`.yaml` **: jobs `guard` et `promote`.**
 
 ```yaml
 name: release
@@ -2727,6 +2730,7 @@ jobs:
         run: |
           code=$(curl -s -u "$REG_AUTH" -o /dev/null -w '%{http_code}' \
             -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+            -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
             "$REGISTRY/v2/factura/manifests/$SHA12")
           [ "$code" = 200 ] \
             || { echo "pas d'image factura:$SHA12 : ci a-t-il poussé ?" >&2
@@ -2755,18 +2759,23 @@ set -euo pipefail
 v=${1:?version}
 prev=$(git describe --tags --abbrev=0 "$v^" 2>/dev/null || true)
 plage=${prev:+$prev..}$v
-section() {                       # $1 titre, $2 regex de préfixe
+section() {                       # $1 titre, $2 préfixe (vide = le reste)
   local lignes
-  lignes=$(git log --no-merges --format='- %s (%h)' "$plage" \
-             | grep -E "^- $2" | sed -E "s/^- $2:? ?/- /" || true)
-  [ -n "$lignes" ] && printf '### %s\n%s\n\n' "$1" "$lignes"
+  if [ -n "$2" ]; then
+    lignes=$(git log --no-merges --format='- %s (%h)' "$plage" \
+               | grep -E "^- $2:" | sed -E "s/^- $2: ?/- /" || true)
+  else
+    lignes=$(git log --no-merges --format='- %s (%h)' "$plage" \
+               | grep -vE '^- (feat|fix):' || true)
+  fi
+  [ -z "$lignes" ] || printf '### %s\n%s\n\n' "$1" "$lignes"
 }
 {
   printf '## %s — %s\n\n' "$v" "$(date +%F)"
   section 'Nouveautés' 'feat'
   section 'Corrections' 'fix'
-  section 'Autres' '[^f]|f[^ei]|fe[^a]|fi[^x]'
-  [ -f CHANGELOG.md ] && cat CHANGELOG.md
+  section 'Autres' ''
+  [ ! -f CHANGELOG.md ] || cat CHANGELOG.md
 } > CHANGELOG.new
 mv CHANGELOG.new CHANGELOG.md
 ```
@@ -2798,13 +2807,12 @@ ci]`, `[ci skip]`, `[no ci]`, `[skip actions]` ou `[actions skip]`.
           git config user.email ci-bot@lab.local
           git add CHANGELOG.md
           git commit -m "[skip ci] changelog $VERSION"
-          url="http://ci-bot:${GITEA_TOKEN}@10.10.10.14:3000"
+        url="http://${GITHUB_ACTOR}:${GITEA_TOKEN}@10.10.10.14:3000"
           git push "$url/mathieu/factura.git" HEAD:main
 ```
 
-Si `main` est protégée avec liste blanche, `ci-bot` (l'identité du jeton
-automatique) doit y figurer, ou la protection doit autoriser les pushes
-du jeton d'Actions.
+`ci-bot` est l'auteur du commit (`user.name`); l'authentification du push utilise le jeton
+automatique, dont l'identité côté Gitea est celle de l'acteur du run (`GITHUB_ACTOR`, ici `mathieu`). Si `main` est protégée avec liste blanche, cette identité doit y figurer (à vérifier sur cible : selon la version de Gitea, le jeton d'Actions peut être refusé par la protection de branche, auquel cas un jeton personnel dédié en secret remplace `GITEA_TOKEN`).
 
 **4. Release Gitea.**
 
@@ -2824,6 +2832,7 @@ du jeton d'Actions.
       - run: |
           digest=$(curl -sI -u "$REG_AUTH" \
             -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+            -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
             "$REGISTRY/v2/factura/manifests/$VERSION" \
             | grep -i docker-content-digest | tr -d '\r' | cut -d' ' -f2)
           corps=$(awk '/^## /{n++} n==1' CHANGELOG.md)
@@ -2906,6 +2915,7 @@ ok() { printf '  [ OK ] %s\n' "$1"; }
 ko() { printf '  [FAIL] %s\n' "$1"; rc=1; }
 dig() { curl -sI -u mathieu:Factura-Reg-2026 \
   -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
   "$REG/v2/factura/manifests/$1" | grep -i docker-content-digest \
   | tr -d '\r' | cut -d' ' -f2; }
 

@@ -23,7 +23,6 @@ fi
 cat > "$CIBLE" <<'EOF'
 # Archivage factura (simplifie le 17/09 : plus besoin du script wrapper)
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-MAILTO=""
 */2 * * * * factura tar czf /srv/factura/backups/data-$(date +%F).tgz /srv/factura/data 2>&1 | logger -t factura-archivage
 EOF
 chmod 0644 "$CIBLE"
@@ -48,7 +47,8 @@ cat <<'EOF'
 Symptôme attendu : depuis la modification de la planification, plus aucune
 archive n'apparaît dans /srv/factura/backups. Celle d'hier, antérieure au
 changement, est bien là. La commande copiée-collée dans un shell fonctionne.
-Le journal contient une ligne de cron mentionnant la tâche, suivie d'une
-erreur de syntaxe du shell.
-À observer dans les deux minutes : journalctl -t factura-archivage -f
+Le journal contient toutes les deux minutes la ligne CMD de cron pour la
+tâche, suivie de « (CRON) info (No MTA installed, discarding output) »,
+et rien sous l'étiquette factura-archivage.
+À observer dans les deux minutes : journalctl -t CRON -f
 EOF

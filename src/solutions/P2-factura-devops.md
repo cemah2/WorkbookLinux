@@ -24,7 +24,7 @@ Arborescence finale du dépôt, pour s'y retrouver :
 factura-v2/
   .gitea/workflows/   ci.yaml  cd-prod.yaml  restore-test.yaml
   .pre-commit-config.yaml  .gitleaks.toml  .yamllint  .ansible-lint
-  .gitignore  .editorconfig  Makefile  README.md
+  .gitignore  .editorconfig  Makefile  README.md  ansible.cfg
   app/                api/ worker/ nginx/ sql/ compose.yaml
   infra/              *.tf  templates/  envs/{staging,prod,k3s}.tfvars
   infra/monitoring/   compose.yaml prometheus/ alertmanager/ grafana/
@@ -68,7 +68,7 @@ curl -fsS -u "mathieu:$GP" -X POST "$GITEA/api/v1/user/repos" \
 # clé publique de lab-adm sur le compte Gitea (une fois)
 curl -fsS -u "mathieu:$GP" -X POST "$GITEA/api/v1/user/keys" \
   -H 'Content-Type: application/json' \
-  -d "{\"title\":\"mathieu@lab-adm\",\"key\":\"$(cat ~/.ssh/id_ed25519.pub)\"}" \
+  -d "{\"title\":\"lab-adm\",\"key\":\"$(cat ~/.ssh/id_ed25519.pub)\"}" \
   >/dev/null
 unset GP
 ```
@@ -153,7 +153,7 @@ repos:
 set -euo pipefail
 MSG_FILE="${1:?fichier du message}"
 FIRST=$(grep -v '^#' "$MSG_FILE" | sed -n '1p')
-RE='^(feat|fix|chore|docs|ci|infra|refactor|test)(\([a-z0-9._/-]+\))?!?: .{3,72}$'
+RE='^(feat|fix|chore|docs|ci|infra|refactor|test)(\([a-z0-9._/-]+\))?: .{3,72}$'
 case "$FIRST" in
   Merge*|Revert*|fixup!*|squash!*) exit 0 ;;
 esac
@@ -198,7 +198,7 @@ git add .pre-commit-config.yaml tools/check-commit-msg.sh
 git commit -m "ci(hooks): pre-commit, gitleaks, shellcheck, commit-msg"
 git add app/
 git commit -m "feat(app): API, worker et stack Compose de dev fournis"
-git add infra/ ansible/ k8s/ docs/ Makefile README.md tools/
+git add infra/ ansible/ k8s/ docs/ Makefile README.md tools/ ansible.cfg
 git commit -m "chore(repo): arborescence infra, ansible, k8s, docs"
 printf '# Journal de bord\n\n## %s — PB.1\n\n' "$(date +%F)" \
   > docs/journal.md
@@ -219,7 +219,7 @@ git commit -m "infra(tofu): exemple de tfvars"
 #   gitleaks.................Failed
 #   - hook id: gitleaks
 #   Finding: pve_api_token = "tofu@pve!factura=3f1c2a9e-8b7d-...
-#   Secret: 3f1c2a9e-8b7d-4e21-9c55-0a1b2c3d4e5f   RuleID: generic-api-key
+#   RuleID: proxmox-api-token   (règle ajoutée dans .gitleaks.toml)
 git reset HEAD infra/terraform.tfvars.example; rm infra/terraform.tfvars.example
 ```
 
@@ -256,10 +256,10 @@ fichier du message en argument — c'est le contrat de Git.
 
 **gitleaks en hook ET dans la CI (PB.6)** : le hook protège le poste du dev
 consciencieux ; la CI protège contre `git commit --no-verify` et contre le
-collègue qui n'a pas installé les hooks. Le `.gitleaks.toml` fourni met en
+collègue qui n'a pas installé les hooks. Les règles par défaut ne reconnaissent pas un token Proxmox (`@` et `!` cassent `generic-api-key`) : le `.gitleaks.toml` fourni ajoute une règle `proxmox-api-token`, et met en
 liste blanche les `vault.yml` (leur contenu chiffré ressemble à de
-l'entropie, donc à un secret) et `devpass` (mot de passe de démonstration de
-`compose.yaml`). La règle : la liste blanche décrit des **chemins** ou des
+l'entropie, donc à un secret), `devpass` (mot de passe de démonstration de
+`compose.yaml`) et l'UUID nul du faux token de `tofu validate` (PB.6). La règle : la liste blanche décrit des **chemins** ou des
 **valeurs de démo connues**, jamais un motif large comme `password`.
 
 **`tofu fmt -check` en hook `system`** : il utilise le binaire du poste
@@ -387,7 +387,7 @@ variable "pve_node" {
 }
 
 variable "pve_api_token" {
-  description = "Token API Proxmox : user@realm!name=uuid (TF_VAR_pve_api_token)"
+  description = "Token Proxmox user@realm!name=uuid (TF_VAR_pve_api_token)"
   type        = string
   sensitive   = true
   validation {
@@ -494,7 +494,9 @@ resource "proxmox_virtual_environment_file" "user_data" {
 #cloud-config
 hostname: ${hostname}
 fqdn: ${hostname}.lab.local
-manage_etc_hosts: true
+# « localhost » et non « true » : cloud-init ne réécrit pas tout /etc/hosts
+# à chaque boot, le bloc posé par Ansible (PB.3) survit au redémarrage
+manage_etc_hosts: localhost
 timezone: Europe/Paris
 users:
   - name: mathieu
@@ -774,7 +776,7 @@ du bonus « backend distant chiffré ».
   template a un disque de 20 Go et que tu demandes 20 : mets une valeur
   strictement supérieure ou identique au template, jamais inférieure.
   Ajoute à `ignore_changes` seulement ce que tu as **compris**, et écris
-  pourquoi dans le journal : c'est noté.
+  pourquoi dans le journal : c'est noté. `manage_etc_hosts: true` : cloud-init régénère `/etc/hosts` **à chaque boot** depuis son gabarit, et le bloc `ANSIBLE FACTURA` du rôle `common` disparaît au premier redémarrage (`changed=1` au passage suivant, et `lab-ops` ne résout plus). `localhost` ne gère que la ligne `127.0.1.1`.
 * `cloud-init status` → `error` avec `Invalid cloud-config` : le rendu du
   template contient une clé `${...}` non fournie, ou la première ligne n'est
   pas exactement `#cloud-config` (sans espace). `cloud-init schema
@@ -823,7 +825,7 @@ ansible -i inventory/staging.ini all -m ping
 
 `ansible/ansible.cfg` est celui du squelette (`inventory = inventory/
 staging.ini` par défaut, `roles_path = roles`, `vault_password_file =
-../.vault-pass`, `pipelining`). Le `.vault-pass` n'existe qu'à PB.5 : tant
+../.vault-pass`, `pipelining`). Ansible ne lit que le `ansible.cfg` du répertoire **courant** : le squelette en met donc un second à la racine (mêmes réglages, chemins `ansible/roles`, `ansible/collections`, `.vault-pass`), utilisé quand on lance `ansible-playbook` ou `ansible-lint` depuis `~/ factura-v2` (Makefile, checks, `rebuild.sh`, pre-commit). Le `.vault-pass` n'existe qu'à PB.5 : tant
 qu'aucun fichier chiffré n'est lu, Ansible ne s'en plaint pas.
 
 **2. Variables de groupe**
@@ -1144,7 +1146,7 @@ firewall_external_iface: "{{ ansible_default_ipv4.interface }}"
     block: "{{ lookup('ansible.builtin.template', 'docker-user.rules.j2') }}"
   notify: Reload ufw
 
-- name: ufw actif au démarrage
+- name: Activation d'ufw au démarrage
   community.general.ufw:
     state: enabled
 ```
@@ -1156,12 +1158,13 @@ firewall_external_iface: "{{ ansible_default_ipv4.interface }}"
 :DOCKER-USER - [0:0]
 -A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
 -A DOCKER-USER ! -i {{ firewall_external_iface }} -j RETURN
+{# iptables-restore : une règle par ligne, pas de continuation par « \ » #}
+{% set m = '-p tcp -m conntrack --ctorigdstport' %}
 {% for r in firewall_docker_rules %}
--A DOCKER-USER -p tcp -m conntrack --ctorigdstport {{ r.port }} \
-  -s {{ r.src }} -j RETURN
+-A DOCKER-USER -s {{ r.src }} {{ m }} {{ r.port }} -j RETURN
 {% endfor %}
 {% for p in firewall_docker_rules | map(attribute='port') | unique %}
--A DOCKER-USER -p tcp -m conntrack --ctorigdstport {{ p }} -j DROP
+-A DOCKER-USER {{ m }} {{ p }} -j DROP
 {% endfor %}
 -A DOCKER-USER -j RETURN
 COMMIT
@@ -1201,7 +1204,7 @@ chrony_pools: ["2.ubuntu.pool.ntp.org"]
     mode: "0644"
   notify: Restart chrony
 
-- name: chrony actif
+- name: Service chrony actif
   ansible.builtin.systemd:
     name: chrony
     state: started
@@ -1310,7 +1313,7 @@ node_exporter_textfile_group: deploy
     group: "{{ node_exporter_textfile_group }}"
     mode: "2775"
 
-- name: node_exporter actif
+- name: Service node_exporter actif
   ansible.builtin.systemd:
     name: prometheus-node-exporter
     state: started
@@ -1395,7 +1398,7 @@ promtail_http_port: 9080
     mode: "0644"
   notify: Restart promtail
 
-- name: promtail actif
+- name: Service promtail actif
   ansible.builtin.systemd:
     name: promtail
     state: started
@@ -1456,21 +1459,18 @@ scrape_configs:
           host: {{ inventory_hostname }}
           env: {{ factura_env }}
           __path__: /var/log/pods/*/*/*.log
+    # __path__ n'est ici que le motif glob : les labels se tirent du label
+    # « filename » (chemin réel) dans le pipeline, pas par relabel_configs
     pipeline_stages:
       - cri: {}
-    relabel_configs:
-      - source_labels: ['__path__']
-        regex: '/var/log/pods/([^_]+)_([^_]+)_[^/]+/([^/]+)/.*'
-        replacement: '$1'
-        target_label: namespace
-      - source_labels: ['__path__']
-        regex: '/var/log/pods/([^_]+)_([^_]+)_[^/]+/([^/]+)/.*'
-        replacement: '$2'
-        target_label: pod
-      - source_labels: ['__path__']
-        regex: '/var/log/pods/([^_]+)_([^_]+)_[^/]+/([^/]+)/.*'
-        replacement: '$3'
-        target_label: container
+      - regex:
+          source: filename
+          expression: "^/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_\
+            [^/]+/(?P<container>[^/]+)/"
+      - labels:
+          namespace:
+          pod:
+          container:
 {% endif %}
 ```
 
@@ -1535,7 +1535,7 @@ docker_log_max_file: "5"
     name: [docker.io, docker-compose-v2]
     state: present
 
-- name: daemon.json
+- name: Fichier daemon.json
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
     owner: root
@@ -1579,10 +1579,10 @@ for e in staging prod; do
   ansible-playbook -i ansible/inventory/$e.ini ansible/playbooks/baseline.yml
 done
 # second passage : changed=0
-ansible-playbook -i ansible/inventory/staging.ini ansible/playbooks/baseline.yml \
-  | tail -n 4
-ansible-playbook -i ansible/inventory/staging.ini ansible/playbooks/baseline.yml \
-  --check --diff | grep -c '^changed' || true      # 0
+ansible-playbook -i ansible/inventory/staging.ini \
+  ansible/playbooks/baseline.yml | tail -n 4
+ansible-playbook -i ansible/inventory/staging.ini \
+  ansible/playbooks/baseline.yml --check --diff | grep -c '^changed' || true
 ```
 
 ```
@@ -1595,7 +1595,7 @@ Tests demandés :
 
 ```bash
 ssh deploy@10.10.10.21 docker ps          # marche (clé mathieu@lab-adm)
-ssh deploy@10.10.10.21 sudo true          # "deploy is not in the sudoers file"
+ssh deploy@10.10.10.21 sudo true          # échoue : deploy n'a pas sudo
 nc -zv -w2 10.10.10.22 5432               # timed out (même après PB.5)
 ssh mathieu@10.10.10.21 'sudo iptables -S DOCKER-USER'
 ```
@@ -1802,7 +1802,7 @@ docker image ls factura-api:dev factura-worker:dev
 #  factura-api      dev   ...   168MB
 #  factura-worker   dev   ...   161MB
 docker run -d --rm --name t -p 8000:8000 -e DATABASE_URL=x factura-api:dev
-sleep 3; curl -s :8000/version
+sleep 12; curl -s localhost:8000/version   # > interval du HEALTHCHECK
 #  {"app":"factura-api","color":"none","version":"dev"}
 docker inspect -f '{{.Config.User}} {{.State.Health.Status}}' t
 #  app healthy
@@ -1836,7 +1836,8 @@ services:
       context: ./api
       args: { APP_VERSION: "${APP_VERSION:-dev}" }
     environment:
-      DATABASE_URL: postgresql://factura:${DB_PASSWORD:-devpass}@postgres:5432/factura
+      DATABASE_URL: >-
+        postgresql://factura:${DB_PASSWORD:-devpass}@postgres:5432/factura
       REDIS_URL: redis://redis:6379/0
       APP_COLOR: dev
     depends_on:
@@ -1847,7 +1848,8 @@ services:
       context: ./worker
       args: { APP_VERSION: "${APP_VERSION:-dev}" }
     environment:
-      DATABASE_URL: postgresql://factura:${DB_PASSWORD:-devpass}@postgres:5432/factura
+      DATABASE_URL: >-
+        postgresql://factura:${DB_PASSWORD:-devpass}@postgres:5432/factura
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres: { condition: service_healthy }
@@ -1880,16 +1882,16 @@ volumes:
 
 ```bash
 docker compose up -d --build
-curl -s :8080/health                  # {"db":"ok",...,"status":"ok"}
+curl -s localhost:8080/health         # {"db":"ok",...,"status":"ok"}
 curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"client":"ACME","montant_ht":100}' :8080/api/factures
+  -d '{"client":"ACME","montant_ht":100}' localhost:8080/api/factures
 #  {"id":6,"montant_ttc":120.0,"statut":"nouvelle"}   (201)
 docker compose logs worker | tail -1
 #  {"ts":"...","level":"INFO","logger":"factura.worker",
 #   "msg":"facture traitée","id":6}
-docker compose logs api | grep -c '"GET /health'      # JSON, une ligne/requête
+docker compose logs api | grep -c '"GET /health'  # 1 ligne d'accès/requête
 docker compose down -v && docker compose up -d
-curl -s :8080/api/factures | jq length               # 5 (init.sql rejoué)
+curl -s localhost:8080/api/factures | jq length      # 5 (init.sql rejoué)
 ```
 
 **4. Scan et tests**
@@ -1928,13 +1930,13 @@ demandera en entretien) :
 | `USER app` | tout ce qui suit et le processus final : non-root |
 | `HEALTHCHECK` en python | pas de `curl` dans slim ; `start-period` pour Gunicorn |
 | `CMD [...]` forme exec | PID 1 = gunicorn, reçoit `SIGTERM`, arrêt gracieux |
-| `--access-logfile -` | journaux sur stdout, un JSON par requête, pour promtail |
+| `--access-logfile -` | une ligne d'accès par requête sur stdout (texte, pas JSON), pour promtail |
 
 ::: pourquoi
 **Multi-stage avec un venv** : `pip install` produit des fichiers dans
 `site-packages` et des dépendances de build (`gcc`, en-têtes) qu'on ne
 veut pas en prod. Copier `/venv` d'un étage à l'autre ramène exactement les
-paquets Python, rien d'autre ; la base `slim` (≈ 45 Mo) + venv (≈ 55 Mo) +
+paquets Python, rien d'autre ; la base `slim` (≈ 120 Mo) + venv (≈ 55 Mo) +
 app donne 170 Mo, contre 1,1 Go pour `FROM python` + `COPY .`. Moins de
 paquets, c'est aussi moins de CVE à scanner : la moitié des HIGH du
 `Dockerfile` des devs venaient de `gcc` et `perl` de l'image complète.
@@ -2128,7 +2130,7 @@ images:
     mode: "0600"
   no_log: true
 
-- name: compose.yaml
+- name: Fichier compose.yaml
   ansible.builtin.template:
     src: compose-db.yaml.j2
     dest: "{{ factura_base_dir }}/compose.yaml"
@@ -2201,7 +2203,8 @@ images:
 
 - name: Adresse de la base de l'environnement
   ansible.builtin.set_fact:
-    factura_db_host: "{{ hostvars[groups[factura_env ~ '_db'][0]].ansible_host }}"
+    factura_db_host: >-
+      {{ hostvars[groups[factura_env ~ '_db'][0]].ansible_host }}
 
 - name: Fichiers de configuration (secrets en .env 0600)
   ansible.builtin.template:
@@ -2210,7 +2213,7 @@ images:
     mode: "0600"
   no_log: true
 
-- name: compose.yaml, nginx, switch.sh
+- name: Fichiers compose.yaml, nginx, switch.sh
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ factura_base_dir }}/{{ item.dest }}"
@@ -2221,14 +2224,14 @@ images:
     - { src: switch.sh.j2, dest: bin/switch.sh, mode: "0750" }
   notify: Reload nginx
 
-- name: nginx/active.conf (créé une fois, géré ensuite par switch.sh)
+- name: Fichier nginx/active.conf (créé une fois, puis géré par switch.sh)
   ansible.builtin.template:
     src: nginx/active.conf.j2
     dest: "{{ factura_base_dir }}/nginx/active.conf"
     mode: "0644"
     force: false
 
-- name: state.env (premier déploiement)
+- name: Fichier state.env (premier déploiement)
   ansible.builtin.template:
     src: state.env.j2
     dest: "{{ factura_base_dir }}/state.env"
@@ -2257,6 +2260,7 @@ images:
   until: active_health.status == 200
   retries: "{{ (factura_health_timeout / 3) | int }}"
   delay: 3
+  check_mode: false   # GET sans effet : exécuté aussi en --check
   when: factura_image_tag | length == 0 or first_deploy | default(false)
 
 - name: Déploiement bleu/vert d'un nouveau tag
@@ -2274,8 +2278,7 @@ tourne ; le bleu/vert le remplace.
 ---
 - name: Reload nginx
   ansible.builtin.command:
-    cmd: docker compose exec -T nginx sh -c 'nginx -t && nginx -s reload'
-    chdir: "{{ factura_base_dir }}"
+    cmd: docker exec factura-nginx-1 sh -c 'nginx -t && nginx -s reload'
   changed_when: true
   failed_when: false   # nginx pas encore démarré au premier déploiement
 ```
@@ -2495,16 +2498,21 @@ BASE="{{ factura_base_dir }}"
 case "$COLOR" in blue|green) ;; *) echo "couleur invalide" >&2; exit 2;; esac
 cd "$BASE"
 # 1. la couleur cible doit répondre
-PORT={{ factura_blue_port }}
-[ "$COLOR" = green ] && PORT={{ factura_green_port }}
-curl -fsS -m 3 "http://127.0.0.1:$PORT/health" >/dev/null \
+# valeurs Jinja entre guillemets : shellcheck (pre-commit) lit le .j2 brut
+PORT="{{ factura_blue_port }}"
+[ "$COLOR" = green ] && PORT="{{ factura_green_port }}"
+# les ports directs sont publiés sur l'IP de la VM seulement (pas 127.0.0.1)
+IP="{{ ansible_host }}"
+curl -fsS -m 3 "http://$IP:$PORT/health" >/dev/null \
   || { echo "api-$COLOR muet sur :$PORT, bascule refusée" >&2; exit 1; }
 # 2. réécriture atomique d'active.conf puis reload (jamais restart)
 printf 'upstream factura_api { server api-%s:8000; }\n' "$COLOR" \
   > nginx/active.conf.tmp
 mv nginx/active.conf.tmp nginx/active.conf
-docker compose exec -T nginx nginx -t
-docker compose exec -T nginx nginx -s reload
+# docker exec direct : « docker compose exec » relirait compose.yaml, donc
+# .env ET state.env (--env-file .env --env-file state.env) ; inutile ici
+docker exec factura-nginx-1 nginx -t
+docker exec factura-nginx-1 nginx -s reload
 # 3. état et journal
 sed -i "s/^ACTIVE=.*/ACTIVE=$COLOR/" state.env
 printf '%s switch -> %s (%s)\n' "$(date -Is)" "$COLOR" "$REASON" >> switch.log
@@ -2548,23 +2556,26 @@ for i in api worker; do
     lab-ops.lab.local:3000/mathieu/factura-$i:dev-$SHA
   docker push lab-ops.lab.local:3000/mathieu/factura-$i:dev-$SHA
 done
-ansible-playbook -i ansible/inventory/staging.ini ansible/playbooks/deploy.yml \
-  -e factura_image_tag=dev-$SHA -e ansible_user=deploy
+ansible-playbook -i ansible/inventory/staging.ini \
+  ansible/playbooks/deploy.yml -e factura_image_tag=dev-$SHA \
+  -e ansible_user=deploy
 curl -s http://10.10.10.21/health; curl -s http://10.10.10.21/version
 curl -s -X POST -H 'Content-Type: application/json' \
   -d '{"client":"ACME","montant_ht":100}' http://10.10.10.21/api/factures
-ansible-playbook -i ansible/inventory/prod.ini ansible/playbooks/deploy.yml \
-  -e factura_image_tag=dev-$SHA -e ansible_user=deploy
+ansible-playbook -i ansible/inventory/prod.ini \
+  ansible/playbooks/deploy.yml -e factura_image_tag=dev-$SHA \
+  -e ansible_user=deploy
 ```
 
 Idempotence et preuves :
 
 ```bash
-ansible-playbook -i ansible/inventory/staging.ini ansible/playbooks/deploy.yml \
-  -e ansible_user=deploy | grep -A3 'PLAY RECAP'
+ansible-playbook -i ansible/inventory/staging.ini \
+  ansible/playbooks/deploy.yml -e ansible_user=deploy | grep -A3 'PLAY RECAP'
 #  factura-staging-db  : ok=9   changed=0 ...
 #  factura-staging-web : ok=15  changed=0 ...
-ansible-playbook -i ansible/inventory/staging.ini ansible/playbooks/deploy.yml \
+ansible-playbook -i ansible/inventory/staging.ini \
+  ansible/playbooks/deploy.yml -e ansible_user=deploy \
   --check --diff | grep -c '^changed:'                     # 0
 nc -zv -w2 10.10.10.22 5432                                # timed out
 ssh mathieu@10.10.10.21 nc -zv -w2 10.10.10.22 5432        # succeeded!
@@ -2600,7 +2611,7 @@ déploiement : tag requis » évite de démarrer une stack avec une image
 `:none` qui n'existe pas (le `${TAG_BLUE:-none}` du template est là pour
 que `docker compose config` reste valide, pas pour tourner).
 
-**Indirection `db_password: "{{ vault_db_password }}"`** : `grep -r
+**Indirection** `db_password: "{{ vault_db_password }}"` : `grep -r
 db_password` trouve où la variable est utilisée sans décrypter ; on peut
 changer la source (vault → gestionnaire de secrets) sans toucher aux
 rôles ; et `ansible-vault view` sur un fichier de 4 lignes est lisible.
@@ -2702,10 +2713,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Outils du runner
-        run: which tofu trivy ansible-playbook pre-commit jq
-      - name: pre-commit (gitleaks, shellcheck, yamllint, ansible-lint)
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"   # outils pipx du compte runner
+          which tofu trivy ansible-playbook pre-commit jq
+      - name: Pre-commit (gitleaks, shellcheck, yamllint, ansible-lint)
         run: |
           export PATH="$HOME/.local/bin:$PATH"
+          # collections pour ansible-lint (ansible.cfg racine -> ansible/)
+          ansible-galaxy collection install -r ansible/requirements.yml \
+            -p ansible/collections
           pre-commit run --all-files --show-diff-on-failure
       - name: OpenTofu fmt et validate (sans état, sans token)
         working-directory: infra
@@ -2815,7 +2831,9 @@ jobs:
 
   deploy-staging:
     needs: build
-    if: gitea.ref == 'refs/heads/main'
+    # main ET tags v* : sinon le garde-fou « le staging tourne ce tag »
+    # de cd-prod ne peut jamais passer
+    if: gitea.ref == 'refs/heads/main' || gitea.ref_type == 'tag'
     runs-on: ops-host
     timeout-minutes: 15
     env:
@@ -2835,18 +2853,20 @@ jobs:
         run: tools/check-inventory.sh staging
       - name: Déploiement staging (bleu/vert, smoke, rollback)
         env:
-          TAG: ${{ needs.build.outputs.tag }}
+          # sur un tag v*, on déploie le tag de version (celui promu ensuite)
+          TAG: ${{ needs.build.outputs.version_tag || needs.build.outputs.tag }}
           API_DIGEST: ${{ needs.build.outputs.api_digest }}
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           cd ansible
-          ansible-galaxy collection install -r requirements.yml -p collections -q
+          ansible-galaxy collection install -r requirements.yml \
+            -p collections -q
           ansible-playbook -i inventory/ci/staging.ini playbooks/deploy.yml \
             -e "factura_image_tag=$TAG" -e ansible_user=deploy \
             --private-key "$RUNNER_TEMP/deploy_key"
       - name: Smoke final sur le port 80
         env:
-          TAG: ${{ needs.build.outputs.tag }}
+          TAG: ${{ needs.build.outputs.version_tag || needs.build.outputs.tag }}
         run: tools/smoke.sh http://10.10.10.21 "$TAG"
       - name: Nettoyage des secrets
         if: always()
@@ -3003,8 +3023,8 @@ ENV="${1:?env}"
 cd "$(dirname "$0")/.."
 CI="ansible/inventory/ci/$ENV.ini"
 GEN="ansible/inventory/$ENV.ini"
-hosts() { awk '/ansible_host=/{sub("ansible_host=","",$2); print $1, $2}' "$1" \
-          | sort; }
+hosts() { awk '/ansible_host=/{sub("ansible_host=","",$2); print $1, $2}' \
+            "$1" | sort; }
 if [ -f "$GEN" ]; then
   diff <(hosts "$GEN") <(hosts "$CI") \
     || { echo "inventaire CI $CI différent de $GEN (tofu output)" >&2; exit 1; }
@@ -3050,7 +3070,7 @@ n'aurait pas vérifié non plus.
   ansible.builtin.meta: end_host
   when: state['TAG_' ~ (old_color | upper)] == factura_image_tag
 
-- name: Déploiement {{ new_color }} avec {{ factura_image_tag }}
+- name: Déploiement bleu/vert du nouveau tag vers {{ new_color }}
   block:
     - name: Pull explicite des images du tag
       community.docker.docker_image_pull:
@@ -3058,7 +3078,7 @@ n'aurait pas vérifié non plus.
         tag: "{{ factura_image_tag }}"
       loop: [api, worker]
 
-    - name: state.env - tag de la couleur cible
+    - name: Fichier state.env - tag de la couleur cible
       ansible.builtin.lineinfile:
         path: "{{ factura_base_dir }}/state.env"
         regexp: "^TAG_{{ new_color | upper }}="
@@ -3120,7 +3140,7 @@ n'aurait pas vérifié non plus.
         regexp: "^TAG_WORKER="
         line: "TAG_WORKER={{ factura_image_tag }}"
 
-    - name: state.env - profil actif
+    - name: Fichier state.env - profil actif
       ansible.builtin.lineinfile:
         path: "{{ factura_base_dir }}/state.env"
         regexp: "^COMPOSE_PROFILES="
@@ -3136,7 +3156,7 @@ n'aurait pas vérifié non plus.
         wait_timeout: "{{ factura_health_timeout }}"
 
   rescue:
-    - name: Rebascule vers {{ old_color }} si on avait basculé
+    - name: Rebascule (si on avait basculé) vers {{ old_color }}
       ansible.builtin.command:
         cmd: >-
           {{ factura_base_dir }}/bin/switch.sh {{ old_color }}
@@ -3153,7 +3173,7 @@ n'aurait pas vérifié non plus.
         state: stopped
       failed_when: false
 
-    - name: state.env - tag de la couleur en échec effacé, profil restauré
+    - name: Fichier state.env - tag en échec effacé, profil restauré
       ansible.builtin.lineinfile:
         path: "{{ factura_base_dir }}/state.env"
         regexp: "{{ item.re }}"
@@ -3270,7 +3290,8 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           cd ansible
-          ansible-galaxy collection install -r requirements.yml -p collections -q
+          ansible-galaxy collection install -r requirements.yml \
+            -p collections -q
           ansible-playbook -i inventory/ci/prod.ini playbooks/deploy.yml \
             -e "factura_image_tag=$TAG" -e ansible_user=deploy \
             --private-key "$RUNNER_TEMP/deploy_key"
@@ -3288,8 +3309,8 @@ jobs:
           BEFORE=$(jq -r .version before.json)
           BODY="Promu en prod par ${{ gitea.actor }} le $(date -Is). \
           factura-api:$TAG digest $DIGEST. Version précédente : $BEFORE."
-          curl -fsS -X POST \
-            -H "Authorization: token $TOKEN" -H 'Content-Type: application/json' \
+          curl -fsS -X POST -H "Authorization: token $TOKEN" \
+            -H 'Content-Type: application/json' \
             "$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/releases" \
             -d "$(jq -n --arg t "$TAG" --arg b "$BODY" \
                  '{tag_name:$t,name:("Factura "+$t),body:$b}')" >/dev/null \
@@ -3303,10 +3324,11 @@ jobs:
 
 ```makefile
 GITEA ?= http://lab-ops.lab.local:3000
+CD_URL := $(GITEA)/api/v1/repos/mathieu/factura/actions/workflows
 promote:   ## make promote TAG=v2.1.0 (GITEA_TOKEN dans l'environnement)
 	curl -fsS -X POST -H "Authorization: token $$GITEA_TOKEN" \
 	  -H 'Content-Type: application/json' \
-	  "$(GITEA)/api/v1/repos/mathieu/factura/actions/workflows/cd-prod.yaml/dispatches" \
+      "$(CD_URL)/cd-prod.yaml/dispatches" \
 	  -d '{"ref":"main","inputs":{"tag":"$(TAG)"}}'
 lint: check-inventory
 check-inventory:
@@ -3337,15 +3359,16 @@ docker tag lab-ops.lab.local:3000/mathieu/factura-worker:sha-3f9c1e2 \
   lab-ops.lab.local:3000/mathieu/factura-worker:v9.9.9
 docker push lab-ops.lab.local:3000/mathieu/factura-api:v9.9.9
 docker push lab-ops.lab.local:3000/mathieu/factura-worker:v9.9.9
-ansible-playbook -i ansible/inventory/staging.ini ansible/playbooks/deploy.yml \
-  -e factura_image_tag=v9.9.9 -e ansible_user=deploy
+ansible-playbook -i ansible/inventory/staging.ini \
+  ansible/playbooks/deploy.yml -e factura_image_tag=v9.9.9 \
+  -e ansible_user=deploy
 #  TASK [factura_compose : /health = 200 et /version = tag ...]  FAILED
 #  (retries exhausted: version sha-3f9c1e2 != v9.9.9)
 #  TASK [factura_compose : Rebascule ...]  skipping (switched=false)
 #  TASK [factura_compose : Arrêt de la couleur en échec]  ok
 #  TASK [factura_compose : Trace du rollback]  changed
 #  fatal: Déploiement de v9.9.9 sur green annulé (...) ; aucune bascule
-ssh mathieu@10.10.10.21 tail -n 2 /srv/factura/switch.log
+ssh deploy@10.10.10.21 tail -n 2 /srv/factura/switch.log
 #  2026-09-14T10:02:11+02:00 switch -> blue (deploy-v2.1.0)
 #  2026-09-14T10:41:03+00:00 rollback green -> blue (tag v9.9.9, étape: ...)
 curl -s http://10.10.10.21/version | jq -r .version     # v2.1.0
@@ -3395,8 +3418,9 @@ sur la VM, corriger dans une PR, repasser par le staging.
 ## Quelle version tourne ?
   curl http://10.10.10.31/version            # tag + couleur
   ssh deploy@10.10.10.31 cat /srv/factura/state.env
-  ssh deploy@10.10.10.31 docker inspect --format '{{index .RepoDigests 0}}' \
-    factura-api-blue-1                       # digest = identité réelle
+  ssh deploy@10.10.10.31 'docker image inspect \
+    --format "{{index .RepoDigests 0}}" \
+    "$(docker inspect --format {{.Image}} factura-api-blue-1)"'   # digest
 Comparer le digest avec la release Gitea du tag.
 
 ## Sinistre (PB.9)
@@ -3483,8 +3507,7 @@ infra/monitoring/
   compose.yaml
   prometheus/prometheus.yml   prometheus/rules/recording.yml
   prometheus/rules/alerts.yml
-  alertmanager/alertmanager.yml.j2     (template : mot de passe Grafana non,
-                                        mais l'URL du sink oui)
+  alertmanager/alertmanager.yml
   loki/loki.yml               blackbox/blackbox.yml
   alert-sink/sink.py
   grafana/provisioning/datasources/datasources.yml
@@ -3581,13 +3604,17 @@ alerting:
 
 scrape_configs:
   - job_name: prometheus
-    static_configs: [{ targets: ["localhost:9090"], labels: { host: lab-ops } }]
+    static_configs:
+      - { targets: ["localhost:9090"], labels: { host: lab-ops } }
   - job_name: alertmanager
-    static_configs: [{ targets: ["alertmanager:9093"], labels: { host: lab-ops } }]
+    static_configs:
+      - { targets: ["alertmanager:9093"], labels: { host: lab-ops } }
   - job_name: grafana
-    static_configs: [{ targets: ["grafana:3000"], labels: { host: lab-ops } }]
+    static_configs:
+      - { targets: ["grafana:3000"], labels: { host: lab-ops } }
   - job_name: loki
-    static_configs: [{ targets: ["loki:3100"], labels: { host: lab-ops } }]
+    static_configs:
+      - { targets: ["loki:3100"], labels: { host: lab-ops } }
 
   - job_name: node
     static_configs:
@@ -3787,7 +3814,8 @@ groups:
         for: 30m
         labels: { severity: warning }
         annotations:
-          summary: "{{ $labels.host }}:{{ $labels.mountpoint }} plein dans < 4 h"
+          summary: >-
+            {{ $labels.host }}:{{ $labels.mountpoint }} plein dans < 4 h
           description: >-
             Au rythme de la dernière heure, le système de fichiers sera
             plein avant 4 h.
@@ -3977,7 +4005,8 @@ avec leur requête :
 | File Redis | `redis_key_size{key="factura:jobs"}` |
 | Jobs worker | `sum by (env, result) (rate(factura_jobs_processed_total[5m]))` |
 | Budget restant 30 j | `factura:error_budget:remaining_30d` (stat, `percentunit`, rouge < 0) |
-| Burn rate 1 h / 6 h | `factura:http_errors:ratio_rate1h / 0.005`, `..._rate6h / 0.005` |
+| Burn rate 1 h / 6 h | `factura:http_errors:ratio_rate1h / 0.005`, `..._` |
+|  | `rate6h / 0.005` |
 | Âge sauvegarde | `time() - factura_backup_last_success_timestamp` (unité `s`) |
 | Erreurs (Loki) | `{env="$env", container=~"factura-api.*"} \| json \| level="ERROR"` |
 
@@ -4022,7 +4051,7 @@ monitoring_dir: /opt/factura-monitoring
       loop:
         - { p: "" }
         - { p: secrets, m: "0700" }
-        - { p: data, o: "10001", m: "0750" }
+        - { p: data, o: "10001", m: "0755" }   # alerts.log lisible
 
     - name: Configurations (copie récursive du dépôt)
       ansible.builtin.copy:
@@ -4053,7 +4082,7 @@ monitoring_dir: /opt/factura-monitoring
           check config /etc/prometheus/prometheus.yml
       changed_when: false
 
-    - name: amtool check-config
+    - name: Vérification amtool check-config
       ansible.builtin.command:
         cmd: >
           docker run --rm -v {{ monitoring_dir }}/alertmanager:/etc/alertmanager:ro
@@ -4102,17 +4131,19 @@ conteneur ; un fichier 0600 root lui serait illisible. Le répertoire
 
 ```bash
 # FacturaApiDown : arrêt des deux couleurs sur le staging
-ssh deploy@10.10.10.21 'cd /srv/factura && docker compose --profile blue \
-  --profile green stop api-blue api-green'
+# (sur la VM web, tout « docker compose » à la main charge les deux env)
+ssh deploy@10.10.10.21 'cd /srv/factura && docker compose --env-file .env \
+  --env-file state.env --profile blue --profile green stop api-blue api-green'
 date -Is                                       # T0
 watch -n 10 'curl -s http://lab-ops:9093/api/v2/alerts \
   | jq -r ".[].labels.alertname"'
 ssh mathieu@lab-ops 'tail -f /opt/factura-monitoring/data/alerts.log'
-#  2026-09-15T14:03:41+0200 firing FacturaApiDown env=staging severity=critical ...
+#  2026-09-15T14:03:41+0200 firing FacturaApiDown env=staging \
+#    severity=critical ...
 #  -> T0 + 2 min 10 s (for: 1m + scrape 15 s + group_wait 30 s + évaluation)
-ssh deploy@10.10.10.21 'cd /srv/factura && docker compose --profile blue \
-  --profile green start api-blue'
-#  ... resolved FacturaApiDown env=staging ...  (T0 + ~5 min, resolve_timeout)
+ssh deploy@10.10.10.21 'cd /srv/factura && docker compose --env-file .env \
+  --env-file state.env --profile blue --profile green start api-blue'
+#  ... resolved FacturaApiDown ...  (~5 min après le firing : group_interval)
 
 # Burn : des 5xx sans toucher au code -> bascule vers une couleur arrêtée
 ssh deploy@10.10.10.21 'cd /srv/factura && printf \
@@ -4120,7 +4151,7 @@ ssh deploy@10.10.10.21 'cd /srv/factura && printf \
 # (switch.sh refuse une couleur qui ne répond pas : c'est le but ; pour la
 #  preuve, on coupe la base à la place, ce qui donne des 503 sur /health
 #  et des 500 sur /api/factures)
-ssh mathieu@10.10.10.22 'cd /srv/factura && docker compose stop postgres'
+ssh deploy@10.10.10.22 'cd /srv/factura && docker compose stop postgres'
 for i in $(seq 200); do
   [ $((i % 10)) -lt 3 ] && p=/api/factures || p=/version
   curl -s -o /dev/null "http://10.10.10.21$p"
@@ -4128,7 +4159,7 @@ done
 #  factura:http_errors:ratio_rate5m{env="staging"} ≈ 0.30 > 0.072
 #  -> FacturaErrorBudgetBurn (critical) pending puis firing après 2 min ;
 #     la version warning est inhibée (même alertname et env).
-ssh mathieu@10.10.10.22 'cd /srv/factura && docker compose start postgres'
+ssh deploy@10.10.10.22 'cd /srv/factura && docker compose start postgres'
 ```
 
 Loki :
@@ -4148,8 +4179,8 @@ curl -sG http://lab-ops:3100/loki/api/v1/query_range \
 ```
 
 Un `400` n'est pas une erreur applicative (pas de `level=ERROR`) ; pour en
-produire une, la base coupée ci-dessus donne `psycopg.OperationalError`
-dans `/health` → `log.exception` → `ERROR`. Les journaux d'accès Gunicorn
+produire une, la base coupée ci-dessus fait lever `psycopg.OperationalError`
+dans `GET` `/api/factures` (500) : Flask journalise l'exception non rattrapée (`Exception on /api/factures [GET]`) en `ERROR` (`/health`, lui, rattrape l'erreur sans journaliser). Coupe la base de la **prod** 30 s, ou remplace `env="prod"` par `env="staging"` dans la requête. Les journaux d'accès Gunicorn
 (`|= "POST /api/factures"`) sont là, ligne par requête.
 
 **4. `docs/slo.md`**
@@ -4243,7 +4274,7 @@ qu'une modification à la souris diverge du dépôt.
 :::
 
 ::: piege
-* Le port de Grafana : la pile du module 26 utilisait 3001 aussi ; si
+* Les ports : la pile du module 26 publie Prometheus, Alertmanager et Loki sur 9090, 9093 et 3100 (et Grafana sur 3000, celui de Gitea); si
   `/opt/observabilite` tourne encore, le `up -d` échoue avec « port is
   already allocated ». Le playbook l'arrête d'abord.
 * `promtool check rules` sur `alerts.yml` : deux alertes du même nom
@@ -4255,7 +4286,7 @@ qu'une modification à la souris diverge du dépôt.
   env est **éteinte** (la couleur inactive après un rollback, ou avant
   le premier bleu/vert) : `up == 0` et `InstanceDown` se déclencheraient.
   Solution retenue : après un déploiement réussi, les deux couleurs
-  tournent (l'ancienne reste en vie). Si tu préfères éteindre l'ancienne,
+  tournent (l'ancienne reste en vie). Après le test de rollback de PB.7, la couleur en échec est arrêtée : redéploie un tag valide avant `check_PB_08.sh`, qui exige toutes les cibles `up`. Si tu préfères éteindre l'ancienne,
   ajoute `unless on (instance) ...` ou un `job!="factura-api"` à
   `InstanceDown` et surveille l'API par blackbox seulement.
 * `fail_if_body_not_matches_regexp` sur `"status":"ok"` : `/health`
@@ -4264,7 +4295,7 @@ qu'une modification à la souris diverge du dépôt.
   regexp est là pour le jour où quelqu'un met `/health` en 200
   permanent.
 * Loki 3 refuse les lignes plus vieilles que `reject_old_samples_max_age`
-  : une VM dont l'horloge retarde (chrony pas encore synchronisé au
+  une VM dont l'horloge retarde (chrony pas encore synchronisé au
   premier boot) voit ses premières lignes rejetées, promtail affiche
   `entry too far behind`. Ce n'est pas une panne, c'est PB.3 qui n'a pas
   encore tourné.
@@ -4272,7 +4303,7 @@ qu'une modification à la souris diverge du dépôt.
   parce que `lab-ops` est dans le `/24` et que le port 80 est ouvert au
   réseau. Les ports 8081/8082 sont ouverts à `10.10.10.14` — la source
   vue par la VM est l'IP de `lab-ops` (SNAT Docker), donc le scrape
-  passe. Sans cette règle ufw, `up == 0` sur `factura-api`.
+  passe. Sans ces règles (`firewall_docker_rules`, car ce sont des ports publiés par Docker), `up == 0` sur `factura-api`.
 :::
 
 ---
@@ -4330,6 +4361,7 @@ pg_backup_on_calendar: "*-*-* 02:30:00"
     key: >-
       {{ lookup('ansible.builtin.pipe',
                 'ssh-keyscan -t ed25519 ' ~ pg_backup_remote_host) }}
+  become: true
   become_user: "{{ pg_backup_user }}"
 
 - name: Script de sauvegarde
@@ -4384,7 +4416,7 @@ ENV="{{ factura_env }}"
 REMOTE="{{ pg_backup_remote_user }}@{{ pg_backup_remote_host }}"
 REMOTE="$REMOTE:{{ pg_backup_remote_dir }}/"
 PROM="{{ pg_backup_textfile }}"
-KEEP={{ pg_backup_retention_days }}
+KEEP="{{ pg_backup_retention_days }}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BASE="$DIR/factura-$ENV-$STAMP"
 T0=$(date +%s)
@@ -4415,7 +4447,11 @@ metrics() {  # metrics <ok:0|1> <size> <dur>
   mv "$tmp" "$PROM"     # écriture atomique : node_exporter ne lit jamais
                         # un fichier à moitié écrit
 }
-trap 'rc=$?; [ $rc -ne 0 ] && { log "ECHEC rc=$rc"; metrics 0 0 0; }' EXIT
+on_exit() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then log "ECHEC rc=$rc"; metrics 0 0 0; fi
+}
+trap on_exit EXIT
 
 log "début ($ENV)"
 docker exec "$CTN" pg_dump -U "$DBU" -Fc "$DB" > "$BASE.dump"
@@ -4488,6 +4524,7 @@ WantedBy=timers.target
   become: true
   vars:
     backup_root: /srv/backups/factura
+    rr: /usr/bin/rrsync
     backup_envs: >-
       {{ groups['db'] | map('extract', hostvars, 'factura_env')
          | unique | list }}
@@ -4534,7 +4571,7 @@ WantedBy=timers.target
         manage_dir: false
         key: "{{ hostvars[item].deploy_key.public_key }}"
         key_options: >-
-          restrict,from="{{ hostvars[item].ansible_host }}",command="/usr/bin/rrsync
+          restrict,from="{{ hostvars[item].ansible_host }}",command="{{ rr }}
           {{ backup_root }}/{{ hostvars[item].factura_env }}"
       loop: "{{ groups['db'] }}"
 
@@ -4603,22 +4640,31 @@ curl -sG http://lab-ops:9090/api/v1/query \
 
     - name: Nom du dump
       ansible.builtin.set_fact:
-        dump: "{{ listing.stdout_lines | select('search', '\\.dump$') | first }}"
+        dump: >-
+          {{ listing.stdout_lines | select('search', '\\.dump$') | first }}
 
     - name: Base du nom (sans extension)
       ansible.builtin.set_fact:
         base: "{{ dump | regex_replace('\\.dump$', '') }}"
 
     - name: Rapatriement sur lab-adm (dump, sha256, meta)
-      ansible.builtin.command:
+      # synchronize ne sait pas tirer d'un tiers (lab-ops) vers localhost
+      ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: >
           rsync -a
-          mathieu@{{ backup_host }}:{{ backup_root }}/{{ base }}.{dump,sha256,meta}
+          mathieu@{{ backup_host }}:{{ backup_root }}/{{ base }}.{{ item }}
           {{ work }}/
+      loop: [dump, sha256, meta]
       delegate_to: localhost
       become: false
       args:
-        creates: "{{ work }}/{{ dump }}"
+        creates: "{{ work }}/{{ base }}.{{ item }}"
+
+    - name: Répertoire de travail sur la VM db
+      ansible.builtin.file:
+        path: "{{ work }}"
+        state: directory
+        mode: "0750"
 
     - name: Copie sur la VM db
       ansible.builtin.copy:
@@ -4634,12 +4680,12 @@ curl -sG http://lab-ops:9090/api/v1/query \
       changed_when: false
 
     - name: Nombre de lignes attendu
-      ansible.builtin.shell:
+      ansible.builtin.command:
         cmd: awk -F= '/^rows_factures=/{print $2}' {{ work }}/{{ base }}.meta
       register: expected
       changed_when: false
 
-    - name: pg_restore (clean, if-exists) dans le conteneur
+    - name: Restauration pg_restore (clean, if-exists) dans le conteneur
       ansible.builtin.shell:
         cmd: >
           docker exec -i {{ container }} pg_restore -U factura -d factura
@@ -4658,7 +4704,8 @@ curl -sG http://lab-ops:9090/api/v1/query \
         that: actual.stdout | int == expected.stdout | int
         fail_msg: >-
           restauré {{ actual.stdout }} lignes, attendu {{ expected.stdout }}
-        success_msg: "{{ actual.stdout }} factures restaurées depuis {{ dump }}"
+        success_msg: >-
+          {{ actual.stdout }} factures restaurées depuis {{ dump }}
 
     - name: Nettoyage
       ansible.builtin.file:
@@ -4714,7 +4761,8 @@ jobs:
           SIZE=$(stat -c %s "$DUMP")
           if [ "$ROWS" = "$EXP" ]; then R=ok; else R=fail; fi
           REPORT="$OUT/$(date +%Y%m%d-%H%M)-$R.txt"
-          FMT='dump=%s\nsize=%s\nduration_s=%s\nrows=%s\nexpected=%s\nresult=%s\n'
+          FMT='dump=%s\nsize=%s\nduration_s=%s\nrows=%s\nexpected=%s\n'
+          FMT="${FMT}result=%s\n"
           printf "$FMT" \
             "$(basename "$DUMP")" "$SIZE" "$DUR" "$ROWS" "$EXP" "$R" \
             | tee "$REPORT"
@@ -4749,7 +4797,7 @@ cat docs/rebuild-20260916-0915.log | grep -E '^\[|TOTAL'
 [  302s] 3/5 baseline Ansible
 [  611s] 4/5 déploiement de l'application (v2.1.0)
 [  742s] 5/5 restauration de la dernière sauvegarde
-[  801s]   ok   curl -fsS -m 5 http://10.10.10.31/health
+  ok   curl -fsS -m 5 http://10.10.10.31/health
 ...
 [  804s] TOTAL: 804 s
 ```
@@ -4777,8 +4825,9 @@ RPO : 24 h au pire (sauvegarde à 02:30, restauration = dernier dump).
 RTO : 13 min 24 s mesuré le 2026-09-16 (docs/rebuild-20260916-0915.log).
 Procédure : source ~/.config/factura/pve.env ; ssh-agent chargé ;
   tools/rebuild.sh prod <tag en prod>   (tag : dernière release Gitea)
-  ansible-playbook -i ansible/inventory/prod.ini -i ansible/inventory/ops.ini \
-    ansible/playbooks/backup.yml          (nouvelle clé de sauvegarde)
+  ansible-playbook -i ansible/inventory/prod.ini \
+    -i ansible/inventory/ops.ini ansible/playbooks/backup.yml
+                                          (nouvelle clé de sauvegarde)
 Vérifier : smoke, Grafana (cibles up), FacturaBackupTooOld inactive après
 la sauvegarde suivante (ou `systemctl start factura-backup` à la main).
 RPO < 1 h : réplication logique PostgreSQL vers factura-staging-db
@@ -4813,8 +4862,7 @@ que `FacturaBackupTooOld` attend.
 fait par un humain est fait deux fois puis oublié. Un job planifié sur
 le runner produit un rapport horodaté et un run rouge quand ça casse. Le
 compte `runner` dans le groupe `backup` (lecture) et `restore-tests` en
-`0775` : les droits sont posés par `backup.yml`, jamais à la main — le
-check de PB.3 sur l'idempotence le verrait.
+`0775` : les droits sont posés par `backup.yml`, jamais à la main — un second passage de `backup`.`yml` (`changed` ≠ 0) le verrait.
 
 **Détruire la prod pour de vrai** : le seul test qui prouve que
 l'infrastructure as code est complète. Tout ce qui manquait (un fichier
@@ -4891,6 +4939,10 @@ firewall_rules_group:
   - { port: 80, src: 10.10.10.0/24, comment: "redirection https" }
   - { port: 6443, src: "{{ lab_admin_ip }}", comment: "kubectl" }
   - { port: 30200, src: "{{ lab_ops_ip }}", comment: "api /metrics NodePort" }
+  # les pods joignent l'API et le kubelet par l'IP du nœud (chaîne INPUT) :
+  # sans ces règles, CoreDNS, Traefik et metrics-server échouent
+  - { port: 6443, src: 10.42.0.0/16, comment: "pods -> apiserver" }
+  - { port: 10250, src: 10.42.0.0/16, comment: "metrics-server -> kubelet" }
 firewall_docker_rules: []
 k3s_version: "v1.30.6+k3s1"
 k3s_tls_san: factura-k3s.lab.local
@@ -4927,6 +4979,14 @@ registry_token: ""
 
 ```yaml
 ---
+- name: Répertoire /etc/rancher/k3s (créé avant l'installeur)
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Registre Gitea (HTTP) pour containerd
   ansible.builtin.template:
     src: registries.yaml.j2
@@ -4955,7 +5015,7 @@ registry_token: ""
   args:
     creates: /usr/local/bin/k3s
 
-- name: k3s actif
+- name: Service k3s actif
   ansible.builtin.systemd:
     name: k3s
     state: started
@@ -4965,9 +5025,9 @@ registry_token: ""
   ansible.builtin.command:
     cmd: >-
       k3s kubectl get node {{ inventory_hostname }}
-      -o jsonpath={.status.conditions[-1].type}
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
   register: node
-  until: node.stdout == "Ready"
+  until: node.stdout == "True"
   retries: 30
   delay: 5
   changed_when: false
@@ -4976,6 +5036,14 @@ registry_token: ""
   ansible.builtin.slurp:
     path: /etc/rancher/k3s/k3s.yaml
   register: kubeconfig
+
+- name: Répertoire ~/.kube sur lab-adm
+  ansible.builtin.file:
+    path: "{{ k3s_kubeconfig_local | dirname }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
 
 - name: Kubeconfig déposé sur lab-adm (IP du nœud, mode 0600)
   ansible.builtin.copy:
@@ -5018,7 +5086,7 @@ configs:
 
 ```yaml
 ---
-- name: k3s mono-nœud Factura
+- name: Cluster k3s mono-nœud Factura
   hosts: k3s
   become: true
   roles:
@@ -5037,13 +5105,15 @@ jamais versionné) :
   become: false
   vars:
     out: "{{ playbook_dir }}/../../k8s/secret.yaml"
+    database_url: >-
+      postgresql://factura:{{ db_password }}@postgres:5432/factura
     docker_auth: >-
       {{ {'auths': {registry: {'username': registry_user,
           'password': registry_token,
           'auth': (registry_user ~ ':' ~ registry_token) | b64encode}}}
          | to_json }}
   tasks:
-    - name: secret.yaml
+    - name: Fichier secret.yaml
       ansible.builtin.copy:
         dest: "{{ out }}"
         mode: "0600"
@@ -5054,7 +5124,7 @@ jamais versionné) :
           metadata: { name: factura-secrets, namespace: factura }
           type: Opaque
           stringData:
-            DATABASE_URL: "postgresql://factura:{{ db_password }}@postgres:5432/factura"
+            DATABASE_URL: "{{ database_url }}"
             POSTGRES_PASSWORD: "{{ db_password }}"
             REDIS_URL: "redis://:{{ redis_password }}@redis:6379/0"
             REDIS_PASSWORD: "{{ redis_password }}"
@@ -5318,7 +5388,8 @@ spec:
   selector: { app: api }
   ports: [{ port: 8000, targetPort: http, name: http }]
 ---
-# /metrics pour Prometheus (lab-ops), via NodePort filtré par ufw
+# /metrics pour Prometheus (lab-ops), via NodePort (DNAT kube-proxy :
+# passe par FORWARD, les règles ufw INPUT ne le filtrent pas)
 apiVersion: v1
 kind: Service
 metadata: { name: api-metrics, namespace: factura }
@@ -5344,7 +5415,8 @@ metadata:
   namespace: factura
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web
-    traefik.ingress.kubernetes.io/router.middlewares: factura-redirect-https@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      factura-redirect-https@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -5414,8 +5486,9 @@ kubectl -n factura rollout status deploy/api
 kubectl -n factura get pods,svc,ingress,hpa
 curl --cacert k8s/factura-tls.crt https://factura-k3s.lab.local/health
 curl -sI http://factura-k3s.lab.local/health | head -1     # 301 -> https
-curl -s --cacert k8s/factura-tls.crt -X POST -H 'Content-Type: application/json' \
-  -d '{"client":"ACME","montant_ht":100}' https://factura-k3s.lab.local/api/factures
+curl -s --cacert k8s/factura-tls.crt -X POST \
+  -H 'Content-Type: application/json' -d '{"client":"ACME","montant_ht":100}' \
+  https://factura-k3s.lab.local/api/factures
 kubectl -n factura logs deploy/worker | tail -1              # facture traitée
 ```
 
@@ -5446,14 +5519,13 @@ sleep 90; kill $(jobs -p)
 #  api  Deployment/api  148%/60% 2  5  4      (+30 s : montée à 4)
 #  api  Deployment/api  71%/60%  2  5  5      (+60 s)
 #  api  Deployment/api  3%/60%   2  5  5      (charge coupée)
-#  api  Deployment/api  3%/60%   2  5  2      (+5 min : stabilisation par
-#                                              défaut 300 s de scaleDown)
+#  api  Deployment/api  3%/60%   2  5  2      (+1 min 30 : fenêtre
+#                                              scaleDown ramenée à 60 s)
 ```
 
 Délais mesurés : montée en **≈ 30 s** après le début de la charge (délai
 de collecte de metrics-server, 15 s, plus le cycle de l'HPA, 15 s) ;
-descente en **≈ 5 min** (fenêtre de stabilisation par défaut ; la
-`behavior.scaleDown` à 60 s réduit à ~1 min 30). Journal.
+descente en **≈ 1 min 30** grâce à `behavior.scaleDown` à 60 s (sans elle, fenêtre de stabilisation par défaut de 300 s : ≈ 5 min). Journal.
 
 **5. Supervision de k3s**
 
@@ -5477,6 +5549,9 @@ Promtail sur k3s lit `/var/log/pods` (variable de PB.3) :
 # Compose ou k3s pour Factura ?
 
 Mesures (2026-09-17, au repos, même application, même tag v2.1.0)
+```
+
+Le tableau du document (reproduit ici hors bloc de code pour la mise en page) :
 
 | Critère | Compose (factura-prod-web) | k3s (factura-k3s) |
 |---|---|---|
@@ -5492,6 +5567,7 @@ Mesures (2026-09-17, au repos, même application, même tag v2.1.0)
 | Courbe d'apprentissage | Docker + Compose : une semaine | Kubernetes : plusieurs mois pour être à l'aise en incident |
 | Panne à 3 h du matin | `docker compose logs`, `switch.sh` : 5 commandes connues | `kubectl describe`, events, probes : une discipline |
 
+```markdown
 ## Recommandation pour Ravel & Associés
 Rester sur **Compose + bleu/vert** pour Factura. Une application, deux
 VM, un admin : tout ce que k3s apporte réellement ici (rolling update
@@ -5534,7 +5610,7 @@ comparaison est le cœur de PB.10.
 **`runAsUser: 10001` + `readOnlyRootFilesystem`** : le uid choisi en
 PB.4 rend `runAsNonRoot` vérifiable ; le système de fichiers en lecture
 seule avec un `emptyDir` sur `/tmp` interdit à une faille dans l'API
-d'écrire ailleurs. `capabilities: drop: [ALL]` : Gunicorn sur 8000 (port
+d'écrire ailleurs. `capabilities: drop: [ALL]` : Gunicorn sur 8000 (port \>
 > 1024) n'en a besoin d'aucune.
 
 **Deux Ingress plutôt qu'un** : Traefik écoute sur `web` (80) et
@@ -5613,15 +5689,16 @@ dernier `cd-prod` est vert, et pourtant `montant_ttc` vaut 119,6 pour
 2. L'identité réelle : le digest.
 
    ```bash
-   ssh deploy@10.10.10.31 'docker inspect --format \
-     "{{.Name}} {{.Config.Image}} {{index .Image}} {{index .RepoDigests 0}}" \
-     $(docker ps -q --filter name=api)' 2>/dev/null
-   # ou, plus sûr :
-   ssh deploy@10.10.10.31 'docker image inspect --format \
-     "{{index .RepoDigests 0}}" lab-ops.lab.local:3000/mathieu/factura-api:v2.1.0'
+   # RepoDigests est un champ d'IMAGE : docker inspect <conteneur> donne
+   # l'ID d'image (.Image), docker image inspect donne le digest
+   ssh deploy@10.10.10.31 'docker inspect --format "{{.Name}} {{.Image}}" \
+     $(docker ps -q --filter name=api)'
+   IMG=lab-ops.lab.local:3000/mathieu/factura-api:v2.1.0
+   ssh deploy@10.10.10.31 "docker image inspect --format \
+     '{{index .RepoDigests 0}}' $IMG"
    #  ...factura-api@sha256:9c4e...   (prod)
-   ssh deploy@10.10.10.21 'docker image inspect --format \
-     "{{index .RepoDigests 0}}" lab-ops.lab.local:3000/mathieu/factura-api:v2.1.0'
+   ssh deploy@10.10.10.21 "docker image inspect --format \
+     '{{index .RepoDigests 0}}' $IMG"
    #  ...factura-api@sha256:3f7a...   (staging) : DIFFÉRENT
    ```
 
@@ -5668,8 +5745,9 @@ tourné : rien n'a changé dans Git.
 
 ```bash
 # 1. l'ancienne couleur (blue) tourne encore avec la bonne image ? vérifier :
-ssh deploy@10.10.10.31 'curl -s localhost:8081/version; docker inspect \
-  --format "{{index .RepoDigests 0}}" factura-api-blue-1'
+ssh deploy@10.10.10.31 'curl -s 10.10.10.31:8081/version; docker image inspect \
+  --format "{{index .RepoDigests 0}}" \
+  "$(docker inspect --format {{.Image}} factura-api-blue-1)"'
 #  si le digest est 3f7a... : retour arrière immédiat (< 1 min)
 ssh deploy@10.10.10.31 '/srv/factura/bin/switch.sh blue "INC-B1: v2.1.0 mutée"'
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -5681,11 +5759,13 @@ ssh deploy@10.10.10.21 "docker save $IMG" | docker load
 docker image inspect --format '{{index .RepoDigests 0}}' \
   lab-ops.lab.local:3000/mathieu/factura-api:v2.1.0      # 3f7a... : la bonne
 docker push lab-ops.lab.local:3000/mathieu/factura-api:v2.1.0
-# 3. redéployer proprement par le pipeline (make promote TAG=v2.1.0) : la
-#    couleur inactive (green) reçoit l'image de la CI, bascule, smoke.
+# 3. green (inactive) garde l'image mutée : le rôle ne la touchera pas
+#    (blue tourne déjà v2.1.0 -> end_host). L'arrêter tout de suite
+#    (docker compose ... stop api-green) ; la prochaine promotion (v2.1.1)
+#    la redéploiera avec une image de la CI.
 # 4. les factures créées entre 10:00 et la correction : requête SQL
-ssh mathieu@10.10.10.32 'docker exec factura-postgres-1 psql -U factura -d factura \
-  -Atc "SELECT id, montant_ht, montant_ttc FROM factures WHERE \
+ssh mathieu@10.10.10.32 'docker exec factura-postgres-1 psql -U factura \
+  -d factura -Atc "SELECT id, montant_ht, montant_ttc FROM factures WHERE \
         created_at > now() - interval '"'"'3 hours'"'"' \
         AND round(montant_ht*1.2,2) <> montant_ttc"'
 #  -> liste à corriger (UPDATE ... SET montant_ttc = round(montant_ht*1.2,2))
@@ -5874,8 +5954,11 @@ le staging se déploie normalement. Un correctif doit partir avant 18 h.*
    #  DB_PASSWORD=Prd-Db-2026
    ssh mathieu@10.10.10.32 'docker exec factura-postgres-1 psql -U factura \
      -d factura -Atc "select 1"'                     # 1 : socket, sans mdp
-   ssh mathieu@10.10.10.32 "PGPASSWORD=Prd-Db-2026 psql -h 10.10.10.32 \
-     -U factura -d factura -Atc 'select 1'"          # 1 : le mdp est valide
+   # pas de psql sur les VM : un client jetable, depuis la VM web (seule
+   # source autorisée sur 5432)
+   ssh mathieu@10.10.10.31 "docker run --rm -e PGPASSWORD=Prd-Db-2026 \
+     postgres:16-alpine psql -h 10.10.10.32 -U factura -d factura \
+     -Atc 'select 1'"                                # 1 : le mdp est valide
    ```
 
    La prod tourne avec l'ancien mot de passe ; la « rotation » n'a pas
@@ -5902,7 +5985,8 @@ ansible-vault view ansible/inventory/group_vars/prod/vault.yml   # lisible
 # vérifier que ce coffre = ce que la prod utilise
 diff <(ansible-vault view ansible/inventory/group_vars/prod/vault.yml \
        | awk -F'"' '/vault_db_password/{print $2}') \
-     <(ssh deploy@10.10.10.31 'grep ^DB_PASSWORD= /srv/factura/.env' | cut -d= -f2) \
+     <(ssh deploy@10.10.10.31 'grep ^DB_PASSWORD= /srv/factura/.env' \
+       | cut -d= -f2) \
   && echo "vault == prod"
 git commit -m "fix(vault): restaure le coffre prod lisible (INC-B3)"
 git push
@@ -5958,7 +6042,7 @@ est `firing` depuis des heures sur Prometheus, Alertmanager est `up`, et
 
    ```bash
    curl -m 3 http://10.10.10.21/health          # connection refused / 502
-   ssh deploy@10.10.10.21 'cd /srv/factura && docker compose ps -a'
+   ssh deploy@10.10.10.21 'docker ps -a --filter name=factura-api'
    #  factura-api-blue-1   exited (0)   ... 12:02
    #  factura-api-green-1  exited (0)
    ssh deploy@10.10.10.21 'docker inspect --format "{{.State.ExitCode}} \
@@ -6020,8 +6104,8 @@ curl -s -X DELETE http://lab-ops:9093/api/v2/silence/7c1d…-…   # ou amtool
 ssh mathieu@lab-ops 'tail -n 2 /opt/factura-monitoring/data/alerts.log'
 #  … firing FacturaApiDown env=staging severity=critical …
 # 3. remettre le staging
-ssh deploy@10.10.10.21 'cd /srv/factura && docker compose --profile blue \
-  --profile green start api-blue api-green'
+ssh deploy@10.10.10.21 'cd /srv/factura && docker compose --env-file .env \
+  --env-file state.env --profile blue --profile green start api-blue api-green'
 curl -s http://10.10.10.21/health
 #  … resolved FacturaApiDown …  dans alerts.log quelques minutes après
 ```

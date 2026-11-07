@@ -50,8 +50,12 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' \
   || ko "curl https://factura.lab.local renvoie « $CODE » (validation TLS)"
 
 # 4. prévention : une surveillance de l'expiration existe-t-elle ?
-if ls /etc/cron.d/*cert* /etc/systemd/system/*cert*.timer \
-     /usr/local/bin/*cert* /usr/local/sbin/*cert* >/dev/null 2>&1; then
+TROUVE=0
+for g in '/etc/cron.d/*cert*' '/etc/systemd/system/*cert*.timer' \
+         '/usr/local/bin/*cert*' '/usr/local/sbin/*cert*'; do
+  compgen -G "$g" >/dev/null && TROUVE=1
+done
+if [ "$TROUVE" -eq 1 ]; then
   ok "un mécanisme de surveillance/renouvellement du certificat existe"
 else
   ko "aucune surveillance de l'expiration (timer, cron ou script attendu)"

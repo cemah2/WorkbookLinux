@@ -74,7 +74,7 @@ if [ -f "$F" ]; then
     && ok "le filtre utilise <HOST> (sans quoi rien n'est bannissable)" \
     || ko "le filtre ne contient pas <HOST> : fail2ban ne saura pas quelle \
 IP bannir"
-  grep -qE '\(403\|404\)|404\|403' "$F" \
+  grep -qE '403\|404|404\|403' "$F" \
     && ok "le filtre discrimine sur le code de statut" \
     || note "le filtre ne regarde pas le code HTTP : risque de bannir des \
 requêtes réussies"

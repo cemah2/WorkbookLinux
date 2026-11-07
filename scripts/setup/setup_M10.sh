@@ -309,7 +309,7 @@ esac
 chmod -R a+rX "$DEPOT"
 
 # ---------------------------------------------------------------------
-# 3. Archive de sources à compiler (E9.x, L10.4)
+# 3. Archive de sources à compiler (E10.15, L10.4)
 # ---------------------------------------------------------------------
 SRC="$ETAT/build/horodate-1.4"
 rm -rf "$SRC"; mkdir -p "$SRC"

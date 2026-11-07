@@ -28,12 +28,14 @@ timedatectl set-ntp false >/dev/null 2>&1 || true
 sed -i 's/^makestep /#makestep /' "$CONF"
 
 # --- 3. l'heure « pour tester un script », écrite aussi dans le RTC -------
-date -s "$(date -d '+44 days' '+%Y-%m-%d %H:%M:%S')" >/dev/null
+# 44 jours EN ARRIÈRE : c'est ce qui produit « not valid yet » (apt, TLS).
+date -s "$(date -d '-44 days' '+%Y-%m-%d %H:%M:%S')" >/dev/null
 hwclock --systohc >/dev/null 2>&1 || true
 
 cat <<'EOF2'
 
 Symptôme attendu : « sudo apt update » échoue avec « Release file ... is not
-valid yet », « curl https://... » refuse tous les certificats, et les
-journaux portent des dates dans le futur. Le réseau, lui, fonctionne.
+valid yet », « curl https://... » refuse les certificats récents (« not yet
+valid »), et les journaux portent des dates dans le passé. Le réseau, lui,
+fonctionne.
 EOF2

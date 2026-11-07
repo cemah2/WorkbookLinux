@@ -512,7 +512,8 @@ bonus, on pose les droits voulus (`os.chmod`) avant le `replace`, puisque
 | en-tête token | `Request(url, headers={...})` | `session.headers[...]` une fois |
 | timeout | `urlopen(req, timeout=5)` : un seul délai | `timeout=(connexion, lecture)` |
 | 4xx/5xx | `HTTPError` levée automatiquement | rien sans `raise_for_status()` |
-| retries | à écrire à la main | `HTTPAdapter(max_retries=Retry(...))` |
+| retries | à écrire à la main | `HTTPAdapter(max_retries=Retry(.` |
+|  |  | `..))` |
 | JSON | `json.load(rep)` | `r.json()` |
 | TLS privé | `ssl.create_default_context(cafile=...)` | `verify="/chemin/ca.crt"` |
 
@@ -534,7 +535,7 @@ bugs.
    imbriqué. En bash : `jq` en cascade, tableaux associatifs non
    imbriquables, quoting acrobatique pour une liste de listes.
 2. **Idempotence** — hors périmètre de Python comme de bash : c'est
-   Ansible (L19). Mais un script Python qui rend un état (`sante.py`,
+   Ansible (module 23). Mais un script Python qui rend un état (`sante.py`,
    JSON) s'intègre à Ansible comme *fact*.
 3. **Taille** — `sante.sh` du module 16 : 200 lignes, un `set -e`
    désamorcé partout par `|| true`. `pilotage` fait la même chose en trois
@@ -787,7 +788,7 @@ with open(chemin, encoding=enc, newline="") as f:
 `0xE9` est `é` en latin-1 ; en UTF-8, `é` s'écrit `0xC3 0xA9`, et `0xE9`
 seul est un début de séquence invalide. `utf-8-sig` lit un fichier UTF-8
 avec ou sans BOM (`EF BB BF`) : sans lui, le BOM se retrouve collé au nom de
-la première colonne (`﻿hote`) et `ligne["hote"]` lève `KeyError` —
+la première colonne (`hote`) et `ligne["hote"]` lève `KeyError` —
 l'erreur classique après un export Excel. `csv.DictReader` gère les champs
 entre guillemets contenant le séparateur, ce qu'un `split(";")` ne fait pas ;
 `newline=""` est exigé par le module `csv`.
@@ -1477,7 +1478,7 @@ $ /usr/bin/time -v bin/logstats.py data/gros.log 2>&1 | grep Maximum
 ```
 
 Trois observations : (1) sur 216 000 lignes, awk + sort reste un peu plus
-rapide — `sort` est du C optimisé, la regex Python coûte ~10 µs par ligne ;
+rapide — `sort` est du C optimisé, la regex Python coûte ~10 μs par ligne ;
 (2) Python calcule **tous** les indicateurs en une seule passe là où le
 pipeline relit le fichier trois fois, et l'écart se réduit quand on ajoute
 un indicateur ; (3) le p95 par URL, la sortie JSON et `--since` sont dix
@@ -1800,9 +1801,9 @@ de dépendance, sans framework.
 un 401 avec `{"data": null}` ; sans l'appel, `None` déclencherait un
 `TypeError` plus loin, ou pire, un inventaire vide accepté. Avec lui, on
 obtient `HTTPError`, qui hérite de `RequestException`, qui hérite
-d'`OSError` : une seule clause `except OSError` en bout de chaîne couvre le
-fichier absent, le JSON invalide (`ValueError`), la connexion refusée et
-l'erreur HTTP, chacun avec son message et sans Traceback.
+d'`OSError` : une seule clause `except (OSError, ValueError, KeyError)` en bout de chaîne couvre le
+fichier absent et la connexion refusée (`OSError`), l'erreur HTTP (`RequestException`), le JSON invalide (`ValueError`) et
+une clé absente de la fixture, chacun avec son message et sans Traceback.
 
 **`ipaddress.ip_interface("10.10.10.11/24").ip`** parse et valide en une
 fois : une valeur `10.10.10.300/24` lève `ValueError`, qu'on journalise. Le
@@ -2103,7 +2104,11 @@ def main(argv: list[str] | None = None) -> int:
     rap = rapport(resultats)
     texte = json.dumps(rap, ensure_ascii=False, indent=2) + "\n"
     if args.output:
-        ecrire_atomique(args.output, texte)
+        try:
+            ecrire_atomique(args.output, texte)
+        except OSError as exc:
+            log.error("écriture de %s : %s", args.output, exc)
+            return UNKNOWN
     sys.stdout.write(rendre_texte(rap) if args.text else texte)
     return rap["code"]
 
@@ -2585,8 +2590,8 @@ DEBUG: garde   factura-2026-09-12.tar.gz (quotidienne)
 ...
 14 gardée(s), 106 supprimée(s) (simulation)
 $ pytest -q
-.........                                                          [100%]
-9 passed in 0.05s
+..........                                                         [100%]
+10 passed in 0.05s
 ```
 
 ::: pourquoi
@@ -2949,7 +2954,7 @@ la boucle de service, journalise, et **expose l'échec** comme une métrique
 (`factura_collecte_ok 0`) sur laquelle on alerte. Un 500 aurait été aussi
 détectable (`up == 0`), mais aurait perdu les métriques encore valides.
 
-**`ThreadingHTTPServer`** sert plusieurs scrapes en parallèle (Prometheus
+**`ThreadingHTTPServer`** sert plusieurs scrapes en parallèle (Prometheus +
 + un `curl` de diagnostic). **`signal.signal(SIGTERM, ...)`** lève
 `SystemExit` depuis le gestionnaire : `serve_forever()` s'interrompt, le
 `finally` ferme le socket, le code est 0 — systemd voit un arrêt propre,
@@ -3895,8 +3900,8 @@ SuccessExitStatus=1 2
 Description=Rapport de santé toutes les 15 minutes
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=15min
+# Persistent= ne rattrape les exécutions manquées qu'avec OnCalendar=
+OnCalendar=*:0/15
 RandomizedDelaySec=60
 Persistent=true
 

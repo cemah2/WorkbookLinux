@@ -38,7 +38,10 @@ for line in "${LAB_VMS[@]}"; do
   printf '%-9s %-5s %-12s %-8s %-6s %-5s %-4s %s\n' \
     "$name" "$vmid" "$ip" "$status" "$agent" "$ping" "$ssh" "$snap"
 
-  [ "$status" = "running" ] && [ "$ssh" = "yes" ] || PROBLEMS=$((PROBLEMS+1))
+  # lab-virt ne sert qu'au module 20 : éteinte, ce n'est pas un problème.
+  if [ "$status" = "running" ] && [ "$ssh" = "yes" ]; then :
+  elif [ "$vmid" -eq "$LAB_VIRT_VMID" ] && [ "$status" = "stopped" ]; then :
+  else PROBLEMS=$((PROBLEMS+1)); fi
 done
 
 echo
@@ -49,8 +52,10 @@ if ip link show "$LAB_BRIDGE" >/dev/null 2>&1; then
 else
   ko "bridge $LAB_BRIDGE absent"; PROBLEMS=$((PROBLEMS+1))
 fi
-if iptables -t nat -C POSTROUTING -s "$LAB_NET" -o "$LAB_WAN_BRIDGE" \
-     -j MASQUERADE 2>/dev/null; then
+# La règle réelle contient « ! -d LAN » : iptables -C exigerait la ligne
+# exacte, on cherche donc dans la liste.
+if iptables -t nat -S POSTROUTING 2>/dev/null \
+     | grep -q -- "-s $LAB_NET .*-o $LAB_WAN_BRIDGE -j MASQUERADE"; then
   ok "NAT $LAB_NET -> $LAB_WAN_BRIDGE actif"
 else
   ko "règle MASQUERADE absente (voir /etc/network/interfaces, chapitre 0.3)"

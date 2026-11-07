@@ -57,12 +57,12 @@ printf '%s\n' "$r" | has 'vitrine vitrine_app UTF8' \
 r=$(ansible lab-db -b -m ansible.builtin.shell -o \
       -a 'grep -E "^host\s+vitrine\s+vitrine_app\s+10.10.10.11/32\s+scram-sha-256" \
           /etc/postgresql/*/main/pg_hba.conf | wc -l' 2>/dev/null)
-printf '%s\n' "$r" | has '| 1$' \
+printf '%s\n' "$r" | has '(stdout) 1$' \
   && ok "entrée pg_hba host vitrine vitrine_app 10.10.10.11/32 scram-sha-256" \
   || ko "entrée pg_hba attendue absente (postgresql_pg_hba)"
 r=$(ansible lab-db -b -m ansible.builtin.shell -o \
       -a 'ufw status | grep 5432 | grep -c 10.10.10.11' 2>/dev/null)
-printf '%s\n' "$r" | has '| 1$' \
+printf '%s\n' "$r" | has '(stdout) 1$' \
   && ok "ufw : 5432/tcp autorisé depuis 10.10.10.11" \
   || ko "ufw : règle 5432 depuis 10.10.10.11 absente sur lab-db"
 

@@ -57,9 +57,7 @@ systemctl enable --now chronyd >/dev/null 2>&1 \
 # 2. /etc/hosts — les 7 VM, entre deux marqueurs pour rester idempotent
 # ---------------------------------------------------------------------
 info "/etc/hosts"
-sed -i '/^# BEGIN workbook/,/^# END workbook/d' /etc/hosts
-cat >> /etc/hosts <<'EOF'
-# BEGIN workbook
+HOSTS_BLOCK='# BEGIN workbook
 10.10.10.10  lab-adm.lab.local  lab-adm
 10.10.10.11  lab-web.lab.local  lab-web
 10.10.10.12  lab-db.lab.local   lab-db
@@ -67,17 +65,27 @@ cat >> /etc/hosts <<'EOF'
 10.10.10.14  lab-ops.lab.local  lab-ops
 10.10.10.15  lab-git.lab.local  lab-git
 10.10.10.16  lab-virt.lab.local lab-virt
-# END workbook
-EOF
+# END workbook'
+put_block() {           # put_block FICHIER : remplace le bloc, idempotent
+  sed -i '/^# BEGIN workbook/,/^# END workbook/d' "$1"
+  printf '%s\n' "$HOSTS_BLOCK" >> "$1"
+}
+put_block /etc/hosts
 
 # cloud-init réécrit /etc/hosts à chaque boot si manage_etc_hosts est
-# actif : on le désactive pour que nos entrées survivent au redémarrage.
+# actif. Proxmox le met à true dans le user-data qu'il génère, et le
+# user-data l'emporte sur cloud.cfg.d : on désactive quand même, ET on
+# ajoute le bloc aux modèles dont cloud-init régénère /etc/hosts.
 if [ -d /etc/cloud/cloud.cfg.d ]; then
   cat > /etc/cloud/cloud.cfg.d/99-workbook.cfg <<'EOF'
 # Workbook Linux/DevOps : /etc/hosts est géré par bootstrap-lab.sh
 manage_etc_hosts: false
 EOF
 fi
+for tpl in /etc/cloud/templates/hosts.debian.tmpl \
+           /etc/cloud/templates/hosts.redhat.tmpl; do
+  if [ -f "$tpl" ]; then put_block "$tpl"; fi
+done
 
 # ---------------------------------------------------------------------
 # 3. Fuseau, locale, historique
@@ -149,11 +157,15 @@ fi
 info "répertoire $LAB_HOME/workbook"
 install -d -o "$LAB_USER" -g "$LAB_USER" "$LAB_HOME/workbook" \
   "$LAB_HOME/workbook/scripts" "$LAB_HOME/carnet"
-# Si le zip du workbook est déjà là, on le déballe (cf. chapitre 0.4).
-if [ -f "$LAB_HOME/workbook.zip" ]; then
-  su - "$LAB_USER" -c "unzip -o -q ~/workbook.zip -d ~/workbook"
-  find "$LAB_HOME/workbook/scripts" -name '*.sh' -exec chmod +x {} +
-fi
+# Si le zip du workbook est déjà là, on le déballe (cf. chapitre 0.4) :
+# workbook.zip (scripts/ + src/) ou workbook-scripts.zip (make zip-scripts).
+for z in workbook.zip workbook-scripts.zip; do
+  if [ -f "$LAB_HOME/$z" ]; then
+    su - "$LAB_USER" -c "unzip -o -q ~/$z -d ~/workbook"
+    find "$LAB_HOME/workbook/scripts" -name '*.sh' -exec chmod +x {} +
+    break
+  fi
+done
 
 # ---------------------------------------------------------------------
 # Bilan

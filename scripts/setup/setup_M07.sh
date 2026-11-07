@@ -194,7 +194,7 @@ Prêt. Points d'entrée :
   $BASE/bin/portee.sh       ./ vs bash vs source (E7.2)
   $BASE/data/inventaire.csv CSV ';' sans saut de ligne final (E7.9, L7.2)
   $BASE/data/serveurs.txt   liste sans saut de ligne final (E7.8)
-  $BASE/logs/               journaux + un nom avec espace (E7.6, L7.1)
+  $BASE/logs/               journaux + un nom avec espace (E7.12, L7.1)
   $BASE/archives/           archives datées à purger (L7.3, D7)
   $BASE/conf/seuils.conf    clé=valeur à parser (E7.10)
   $BASE/casse/              scripts à relire et corriger (E7.15, E7.16)

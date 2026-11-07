@@ -32,8 +32,10 @@ User=factura
 Group=factura
 RuntimeDirectory=factura
 WorkingDirectory=/srv/factura
-EnvironmentFile=/etc/factura/api.env
+# pas d'EnvironmentFile=/etc/factura/api.env ici : il écraserait
+# FACTURA_PORT (EnvironmentFile= prime toujours sur Environment=)
 Environment=FACTURA_PORT=8090
+Environment=FACTURA_DATA=/srv/factura/data
 Environment=FACTURA_LOG=/var/log/factura/import.log
 ExecStart=/opt/factura/bin/factura-api.py
 Restart=on-failure

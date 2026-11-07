@@ -68,10 +68,23 @@ if [ -f "$DROPIN" ]; then
     && ok "MemoryMax=128M : le drop-in l'emporte sur l'unité de base" \
     || ko "MemoryMax vaut $(val MemoryMax), le drop-in doit l'abaisser à \
 134217728 (128M)"
-  val Environment | tr ' ' '\n' | grep -q '^FACTURA_PORT=8081$' \
-    && ok "le port effectif est 8081 (posé par le drop-in)" \
-    || ko "FACTURA_PORT=8081 attendu dans l'environnement effectif \
-(systemctl show -p Environment $UNIT)"
+  # Environment= est écrasé par EnvironmentFile= : on accepte un second
+  # fichier d'environnement ajouté par le drop-in, ou un ExecStart= adapté.
+  if grep -Eq '^(EnvironmentFile|Environment|ExecStart)=' "$DROPIN"; then
+    ok "le drop-in porte la surcharge du port (fichier d'env ou ExecStart)"
+  else
+    ko "le drop-in doit surcharger le port : EnvironmentFile= vers un second \
+fichier (Environment= seul est écrasé par /etc/factura/api.env)"
+  fi
+  PID=$(val MainPID)
+  if [ -n "$PID" ] && [ "$PID" != 0 ] && \
+     sudo cat "/proc/$PID/environ" 2>/dev/null | tr '\0' '\n' \
+       | grep -q '^FACTURA_PORT=8081$'; then
+    ok "le processus tourne avec FACTURA_PORT=8081"
+  else
+    ko "FACTURA_PORT=8081 absent de /proc/<pid>/environ : la valeur de \
+/etc/factura/api.env l'emporte encore"
+  fi
 else
   ko "drop-in absent : $DROPIN"
 fi

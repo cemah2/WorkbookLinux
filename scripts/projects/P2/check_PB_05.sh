@@ -33,7 +33,8 @@ grep -rq 'vault_' "$A/inventory/group_vars/staging/main.yml" \
   && ok "indirection var -> vault_var dans main.yml" \
   || ko "les variables claires ne référencent pas vault_* (pattern d'indirection)"
 if (cd "$REPO" && ansible-playbook -i ansible/inventory/staging.ini \
-      ansible/playbooks/deploy.yml --check --diff >/tmp/ap.log 2>&1); then
+      ansible/playbooks/deploy.yml -e ansible_user=deploy \
+      --check --diff >/tmp/ap.log 2>&1); then
   grep -qE 'changed=0 .*failed=0' /tmp/ap.log \
     && ok "deploy.yml idempotent sur staging (--check : changed=0)" \
     || ko "deploy.yml n'est pas idempotent (changed>0 en --check, /tmp/ap.log)"
@@ -44,13 +45,15 @@ fi
 for e in staging prod; do
   case $e in staging) W=10.10.10.21; D=10.10.10.22;; *) W=10.10.10.31; D=10.10.10.32;; esac
   echo "-- $e"
-  r "$W" 'stat -c %a:%U /srv/factura/.env' | grep -qE '^600:(deploy|root)' \
+  # /srv/factura est en 0750 deploy : lecture par sudo (mathieu)
+  r "$W" 'sudo stat -c %a:%U /srv/factura/.env' \
+    | grep -qE '^600:(deploy|root)' \
     && ok "$e : /srv/factura/.env en 0600" \
     || ko "$e : /srv/factura/.env absent ou lisible par tous"
-  r "$W" 'grep -c "^DB_PASSWORD=" /srv/factura/.env' | grep -q 1 \
+  r "$W" 'sudo grep -c "^DB_PASSWORD=" /srv/factura/.env' | grep -q 1 \
     && ok "$e : DB_PASSWORD injecté depuis le vault" \
     || ko "$e : DB_PASSWORD absent du .env"
-  r "$W" 'cat /srv/factura/.env' | grep -qE 'devpass|changeme' \
+  r "$W" 'sudo cat /srv/factura/.env' | grep -qE 'devpass|changeme' \
     && ko "$e : mot de passe de dev en prod/staging !" \
     || ok "$e : pas de mot de passe de démo"
   r "$W" 'docker ps --format {{.Names}}' >/tmp/ps.$$

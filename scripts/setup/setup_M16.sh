@@ -21,7 +21,7 @@ ETC=/etc/factura
 LOGD=/var/log/factura
 NGXD=/var/log/nginx
 ECH="$BASE/echantillons"
-MARQ=/var/lib/factura/.setup-m13
+MARQ=/var/lib/factura/.setup-m16
 
 command -v python3 >/dev/null 2>&1 || {
   echo "python3 est requis (voir §16.1)" >&2; exit 1; }

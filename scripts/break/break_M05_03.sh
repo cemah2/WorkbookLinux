@@ -20,7 +20,7 @@ awk '{
   else             printf "%s\r\n", $0
 }' "$SRC" > "$AGG"
 
-cp -- "$BASE/bin/top-ip.sh" "$BK/top-ip.sh" 2>/dev/null || true
+[ -f "$BK/top-ip.sh" ] || cp -- "$BASE/bin/top-ip.sh" "$BK/top-ip.sh"
 sed -i 's|SRC="${1:-$HOME/lab05/access.log}"|SRC="${1:-$HOME/lab05/access-agrege.log}"|' \
   "$BASE/bin/top-ip.sh"
 

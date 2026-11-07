@@ -54,5 +54,5 @@ chmod 644 "$LOG"
 
 echo
 echo "Symptôme attendu :"
-echo "  http://10.10.10.11/ répond 404 et $WEB ne contient plus"
-echo "  qu'un répertoire factura-site/."
+echo "  le site servi depuis $WEB répond 404 : le répertoire ne contient"
+echo "  plus qu'un sous-répertoire factura-site/."

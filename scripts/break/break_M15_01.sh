@@ -15,13 +15,15 @@ import re, sys
 p = sys.argv[1]; s = open(p).read()
 # « nettoyage » de la syntaxe : le ^~ disparaît
 s = re.sub(r'location\s+\^~\s+/api/', 'location /api/', s)
-# cache des fichiers statiques, inséré avant la première location
+# cache des fichiers statiques, inséré juste avant la location /api/ : il
+# tombe ainsi dans le même server (le 443 après L15.2, pas le server 80)
 bloc = ('    # cache statique 2026-09 : 7 jours sur les assets\n'
         '    location ~* \\.(json|js|css|png|svg|ico)$ {\n'
         '        expires 7d;\n'
         '        add_header Cache-Control "public";\n'
         '    }\n')
-i = s.find('    location')
+m = re.search(r'^[ \t]*location\s+/api/', s, re.M)
+i = m.start() if m else s.find('    location')
 s = s[:i] + bloc + s[i:] if i >= 0 else s + bloc
 open(p, 'w').write(s)
 PY

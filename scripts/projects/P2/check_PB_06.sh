@@ -16,7 +16,7 @@ python3 - "$W" <<'PY' && ok "ci.yaml est du YAML valide" || ko "ci.yaml invalide
 import sys, yaml; yaml.safe_load(open(sys.argv[1]))
 PY
 for j in lint test build; do
-  grep -qE "^\s+$j[a-z-]*:" "$W" && ok "job $j" || ko "job $j absent"
+  grep -qE "^\s+${j}[a-z-]*:" "$W" && ok "job $j" || ko "job $j absent"
 done
 grep -qE 'pre-commit|gitleaks|yamllint' "$W" && ok "lint exécuté en CI" \
   || ko "aucun lint en CI"

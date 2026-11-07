@@ -25,8 +25,7 @@ pression, pendant cinq jours d'astreinte fictifs sur la plateforme **Factura**.
 
 Temps estimé : 12 à 16 h (étalées, comme une vraie semaine d'astreinte).
 Prérequis : toute la partie système, en particulier les modules 08 (systemd),
-11 (réseau), 12 (SSH), 13 (logs), 14 (timers), 15 (sécurité) et **16
-(dépannage, performance, gestion d'incident)**, dont ce projet est le
+12 (réseau), 14 (SSH), 16 (logs), 17 (timers), 18 (sécurité) et **19 (dépannage, performance, gestion d'incident)**, dont ce projet est le
 prolongement appliqué. Les huit pannes du module 19 ne sont **pas** rejouées
 ici : les scénarios sont tous différents.
 :::
@@ -101,10 +100,10 @@ sudo bash break_PC_X_Y.sh      # met en place le scénario PC.X.Y
 
 Tu tiens un **journal de bord** dans `~/astreinte/journal/PC-X-Y.md` : heure,
 symptôme, hypothèse, commande, résultat, conclusion. Tu valides la remise en
-service avec :
+service avec (les `check` lisent des fichiers réservés à root, d'où `sudo`) :
 
 ```bash
-bash check_PC_X_Y.sh
+sudo bash check_PC_X_Y.sh
 ```
 
 ::: astuce
@@ -158,7 +157,7 @@ qu'un certificat n'expire plus jamais en silence.
 
 ::: check
 ```bash
-bash check_PC_1_1.sh
+   sudo bash check_PC_1_1.sh
 ```
 :::
 
@@ -171,7 +170,7 @@ lignes: 8
 ::: contexte
 **09:36** — Slack, canal #support : « les utilisateurs ont "erreur base de
 données" quand ils se connectent. Moi aussi. Ça marchait hier. » Un peu plus
-tard : « le message exact c'est *FATAL: sorry, too many clients already*. »
+tard : « le message exact c'est *FATAL : remaining connection slots are reserved for roles with the SUPERUSER attribute*. »
 
 Priorité : **P1**. Interdit : redémarrer PostgreSQL **hors** de la fenêtre de
 maintenance 12:30–13:00 (une coupure en pleine matinée est refusée par le
@@ -188,7 +187,7 @@ symptôme, et poser un garde-fou contre les transactions abandonnées.
 
 ::: check
 ```bash
-bash check_PC_1_2.sh
+   sudo bash check_PC_1_2.sh
 ```
 :::
 
@@ -219,7 +218,7 @@ world-writable dans la racine servie.
 
 ::: check
 ```bash
-bash check_PC_1_3.sh
+   sudo bash check_PC_1_3.sh
 ```
 :::
 
@@ -237,7 +236,7 @@ son code est bon. Répare, on perd des commandes ! »
 *active (running)*, je comprends pas. »
 
 Priorité : **P1**. Interdit : **rollback** de la version applicative (le métier
-veut garder la 2.4.0, qui corrige une autre bogue) et reboot de la VM.
+veut garder la 2.4.0, qui corrige un autre bogue) et reboot de la VM.
 :::
 
 ```bash
@@ -250,7 +249,7 @@ service en ligne.
 
 ::: check
 ```bash
-bash check_PC_1_4.sh
+   sudo bash check_PC_1_4.sh
 ```
 :::
 
@@ -288,7 +287,7 @@ rotation qui manquait — sans redémarrer PostgreSQL.
 
 ::: check
 ```bash
-bash check_PC_2_1.sh
+   sudo bash check_PC_2_1.sh
 ```
 :::
 
@@ -318,7 +317,7 @@ bloquer le boot et les jobs à l'avenir.
 
 ::: check
 ```bash
-bash check_PC_2_2.sh
+   sudo bash check_PC_2_2.sh
 ```
 :::
 
@@ -350,7 +349,7 @@ restauration.
 
 ::: check
 ```bash
-bash check_PC_2_3.sh
+   sudo bash check_PC_2_3.sh
 ```
 :::
 
@@ -381,7 +380,7 @@ de plus de 30 jours, épargne les fichiers légaux, trace ses suppressions, a un
 
 ::: check
 ```bash
-bash check_PC_2_4.sh
+   sudo bash check_PC_2_4.sh
 ```
 :::
 
@@ -428,7 +427,7 @@ et à réagir proprement.
 
 ::: check
 ```bash
-bash check_PC_3_1.sh
+   sudo bash check_PC_3_1.sh
 ```
 :::
 
@@ -458,7 +457,7 @@ rétablir un déploiement par clé cohérent, sans jamais repasser au mot de pas
 
 ::: check
 ```bash
-bash check_PC_3_2.sh
+   sudo bash check_PC_3_2.sh
 ```
 :::
 
@@ -488,7 +487,7 @@ vert.
 
 ::: check
 ```bash
-bash check_PC_3_3.sh
+   sudo bash check_PC_3_3.sh
 ```
 :::
 
@@ -513,7 +512,7 @@ technique** (clients + interne), dans
 2. **T+15 (14:15)** — piste : on a identifié la zone, sans jargon ni promesse de
    délai que tu ne tiendras pas.
 3. **T+30 (14:30)** — rétablissement : service rétabli, ce qu'il faut vérifier
-   côté utilisateur, un mot sur la suite (post-mortem à venir).
+   côté utilisateur, un mot sur la suite (postmortem à venir).
 
 Contraintes : pas de jargon (« résolution DNS » → « annuaire interne »), pas
 d'accusation, pas de délai chiffré non garanti, une action claire par message.
@@ -553,7 +552,7 @@ rien de plus ouvert, service partenaire joignable.
 
 ::: check
 ```bash
-bash check_PC_4_1.sh
+   sudo bash check_PC_4_1.sh
 ```
 :::
 
@@ -561,13 +560,12 @@ bash check_PC_4_1.sh
 lignes: 6
 :::
 
-### PC.4.2 — TLS échoue par intermittence, sans qu'on ait touché aux certificats
+### PC.4.2 — TLS échoue, sans qu'on ait touché aux certificats
 
 ::: contexte
-**11:20** — Slack d'un dev : « Nos appels vers l'API en HTTPS échouent une fois
-sur deux avec `certificate is not yet valid`. Et les horodatages dans les logs
-sont bizarres, genre en avance. On n'a pourtant **rien** changé aux
-certificats. »
+**11:20** — Slack d'un dev : « Nos appels HTTPS vers l'API depuis lab-web échouent avec `certificate is not yet valid`. Et les horodatages dans les logs
+sont bizarres, genre en retard de plusieurs heures. On n'a pourtant **rien** changé aux
+certificats. » (Seul le renouvellement automatique posé lundi a tourné cette nuit.)
 
 Priorité : **P2**. Interdit : régénérer les certificats (ce n'est pas le
 problème), reboot.
@@ -577,13 +575,13 @@ problème), reboot.
 sudo bash break_PC_4_2.sh
 ```
 
-Objectif : relier l'erreur TLS et les horodatages en avance à une **horloge
-dérivée** (synchro NTP coupée, horloge avancée de plus d'une demi-heure), la
+Objectif : relier l'erreur TLS et les horodatages en retard à une **horloge
+dérivée** (synchro NTP coupée, horloge en retard de trois heures : le certificat renouvelé cette nuit n'est pas encore « valide » pour elle), la
 resynchroniser, et réactiver la synchro au démarrage.
 
 ::: check
 ```bash
-bash check_PC_4_2.sh
+   sudo bash check_PC_4_2.sh
 ```
 :::
 
@@ -591,7 +589,7 @@ bash check_PC_4_2.sh
 lignes: 8
 :::
 
-### PC.4.3 — Redis rame et la VN db swappe
+### PC.4.3 — Redis rame et la VM db swappe
 
 ::: contexte
 **14:45** — alerte `NodeSwapUsage` sur lab-db, et Slack #support : « le site est
@@ -613,7 +611,7 @@ persister le réglage, et faire cesser le swap.
 
 ::: check
 ```bash
-bash check_PC_4_3.sh
+   sudo bash check_PC_4_3.sh
 ```
 :::
 
@@ -643,7 +641,7 @@ le healthcheck au bon endroit, et retrouver un conteneur `healthy` stable.
 
 ::: check
 ```bash
-bash check_PC_4_4.sh
+   sudo bash check_PC_4_4.sh
 ```
 
 Si Docker n'est pas disponible sur ta VM, ce ticket est **facultatif** : le
@@ -685,7 +683,7 @@ qui ne s'ouvre pas à tout Internet.
 
 ::: check
 ```bash
-bash check_PC_5_1.sh
+   sudo bash check_PC_5_1.sh
 ```
 :::
 
@@ -716,7 +714,7 @@ récidive (conf versionnée).
 
 ::: check
 ```bash
-bash check_PC_5_2.sh
+   sudo bash check_PC_5_2.sh
 ```
 :::
 
@@ -745,7 +743,7 @@ poser une surveillance des inodes (pas seulement de l'espace).
 
 ::: check
 ```bash
-bash check_PC_5_3.sh
+   sudo bash check_PC_5_3.sh
 ```
 :::
 

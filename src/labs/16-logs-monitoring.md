@@ -139,7 +139,8 @@ fichiers plats : le journal binaire se gère avec `journalctl --vacuum-*`.
 | 9 | `cron` | planificateur |
 | 10 | `authpriv` | authentification **privée** (sshd, sudo, PAM) |
 | 11 | `ftp`, 12 `ntp` | services dédiés |
-| 13 | `security`, 14 `console`, 15 `solaris-cron` | usage marginal |
+| 13 | `log audit`, 14 `log alert`, 15 `clock` |  |
+|  | `daemon` | usage marginal (RFC 5424) |
 | 16–23 | `local0` … `local7` | **réservées aux applications maison** |
 
 ### Sévérités syslog
@@ -224,7 +225,8 @@ dans un fragment à numéro bas, il court-circuite tout ce qui suit.
 
 | Directive | Effet |
 |---|---|
-| `daily` / `weekly` / `size 100M` | déclencheur de rotation |
+| `daily` / `weekly` / `size 100M` | déclencheur (`size` **remplace** l'intervalle) |
+| `maxsize 100M` | tourne aussi avant l'échéance si la taille dépasse |
 | `rotate 14` | nombre d'anciennes copies conservées |
 | `compress` / `delaycompress` | gzip / ne compresse qu'au tour suivant |
 | `missingok` / `notifempty` | pas d'erreur si absent / ne tourne pas si vide |
@@ -268,7 +270,7 @@ qu'une nouvelle application peut obtenir sans swapper, cache récupérable inclu
 | Colonne `vmstat 1` | Ce qu'elle dit |
 |---|---|
 | `r` / `b` | processus prêts à tourner / bloqués en E/S |
-| `si` / `so` | pages lues depuis / écrites vers le swap, **par seconde** |
+| `si` / `so` | mémoire (Kio) lue depuis / écrite vers le swap, **par seconde** |
 | `bi` / `bo` | blocs lus / écrits sur les disques |
 | `us sy id wa st` | répartition du temps CPU, `st` = temps volé par l'hôte |
 
@@ -317,7 +319,7 @@ d) `--list-boots` doit être exécuté avant pour construire l'index
 a) `journalctl -p warning -t local3`
 b) `journalctl SYSLOG_FACILITY=19 -p warning`
 c) `journalctl -u local3.service -p 4`
-d) `journalctl --facility=local3`
+d) `journalctl -p local3.warning`
 
 **Q16.3** — Que fait exactement `journalctl --vacuum-size=200M` ?
 **Deux réponses correctes.**
@@ -328,7 +330,7 @@ b) supprime les fichiers de journal **archivés** les plus anciens jusqu'à
 c) modifie durablement la configuration de journald
 d) ne touche jamais au fichier `system.journal` actif
 
-**Q16.4** — Cette ligne apparaît dans `journalctl -u factura-bruyant` :
+**Q16.4** — Cette ligne apparaît dans `journalctl -g Suppressed` :
 
 ```text
 sept. 18 14:03:11 lab-web systemd-journald[412]: Suppressed 2381 messages
@@ -413,7 +415,7 @@ b) `st` = *steal*, l'hyperviseur donne du CPU à d'autres VM : le problème est
 c) `st` = *system time*, c'est du temps noyau, tu regardes les appels système
 d) `st` = *storage*, c'est de l'attente disque, équivalent de `wa`
 
-**Q16.13** — `iostat -xz 1` donne pour `sdb` : `%util 99.8`, `await 340.00`,
+**Q16.13** — `iostat -xz 1` donne pour `sdb` : `%util 99.8`, `r_await 340.00`,
 `aqu-sz 28.4`, `r/s 12.0`, `w/s 8.0`. Quelle lecture est correcte ?
 
 a) le disque traite 20 opérations par seconde à saturation, chacune attend 340 ms
@@ -447,12 +449,12 @@ b) `latence p99 de /api/paiement > 2 s pendant 5 minutes`
 c) `load average > 4`
 d) `mémoire utilisée > 70 %`
 
-**Q16.17** — `sar -u 1 3` répond `Cannot open /var/log/sysstat/sa18: No such file
-or directory`. Pourquoi ?
+**Q16.17** — `sar -u` répond `Cannot open /var/log/sysstat/sa18: No such file
+or directory`, alors que `sar -u 1 3` fonctionne. Pourquoi ?
 
-a) `sar` en temps réel exige que la collecte historique soit activée
-b) la commande est correcte ; c'est `sar -u` **sans** intervalle qui lit le
-   fichier du jour, lequel n'existe pas tant que la collecte n'est pas activée
+a) `sar` exige toujours que la collecte historique soit activée, même avec un intervalle
+b) `sar -u` **sans** intervalle relit le
+   fichier du jour, lequel n'existe pas tant que la collecte n'est pas activée; avec un intervalle, `sar` mesure en direct
 c) le paquet `sysstat` est corrompu
 d) il faut lancer `sar` en root
 
@@ -760,7 +762,7 @@ propre, testée, et un rapport qui justifie tes choix.
    `factura` dans un répertoire qui ne lui appartient pas.
 5. Vérifie ta configuration **sans rien modifier**, corrige jusqu'à ce que la
    sortie de debug ne montre plus d'erreur ni de fichier ignoré.
-6. Force une rotation. Montre que : l'inode d'`app.log` a changé, l'application
+6. Force deux rotations successives. Montre que : l'inode d'`app.log` a changé, l'application
    écrit bien dans le nouveau fichier, le `.1` n'est pas encore compressé et le
    `.2.gz` l'est.
 7. Explique par écrit dans `~/lab16/rotation.md` pourquoi tu n'as **pas** utilisé
@@ -770,7 +772,7 @@ propre, testée, et un rapport qui justifie tes choix.
 
 ::: check
 Critère de succès : `logrotate -d /etc/logrotate.conf` ne signale ni erreur ni
-fichier ignoré pour `factura`, une rotation forcée produit `app.log.1` et
+fichier ignoré pour `factura`, deux rotations forcées produisent `app.log.1` et
 `app.log.2.gz`, l'application continue d'écrire dans le nouveau fichier, et
 `rotation.md` existe.
 
@@ -881,7 +883,7 @@ bash check_M16_05.sh     # à lancer sur lab-ops
 ## 16.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf13`. Le snapshot de secours
+Avant chaque Break & Fix : `qm snapshot 9002 avant-bf16`. Le snapshot de secours
 reste `avant-lab16` (`qm rollback 9002 avant-lab16`), mais l'utiliser vaut échec
 de l'exercice : l'objectif est de réparer, pas de rembobiner.
 `BF16.2` écrit plusieurs gigaoctets : vérifie `df -h /var` avant.
@@ -916,7 +918,7 @@ lignes: 12
 sudo bash break_M16_02.sh
 ```
 
-**Symptôme utilisateur** : `df -h /var` affiche moins de 1 Go libre.
+**Symptôme utilisateur** : `df -h /var` a perdu plusieurs gigaoctets en une nuit.
 `du -sh /var/log/*` désigne `/var/log/journal` comme premier consommateur.
 Aucun fichier `.log` n'est anormalement gros. Un collègue propose
 `rm -rf /var/log/journal/*` : tu refuses.
@@ -941,7 +943,7 @@ sudo bash break_M16_03.sh
 
 **Symptôme utilisateur** : le développeur de `factura-api` affirme que son
 application écrit une ligne par requête. `journalctl -u factura-api` en montre
-quelques-unes, puis plus rien pendant 20 secondes, puis reprend. Aucune erreur
+quelques-unes, puis plus rien pendant une trentaine de secondes, puis reprend. Aucune erreur
 dans l'application, aucune erreur dans `systemctl status`. Le développeur accuse
 « le serveur ».
 
@@ -964,7 +966,7 @@ sudo bash break_M16_04.sh
 ```
 
 **Symptôme utilisateur** : `ls -lh /var/log/factura/acces.log` affiche 800 Mo,
-`du -h` du même fichier affiche 12 Mo, `wc -l` compte 4 000 lignes, et les
+`du -h` du même fichier affiche moins d'un mégaoctet, `wc -l` compte 4 000 lignes, et les
 numéros de séquence des lignes présentent un trou de plusieurs centaines
 d'entrées après chaque rotation. `less` affiche des `^@` en pagaille.
 

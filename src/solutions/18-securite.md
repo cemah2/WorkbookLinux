@@ -119,7 +119,7 @@ suppression. Et `ufw delete` accepte aussi la règle en toutes lettres
 
 **Q18.4** — *`firewall-cmd --add-port=8080/tcp` perdu au reboot.*
 
-**Réponses : a) et c)**
+**Réponses : a), b) et c)**
 
 ::: pourquoi
 firewalld maintient **deux configurations distinctes** :
@@ -135,7 +135,7 @@ dangereuse en sachant qu'un reboot te rendra la main. On l'exploite d'ailleurs
 avec `--timeout=` : `firewall-cmd --add-port=8080/tcp --timeout=5m` pose une
 règle qui s'auto-supprime au bout de cinq minutes.
 
-Les deux réponses correctes correspondent aux deux façons de faire durer :
+b) et c) correspondent aux deux façons de faire durer :
 
 * écrire dans le permanent puis recharger : `--permanent --add-port=8080/tcp`
   suivi de `--reload` ;
@@ -143,8 +143,7 @@ Les deux réponses correctes correspondent aux deux façons de faire durer :
   `--runtime-to-permanent`, qui recopie l'état courant dans les fichiers. C'est
   la méthode que je recommande en production : on ne fige que ce qui est prouvé.
 
-b) est correcte sur le fond, mais c'est **deux** commandes ; elle reste bonne
-réponse. d) est fausse : `enable` fait démarrer firewalld au boot, il ne change
+a) donne la cause, b) et c) les **deux** remèdes. d) est fausse : `enable` fait démarrer firewalld au boot, il ne change
 rien au contenu de la configuration chargée.
 :::
 
@@ -279,7 +278,7 @@ attendu du répertoire parent : `httpd_sys_content_t`. D'où la formule à reten
 **`cp` répare, `mv` casse**.
 
 Le processus nginx tourne dans le domaine `httpd_t`. La politique l'autorise à
-lire `httpd_sys_content_t`, `httpd_sys_rw_content_t` et quelques autres types ;
+lire `httpd_sys_content_t`, `httpd_ sys_rw_content_t` et quelques autres types ;
 elle lui interdit explicitement `user_home_t`, précisément pour qu'une faille
 dans nginx ne permette pas de lire les répertoires personnels. Le refus est donc
 un fonctionnement **correct** de SELinux face à un fichier mal étiqueté.
@@ -299,7 +298,7 @@ Unix, et les droits Unix sont parfaits. Le réflexe qui fait gagner vingt minute
 sur Rocky : dès qu'un service refuse un accès dont les droits POSIX sont bons,
 `ausearch -m AVC -ts recent` **avant** toute autre hypothèse. Et si
 `setroubleshoot-server` est installé, `sealert -a /var/log/audit/audit.log`
-donne le diagnostic en français, avec la commande de correction.
+donne le diagnostic en clair, avec la commande de correction.
 :::
 
 ---
@@ -365,7 +364,7 @@ du piège `--permanent` de firewalld.
 
 b) fonctionnerait, mais on générerait un module de politique maison pour
 reproduire un booléen déjà existant : plus de code, plus de dette, aucun gain.
-d) se trompe de problème : `semanage port` sert quand un service **écoute** sur
+c) se trompe de problème : `semanage port` sert quand un service **écoute** sur
 un port inhabituel, pas quand il se connecte.
 :::
 
@@ -408,10 +407,8 @@ rien casser. C'est l'intérêt même du mode, et la raison pour laquelle
 
 ::: piege
 Depuis RHEL 9 / Rocky 9, `SELINUX=disabled` dans `/etc/selinux/config` n'est plus
-la méthode officielle de désactivation : le noyau démarre quand même la
-politique, seul le mode change. La vraie désactivation demande le paramètre de
-démarrage `selinux=0`. Résultat : des machines qu'on croit « SELinux désactivé »
-tournent en réalité en permissive et remplissent `audit.log` de refus jamais lus.
+la méthode officielle de désactivation : le noyau démarre avec SELinux actif et ne le désactive qu'en cours de démarrage, sans charger de politique. La méthode documentée est le paramètre de
+démarrage `selinux=0`. Dans les deux cas, rien n'est journalisé et aucun fichier créé n'est étiqueté : c'est ce qui rend le retour en `enforcing` si coûteux.
 :::
 
 ---
@@ -568,18 +565,15 @@ fichier d'exemple qui documente les variables attendues.
 
 ::: pourquoi
 Historiquement, le nom d'hôte était vérifié dans le `CN` (Common Name) du sujet.
-Cet usage est **déprécié depuis la RFC 2818 (2000)** et abandonné dans les faits :
-Chrome ne le regarde plus depuis 2017, Firefox depuis 2018, OpenSSL et curl
-suivent la même logique via `X509_check_host()`. Aujourd'hui, un certificat sans
-`subjectAltName` n'identifie **aucun** nom d'hôte, quel que soit son `CN`.
+Cet usage est **déprécié depuis la RFC 2818 (2000)** et abandonné par les clients modernes :
+Chrome ne le regarde plus depuis 2017 (version 58), Go depuis la version 1.15. Pour eux, un certificat sans
+`subjectAltName` n'identifie **aucun** nom d'hôte, quel que soit son `CN` :
+`NET::ERR_CERT_COMMON_NAME_INVALID` dans Chrome,
+`x509: certificate relies on legacy Common Name field` en Go.
 
-L'erreur typique côté curl :
-
-```console
-$ curl https://app.lab.local
-curl: (60) SSL: no alternative certificate subject name matches
-      target host name 'app.lab.local'
-```
+**Piège dans le piège** : `curl` (avec OpenSSL) retombe encore sur le `CN` quand
+le certificat n'a **aucun** SAN. Le test « ça marche avec curl » ne prouve donc
+rien ; seul `openssl x509 -noout -ext subjectAltName` tranche.
 
 La forme correcte en une commande, avec OpenSSL 3 :
 
@@ -675,7 +669,7 @@ b) est faux : une mise à jour de paquet laisse bien des processus avec un binai
 `/usr/sbin/nginx (deleted)`, pas `/tmp/.x`. Savoir distinguer les deux cas évite
 autant les faux positifs que les angles morts.
 
-d) est l'erreur de débutant sous stress : tuer détruit la preuve, alerte
+c) est l'erreur de débutant sous stress : tuer détruit la preuve, alerte
 l'attaquant, et ne traite ni la persistance (cron, unité systemd, clé SSH
 ajoutée) ni le vecteur d'entrée. Le processus reviendra dans cinq minutes.
 :::
@@ -694,7 +688,7 @@ connexion**, grâce au suivi de connexion du noyau — *conntrack*.
 
 Le chemin : un paquet entrant traverse les hooks netfilter dans l'ordre
 `prerouting`, décision de routage, puis `input` s'il est destiné à la machine.
-Avant même `prerouting`, le module `nf_conntrack` examine le paquet et lui
+Dès le hook `prerouting` (priorité -200, avant `mangle` et `nat`), le module `nf_conntrack` examine le paquet et lui
 attribue un état :
 
 | État | Signification |
@@ -1199,7 +1193,7 @@ niveau 2 point par point, et tenir un **registre des écarts** — pour chaque
 contrôle non appliqué, la raison, le risque résiduel accepté, et qui l'a accepté.
 C'est ce registre que l'auditeur veut voir, pas un score de 100 %.
 
-Outillage : `oscap xccdf eval --profile cis_level1_server` avec
+Outillage : `oscap xccdf eval --profile cis_server_l1` avec
 `scap-security-guide` (Rocky), les rôles Ansible `ansible-lockdown`, et `lynis`
 pour un avis rapide et non normatif.
 
@@ -1266,8 +1260,7 @@ sudo ufw enable                                             # 4. on arme
 ::: pourquoi
 L'ordre est la seule chose qui compte. `ufw enable` applique immédiatement la
 politique par défaut ; si aucune règle n'autorise ton SSH à ce moment-là, ta
-session en cours est coupée net — les connexions déjà établies sont certes
-acceptées par la règle `ESTABLISHED` de `before.rules`, mais tu ne pourras pas
+session en cours survit en général ( la règle `ESTABLISHED` de `before.rules` l'accepte), mais tu ne pourras pas
 te reconnecter, et le moindre incident réseau te met dehors définitivement.
 
 `ufw enable` affiche d'ailleurs l'avertissement
@@ -1306,7 +1299,7 @@ Ports:
 Les profils sont de simples fichiers INI dans `/etc/ufw/applications.d/`,
 déposés par les paquets. Leur intérêt n'est pas d'éviter de taper « 80 » : c'est
 que la règle **suit le logiciel**. Si une version future de nginx ajoute un port,
-la mise à jour du profil suffit, et `ufw app update nginx` recharge les règles
+la mise à jour du profil suffit, et `ufw app update 'Nginx Full'` recharge les règles
 qui s'y réfèrent.
 
 Leur limite : un profil ne porte que des ports, pas de source. Pour une règle
@@ -1430,7 +1423,7 @@ questions.
 Un « service » firewalld n'est pas un service systemd : c'est un fichier XML de
 `/usr/lib/firewalld/services/` qui nomme un ou plusieurs ports (et parfois des
 modules conntrack). `firewall-cmd --get-services` les liste,
-`--info-service=https` détaille. Nommer les services plutôt que les ports rend la
+`- -info-service=https` détaille. Nommer les services plutôt que les ports rend la
 configuration lisible en audit — c'est l'avantage principal de firewalld.
 :::
 
@@ -1439,7 +1432,7 @@ configuration lisible en audit — c'est l'avantage principal de firewalld.
 **E18.9** — *Rich rule PostgreSQL depuis 10.10.10.11 seulement.*
 
 ```bash
-sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" \
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4"
   source address="10.10.10.11/32" port port="5432" protocol="tcp" accept'
 sudo firewall-cmd --reload
 sudo firewall-cmd --list-all | grep -A2 'rich rules'
@@ -1704,9 +1697,8 @@ notAfter=Sep 16 17:34:09 2036 GMT
 
 ::: pourquoi
 `openssl req -x509` fait deux choses d'un coup : il crée une demande et
-l'auto-signe. Les extensions d'une CA — `basicConstraints = critical,CA:TRUE` et
-`keyUsage = keyCertSign, cRLSign` — sont ajoutées automatiquement par OpenSSL 3
-dans ce mode ; on peut les imposer avec `-addext` pour être explicite.
+l'auto-signe. `basicConstraints = critical,CA:TRUE` ( et les identifiants de clé) est ajouté automatiquement, via la section `v3_ca` du `openssl.cnf` par défaut; en revanche
+`keyUsage = critical,keyCertSign,cRLSign` y est commenté : on l'impose avec `-addext` pour être explicite.
 
 `chmod 600` immédiatement, avant toute autre commande : une clé de CA est le
 secret le plus critique de l'infrastructure. Quiconque l'obtient peut émettre un
@@ -1846,7 +1838,7 @@ place.
 
 ```bash
 sudo lynis audit system
-sudo grep -E '^(hardening_index|suggestion)=' /var/log/lynis-report.dat \
+sudo grep -E '^(hardening_index=|suggestion\[\]=)' /var/log/lynis-report.dat \
   | head -6
 ```
 
@@ -2014,7 +2006,7 @@ tu as ouvert un chemin non filtré. Contrôle : `sudo ip -6 addr` et
 `sudo ufw status numbered` où les règles `(v6)` apparaissent explicitement.
 
 **Docker sur `lab-ops`.** Docker écrit ses propres règles dans la chaîne
-`DOCKER-USER` et dans le `nat`, **en amont** des chaînes ufw. Un conteneur lancé
+`DOCKER` (via `FORWARD`) et dans la table `nat`, **en amont** des chaînes ufw. Un conteneur lancé
 avec `-p 5432:5432` est joignable depuis tout le réseau malgré `ufw default deny
 incoming`. Le contrôle est `sudo iptables -S DOCKER-USER` et le correctif est de
 publier sur `127.0.0.1:5432:5432` ou d'ajouter des règles dans `DOCKER-USER`.
@@ -2056,7 +2048,7 @@ sudo fail2ban-client status sshd
 # /etc/fail2ban/filter.d/nginx-scan.conf
 [Definition]
 cible = (?:wp-login\.php|\.env|admin\.php|phpmyadmin/|\.git/config)
-failregex = ^<HOST> -[^"]*"[A-Z]+ /%(cible)s\S*[^"]*" (?:403|404) 
+failregex = ^<HOST> -[^"]*"[A-Z]+ /%(cible)s\S*[^"]*" (?:403|404)\s
 ignoreregex =
 datepattern = ^[^\[]*\[({DATE})
 ```
@@ -2133,8 +2125,8 @@ Status for the jail: nginx-scan
   section. On sort ainsi la liste des chemins du corps de la regex, ce qui
   la rend relisible et modifiable sans y toucher — c'est exactement ce que
   fait `jail.conf` avec `%(__prefix_line)s`.
-* `(?:403|404) ` avec l'espace final : le code de statut est le champ qui suit la
-  requête. Sans lui, on bannirait aussi les requêtes réussies — donc les tiens.
+* `(?:403|404) ``\s` : le code de statut est le champ qui suit la
+  requête (un espace littéral en fin de ligne serait supprimé par le `ConfigParser`). Sans lui, on bannirait aussi les requêtes réussies — donc les tiens.
 
 **Le `datepattern`.** Le format `combined` place la date entre crochets après
 l'IP. fail2ban sait le reconnaître seul dans la plupart des cas, mais le déclarer
@@ -2712,7 +2704,7 @@ laisse aucune place à l'interprétation.
 
 ::: piege
 Variante du même piège, à connaître parce qu'elle est plus fréquente encore en
-entreprise : **Docker**. Le démon insère ses règles dans `DOCKER-USER` et dans la
+entreprise : **Docker**. Le démon insère ses règles dans la chaîne `DOCKER` et dans la
 table `nat`, en amont des chaînes ufw, et fait du DNAT avant que `ufw-user-input`
 ne soit consulté. Conséquence : un conteneur publié avec `-p 5432:5432` est
 joignable depuis tout le réseau **malgré** `ufw default deny incoming`, et
@@ -2762,15 +2754,16 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost/rapport.html   # 200
 **Correctif niveau 2 — que ça ne se reproduise plus**
 
 ```bash
-sudo semanage fcontext -a -t httpd_sys_content_t \
-     "/usr/share/nginx/html(/.*)?"     # ici déjà couvert par la politique
+# pas de semanage ici : /usr/share/nginx/html(/.*)? est déjà déclaré
+# httpd_sys_content_t par la politique (semanage -a répondrait
+# « already defined ») ; il suffit de réappliquer
 sudo restorecon -Rv /usr/share/nginx/html
 # et surtout, l'automatisme :
 sudo systemctl enable --now restorecond     # paquet policycoreutils-restorecond
 ```
 
 **Prévention** : `restorecond` surveille une liste de chemins
-(`/etc/selinux/restorecond.conf`) et réétiquette automatiquement tout fichier qui
+(`/etc/selinux/restorecond.conf`, où l'on ajoute `/usr/share/nginx/html/*`) et réétiquette automatiquement tout fichier qui
 y apparaît avec un mauvais contexte. C'est le filet pour les répertoires
 alimentés par des humains. Côté procédure, la règle à faire connaître est simple :
 on ne dépose pas de contenu web avec `mv` depuis un home, on utilise `cp` (ou
@@ -2784,14 +2777,13 @@ expliquer :
 | Commande | Appel système | Inode | Contexte |
 |---|---|---|---|
 | `mv` (même FS) | `rename()` | conservé | **conservé** |
-| `mv` (autre FS) | `copy` + `unlink` | nouveau | hérité de la destination |
+| `mv` (autre FS) | `copy` + `unlink` | nouveau | recopié de la source |
 | `cp` | `open(O_CREAT)` | nouveau | hérité de la destination |
 | `cp -a`, `cp --preserve=context` | idem | nouveau | **copié de la source** |
 
-D'où le comportement déroutant : le même `mv` produit le bon contexte quand il
-traverse deux systèmes de fichiers, et le mauvais quand il reste sur le même.
-Sur une machine où `/home` est une partition séparée, la panne ne se produit
-même pas — ce qui explique le « chez moi ça marche » du collègue.
+D'où la règle simple : `mv` conserve le contexte dans tous les cas, y compris quand il
+traverse deux systèmes de fichiers (GNU `mv` recopie alors les attributs étendus).
+Seul `mv -Z` applique le contexte par défaut de la destination — option que personne ne tape.
 
 Les deux niveaux de correction sont une distinction d'exploitation, pas une
 subtilité SELinux : le premier remet le service en état (traitement du symptôme),
@@ -2844,12 +2836,16 @@ openssl s_client -connect 127.0.0.1:443 </dev/null 2>/dev/null | \
 La clé privée **ne change pas** : on réémet un certificat pour la même clé. La CA
 n'est pas touchée, donc rien à redistribuer côté clients.
 
+Depuis `lab-adm`, le message de `curl` n'est pas `certificate has expired` mais `unable to get local issuer certificate` : le certificat périmé en place n'a pas été émis par ta CA de lab (seule `lab-web` connaît son émetteur). `openssl x509 -noout -issuer` le montre. La réémission par ta CA règle les deux symptômes d'un coup.
+
 **Prévention — le mécanisme qui aurait alerté quinze jours avant**
 
 ```bash
 # /etc/cron.d/verif-certs  (ou un timer systemd)
-0 7 * * * root /usr/local/bin/verif-certs.sh app.lab.local:443 \
-          || logger -p auth.warning "certificat TLS proche expiration"
+# cron ne connaît pas le « \ » de continuation : une entrée = une ligne
+PATH=/usr/local/bin:/usr/bin:/bin
+MSG=certificat TLS proche expiration
+0 7 * * * root verif-certs.sh app.lab.local:443 || logger -p auth.warning "$MSG"
 ```
 
 avec `verif-certs.sh` de L18.4, qui sort en 1 sous 30 jours et en 2 sous 15
@@ -2880,7 +2876,7 @@ Les trois automatismes qui règlent définitivement la question :
 
 ---
 
-### **BF18.4** — « Je n'arrive plus à me connecter en SSH, sauf depuis le bastion »
+### **BF18.4** — « Je n'arrive plus à me connecter en SSH, mais seulement depuis le bastion »
 
 **Démarche de diagnostic**
 
@@ -3191,7 +3187,7 @@ exit 0
 ```
 
 ```bash
-~/lab18/bin/audit-securite.sh > ~/lab18/rapport-lab-web.md
+~/lab18/bin/audit-securite.sh -> ~/lab18/rapport-T3.md   # lab-adm lui-même
 echo $?
 for h in 10.10.10.11 10.10.10.12 10.10.10.13 10.10.10.14; do
   ssh "mathieu@$h" 'bash -s' < ~/lab18/bin/audit-securite.sh \
@@ -3204,7 +3200,7 @@ Les décisions de conception qui font la valeur du livrable :
 
 **Séparation stdout / stderr.** Le rapport sur stdout, la trace sur stderr. C'est
 ce qui rend `audit-securite.sh > rapport.md` utilisable tel quel, et
-`ssh hôte 'bash -s' < audit-securite.sh >> rapport-global.md` utilisable pour
+`ssh hôte 'bash -s' < audit-securite.sh » rapport-global.md` utilisable pour
 auditer tout un parc **sans rien installer sur les machines cibles**. Le script
 voyage par stdin, s'exécute, et renvoie son rapport : c'est le mode d'emploi d'un
 auditeur qui n'a pas de droit de dépôt.

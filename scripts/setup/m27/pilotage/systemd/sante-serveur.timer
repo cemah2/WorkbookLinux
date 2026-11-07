@@ -2,8 +2,8 @@
 Description=Rapport de santé toutes les 15 minutes
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=15min
+# Persistent= ne rattrape les exécutions manquées qu'avec OnCalendar=
+OnCalendar=*:0/15
 RandomizedDelaySec=60
 Persistent=true
 

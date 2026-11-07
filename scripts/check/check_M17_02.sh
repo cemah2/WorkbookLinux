@@ -119,13 +119,13 @@ fi
 if [ -x "$SCRIPT" ]; then
   AVANT=$(ls -1 "$BACK" 2>/dev/null | wc -l)
   runuser -u factura -- env -i PATH=/usr/bin:/bin HOME=/srv/factura \
-    SHELL=/bin/sh "$SCRIPT" >/tmp/.m14_02.out 2>&1
+    SHELL=/bin/sh "$SCRIPT" >/tmp/.m17_02.out 2>&1
   RC=$?
   APRES=$(ls -1 "$BACK" 2>/dev/null | wc -l)
   [ "$RC" -eq 0 ] \
     && ok "exécution dans un environnement de type cron : code 0" \
     || ko "exécution en environnement cron : code $RC (voir \
-/tmp/.m14_02.out) — c'est exactement ce que cron fera à 02:30"
+/tmp/.m17_02.out) — c'est exactement ce que cron fera à 02:30"
   [ "$APRES" -gt "$AVANT" ] \
     && ok "une archive a été produite dans $BACK" \
     || ko "aucune nouvelle archive dans $BACK après exécution"
@@ -144,7 +144,7 @@ if [ -x "$SCRIPT" ]; then
 
   # --- 6. deux exécutions simultanées ---------------------------------
   A=$(ls -1 "$BACK" 2>/dev/null | wc -l)
-  VERROU=$(grep -oE '/var/lock/[^ ]*' "$CRND" 2>/dev/null | head -1)
+  VERROU=$(grep -oE '/(var|run)/lock/[^ ]*' "$CRND" 2>/dev/null | head -1)
   VERROU="${VERROU:-/var/lock/factura-sauvegarde.lock}"
   ( flock -n "$VERROU" -c "sleep 4" ) &
   sleep 1

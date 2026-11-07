@@ -16,7 +16,9 @@ if command -v getfacl >/dev/null 2>&1; then
 fi
 
 # --- on retire le SGID (2770 -> 0770) : plus d'héritage de groupe -------
-chmod 0770 "$DIR"
+# (GNU chmod CONSERVE le SGID d'un répertoire avec « chmod 0770 » : il faut
+# un zéro de plus, ou la forme symbolique g-s)
+chmod 00770 "$DIR"
 
 # --- et on efface toute ACL par défaut : plus de w de groupe hérité -----
 if command -v setfacl >/dev/null 2>&1; then

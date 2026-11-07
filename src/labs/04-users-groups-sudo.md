@@ -55,6 +55,8 @@ sudo apt install -y sudo passwd libpam-pwquality libpam-modules whois acl
 `libpam-pwquality` fournit `pam_pwquality.so` et `/etc/security/pwquality.conf`,
 absents d'une installation Ubuntu Server par défaut.
 
+Sur `lab-web`, le lab L4.3 suppose nginx installé (`sudo apt install -y nginx`).
+
 ::: rhel
 Sous Rocky 9 : `sudo dnf install -y sudo shadow-utils libpwquality
 pam authselect`. Le groupe d'administration est **`wheel`**, pas `sudo`, et
@@ -149,9 +151,8 @@ seulement avec `-m`. Modifier `/etc/skel` n'a aucun effet rétroactif.
 | ≥ 1000 | `UID_MIN` / `UID_MAX` dans `/etc/login.defs` | humains |
 | 65534 | — | `nobody` |
 
-`/etc/login.defs` porte aussi `PASS_MAX_DAYS`, `PASS_MIN_DAYS`, `PASS_WARN_AGE`,
-`ENCRYPT_METHOD` et `UMASK` : ce sont les **valeurs par défaut appliquées aux
-comptes créés ensuite**, jamais aux comptes existants.
+`/etc/login.defs` porte aussi `PASS_MAX_DAYS`, `PASS_MIN_DAYS`, `PASS_WARN_AGE` : ce sont les **valeurs par défaut appliquées aux
+comptes créés ensuite**, jamais aux comptes existants. `UMASK`, lui, est relu à chaque ouverture de session par `pam_umask`.
 
 ### Identité effective
 
@@ -204,7 +205,7 @@ sudo -l                           # ce que J'AI le droit de faire
 sudo -l -U karim                  # ce que KARIM a le droit de faire
 sudo -u www-data -- cmd           # exécute en tant que www-data
 sudo -i                           # shell de login root : PATH, HOME, cd /root
-sudo -s                      # shell root, garde TON environnement et TON cwd
+sudo -s                      # shell root, garde TON cwd (HOME=/root sur Ubuntu)
 sudo -k                           # oublie le ticket, redemande le mot de passe
 ```
 
@@ -266,13 +267,15 @@ n'interroge que le fichier local. Sur une machine jointe à un annuaire
 (LDAP/SSSD/AD), un compte peut exister pour le système sans figurer dans
 `/etc/passwd` : `getent` est le seul verdict qui compte.
 
-@fig(users-auth-flow): Ouvrir une session (sshd, PAM, NSS, fichiers de comptes ou SSSD) et élever ses droits (`sudo`, PAM, `sudoers`, commande en root) : deux chaînes à connaître avant de dépanner un « accès refusé ».
+@fig(users-auth-flow): Ouvrir une session
+
+login / sshd / su l'application demande « qui est-ce? » PAM `/etc/pam.d/sshd auth` mot de passe, clé, faillock `account` compte valide, non expiré? `session` limits, home, journal pile de modules, lue dans l'ordre NSS `/etc/nsswitch.conf passwd: files sss` · `group: files sss` « à quoi ressemble ce compte? » (`getent`) `files /etc/passwd /etc/group /etc/shadow sss` SSSD → LDAP / AD l'ordre des sources est celui de la ligne ; `shadow` reste `files` et n'est lu que par PAM session ouverte uid, gid, groupes, shell de `passwd` Élever ses droits Ouvrir une session (sshd, PAM, NSS, fichiers de comptes ou SSSD) et élever ses droits (`sudo`, PAM, `sudoers`, commande en root) : deux chaînes à connaître avant de dépanner un « accès refusé ».
 
 ---
 
 ## 4.3 Quiz — QCM
 
-**Q4.1** — Sur `lab-adm`, `getent passwd facturasvc` renvoie :
+**Q4.1** — Sur un serveur, `getent passwd facturasvc` renvoie :
 
 ```text
 facturasvc:x:998:998::/var/lib/facturasvc:/usr/sbin/nologin
@@ -665,7 +668,7 @@ sudo bash check_M04_01.sh
 Audit interne. L'application `factura` tourne sous le compte `facturasvc`, créé
 il y a deux ans par un prestataire avec `adduser facturasvc` et un mot de passe
 noté dans un wiki. Le compte a un UID d'humain, un shell `bash`, un home dans
-`/home` et appartient au groupe `sudo`. Le processus applicatif tourne déjà (il
+`/home` et appartient au groupe `sudo`. Le processus applicatif tourne déjà (`/opt/factura/bin/factura-daemon`, lancé par le script de mise en place, sans unité systemd; il
 lit `/opt/factura/etc/factura.conf`) et l'auditeur exige la remise en conformité
 avec une **fenêtre d'interruption la plus courte possible** : tu devras justifier
 chaque seconde d'arrêt dans ton rapport.
@@ -859,7 +862,7 @@ sudo bash break_M04_02.sh
 
 **Symptôme utilisateur** : `karim` ne peut plus ouvrir de session. En SSH par mot
 de passe il obtient `Permission denied, please try again.` ; depuis ta session
-root, `su - karim` répond `su: Authentication failure` — alors que root n'a
+root, `su - karim` est refusé avec un message qui parle d'expiration (`Your account has expired; please contact your system administrator`) — alors que root n'a
 aucun mot de passe à saisir, ce qui est un indice en soi. Son home existe, ses
 fichiers sont intacts, et son compte apparaît bien dans `getent passwd`.
 
@@ -886,8 +889,7 @@ sudo bash break_M04_03.sh
 
 **Symptôme utilisateur** : `karim` était membre de `sudo`, `deploy` et `factura`.
 Après une opération d'ajout au groupe `docker` par un collègue pressé, `sudo -l`
-lui répond `Sorry, user karim may not run sudo on lab-adm.`, il n'accède plus aux
-partages de `/srv/factura`, et le déploiement échoue. Le collègue jure n'avoir
+lui répond `Sorry, user karim may not run sudo on lab-adm.`, il n'accède plus à `/opt/factura/data`, et le déploiement échoue. Le collègue jure n'avoir
 tapé qu'**une seule** commande.
 
 **Interdit** : deviner la liste des groupes — tu dois la **retrouver** à partir

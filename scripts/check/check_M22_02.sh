@@ -72,15 +72,15 @@ grep -qE '^FROM .* AS ' "$API/Dockerfile" 2>/dev/null \
   && ok "Dockerfile multi-stage" || ko "pas de multi-stage (FROM … AS …)"
 
 # --- 3. comportement : démarrage, santé, arrêt propre -------------------
-docker rm -f chk18-02 >/dev/null 2>&1
-if docker run -d --name chk18-02 -p 127.0.0.1:18002:8000 "$IMG" \
+docker rm -f chk22-02 >/dev/null 2>&1
+if docker run -d --name chk22-02 -p 127.0.0.1:18002:8000 "$IMG" \
    >/dev/null 2>&1; then
   for _ in $(seq 1 30); do
-    [ "$(docker inspect chk18-02 --format '{{.State.Health.Status}}' \
+    [ "$(docker inspect chk22-02 --format '{{.State.Health.Status}}' \
       2>/dev/null)" = healthy ] && break
     sleep 1
   done
-  [ "$(docker inspect chk18-02 --format '{{.State.Health.Status}}')" \
+  [ "$(docker inspect chk22-02 --format '{{.State.Health.Status}}')" \
     = healthy ] && ok "le conteneur passe à healthy" \
     || ko "le conteneur ne devient pas healthy en 30 s (docker inspect \
 --format '{{json .State.Health}}')"
@@ -91,15 +91,15 @@ if docker run -d --name chk18-02 -p 127.0.0.1:18002:8000 "$IMG" \
   [ "$UID_APP" = 10001 ] && ok "l'API tourne avec l'UID 10001" \
     || ko "l'API tourne avec l'UID ${UID_APP:-?} au lieu de 10001"
   DEBUT=$(date +%s%N)
-  docker stop chk18-02 >/dev/null 2>&1
+  docker stop chk22-02 >/dev/null 2>&1
   DUREE=$(( ($(date +%s%N) - DEBUT) / 1000000 ))
   [ "$DUREE" -lt 2000 ] && ok "docker stop en ${DUREE} ms" \
     || ko "docker stop a pris ${DUREE} ms : PID 1 sourd à SIGTERM"
-  [ "$(docker inspect chk18-02 --format '{{.State.ExitCode}}')" = 0 ] \
+  [ "$(docker inspect chk22-02 --format '{{.State.ExitCode}}')" = 0 ] \
     && ok "code de sortie 0 après stop" \
-    || ko "code de sortie $(docker inspect chk18-02 \
+    || ko "code de sortie $(docker inspect chk22-02 \
 --format '{{.State.ExitCode}}') après stop (attendu 0)"
-  docker rm -f chk18-02 >/dev/null 2>&1
+  docker rm -f chk22-02 >/dev/null 2>&1
 else
   ko "impossible de lancer l'image (port 18002 pris ? docker logs)"
 fi

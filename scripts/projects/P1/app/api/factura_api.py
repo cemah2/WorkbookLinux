@@ -26,6 +26,7 @@ import psycopg
 import redis
 from flask import Flask, Response, jsonify, request
 from psycopg.rows import dict_row
+from werkzeug.exceptions import HTTPException
 
 VERSION = "1.0.0"
 DB_URL = os.environ.get(
@@ -66,6 +67,8 @@ def after(resp):
 
 @app.errorhandler(Exception)
 def on_error(exc):
+    if isinstance(exc, HTTPException):   # 404, 405... : code d'origine
+        return exc
     log.error("erreur non geree: %s", exc)
     return jsonify(error=str(exc)), 500
 

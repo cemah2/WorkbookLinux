@@ -3,7 +3,7 @@
 Ce chapitre ne t'apprend pas Linux. Il te donne un laboratoire reproductible,
 une méthode de travail et les réflexes qui te serviront pendant les 27 modules
 et les 3 projets. Compte une demi-journée pour tout monter, et fais-le
-sérieusement : chaque module suppose que ces six VM existent, avec ces noms,
+sérieusement : chaque module suppose que ces sept VM existent, avec ces noms,
 ces IP et ce snapshot `snap-clean`.
 
 ---
@@ -75,33 +75,32 @@ Tu peux lire le code des `break` **après** avoir résolu la panne, pas avant.
 
 ### Le planning
 
-Environ 170 heures de travail. À 12 h par semaine, ça tient en 14 semaines ;
-le tableau ci-dessous en prévoit 16 avec de la marge. Pour tenir en 12,
-fusionne les semaines 9-10 et 15-16.
+Environ 285 heures de travail (210 h de modules, 75 h de projets). À 12 h par semaine, compte 24 semaines. Le tableau ci-dessous découpe le parcours en 19 étapes : celles qui dépassent 12 h ( les étapes 5, 6, 7, 8, 13, 15, 16 et les trois projets) s'étalent sur deux, voire trois semaines réelles.
 
-| Semaine | Modules / projets | Heures | Jalon |
+| Étape | Modules / projets | Heures | Jalon |
 |---|---|---|---|
 | 1 | 01 shell, 02 système de fichiers | 9 | lab monté, carnet ouvert |
 | 2 | 03 permissions, 04 utilisateurs et sudo | 10 | premier Break & Fix |
 | 3 | 05 traitement de texte, 06 vim et archives | 11 | rapport `access.log` |
 | 4 | 07 scripting bash | 7 | dépôt Git perso créé |
-| 5 | 08 processus et systemd, 09 noyau et démarrage | 13 | un service maison durci |
-| 6 | 10 paquets, 11 stockage et LVM | 13 | disque de VM agrandi à chaud |
-| 7 | 12 réseau, 13 réseau avancé | 14 | deux netns qui se parlent via VXLAN |
-| 8 | 14 SSH, 15 services applicatifs | 13 | bastion + PostgreSQL sauvegardé |
+| 5 | 08 processus et systemd, 09 noyau et démarrage | 14 | un service maison durci |
+| 6 | 10 paquets, 11 stockage et LVM | 18 | disque de VM agrandi à chaud |
+| 7 | 12 réseau, 13 réseau avancé | 21 | deux netns qui se parlent via VXLAN |
+| 8 | 14 SSH, 15 services applicatifs | 15 | bastion + PostgreSQL sauvegardé |
+| **Étape** | **Modules / projets** | **Heures** | **Jalon** |
 | 9 | 16 logs et supervision, 17 planification | 11 | logs centralisés |
 | 10 | 18 sécurité | 8 | pare-feu multi-machines |
-| 11 | 19 dépannage et incident | 10 | premier post-mortem |
-| 12 | P1 « Factura » à la main | 10 | app déployée, documentée |
-| 13 | 20 virtualisation KVM, 21 Git | 12 | VM libvirt clonée par script |
-| 14 | 22 Docker et Compose | 8 | image publiée sur registre |
-| 15 | 23 Ansible, 24 OpenTofu / cloud-init | 14 | VM créée par le code |
-| 16 | 25 CI/CD Gitea Actions, 26 k3s + observabilité | 14 | pipeline vert |
-| 17 | 27 Python pour l'ops | 8 | outil packagé sous timer |
-| 18 | P2 « Factura » industrialisée | 12 | `git push` → prod |
-| 19 | P3 une semaine d'astreinte | 10 | 5 incidents résolus |
+| 11 | 19 dépannage et incident | 11 | premier post-mortem |
+| 12 | P1 « Factura » à la main | 20 à 30 | app déployée, documentée |
+| 13 | 20 virtualisation KVM, 21 Git | 15 | VM libvirt clonée par script |
+| 14 | 22 Docker et Compose | 11 | image publiée sur registre |
+| 15 | 23 Ansible, 24 OpenTofu / cloud-init | 18 | VM créée par le code |
+| 16 | 25 CI/CD Gitea Actions, 26 k3s + observabilité | 22 | pipeline vert |
+| 17 | 27 Python pour l'ops | 9 | outil packagé sous timer |
+| 18 | P2 « Factura » industrialisée | 30 à 40 | `git push` → prod |
+| 19 | P3 une semaine d'astreinte | 12 à 16 | 5 incidents résolus |
 
-Les heures sont celles des `Temps estimé` des modules. Si tu débordes de
+Les heures sont celles des `Temps estimé` des modules et des projets. Si tu débordes de
 30 %, c'est normal. Si tu débordes de 100 %, tu ne respectes pas la règle
 des 20 minutes ou tu lis les corrigés avant de chercher.
 
@@ -141,7 +140,7 @@ vérifiées par SHA256), clone et démarre les 7 VM, passe `bootstrap-lab.sh`
 partout, dépose les scripts dans `~/workbook/` sur `lab-adm`, installe
 Gitea sur `lab-git`, pose `snap-clean` et termine par `lab-doctor.sh`.
 Chaque phase détecte ce qui est déjà fait : en cas de coupure, relance
-avec `--from <phase>` (`--help` liste les phases, `--dry-run` montre ce
+avec `- -from <phase>` (`--help` liste les phases, `--dry-run` montre ce
 qui serait fait). Journal dans `/var/log/lab-deploy.log`. La suite de ce
 chapitre décrit pas à pas ce que le script fait, pour comprendre.
 :::
@@ -383,7 +382,7 @@ Le stockage (`local-lvm`) et le bridge externe (`vmbr0`) sont des variables
 de `lab-env.sh` : `LAB_STORAGE=local-zfs bash make-templates.sh` si ton nœud
 est en ZFS.
 
-### Clonage des six VM : `lab-create.sh`
+### Clonage des sept VM : `lab-create.sh`
 
 Le script lit la table des VM dans `lab-env.sh` et, pour chacune, enchaîne :
 
@@ -426,7 +425,7 @@ Continue avec §0.4 et §0.5 ; le snapshot vient **après** le bootstrap.
 
 ### Le snapshot `snap-clean`
 
-Une fois les six VM bootstrapées (§0.5), pose le snapshot de référence :
+Une fois les sept VM bootstrapées (§0.5), pose le snapshot de référence :
 
 ```bash
 bash lab-create.sh snapshot
@@ -441,7 +440,7 @@ VM redémarre proprement. C'est ce qu'on veut pour un état de référence.
 ### `lab-reset.sh` et `lab-status.sh`
 
 ```bash
-bash lab-reset.sh                    # rollback des 6 VM sur snap-clean
+bash lab-reset.sh                    # rollback des 7 VM sur snap-clean
 bash lab-reset.sh lab-db             # une seule
 bash lab-reset.sh --snap avant-lab11 lab-db   # un autre snapshot
 bash lab-reset.sh --list lab-db      # ses snapshots
@@ -516,7 +515,9 @@ Host lab-ops
 Host lab-git
     HostName 10.10.10.15
 
-Host lab-web lab-db lab-rhel lab-ops lab-git
+Host lab-virt
+    HostName 10.10.10.16
+Host lab-web lab-db lab-rhel lab-ops lab-git lab-virt
     User mathieu
     ProxyJump lab-adm
     IdentityFile ~/.ssh/id_ed25519_lab
@@ -524,7 +525,7 @@ Host lab-web lab-db lab-rhel lab-ops lab-git
 ```
 
 `lab-adm` est atteint par le port 2222 du nœud (la règle DNAT de §0.3) ;
-les cinq autres passent par `lab-adm` avec `ProxyJump`, sans transfert
+les six autres passent par `lab-adm` avec `ProxyJump`, sans transfert
 d'agent. Le module 14 explique pourquoi c'est la bonne façon de faire.
 
 Ensuite : `ssh lab-adm`, puis `ssh lab-db`. Pour **VS Code**, installe
@@ -574,6 +575,7 @@ ajoute le nœud et, si tu utilises la route statique, les VM :
 10.10.10.13   lab-rhel
 10.10.10.14   lab-ops
 10.10.10.15   lab-git lab-git.lab.local
+10.10.10.16   lab-virt
 ```
 
 Sans route statique, les entrées `10.10.10.x` ne servent qu'aux modules web
@@ -585,20 +587,19 @@ utiliseront.
 ### Copier les scripts du workbook sur les VM
 
 Le workbook est livré avec `workbook.zip` (les dossiers `scripts/` et
-`src/`). Il doit finir dans `~/workbook/` sur **chaque** VM. Le script
-`bootstrap-lab.sh` s'en charge s'il trouve `~/workbook.zip` ; il suffit donc
+`src/`); `make zip-scripts` (§0.9) produit l'équivalent réduit aux scripts, `workbook-scripts.zip`. L'un ou l'autre doit finir dans `~/workbook/` sur **chaque** VM. Le script
+`bootstrap-lab.sh` s'en charge s'il trouve `~/workbook.zip` ou `~/workbook-scripts.zip` ; il suffit donc
 d'envoyer le zip et le script lui-même :
 
 ```bash
 # depuis ton poste, dans le dossier du workbook
-for h in lab-adm lab-web lab-db lab-rhel lab-ops lab-git; do
+for h in lab-adm lab-web lab-db lab-rhel lab-ops lab-git lab-virt; do
   scp workbook.zip scripts/lab/bootstrap-lab.sh "$h:~/"
 done
 ```
 
 Sous Windows, `scp` est fourni avec OpenSSH ; en PowerShell la boucle
-s'écrit `foreach ($h in 'lab-adm','lab-web','lab-db','lab-rhel','lab-ops',
-'lab-git') { scp workbook.zip scripts/lab/bootstrap-lab.sh "${h}:~/" }`.
+s'écrit `foreach ($h in 'lab-adm','lab-web','lab-db','lab-rhel','lab-ops', 'lab-git','lab-virt') { scp workbook.zip scripts/lab/bootstrap-lab.sh "${h}:~/" }`.
 La première connexion à chaque VM te demande d'accepter sa clé d'hôte :
 compare-la avec `qm terminal <vmid>` si tu veux être rigoureux (module
 14), réponds `yes` sinon.
@@ -653,15 +654,15 @@ publique mal collée dans `lab-keys.pub` ou une VM qui n'a pas fini de booter.
 
 Le script installe l'outillage commun (`vim curl git tmux htop jq tree
 net-tools dnsutils rsync unzip shellcheck`, plus `qemu-guest-agent` et
-`chrony`), écrit les six entrées du lab dans `/etc/hosts` (et empêche
-cloud-init de les écraser au reboot), règle le fuseau sur `Europe/Paris`,
+`chrony`), écrit les sept entrées du lab dans `/etc/hosts` (et empêche
+cloudinit de les écraser au reboot), règle le fuseau sur `Europe/Paris`,
 active un historique bash horodaté, pose un motd qui rappelle le rôle de la
 machine, et déballe `~/workbook.zip` dans `~/workbook/`. Sous Rocky il
 active EPEL pour `htop` et `ShellCheck`, et remplace `dnsutils` par
 `bind-utils`.
 
 ```bash
-for h in lab-adm lab-web lab-db lab-rhel lab-ops lab-git; do
+for h in lab-adm lab-web lab-db lab-rhel lab-ops lab-git lab-virt; do
   echo "== $h"; ssh -t "$h" 'sudo bash ~/bootstrap-lab.sh'
 done
 ```
@@ -674,8 +675,8 @@ Vérifie ensuite ce qui compte :
 
 ```bash
 ssh lab-web 'date; getent hosts lab-db; shellcheck --version | head -2'
-# jeu. 18 sept. 2026 21:04:12 CEST
-# 11.10.10.12     lab-db.lab.local lab-db
+# Fri Sep 18 21:04:12 CEST 2026
+# 10.10.10.12     lab-db.lab.local lab-db
 # ShellCheck - shell script analysis tool
 # version: 0.9.0
 ssh lab-adm 'ls ~/workbook/scripts'
@@ -757,7 +758,7 @@ multipass list                       # IP attribuées en DHCP
 Limites : les IP ne sont pas fixes (mets-les dans `/etc/hosts` de chaque VM
 après `multipass list`, et refais-le si elles changent), pas de disques
 additionnels pour `lab-db` (le module 11 travaille alors sur des fichiers
-images montés en *loop*, le corrigé le prévoit), et pas de snapshot pratique
+images montés en *loop*, le corrigé le prévoit), pas de `lab-virt` (la virtualisation imbriquée du module 20 n'est pas accessible sous Multipass), et pas de snapshot pratique
 (`multipass snapshot` existe depuis la 1.13 mais reste lent ; `multipass
 delete --purge` + relance est souvent plus rapide).
 
@@ -798,7 +799,8 @@ Vagrant.configure("2") do |config|
         end
       end
       vm.vm.provision "shell", inline: <<-SH
-        useradd -m -s /bin/bash -G sudo,wheel mathieu 2>/dev/null || true
+        useradd -m -s /bin/bash mathieu 2>/dev/null || true
+        usermod -aG sudo mathieu 2>/dev/null || usermod -aG wheel mathieu
         echo 'mathieu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/mathieu
         install -d -m 700 -o mathieu -g mathieu /home/mathieu/.ssh
         cp /vagrant/lab-keys.pub /home/mathieu/.ssh/authorized_keys
@@ -812,11 +814,10 @@ end
 
 Le nom du contrôleur SATA dépend de la box (`SATA Controller` pour les box
 `bento`) ; vérifie avec `VBoxManage showvminfo`. Sur `lab-rhel`, le groupe
-`sudo` n'existe pas : le `useradd -G sudo,wheel` échoue, d'où le `|| true`
-suivi du fichier `sudoers.d`. Ensuite `bootstrap-lab.sh` s'applique tel
+`sudo` n'existe pas (et `wheel` n'existe pas sur Ubuntu) : d'où le `usermod` de repli, et le fichier `sudoers.d` qui suffit de toute façon. Ensuite `bootstrap-lab.sh` s'applique tel
 quel. Le réseau `private_network` est de type *host-only* : tu accèdes
 directement aux IP depuis ton poste, sans bastion ; garde le `ProxyJump` de
-§0.4 quand même, c'est lui que les modules supposent.
+§0.4 quand même, c'est lui que les modules supposent. `lab-virt` n'est pas dans ce `Vagrantfile` : VirtualBox n'expose la virtualisation imbriquée que sur certains processeurs (`--nested-hw-virt on`), et le module 20 reste à faire sur un vrai hyperviseur.
 
 ### Docker : pour certains modules seulement
 
@@ -848,19 +849,6 @@ puis loue deux petites VM chez un hébergeur le temps des modules 08 à 19 :
 le coût est de l'ordre d'une dizaine d'euros par mois, et c'est un vrai
 serveur avec une vraie IP publique, ce qui rend le module 18 plus sérieux.
 Le module 20 (KVM imbriqué) exige un vrai hyperviseur ou un serveur dédié.
-
----|---|
-| 08 (partiel) | pas de `systemd` PID 1, pas de cgroups délégués, OOM killer partagé |
-| 10 | pas de périphériques bloc, pas de LVM, `mdadm`, LUKS ni `fstab` |
-| 11 (partiel) | pas de Netplan / NetworkManager, `sysctl` réseau et `tcpdump` limités |
-| 15 (partiel) | pas de `nftables`/`firewalld` réel, pas de SELinux/AppArmor propre |
-| 12, 13, 14 | `sshd`, `journald`, `rsyslog`, `cron` demandent une init : faisable avec une image systemd, pénible |
-| 16, 18 à 22 | dépannage système, Docker-in-Docker, k3s : non |
-
-Si Docker est ta seule option, fais les modules 01 à 07 et 10 dedans, puis
-loue deux petites VM chez un hébergeur le temps des modules 08, 11 à 19 :
-le coût est de l'ordre d'une dizaine d'euros par mois, et c'est un vrai
-serveur avec une vraie IP publique, ce qui rend le module 18 plus sérieux.
 
 ---
 
@@ -1018,7 +1006,7 @@ echo '10.10.10.15 lab-git' >> /root/lab/lab.hosts && systemctl restart dnsmasq
 ```
 
 Puis, sur **chaque** VM existante, relance `sudo bash ~/bootstrap-lab.sh`
-(la nouvelle version écrit six entrées dans `/etc/hosts`) ou ajoute la
+(la nouvelle version écrit sept entrées dans `/etc/hosts`) ou ajoute la
 ligne `10.10.10.15  lab-git.lab.local  lab-git` toi-même. Ajoute aussi le
 bloc `Host lab-git` dans le `~/.ssh/config` de tes postes (§0.4) et
 l'entrée dans leur fichier `hosts`. Enfin, envoie le zip et bootstrape :
@@ -1263,8 +1251,7 @@ alors en ligne de commande :
 Dans l'interface : avatar en haut à droite → *Paramètres* → *Clés SSH /
 GPG* → *Ajouter une clé*. Colle la clé publique de ton poste
 (`~/.ssh/id_ed25519_lab.pub`, §0.4) puis celle de `lab-adm` (crée-la si
-besoin : `ssh lab-adm 'ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
--C mathieu@lab-adm && cat ~/.ssh/id_ed25519.pub'`). Gitea écrit chaque
+besoin : `ssh lab-adm 'ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -C mathieu@lab-adm & cat ~/.ssh/id_ed25519.pub'`). Gitea écrit chaque
 clé dans `/home/git/.ssh/authorized_keys` avec une option `command=` qui
 force l'exécution de `gitea serv` : la clé ne donne **pas** de shell sur
 `lab-git`, seulement le droit de parler Git. Vérifie :
@@ -1330,8 +1317,8 @@ is-enabled gitea` répond `enabled`.
 
 Une forge qu'on ne sauvegarde pas est un point de défaillance unique
 déguisé en sauvegarde. Gitea fournit `gitea dump`, qui produit un zip
-autoportant : `gitea-db.sql` (la base), `gitea-repo.zip` (tous les
-dépôts), `data/` (LFS, avatars, pièces jointes), `log/`, `custom/` et
+autoportant : `gitea-db.sql` (la base), `repos/` (tous les dépôts; `gitea-repo.zip` dans les
+anciennes versions), `data/` (LFS, avatars, pièces jointes), `log/`, `custom/` et
 `app.ini`. Le script `backup-gitea.sh` l'appelle sous l'utilisateur
 `git`, dans `/var/backups/gitea/`, et garde les 7 derniers :
 
@@ -1342,6 +1329,7 @@ sudo install -m 644 ~/workbook/scripts/lab/gitea-backup.{service,timer} \
 sudo systemctl daemon-reload
 sudo systemctl enable --now gitea-backup.timer
 sudo systemctl start gitea-backup.service        # premier dump, tout de suite
+journalctl -u gitea-backup.service -n 2 -o cat   # sa sortie va au journal
 # dump : /var/backups/gitea/gitea-dump-20260921-101502.zip (3.1M)
 # OK  1 dump(s) dans /var/backups/gitea
 systemctl list-timers gitea-backup.timer --no-pager
@@ -1356,8 +1344,8 @@ fausse manipulation, pas d'un disque perdu. Rapatrie-le ailleurs — sur ton
 poste, une fois par semaine :
 
 ```bash
-# depuis ton poste (la lecture demande sudo : le dossier est en 750 git)
-ssh lab-git 'sudo cat $(ls -t /var/backups/gitea/*.zip | head -1)' \
+# depuis ton poste (le dossier est en 750 git:git : lecture via sudo)
+ssh lab-git 'sudo bash -c "cat \$(ls -t /var/backups/gitea/*.zip | head -1)"' \
   > ~/sauvegardes/gitea-$(date +%F).zip
 ```
 
@@ -1370,7 +1358,8 @@ sudo apt install -y sqlite3
 cd /tmp && sudo -u git mkdir restore && cd restore
 sudo -u git unzip -q /var/backups/gitea/gitea-dump-20260921-101502.zip
 sudo cp app.ini /etc/gitea/app.ini && sudo chown root:git /etc/gitea/app.ini
-sudo -u git unzip -q gitea-repo.zip -d /var/lib/gitea/data/
+sudo -u git cp -a repos/. /var/lib/gitea/data/gitea-repositories/
+# ancien format : sudo -u git unzip -q gitea-repo.zip -d /var/lib/gitea/data/
 sudo -u git cp -a data/. /var/lib/gitea/data/
 sudo -u git sqlite3 /var/lib/gitea/data/gitea.db < gitea-db.sql
 sudo -u git gitea admin regenerate hooks --config /etc/gitea/app.ini
@@ -1466,9 +1455,9 @@ sudo ln -s /etc/nginx/sites-available/gitea /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Et dans `app.ini`, trois lignes changent : `HTTP_ADDR = 127.0.0.1` (Gitea
-n'est plus joignable que par nginx), `ROOT_URL = https://lab-git.lab.local/`
-et, dans `[server]`, `PROTOCOL = http` reste (c'est nginx qui fait le TLS).
+Et dans `app.ini`, deux lignes changent : `HTTP_ADDR = 127.0.0.1` (Gitea
+n'est plus joignable que par nginx) et `ROOT_URL = https://lab-git.lab.local/`
+; dans `[server]`, `PROTOCOL = http` reste (c'est nginx qui fait le TLS).
 `sudo systemctl restart gitea`, remplace la DNAT `3000` par `443` dans
 `lab-nat.sh`, importe le certificat de ta CA dans les navigateurs. Tant
 que la PKI n'existe pas, reste en HTTP sur 3000 : dans un LAN privé, ce
@@ -1485,7 +1474,9 @@ cliquer sur « accepter le risque ».
 | `ssh -T` répond mais `git push` échoue : `gitea: command not found` | le `command=` de `authorized_keys` pointe sur un binaire déplacé : `regenerate keys` ; ou `AcceptEnv`/`PermitUserEnvironment` : rien à changer dans `sshd_config` normalement |
 | L'installateur web réapparaît après restart | `INSTALL_LOCK = false` dans `app.ini` (restauré d'un vieux fichier) : passe-le à `true` |
 | Liens de l'interface vers une mauvaise adresse | `ROOT_URL` ne correspond pas à l'URL tapée : corrige `app.ini`, restart |
-| Doute général | `sudo -u git gitea doctor check --all --config /etc/gitea/app.ini` puis, pour corriger ce qu'il sait corriger, `... doctor check --all --fix` |
+| Doute général | `sudo -u git gitea doctor check --all --config /` |
+|  | `etc/gitea/app.ini` puis, pour corriger ce qu'il sait corriger, `.` |
+|  | `.. doctor check --all --fix` |
 
 `gitea doctor` est ton `fsck` : il vérifie la cohérence base ↔ dépôts sur
 disque, les hooks, les clés, les droits. Lance-le après chaque
@@ -1495,7 +1486,7 @@ restauration et chaque mise à jour.
 Pose le snapshot `snap-clean` de `lab-git` **après** tout ça
 (`qm snapshot 9006 snap-clean`), et sache que sur cette VM tu ne feras
 jamais `qm rollback` : elle n'est pas un terrain de jeu, c'est ton
-serveur. Les labs destructeurs se font sur les cinq autres.
+serveur. Les labs destructeurs se font sur les six autres.
 :::
 
 ---
@@ -1529,7 +1520,7 @@ linux-devops-workbook/
 │   ├── labs/MXX-slug.md     énoncés
 │   └── solutions/MXX-slug.md corrigés
 ├── scripts/                 setup/ check/ break/ lab/ lib/ projects/
-├── tex/  css/               template LaTeX, filtre pandoc, feuille de style
+├── tex/  fonts/             template LaTeX, filtre pandoc, polices embarquées
 └── reponses/                TON TRAVAIL : un fichier par lab
     ├── README.md            comment ranger
     └── M07/L7.2.md          un exemple
@@ -1601,20 +1592,20 @@ exercices guidés d'un module (ils sont trop courts pour un fichier
 chacun). Le modèle vide est `reponses/M07/L7.2.md` ; rempli, ça donne :
 
 ```markdown
-# L7.2 — Rotation des journaux applicatifs
+# L7.2 — Exploiter l'inventaire CSV du parc
 
-Date : 2026-10-03 · Durée : 1 h 10 · VM : lab-web
+Date : 2026-10-03 · Durée : 1 h 10 · VM : lab-adm
 
 ## Démarche
-1. `ls -la /var/log/factura/` : 14 fichiers, 2,1 Go, aucun compressé.
+1. `wc -l inventaire.csv` → 10 : en-tête + 10 hôtes, le dernier sans `\n`.
 2. ...
 
 ## Résultat
 `bash check_M07_02.sh` → 6 réussis, 0 échoué.
 
 ## Ce que j'ai appris / à revoir
-- `logrotate -d` simule sans agir : à utiliser AVANT `-f`.
-- Bloqué 20 min sur `su` dans le bloc logrotate : voir corrigé, *pourquoi*.
+- `read` rend 1 sur une dernière ligne sans `\n` : `|| [[ -n $h ]]`.
+- Bloqué 20 min sur le 5e champ avalé par `read` : voir corrigé, *pourquoi*.
 ```
 
 Les scripts que tu écris pour un défi vont à côté (`reponses/M07/D7/
@@ -1659,11 +1650,10 @@ l'historique (module 21 : `git filter-repo`) — et sur GitHub, dans les
 
 Deux stratégies raisonnables :
 
-* **Un commit par lab, directement sur `main`** : `feat(M07): L7.2
-  rotation des journaux`. Simple, linéaire, et `git log --oneline` raconte
+* **Un commit par lab, directement sur `main`** : `feat(M07): L7.2 inventaire CSV du parc`. Simple, linéaire, et `git log --oneline` raconte
   ta progression jour par jour. C'est la recommandation pour les modules
   01 à 19.
-* **Une branche par module** (`m17-git`, `m18-docker`), fusionnée par
+* **Une branche par module** (`m21-git`, `m22-docker`), fusionnée par
   *pull request* dans Gitea à la fin du module : tu t'entraînes au *review*
   et aux PR, et tu peux « fermer » un module proprement. C'est la
   recommandation à partir du module 21, qui introduit précisément ce
@@ -1681,9 +1671,9 @@ Le format `type(portée): sujet`, en minuscules, à l'impératif, sans point
 final, sujet ≤ 72 caractères :
 
 ```text
-feat(M07): L7.2 rotation des journaux applicatifs
-feat(M11): D11 script d'extension LVM à chaud
-fix(M03): E3.4 corrige le calcul de l'umask
+feat(M07): L7.2 inventaire CSV du parc
+feat(M11): D11 volume de sauvegarde RAID chiffré et surveillé
+fix(M03): E3.4 corrige les droits de ~/lab03/lecture
 docs(carnet): séance du 2026-10-03
 chore(scripts): mes/backup.sh passe shellcheck
 ```
@@ -1700,14 +1690,15 @@ ajouter un hook qui refuse les messages hors format.
 ### Régénérer les PDF
 
 La chaîne est Markdown → pandoc (avec le filtre `tex/divs.lua` pour les
-encadrés) → XeLaTeX. Sur ton poste Ubuntu 24.04 ou dans WSL :
+encadrés) → XeLaTeX. Les polices (Source Sans 3, JetBrains Mono, Font Awesome) sont livrées dans `fonts/` : rien à installer de ce côté. Sur ton poste Ubuntu 24.04 ou dans WSL :
 
 ```bash
 sudo apt update
 sudo apt install -y pandoc texlive-xetex texlive-latex-extra \
-  texlive-fonts-recommended fonts-dejavu python3
-python3 build.py              # les 3 PDF, ~4 min la première fois
-# Workbook-Linux-DevOps-3-Memo.pdf: 56 pages, 0 overfull hbox
+  texlive-fonts-recommended python3 python3-pypdf
+python3 build.py              # les 3 volumes + le livret A5, ~4 min
+# Workbook-Linux-DevOps-3-Memo.pdf: 102 pages, 0 overfull hbox
+# Workbook-Linux-DevOps-3-Memo-livret-A5.pdf: 26 faces A4 (104 pages A5)
 # Workbook-Linux-DevOps-1-Enonces.pdf: 492 pages, 9 overfull hbox
 # Workbook-Linux-DevOps-2-Corriges.pdf: 888 pages, 16 overfull hbox
 python3 build.py memo         # un seul volume
@@ -1719,7 +1710,7 @@ check-ids` (vérifie que chaque identifiant d'énoncé a son corrigé, via
 `scripts/lib/check_ids.py`), `make clean` (vide `build/`), `make
 zip-scripts` (produit `build/workbook-scripts.zip` à copier sur les VM,
 §0.4). `texlive-latex-extra` pèse 1 Go avec ses recommandations : c'est
-le prix de `tcolorbox`, `titlesec` et `fvextra`. Les « overfull hbox »
+le prix de `tcolorbox`, `titlesec` et `fvextra` ; `python3-pypdf` ne sert qu'au livret A5 du mémo. Les « overfull hbox »
 sont des lignes de code qui dépassent la marge ; s'il y en a plus d'une
 dizaine, une source contient une ligne de plus de 80 colonnes.
 
@@ -1734,7 +1725,7 @@ name: build-pdf
 on:
   push:
     branches: [main]
-    paths: ["src/**", "tex/**", "build.py", ".gitea/workflows/**"]
+    paths: ["src/**", "tex/**", "fonts/**", "build.py", ".gitea/workflows/**"]
   workflow_dispatch:
 
 jobs:
@@ -1742,12 +1733,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Dépendances (pandoc, XeLaTeX, DejaVu)
+      - name: Dépendances (pandoc, XeLaTeX, pypdf)
         run: |
           apt-get update -q
           DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
             pandoc texlive-xetex texlive-latex-extra \
-            texlive-fonts-recommended fonts-dejavu python3
+            texlive-fonts-recommended python3 python3-pypdf
       - name: Identifiants énoncés / corrigés
         run: python3 scripts/lib/check_ids.py
       - name: Construction des PDF
@@ -1824,8 +1815,8 @@ git commit -m "docs(readme): auteur et date de démarrage"
 git push
 ```
 
-Et complète-le à chaque jalon du planning (§0.1) : une ligne « Semaine 4 :
-module 07 terminé, D7 dans `reponses/M07/D7/` ». En seize semaines, ce
+Et complète-le à chaque jalon du planning (§0.1) : une ligne « Étape 4 :
+module 07 terminé, D7 dans `reponses/M07/D7/` ». En une vingtaine de semaines, ce
 README devient la table des matières de ton portfolio, sans effort
 supplémentaire.
 

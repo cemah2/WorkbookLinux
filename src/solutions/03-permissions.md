@@ -45,6 +45,8 @@ $ ls -l docs/
 ls: cannot access 'docs/a.txt': Permission denied
 ls: cannot access 'docs/b.txt': Permission denied
 total 0
+-????????? ? ? ? ?            ? a.txt
+-????????? ? ? ? ?            ? b.txt
 ```
 :::
 
@@ -76,7 +78,7 @@ rm: remove write-protected regular file 'secret.txt'? y
 $ 
 ```
 
-`rm` pose une question de confortation (le fichier est en lecture seule) mais
+`rm` pose une question de confirmation (le fichier est en lecture seule) mais
 l'efface bien : `rm -f` la supprime.
 :::
 
@@ -293,7 +295,7 @@ donnerait des fichiers exécutables, ce qu'on ne veut pas.
 ::: pourquoi
 L'attribut `i` (immuable) est géré par le **système de fichiers**, en dessous du
 modèle de permissions ugo, et il s'applique **y compris à root**. Un fichier immuable
-ne peut être ni modifié, ni rencommé, ni supprimé, ni lié en dur, et son contenu ne
+ne peut être ni modifié, ni renommé, ni supprimé, ni lié en dur, et son contenu ne
 peut être ouvert en écriture — quel que soit l'UID. La seule façon de le toucher est
 de retirer d'abord l'attribut avec `chattr -i` (ce qui nécessite la capability
 `CAP_LINUX_IMMUTABLE`, que root a par défaut mais qu'on peut retirer à un conteneur).
@@ -326,7 +328,7 @@ capability** au binaire, et rien d'autre. Le processus tourne alors sous un comp
 non privilégié, ne possède que le pouvoir de binder un port bas, et rien de plus :
 s'il est compromis, l'attaquant n'hérite pas des pouvoirs de root.
 
-`=+ep` positionne la capability dans les ensembles **e**ffective et **p**ermitted
+`=+ep` positionne la capability dans les ensembles **effective** et **permitted**
 du fichier, ce qui la rend active dès le lancement sans que le programme ait à la
 demander lui-même.
 :::
@@ -363,8 +365,8 @@ $ ssh lab-web    # fonctionne maintenant
 Le même contrôle s'applique au répertoire `~/.ssh` (attendu `700`) et au fichier
 `~/.ssh/authorized_keys` côté serveur : si `~/.ssh` ou le home sont inscriptibles
 par le groupe, `sshd` peut refuser l'authentification par clé (option
-`StrictModes yes`, activée par défaut). Le diagnostic se lit dans
-`/var/log/auth.log` : `Authentication refused: bad ownership or modes`.
+`StrictModes yes`, activée par défaut). Le diagnostic se lit dans `journalctl -u ssh` (ou
+`/var/log/auth.log` si rsyslog est installé) : `Authentication refused: bad ownership or modes`.
 :::
 
 ---
@@ -868,6 +870,8 @@ seul mécanisme qui automatise l'héritage de droits fins.
 **E3.11** — *Corriger le masque pour rendre `webdev:rwx` effectif.*
 
 ```bash
+# situation de départ (énoncé) : masque explicite, donc non recalculé
+sudo setfacl -m u:webdev:rwx,m::r /srv/factura/exports
 sudo setfacl -m mask::rwx /srv/factura/exports
 getfacl /srv/factura/exports
 # user:webdev:rwx    (plus de #effective restrictif)
@@ -941,9 +945,9 @@ proprement. C'est la mécanique de base derrière le remplacement d'un SUID.
 chmod 700 ~/lab03/secrets
 chmod 600 ~/lab03/secrets/id_ed25519
 chmod 644 ~/lab03/secrets/config
-# Une clé privée en 644 est lisible par le groupe et par tous : ssh refuse de
-# l'utiliser (StrictModes) car n'importe quel utilisateur local pourrait la
-# copier et usurper l'identité.
+# Une clé privée en 644 est lisible par le groupe et par tous : le client ssh
+# refuse de l'utiliser (contrôle intégré au client, sans rapport avec
+# StrictModes qui est côté sshd) car tout utilisateur local pourrait la copier.
 ```
 
 ::: pourquoi
@@ -966,8 +970,8 @@ umask 027
 ::: pourquoi
 `umask 027` donne exactement `640`/`750` (cf. Q3.4). Pour couvrir shells interactifs
 **et** de login, pose-le dans `~/.bashrc` **et** `~/.profile` (ou, système entier,
-dans `/etc/login.defs` + `pam_umask`). Le mettre seulement dans `~/.bashrc` laisse
-les shells de login non couverts.
+dans `/etc/login.defs` + `pam_umask`). Sur Ubuntu, le `~/.profile` par défaut source `~/.bashrc` pour bash; le poser aussi dans `~/.profile` couvre
+les shells de login non bash et un `~/.profile` qui ne sourcerait plus `~/.bashrc`.
 :::
 
 ---
@@ -1016,7 +1020,7 @@ collaboratif réellement fonctionnel.
 
 ::: piege
 S'arrêter à `2770` sans ACL (ni umask `002`) est l'erreur la plus fréquente : le
-groupe est bon mais les fichiers restent `rw-r--r--`, et « on ne peut pas modifier
+groupe est bon mais les fichiers restent `rw-r- -r--`, et « on ne peut pas modifier
 le fichier du collègue » alors que « pourtant on est dans le bon groupe ». Le
 symptôme trompe : le groupe est correct, ce sont les **bits `w`** qui manquent.
 :::
@@ -1028,7 +1032,8 @@ symptôme trompe : le groupe est correct, ce sont les **bits `w`** qui manquent.
 **Procédure de référence :**
 
 ```bash
-# 1. état initial : webdev n'accède pas
+# 1. état initial : webdev est un auditeur externe, hors du groupe
+sudo gpasswd -d webdev facturation        # s'il y avait été mis en L3.1
 sudo -u webdev ls /srv/factura/exports    # Permission denied
 
 # 2 & 3. ACL d'accès (existant) + ACL par défaut (futur), récursif
@@ -1047,7 +1052,7 @@ Le `X` majuscule est essentiel dans une pose récursive : il donne `x` (travers�
 répertoires et l'omet sur les fichiers, exactement ce qu'il faut pour « lire une
 arborescence » sans rendre les fichiers exécutables. `-R -m` couvre l'existant,
 `-R -d -m` installe le patron pour tout ce qui sera créé plus tard. `webdev` obtient
-`r-x` sur les répertoires (lister + traverser) et `r--` sur les fichiers, jamais de
+`r-x` sur les répertoires (lister + traverser) et `r- -` sur les fichiers, jamais de
 `w` : lecture stricte. `other` reste `---`, donc personne d'autre n'est exposé.
 :::
 
@@ -1098,7 +1103,7 @@ neutralisé, non modifiable).
 `-perm 4000` (sans tiret) ne trouverait presque rien : aucun binaire n'a un mode
 strictement `4000` (il faut au moins un `x`). L'inventaire doit utiliser `-perm
 -4000`. Second piège : supprimer le binaire au lieu de retirer le bit — l'énoncé
-demande de le conserver.
+demande de le conserver. Nuance technique : `factura-backup` est un **script** (shebang). Le noyau Linux ignore le bit SUID des scripts interprétés, donc ce fichier précis ne s'exécute pas en root. C'est quand même un écart d'audit (un bit qui n'a rien à faire là, et qui deviendrait exploitable le jour où l'outil est réécrit en binaire compilé) : le scénario de `PATH` hijacking décrit plus haut vaut pour un ELF.
 :::
 
 ---
@@ -1108,6 +1113,8 @@ demande de le conserver.
 **Procédure de référence :**
 
 ```bash
+# 0. nginx tient déjà le port 80 sur lab-web : on le libère le temps du lab
+sudo systemctl stop nginx
 # 1. échec en non-root
 sudo -u facturation /usr/local/bin/factura-api --port 80
 # bind: Permission denied (port < 1024 réservé)
@@ -1120,6 +1127,7 @@ getcap /usr/local/bin/factura-api
 # 4. preuve : bind OK en non-root
 sudo -u facturation /usr/local/bin/factura-api --port 80 &
 ss -tlnp | grep ':80 '     # LISTEN, processus non root
+kill %1 ; sudo systemctl start nginx     # on rend le port à nginx
 ```
 
 ::: pourquoi
@@ -1163,9 +1171,8 @@ sudo -u www-data namei -l /var/www/factura/index.html
 # f: /var/www/factura/index.html
 #  drwxr-xr-x root root  /
 #  drwxr-xr-x root root  var
-#  drw-r--r-- root root  www          <- pas de x : traversée impossible
-#  drwxr-xr-x root root  factura
-#  -rw-r--r-- root root  index.html
+# drwxr-xr-- root root www      <- other sans x : www-data ne traverse pas
+#                      factura - Permission denied
 
 # 3. confirmer que le fichier lui-même est bon
 ls -l /var/www/factura/index.html    # 644, rien à corriger ici
@@ -1221,10 +1228,10 @@ ls -ld /srv/factura/exports
 getfacl /srv/factura/exports | grep default
 # (aucune ligne default: -> le patron d'héritage a disparu)
 
-# 3. reproduire le symptôme
-sudo -u webdev touch /srv/factura/exports/t
+# 3. reproduire le symptôme (mathieu est membre de facturation)
+touch /srv/factura/exports/t
 ls -l /srv/factura/exports/t
-# -rw-r--r-- 1 webdev webdev ...   <- groupe webdev, pas facturation ; g sans w
+# -rw-r--r-- 1 mathieu mathieu ...  <- groupe mathieu, pas facturation, g sans w
 ```
 
 **Correctif :**
@@ -1305,7 +1312,7 @@ not permitted` **en root** sur un fichier ordinaire → `lsattr` avant tout.
 Chercher la cause dans les permissions (`ls -l`), le propriétaire ou un montage `ro`
 fait perdre du temps : ici tout est normal de ce côté. L'attribut est invisible sauf
 à `lsattr`. Prévention : documenter tout `chattr +i` posé en production, et inclure
-un `chattr -i` en préambule des procédures qui doivent réécrire le fichier.
+un `chattr -i` en préambule des procédures qui doivent réécrire le fichier. Note Ubuntu : sur `lab-web`, `/etc/resolv.conf` est normalement un lien vers `/run/systemd/resolve/stub-resolv.conf` ; le script de panne l'a remplacé par un fichier réel pour que `chattr` ait prise. Une fois l'exercice terminé, rétablis le lien : `sudo ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf`.
 :::
 
 ---
@@ -1331,7 +1338,8 @@ CONF=/etc/factura/factura.conf
 SECRETS=/etc/factura/secrets
 EXPORTS=/srv/factura/exports
 API=/usr/local/bin/factura-api
-anomalies=0
+anomalies=0      # ce qui était mauvais avant correction (pour le rapport)
+restantes=0      # ce qui n'a pas pu être corrigé (code de retour)
 
 log()  { printf '   %s\n' "$*" >&2; }
 note() { printf '- %s\n' "$*"; }          # va dans le rapport (stdout)
@@ -1341,7 +1349,7 @@ echo
 echo "## Anomalies détectées"
 
 # --- arborescence web : 755/644, www-data, aucun exécutable parasite --------
-if find "$WEB" -type f -perm -111 | grep -q .; then
+if [ -n "$(find "$WEB" -type f -perm /111 -print -quit)" ]; then
   note "fichiers exécutables parasites sous $WEB"; anomalies=1
 fi
 log "normalisation de $WEB"
@@ -1361,7 +1369,7 @@ if [ -d "$SECRETS" ]; then
   chmod 700 "$SECRETS"
   find "$SECRETS" -type f -exec chmod 600 {} +
 else
-  note "répertoire de secrets $SECRETS absent"; anomalies=1
+  note "répertoire de secrets $SECRETS absent"; anomalies=1; restantes=1
 fi
 
 # --- exports : 2770 groupe facturation + ACL par défaut ---------------------
@@ -1371,7 +1379,7 @@ if command -v setfacl >/dev/null; then
   setfacl -d -m g:facturation:rw "$EXPORTS"
 else
   note "setfacl absent : impossible de garantir le w de groupe hérité"
-  anomalies=1
+  anomalies=1; restantes=1
 fi
 
 # --- SUID parasite sous /usr/local/bin --------------------------------------
@@ -1397,12 +1405,12 @@ note "exports  : $(stat -c '%a %U:%G' "$EXPORTS")"
 [ -x "$API" ] && note "api caps : $(getcap "$API" 2>/dev/null || echo none)"
 
 echo
-if [ "$anomalies" -eq 0 ]; then
-  echo "Conforme."
+if [ "$restantes" -eq 0 ]; then
+  echo "Conforme ($anomalies anomalie(s) corrigée(s))."
 else
-  echo "Des anomalies ont été corrigées ou nécessitent une action manuelle."
+  echo "Non conforme : une anomalie nécessite une action manuelle."
 fi
-exit "$anomalies"
+exit "$restantes"
 ```
 
 ::: pourquoi
@@ -1421,7 +1429,7 @@ bons résultats. Points clés du corrigé :
 * les SUID parasites sont retirés (`u-s`), et l'API reçoit une **capability** plutôt
   qu'un SUID (L3.4) ;
 * séparation stricte stdout (rapport) / stderr (trace) et code de sortie exploitable,
-  pour intégration en CI.
+  pour intégration en CI : `0` dès que l'état final est conforme, même si des anomalies ont été corrigées au passage; `1` seulement s'il en reste une hors de portée du script (cahier des charges, point 4).
 
 Le tout est **idempotent** : relançable sans effet de bord, ce qu'exige un script de
 remédiation qui tournera à chaque déploiement.

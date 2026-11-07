@@ -36,7 +36,7 @@ r=$(adhoc 'id -u ansible; visudo -cf /etc/sudoers.d/ansible')
 
 # --- 2. paquets ------------------------------------------------------------
 r=$(adhoc 'for p in htop vim curl tree chrony; do command -v $p; done | wc -l')
-[ "$(printf '%s\n' "$r" | grep -c '| 5$')" -eq 4 ] \
+[ "$(printf '%s\n' "$r" | grep -c '(stdout) 5$')" -eq 4 ] \
   && ok "htop vim curl tree chrony présents sur les 4 hôtes" \
   || ko "il manque un paquet du tronc commun sur un hôte"
 
@@ -44,14 +44,15 @@ r=$(adhoc 'for p in htop vim curl tree chrony; do command -v $p; done | wc -l')
 r=$(adhoc 'timedatectl show -p Timezone --value')
 [ "$(printf '%s\n' "$r" | grep -c 'Europe/Paris')" -eq 4 ] \
   && ok "fuseau Europe/Paris partout" || ko "fuseau incorrect sur un hôte"
-r=$(adhoc 'systemctl is-active chrony chronyd 2>/dev/null | grep -c ^active')
-[ "$(printf '%s\n' "$r" | grep -c '| 1$')" -eq 4 ] \
+CHRONY='systemctl is-active -q chrony || systemctl is-active -q chronyd'
+r=$(adhoc "$CHRONY && echo chrony-actif")
+[ "$(printf '%s\n' "$r" | grep -c 'chrony-actif')" -eq 4 ] \
   && ok "chrony actif partout" || ko "chrony(d) inactif sur un hôte"
 
 # --- 4. mises à jour automatiques -----------------------------------------
 r=$(ansible ubuntu -b -m ansible.builtin.shell -o \
       -a 'grep -c "\"1\"" /etc/apt/apt.conf.d/20auto-upgrades' 2>/dev/null)
-[ "$(printf '%s\n' "$r" | grep -c '| 2$')" -eq 3 ] \
+[ "$(printf '%s\n' "$r" | grep -c '(stdout) 2$')" -eq 3 ] \
   && ok "20auto-upgrades configuré sur les 3 Ubuntu" \
   || ko "20auto-upgrades incomplet sur un Ubuntu"
 r=$(ansible rhel -b -m ansible.builtin.shell -o \
@@ -77,15 +78,15 @@ r=$(adhoc 'test -f /etc/ssh/sshd_config.d/50-baseline.conf && echo present')
 # --- 6. pare-feu -----------------------------------------------------------
 r=$(ansible ubuntu -b -m ansible.builtin.shell -o \
       -a 'ufw status | grep -c "^Status: active"' 2>/dev/null)
-[ "$(printf '%s\n' "$r" | grep -c '| 1$')" -eq 3 ] \
+[ "$(printf '%s\n' "$r" | grep -c '(stdout) 1$')" -eq 3 ] \
   && ok "ufw actif sur les 3 Ubuntu" || ko "ufw inactif sur un Ubuntu"
 r=$(ansible ubuntu -b -m ansible.builtin.shell -o \
       -a 'ufw status | grep 9100 | grep -c 10.10.10.14' 2>/dev/null)
-[ "$(printf '%s\n' "$r" | grep -c '| 1$')" -eq 3 ] \
+[ "$(printf '%s\n' "$r" | grep -c '(stdout) 1$')" -eq 3 ] \
   && ok "9100/tcp limité à 10.10.10.14 (ufw)" || ko "règle ufw 9100 depuis 10.10.10.14 absente"
 r=$(ansible rhel -b -m ansible.builtin.shell -o \
       -a 'firewall-cmd --list-rich-rules | grep 9100 | grep -c 10.10.10.14' 2>/dev/null)
-printf '%s\n' "$r" | has '| 1$' \
+printf '%s\n' "$r" | has '(stdout) 1$' \
   && ok "rich rule 9100 depuis 10.10.10.14 (firewalld)" \
   || ko "firewalld : rich rule 9100/10.10.10.14 absente sur lab-rhel"
 

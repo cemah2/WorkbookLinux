@@ -62,10 +62,7 @@ for i in 1 2 3 4 5; do
 done
 mkfile "$A/uploads/scan provisoire.tmp" 70 "2026-09-14 02:00:00"
 
-# propriétaires variés : les fichiers de uploads appartiennent à www-data
-if getent passwd www-data >/dev/null; then
-  chown www-data:www-data "$A/uploads"/* 2>/dev/null || true
-fi
+# propriétaires variés : voir la section 7 (propriétaires finaux)
 
 # fichier creux : 2 Gio apparents, quelques blocs réels
 if [ ! -e "$A/archives/disque-vm.img" ]; then
@@ -89,7 +86,7 @@ mkdir -p "$L"/{source,copie,deplace}
 [ -L "$L/casse.txt" ] || \
   ln -s /srv/factura/inexistant.txt "$L/casse.txt"
 
-# fifo, socket, périphérique caractère : les cinq types de fichiers
+# fifo, socket, périphérique caractère : autres types de fichiers
 [ -p "$L/file-attente" ] || mkfifo "$L/file-attente"
 [ -c "$L/faux-null" ]    || mknod "$L/faux-null" c 1 3
 if [ ! -S "$L/app.sock" ] && command -v python3 >/dev/null; then
@@ -253,8 +250,10 @@ fi
 # 7. Propriétaires finaux
 # ---------------------------------------------------------------------
 chown -R "$LAB_USER":"$LAB_USER" "$BASE"
+# un seul fichier à www-data (E2.11, L2.3). Pas les .jpg : L2.4 doit pouvoir
+# les lier en dur et les modifier sans sudo (fs.protected_hardlinks=1).
 if getent passwd www-data >/dev/null; then
-  chown www-data:www-data "$A/uploads"/*.jpg 2>/dev/null || true
+  chown www-data:www-data "$A/uploads/CV Dupont.pdf" 2>/dev/null || true
 fi
 
 # avertissement si un outil de confort manque

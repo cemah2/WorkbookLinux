@@ -50,12 +50,12 @@ fi
 
 # --- 4. par-proprietaire.txt --------------------------------------------
 if [ -s "$INV/par-proprietaire.txt" ]; then
-  if grep -q 'photo1.jpg' "$INV/par-proprietaire.txt" \
+  if grep -q 'CV Dupont.pdf' "$INV/par-proprietaire.txt" \
      && grep -q 'www-data' "$INV/par-proprietaire.txt"; then
     ok "par-proprietaire.txt liste les fichiers de www-data"
   else
-    ko "par-proprietaire.txt : attendu les .jpg de uploads, propriétaire \
-www-data (find ! -user ...)"
+    ko "par-proprietaire.txt : attendu 'CV Dupont.pdf' (nom entier), \
+propriétaire www-data (find ! -user ...)"
   fi
 fi
 

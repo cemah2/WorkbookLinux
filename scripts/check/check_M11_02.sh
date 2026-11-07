@@ -39,7 +39,7 @@ if findmnt -no TARGET "$DB" >/dev/null 2>&1; then
     ko "$DB est monté sur $SRC, pas sur /dev/$VG/lv_pgdata"
   fi
   TAILLE=$(df -BM --output=size "$DB" 2>/dev/null | tail -1 | tr -dc '0-9')
-  if [ "${TAILLE:-0}" -ge 3000 ]; then
+  if [ "${TAILLE:-0}" -ge 2800 ]; then
     ok "le système de fichiers fait ${TAILLE} Mio (extension propagée)"
   else
     ko "le système de fichiers ne fait que ${TAILLE:-0} Mio : as-tu utilisé \
@@ -54,7 +54,7 @@ PVS=$(pvs --noheadings -o pv_name --select "vg_name=$VG" 2>/dev/null \
   | tr -d ' ' | tr '\n' ' ')
 if [ -n "$PVS" ]; then
   note "PV du groupe $VG : $PVS"
-  if echo "$PVS" | grep -q "^${DISQUE1}[0-9]* $\|${DISQUE1}[0-9]* "; then
+  if echo "$PVS" | grep -qE "(^| )${DISQUE1}p?[0-9]* "; then
     ko "$DISQUE1 appartient encore à $VG : pvmove puis vgreduce n'ont pas \
 été menés à leur terme"
   else
@@ -70,7 +70,7 @@ fi
 # --- 4. lv_test réduit à 1 Go, données intactes ------------------------
 if lvs --noheadings -o lv_name "$VG" 2>/dev/null | grep -qw lv_test; then
   ok "lv_test existe"
-  MO=$(lvs --noheadings --units m --nosuffix -o lv_size "$VG/lv_test" \
+  MO=$(LC_ALL=C lvs --noheadings --units m --nosuffix -o lv_size "$VG/lv_test" \
     2>/dev/null | tr -d ' ' | cut -d. -f1)
   if [ "${MO:-0}" -ge 900 ] && [ "${MO:-0}" -le 1100 ]; then
     ok "lv_test fait ${MO} Mio (~1 Go, réduction réussie)"

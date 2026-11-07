@@ -11,7 +11,7 @@ LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 [ -n "$LAB_HOME" ] || { echo "utilisateur $LAB_USER inconnu" >&2; exit 1; }
 
 BASE="$LAB_HOME/lab14"
-SAUV=/root/.m12-backup
+SAUV=/root/.m14-backup
 HOTE="$(hostname -s)"
 
 echo "== Préparation du module 14 =="
@@ -102,7 +102,7 @@ PORT = 5432
 class Banniere(socketserver.BaseRequestHandler):
     def handle(self):
         self.request.sendall(
-            ("LAB12-DB-OK %s\n" % socket.gethostname()).encode())
+            ("LAB14-DB-OK %s\n" % socket.gethostname()).encode())
 
 class Serveur(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
@@ -116,7 +116,7 @@ EOF
   chmod 755 /opt/lab14/faux-pg.py
   cat > /etc/systemd/system/lab14-db.service <<'EOF'
 [Unit]
-Description=Lab12 — faux service de base de données (port 5432)
+Description=Lab14 — faux service de base de données (port 5432)
 After=network-online.target
 Wants=network-online.target
 
@@ -142,7 +142,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 class App(BaseHTTPRequestHandler):
     def do_GET(self):
-        corps = ("LAB12-APP-OK %s\n" % socket.gethostname()).encode()
+        corps = ("LAB14-APP-OK %s\n" % socket.gethostname()).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(corps)))
@@ -157,7 +157,7 @@ EOF
   chmod 755 /opt/lab14/faux-app.py
   cat > /etc/systemd/system/lab14-app.service <<'EOF'
 [Unit]
-Description=Lab12 — fausse application locale (127.0.0.1:3000)
+Description=Lab14 — fausse application locale (127.0.0.1:3000)
 After=network.target
 
 [Service]

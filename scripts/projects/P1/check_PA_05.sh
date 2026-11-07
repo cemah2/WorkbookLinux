@@ -72,7 +72,9 @@ deny all"
   else
     ko "impossible de lire le certificat servi sur 443"
   fi
-  openssl s_client -connect 127.0.0.1:443 -tls1_1 </dev/null >/dev/null 2>&1 \
+  # SECLEVEL=0 : sinon le client OpenSSL d'Ubuntu refuse lui-même TLS 1.1
+  openssl s_client -connect 127.0.0.1:443 -tls1_1 \
+    -cipher 'DEFAULT:@SECLEVEL=0' </dev/null >/dev/null 2>&1 \
     && ko "TLS 1.1 accepté : ssl_protocols TLSv1.2 TLSv1.3" \
     || ok "TLS 1.1 refusé"
   openssl s_client -connect 127.0.0.1:443 -tls1_3 -servername "$FQDN" \

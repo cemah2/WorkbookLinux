@@ -52,12 +52,14 @@ tourne pas en continu"
   else
     ko "MemoryMax= absent ou trop large ($MEM) : 512M attendu"
   fi
-  RMS=$(v "$SVC" RuntimeMaxUSec)
-  if [ -n "$RMS" ] && [ "$RMS" != "infinity" ]; then
-    ok "RuntimeMaxSec appliqué ($RMS)"
+  # Type=oneshot : c'est TimeoutStartSec qui borne l'exécution
+  # (RuntimeMaxSec est sans effet sur un oneshot, cf. systemd.service(5)).
+  TSS=$(v "$SVC" TimeoutStartUSec)
+  if [ -n "$TSS" ] && [ "$TSS" != "infinity" ]; then
+    ok "TimeoutStartSec appliqué ($TSS)"
   else
-    ko "RuntimeMaxSec= absent : une sauvegarde bloquée doit être tuée \
-au-delà de 30 minutes (point 2)"
+    ko "TimeoutStartSec= absent : une sauvegarde bloquée doit être tuée \
+au-delà de 30 minutes (point 2 ; RuntimeMaxSec= n'agit pas sur un oneshot)"
   fi
 else
   ko "$SVC introuvable (systemctl cat $SVC)"
@@ -116,15 +118,15 @@ else
 fi
 
 # --- 4. vérification par systemd-analyze ------------------------------
-if systemd-analyze verify "/etc/systemd/system/$TMR" 2>/tmp/.m14_03.v; then
-  if [ -s /tmp/.m14_03.v ]; then
+if systemd-analyze verify "/etc/systemd/system/$TMR" 2>/tmp/.m17_03.v; then
+  if [ -s /tmp/.m17_03.v ]; then
     note "systemd-analyze verify remonte des avertissements :"
-    sed 's/^/        /' /tmp/.m14_03.v
+    sed 's/^/        /' /tmp/.m17_03.v
   else
     ok "systemd-analyze verify passe sans avertissement"
   fi
 else
-  ko "systemd-analyze verify échoue sur $TMR (voir /tmp/.m14_03.v)"
+  ko "systemd-analyze verify échoue sur $TMR (voir /tmp/.m17_03.v)"
 fi
 
 # --- 5. la version cron est neutralisée, pas supprimée ----------------

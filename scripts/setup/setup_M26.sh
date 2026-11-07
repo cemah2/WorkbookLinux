@@ -155,6 +155,9 @@ _lock = threading.Lock()
 _compteurs = {}          # (method, path, code) -> n
 _hist = {}               # path -> {"buckets": [..], "sum": s, "count": n}
 _lest = bytearray(MEM_MB * 1024 * 1024) if MEM_MB else None
+if _lest is not None:            # toucher chaque page : mémoire réellement
+    for _i in range(0, len(_lest), 4096):   # résidente (sinon calloc = 0 RSS)
+        _lest[_i] = 1
 
 
 def log(msg, **kv):
@@ -666,6 +669,7 @@ spec:
       containers:
         - name: api
           image: 10.10.10.14:5000/factura-api:1.0
+          imagePullPolicy: Always
           env:
             - name: DB_HOST
               value: "127.0.0.1"
@@ -876,7 +880,7 @@ volumes:
 EOF
 
 cat > "$OBS/prometheus/prometheus.yml" <<'EOF'
-# prometheus.yml — lab 22. Rechargement : curl -X POST :9090/-/reload
+# prometheus.yml — lab 26. Rechargement : curl -X POST :9090/-/reload
 global:
   scrape_interval: 15s
   evaluation_interval: 15s

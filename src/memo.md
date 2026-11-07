@@ -12,6 +12,7 @@ Référence : Ubuntu 24.04 ; variantes Rocky 9 en ligne (`apt` / `dnf`).
 | `lab-rhel` (9004) | 10.10.10.13 | Rocky 9 : dnf, firewalld, SELinux |
 | `lab-ops` (9005) | 10.10.10.14 | Docker, runner CI, Prometheus, registre |
 | `lab-git` (9006) | 10.10.10.15 | Gitea (binaire + SQLite), dépôt du workbook |
+| `lab-virt` (9007) | 10.10.10.16 | KVM/QEMU/libvirt imbriqués (module 20), `cpu=host` |
 
 Utilisateur `mathieu` partout, réseau `10.10.10.0/24`, passerelle et DNS
 `10.10.10.1`, domaine `lab.local`, snapshot propre `snap-clean`.
@@ -39,7 +40,7 @@ Utilisateur `mathieu` partout, réseau `10.10.10.0/24`, passerelle et DNS
 
 | Commande | Effet |
 |---|---|
-| `!!` / `!$` / `!*` | dernière commande / son dernier argument / tous |
+| `#!` / `!$` / `!*` | dernière commande / son dernier argument / tous |
 | `!nginx` / `!?nginx?` | dernière commande commençant par / contenant |
 | `sudo !!` | rejoue la dernière commande avec sudo |
 | `^ancien^nouveau` | rejoue la dernière commande en remplaçant |
@@ -92,15 +93,17 @@ Utilisateur `mathieu` partout, réseau `10.10.10.0/24`, passerelle et DNS
 |---|---|
 | `bash -l` | shell login : `/etc/profile`, `~/.bash_profile` ou `~/.profile` |
 | `bash` | interactif non-login : `/etc/bash.bashrc`, `~/.bashrc` |
-| `ssh h cmd` / cron | non interactif : rien, sauf `$BASH_ENV` |
-| `echo $-` | contient `i` si interactif, `l` si login |
+| `ssh h cmd/` | `~.bashrc`, mais coupé par la garde `case $-` |
+| cron, `bash -c` | non interactif : rien, sauf `$BASH_ENV` |
+| `echo $-` | contient `i` si interactif |
+| `shopt -q login_shell` | vrai si shell de login |
 | `source ~/.bashrc` | recharge sans se déconnecter |
 
 ### Redirections de base
 
 | Commande | Effet |
 |---|---|
-| `cmd > f` / `cmd >> f` | stdout écrase / ajoute |
+| `cmd > f` / `cmd » f` | stdout écrase / ajoute |
 | `cmd 2> f` | stderr vers `f` |
 | `cmd > f 2>&1` | les deux vers `f` (l'ordre compte) |
 | `cmd &> f` | idem, raccourci bash |
@@ -328,7 +331,8 @@ réduction), inodes alloués dynamiquement, `tune2fs` sans effet.
 | `id mathieu` | groupes réels |
 | `sudo -u www-data stat f` | tester en tant que l'utilisateur |
 | `sudo -u www-data test -r f && echo ok` | test lecture |
-| `getenforce` / `aa-status` | écarter SELinux / AppArmor |
+| `getenforce` / `sudo aa-` |  |
+| `status` | écarter SELinux / AppArmor |
 | `ls -l /dev/log ; ls -ld /run/x` | sockets et répertoires runtime |
 
 ::: piege
@@ -409,7 +413,7 @@ réduction), inodes alloués dynamiquement, `tune2fs` sans effet.
 | `sudo visudo -c` | valide tout |
 | `sudo -l` / `sudo -l -U karim` | ce que je / karim peut faire |
 | `sudo -u www-data -- cmd` | en tant que www-data |
-| `sudo -i` / `sudo -s` | shell login root / shell root, ton env |
+| `sudo -i` / `sudo -s` | shell login root / shell root, ton cwd |
 | `sudo -k` / `sudo -v` | oublie / prolonge le ticket |
 | `sudo -n true` | teste sans prompt (scripts, Ansible) |
 | `sudo -E cmd` | conserve l'environnement (si autorisé) |
@@ -471,7 +475,7 @@ vers `useradd` (non interactif), `authselect` gère PAM.
 | `cat <<-EOF` | retire les tabulations de tête |
 | `diff <(sort a) <(sort b)` | substitution de processus |
 | `cmd \| tee >(gzip > copie.gz) > sortie` | dérivation d'un flux |
-| `set -o pipefail` | le pipeline renvoie le pire code |
+| `set -o pipefail` | le pipeline renvoie le dernier code non nul |
 | `echo "${PIPESTATUS[@]}"` | codes de chaque maillon |
 | `xargs -n 1 -P 4 cmd` | 1 argument par appel, 4 en parallèle |
 | `xargs -I{} mv {} {}.old` | placeholder |
@@ -582,7 +586,8 @@ vers `useradd` (non interactif), `authselect` gère PAM.
 | `jq 'keys' f` / `jq 'length' f` | clés / taille |
 | `jq -c '.' f` | une ligne par objet |
 | `yq -r '.services \| keys[]' f.yaml` | YAML avec `yq` |
-| `yq -o json f.yaml` | conversion |
+| `yq . f.yaml` / `yq -y . f.yaml` | vers JSON (défaut) / YAML |
+| `yaml` | vers JSON (défaut) / YAML |
 | `python3 -m json.tool f.json` | sans jq |
 | `file -i f` | encodage |
 | `iconv -f ISO-8859-1 -t UTF-8 f > f.utf8` | conversion |
@@ -636,14 +641,14 @@ vers `useradd` (non interactif), `authselect` gère PAM.
 | `dw` `d$` `d0` `dG` `dgg` | jusqu'au mot, fin, début, fin/début fichier |
 | `daw` `ciw` `ci"` `ya{` `dap` | objets : mot, guillemets, bloc, paragraphe |
 | `p` `P` / `"ayy` `"ap` | coller après/avant / registre `a` |
-| `>>` `<<` / `>ip` | indenter |
+| `» «` / `>ip` | indenter |
 | `.` / `5.` | rejoue la dernière modification |
 | `xp` / `ddp` | échange deux caractères / deux lignes |
 | `J` | joint la ligne suivante |
 | `~` `gUiw` `guiw` | casse |
 | `v` `V` `Ctrl-V` | visuel caractère, ligne, bloc |
-| `Ctrl-V 30j I # Esc` | commente 30 lignes |
-| `Ctrl-V 30j l x` | décommente |
+| `Ctrl-V 29j I # Esc` | commente 30 lignes |
+| `Ctrl-V 29j x` | décommente |
 | `:%s/x/y/g` / `:%s/x/y/gc` | remplace partout / avec confirmation |
 | `:10,42s/x/y/` / `:'<,'>s/x/y/` | plage / sélection |
 | `:%s#/opt/#/srv/#g` | autre délimiteur |
@@ -769,7 +774,7 @@ shift $((OPTIND-1)); : "${ENV:?-e obligatoire}"
 | `read -r -a champs <<< "$ligne"` | découpe en tableau |
 | `mapfile -t lignes < f` | fichier en tableau |
 | `printf -v var '%05d' 42` | formate dans une variable |
-| `$(( a * b ))` / `(( i++ ))` | arithmétique |
+| `$(( a * b ))` / `(( i + ))` | arithmétique |
 | `local v ; v=$(cmd)` | déclarer puis affecter (garde `$?`) |
 
 ### Tests
@@ -1299,7 +1304,7 @@ Signed-By: /etc/apt/keyrings/docker.gpg
 | `apt-add-repository --remove ppa:x/y` | retire |
 
 Priorités : `100` installé / backports, `500` dépôt, `990` cible `-t`,
-`>1000` rétrograde. `apt-key` est supprimé : `Signed-By` uniquement.
+`>1000` rétrograde. `apt-key` est déprécié (retiré après 24.04) : `Signed-By` uniquement.
 
 ### RHEL / Rocky
 
@@ -1540,7 +1545,7 @@ Loi de Little : `iodepth ≈ IOPS × latence`. `r_await` (`iostat -x`) ≈ `clat
 | `mdadm --create /dev/md1 -l 5 -n 3 /dev/sd{b,c,d}1` | RAID 5 (n-1 utiles) |
 | `cat /proc/mdstat` | `[UU]` sain, `[U_]` dégradé, `(F)` faulty |
 | `mdadm --detail /dev/md0` / `--examine /dev/sdb1` | tableau / membre |
-| `mdadm --detail --scan >> /etc/mdadm/mdadm.conf` | persistance |
+| `mdadm --detail --scan » /etc/mdadm/mdadm.conf` | persistance |
 | `update-initramfs -u` / `dracut -f` | assemblage au boot (sinon `md127`) |
 | `mdadm /dev/md0 --fail /dev/sdb1 --remove /dev/sdb1` | retire un disque |
 | `mdadm --zero-superblock /dev/sdb1` | disque « neuf » |
@@ -1641,7 +1646,7 @@ network:
 | Commande | Effet |
 |---|---|
 | `getent hosts www.lab.local` | toute la chaîne NSS (`/etc/hosts` inclus) |
-| `dig www.lab.local` / `dig +short` | DNS seul / réponse nue |
+| `dig www.lab.local` / `dig +short` | via le stub (qui sert aussi `/etc/hosts`) / réponse nue |
 | `dig @10.10.10.1 A lab-web.lab.local` | serveur précis |
 | `dig AAAA x` / `MX` / `TXT` / `NS` / `SOA` | types |
 | `dig -x 10.10.10.11` | inverse |
@@ -1722,7 +1727,7 @@ Flags : `[S]` SYN, `[S.]` SYN-ACK, `[.]` ACK, `[P.]` données, `[F.]` FIN,
 * Deux routes par défaut à la même métrique : comportement aléatoire.
 * AAAA avant A : `curl` échoue en v6 alors que v4 marche. `curl -4`.
 * Connexion qui s'établit puis gèle sur du volume : MTU / PMTUD filtré.
-* `dig` ignore `/etc/hosts` ; `getent hosts` non.
+* `dig` ne lit pas `/etc/hosts`, mais le stub `127.0.0.53` le sert : `dig @serveur` pour le DNS seul ; `getent hosts` pour la vue système.
 :::
 
 ::: astuce
@@ -2023,7 +2028,7 @@ vient toujours du RA.
 * `nft add rule` ajoute **en fin** : après un `drop`, jamais atteint. `insert`.
 * MTU 1500 sur un VXLAN : petits paquets OK, gros paquets fragmentés/jetés.
 * Serial SOA non incrémenté : secondaire jamais à jour, aucune erreur.
-* `listen-on { any; }` de BIND et `interface: 0.0.0.0` d'Unbound entrent en
+* `listen-on { any; }` de BIND prend toutes les adresses de la VM (dont `10.10.10.53` d'Unbound); `interface: 0.0.0.0` d'Unbound entre en
   conflit avec `127.0.0.53` : adresses explicites.
 * `tag=10` côté Proxmox **et** `ens18.10` dans la VM = double tag.
 :::
@@ -2064,7 +2069,8 @@ vient toujours du RA.
 | `ssh h 'cmd' ; echo $?` | code de la commande distante (255 = ssh) |
 | `ssh -O check h` / `ssh -O exit h` | maître de multiplexage |
 | `ssh-keygen -R lab-web` / `ssh-keygen -F lab-web` | supprime / cherche known_hosts |
-| `ssh-keyscan -t ed25519 10.10.10.11 >> ~/.ssh/known_hosts` | pré-provisionne |
+| `ssh-keyscan -t ed25519 10.10.10.11 » ~/.ssh/` |  |
+| `known_hosts` | pré-provisionne |
 | `eval "$(ssh-agent -s)"` / `ssh-add -t 3600 cle` | agent, 1 h |
 | `ssh-add -l` / `ssh-add -D` | listé / purgé |
 | `sftp h` / `scp f h:/tmp/` | transferts ponctuels |
@@ -2096,7 +2102,7 @@ Le premier mot-clé rencontré gagne : du plus précis au plus général.
 | `ssh -D 1080 lab-adm` | proxy SOCKS5 |
 | `ssh -fN -o ExitOnForwardFailure=yes -L ... h` | arrière-plan, échec visible |
 | `ssh -L 0.0.0.0:8443:10.10.10.11:443 h` | tunnel écoutant partout |
-| `AllowTcpForwarding` / `GatewayPorts` (serveur) | autorisent `-L`/`-R` |
+| `AllowTcpForwarding` / `GatewayPorts` (serveur) | autorise `-L`/`-D`/`-R` / bind public du `-R` |
 
 ### Serveur
 
@@ -2120,7 +2126,7 @@ KbdInteractiveAuthentication no
 PubkeyAuthentication yes
 MaxAuthTries 3
 LoginGraceTime 30
-AllowGroups sshusers
+AllowGroups ssh-users
 X11Forwarding no
 ClientAliveInterval 300
 ClientAliveCountMax 2
@@ -2135,8 +2141,8 @@ Clé restreinte dans `authorized_keys` :
 * `50-cloud-init.conf` contient `PasswordAuthentication yes` et gagne.
 * `ForwardAgent yes` : root de la machine distante utilise ta clé.
 * Tunnel sans `ExitOnForwardFailure` : port pris, tunnel absent, silence.
-* `sshd -t` oublié avant reload : la conf est invalide, les nouvelles
-  connexions échouent, la session courante survit — ne la ferme pas.
+* `sshd -t` oublié avant reload (Rocky; Ubuntu le fait dans `ExecReload`) : conf invalide, les nouvelles
+  connexions échouent, la session courante survit — ne la ferme pas. Ubuntu 24.04 : `ssh.socket` détient le port; `Port` modifié = `daemon-reload` + `systemctl restart ssh.socket`.
 * Une VM clonée garde les mêmes clés d'hôte : régénère-les.
 :::
 
@@ -2719,7 +2725,10 @@ enabled = true
 | `openssl verify -CAfile ca.crt srv.crt` | chaîne |
 | `openssl s_client -connect 10.10.10.11:443 -servername app.lab.local </dev/null` | serveur |
 | `openssl rsa -in srv.key -noout -modulus \| sha256sum` | clé = cert ? |
-| `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout k.pem -out c.pem -days 365 -subj /CN=app.lab.local` | auto-signé |
+| `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve` |  |
+| `:P-256 -nodes -keyout k.pem -out c.` |  |
+| `pem -days 365 -subj /CN=app.lab.local -addext` |  |
+| `subjectAltName=DNS:app.lab.local` | auto-signé (SAN obligatoire) |
 | `certbot --nginx -d www.example.org` | Let's Encrypt |
 
 ```ini
@@ -2779,6 +2788,7 @@ top -b -n1 | head -20   # vue d'ensemble
 | `ps -eo pid,stat,wchan:20,cmd \| awk '$2 ~ /D/'` | processus bloqués en E/S |
 | `ps -eo pid,ppid,stat,cmd \| awk '$3 ~ /Z/'` | zombies (tuer le parent) |
 | `pidstat -u -p PID 1` / `pidstat -t -p PID 1` | par processus / par thread |
+| `cat /proc/pressure/{cpu,memory,io}` | PSI : part du temps perdu à attendre (`some`/`full`) |
 | `perf top` / `perf top -p PID` | où passe le CPU, coût faible |
 | `perf record -g -p PID -- sleep 10 && perf report` | profil |
 | `strace -p PID -f -T -e trace=network` | appels système (coûteux, bref) |
@@ -2983,7 +2993,7 @@ network:
       addresses: [10.10.10.16/24]
       routes: [{to: default, via: 10.10.10.1}]
       nameservers: {addresses: [10.10.10.1], search: [lab.local]}
-      parameters: {stp: false, forward-delay: 0}
+      # pas de parameters: (stp...) : netplan try les refuse
 ```
 
 ### Snapshots, sauvegarde, migration
@@ -3013,7 +3023,8 @@ snapshot`, `qmrestore`, `qm migrate 9007 pve2 --online --with-local-disks`.
 | `ps -o user,pid,args -C qemu-system-x86_64 \| grep -o -- '-accel [a-z]*'` | kvm ou tcg ? |
 | `cat /proc/PID/cgroup` → `machine.slice/machine-qemu\x2d1\x2dvm.scope` | cgroup |
 | `machinectl list ; systemd-cgls -u machine.slice` | VM vues par systemd |
-| `virsh cpu-stats vm ; domstats vm --cpu-total --block ; virt-top -b -n 1` | perf |
+| `virsh cpu-stats vm ; domstats vm --cpu-total --` |  |
+| `block ; virt-top -b -n 2` | perf |
 | `top` dans l'invité, colonne `st` | steal = hôte saturé |
 | `aa-status \| grep libvirt` ; `/etc/apparmor.d/libvirt/libvirt-<uuid>` | sVirt |
 | `qm agent 9007 ping ; qm guest exec 9007 -- uptime` | agent côté Proxmox |
@@ -3146,7 +3157,7 @@ snapshot`, `qmrestore`, `qm migrate 9007 pve2 --online --with-local-disks`.
 ::: astuce
 * `git log --oneline --graph --all -20` — l'état du dépôt en 3 s.
 * `git add -p` — des commits propres sans effort.
-* `git reflog` — rien n'est perdu pendant 90 jours.
+* `git reflog` — un commit perdu reste récupérable 30 jours (90 si joignable).
 :::
 
 ---
@@ -3219,8 +3230,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=app:app . .
 USER app
 EXPOSE 8000
-HEALTHCHECK --interval=10s --timeout=3s \
-  CMD curl -sf localhost:8000/sante
+HEALTHCHECK --interval=10s --timeout=3s CMD python3 -c \
+  "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/sante')"
 ENTRYPOINT ["python3", "app.py"]
 ```
 
@@ -3276,7 +3287,7 @@ Rocky 9 : dépôt `download.docker.com/linux/centos/docker-ce.repo` ou Podman
 * `-p` contourne ufw : seule la chaîne `DOCKER-USER` est respectée.
 * `.env` interpole le fichier compose ; `env_file:` entre dans le conteneur.
 * `depends_on` sans `condition: service_healthy` = ordre, pas disponibilité.
-* `docker system prune -a --volumes` efface les données.
+* `docker system prune -a --volumes` efface les volumes anonymes ( données).
 :::
 
 ::: astuce
@@ -3454,7 +3465,8 @@ resource "proxmox_virtual_environment_vm" "web" {
     ip_config { ipv4 { address = "10.10.10.110/24"
                        gateway = "10.10.10.1" } }
     user_account { username = "mathieu"
-                   keys = [file("~/.ssh/id_ed25519.pub")] }
+      keys     = [trimspace(file("~/.ssh/id_ed25519.pub"))]
+    }
   }
 }
 output "ip" { value = "10.10.10.110" }
@@ -3545,7 +3557,9 @@ qm template 9100
 | `gitea actions generate-runner-token` | jeton d'enregistrement |
 | `journalctl -u act_runner -f` | ce que le runner reçoit |
 | `docker ps --filter name=GITEA-ACTIONS` | jobs en cours |
-| `yamllint -d '{rules: {truthy: {allowed-values: ["true","false","on"]}}}' .gitea/workflows/` | valide |
+| `yamllint -d '{extends: default, rules: {truthy:` |  |
+| `{allowed-values: ["true","false","on"]}}}' .gitea/` |  |
+| `workflows/` | valide |
 | `act -l` / `act push -j test` | exécute un workflow en local (`act`) |
 | `curl -s http://10.10.10.14:3000/api/v1/repos/mathieu/factura/actions/runs` | API |
 | `git tag -a v1.4.2 -m "release" && git push origin v1.4.2` | déclenche la release |
@@ -3607,7 +3621,7 @@ Clé de déploiement restreinte, côté serveur :
 | Symptôme | Réflexe |
 |---|---|
 | aucun run | YAML invalide, ou `on:` ne couvre pas l'événement |
-| `waiting` sans fin | aucun runner avec le label `runs-on` |
+| `waiting` (jusqu'à `ABANDONED_JOB_TIMEOUT`) | aucun runner avec le label `runs-on` |
 | `permission denied` docker.sock | `container.docker_host` du runner |
 | artefact introuvable | job producteur sauté, `path` faux |
 | vert en CI, cassé en prod | image différente, variable absente, `latest` |
@@ -3617,7 +3631,7 @@ Clé de déploiement restreinte, côté serveur :
 Contexte : `${{ gitea.sha }}`, `gitea.ref`, `gitea.event_name`,
 `gitea.actor`, `secrets.X`, `needs.job.outputs.x`, `hashFiles('**/*.txt')`,
 `failure()`, `always()`. Dans `run:` : `$GITHUB_SHA`, `$GITHUB_REF_NAME`,
-`echo "x=1" >> "$GITHUB_OUTPUT"`, `echo "V=1" >> "$GITHUB_ENV"`.
+`echo "x=1" » "$GITHUB_OUTPUT"`, `echo "V=1" » "$GITHUB_ENV"`.
 
 ::: piege
 * `${{ secrets.X }}` dans `run:` est substitué avant le shell : `env:`.

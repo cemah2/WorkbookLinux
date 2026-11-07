@@ -158,7 +158,7 @@ Gitea Actions reprend la syntaxe GitHub Actions ; les actions publiques
 `docker/login-action@v3`, `docker/build-push-action@v5`) sont téléchargées
 depuis `github.com` par défaut (`DEFAULT_ACTIONS_URL`). Différences à
 connaître : pas d'`environment` avec approbation native, contexte `gitea.*`
-(alias de `github.*`), jeton automatique `secrets.GITEA_TOKEN`.
+(alias de `github.*`), jeton automatique `secrets.GITEA_TOKEN`, et `concurrency` honoré seulement à partir de Gitea 1.26 (ignoré avant).
 
 ### Le runner Gitea : act_runner
 
@@ -176,7 +176,7 @@ démarre dans un conteneur neuf de cette image. Schéma `host` : le job tourne
 dans le shell du runner, avec ses outils, ses fichiers, son utilisateur.
 `runs-on: ubuntu-latest` dans un workflow **ne signifie rien en soi** : c'est
 la correspondance avec un label déclaré qui décide ; sans correspondance, le
-job reste `waiting` indéfiniment.
+job reste `waiting` (Gitea l'annule au bout de `ABANDONED_JOB_TIMEOUT`, 24 h par défaut) et l'onglet *Actions* affiche « No matching online runner with label ».
 
 Jeton d'enregistrement : *Administration du site → Actions → Runners*, ou
 `gitea actions generate-runner-token` en CLI. `config.yaml` : `runner.labels`,
@@ -406,7 +406,7 @@ c) il s'exécute mais tous ses steps sont ignorés
 d) il échoue avec le même code que `build`
 
 **Q25.7** — Ton pipeline construit `factura:latest`, le pousse, et
-`lab-web` fait `docker compose pull && up -d`. Un jour, la prod tourne avec
+`lab-web` fait `docker compose pull & up -d`. Un jour, la prod tourne avec
 une version vieille de trois jours alors que le pipeline est vert. Cause la
 plus plausible ?
 
@@ -420,7 +420,7 @@ d) Docker refuse de tirer une image de moins d'une heure
 
 ```text
 NAME      IMAGE                         STATUS
-gitea     docker.gitea.com/gitea:1.24   Up 2 hours
+gitea     docker.gitea.com/gitea:1.26   Up 2 hours
 db        postgres:16                   Up 2 hours
 runner    docker.gitea.com/act_runner   Restarting (1) 12 seconds ago
 ```
@@ -701,8 +701,8 @@ l'image avec
 `10.10.10.14:5000/factura:<sha12>`, pousse-la, et vérifie via l'API du
 registre (`/v2/factura/tags/list`) qu'elle y est. Compare le *digest* donné
 par `docker inspect` avec celui renvoyé par
-`curl -I -H 'Accept: application/vnd.oci.image.manifest.v1+json'` sur le
-manifest.
+`curl -I` sur le manifest, en annonçant les deux types de manifest acceptés (`Accept:` OCI `image.manifest.v1+json` et Docker `distribution.`
+manifest.`v2+json`).
 
 **E25.11** — Scanne cette image avec `trivy` (image
 `aquasec/trivy`) en mode `--exit-code 1 --severity CRITICAL`. Lis le rapport
@@ -759,8 +759,8 @@ premier pipeline qui lint et teste `factura` sur chaque push.
    *Administration → Actions → Runners* que le runner est `Idle` avec ses
    labels.
 3. Protège la branche `main` de `factura` : push direct interdit sauf pour
-   `mathieu`, au moins une revue pour merger, et **status check** `ci / lint`
-   requis (tu pourras le cocher une fois le pipeline passé une fois).
+   `mathieu`, au moins une revue pour merger, et **status check** `ci / lint` `(*)`
+   requis — Gitea nomme ses statuts `<workflow> / <job> (<événement>)` et accepte les motifs glob (tu pourras le cocher une fois le pipeline passé une fois).
 4. Écris d'abord un `.yamllint` à la racine qui autorise `on` pour la
    règle `truthy`, désactive `document-start` et fixe `line-length` à 100.
    Puis `.gitea/workflows/ci.yaml` avec deux jobs parallèles :
@@ -806,8 +806,7 @@ Sur `lab-web` :
    il lit `SSH_ORIGINAL_COMMAND`, accepte `deploy <tag>`, `rollback` et
    `status`, refuse tout le reste (code 2), valide le tag par une regex
    (12 hexadécimaux ou `vX.Y.Z`), sauvegarde `.env` en `.env.prev` avant
-   d'écrire le nouveau `TAG=`, puis `docker compose pull -q && docker compose
-   up -d` dans `/srv/factura`. `rollback` restaure `.env.prev`.
+   d'écrire le nouveau `TAG=`, puis `docker compose pull -q & docker compose up -d` dans `/srv/factura`. `rollback` restaure `.env.prev`.
 2. Dépose `/srv/factura/compose.yaml` (modèle dans
    `~/lab25/factura/deploy/compose.yaml`) : image
    `10.10.10.14:5000/factura:${TAG}`, port `8080:8000`, `restart:
@@ -973,7 +972,7 @@ Dans `~/lab25/factura-infra` (dépôt Gitea `factura-infra`) :
    rapport pourquoi un état sur le disque d'un runner est inacceptable
    au-delà du lab et ce qu'on utilise à la place.
 6. Protège `main` de `factura-infra` : revue obligatoire, status checks
-   `ansible / lint` et `tofu / plan` requis.
+   `ansible / lint` `(*)` et `tofu / plan` `(*)` requis (motifs glob : le nom réel du statut se termine par `(push)` ou `(pull_request)`).
 
 ::: attention
 `ansible-playbook --check` sur un playbook qui contient un `command` sans
@@ -996,7 +995,7 @@ bash check_M25_04.sh
 ## 25.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9005 avant-bf21`. Les scripts de
+Avant chaque Break & Fix : `qm snapshot 9005 avant-bf25`. Les scripts de
 panne agissent sur `~/lab25/factura` (commit + push sur `main` au nom d'un
 « collègue ») et parfois sur le registre. Snapshot de secours `snap-clean`,
 mais l'utiliser vaut échec : le diagnostic se fait dans l'interface de

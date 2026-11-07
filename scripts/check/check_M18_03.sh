@@ -74,7 +74,7 @@ B=$(getsebool httpd_can_network_connect 2>/dev/null | awk '{print $3}')
 
 if command -v semanage >/dev/null 2>&1; then
   semanage boolean -l 2>/dev/null \
-    | grep '^httpd_can_network_connect' | grep -q '(on   ,   on)' \
+    | grep -E '^httpd_can_network_connect\s' | grep -q '(on   ,   on)' \
     && ok "le booléen est persistant (setsebool -P)" \
     || ko "le booléen n'est pas persistant : sans -P il retombe au reboot"
 fi

@@ -9,10 +9,14 @@ BP="$HOME_CIBLE/.bash_profile"
 SAUV=/root/.breakfix-backup
 mkdir -p "$SAUV"
 
-if [ -f "$BP" ] && [ ! -f "$SAUV/bash_profile.M01_03" ]; then
-  cp -- "$BP" "$SAUV/bash_profile.M01_03"
-else
-  : > "$SAUV/bash_profile.absent.M01_03"
+# sauvegarde une seule fois : au premier passage, jamais du fichier cassé
+if [ ! -e "$SAUV/bash_profile.M01_03" ] && \
+   [ ! -e "$SAUV/bash_profile.absent.M01_03" ]; then
+  if [ -f "$BP" ]; then
+    cp -- "$BP" "$SAUV/bash_profile.M01_03"
+  else
+    : > "$SAUV/bash_profile.absent.M01_03"
+  fi
 fi
 
 cat > "$BP" <<'EOF'
@@ -24,7 +28,8 @@ chmod 644 "$BP"
 
 cat <<'EOF'
 
-Symptôme attendu : en SSH, le prompt redevient "bash-5.2$", les alias et
-les fonctions personnelles ont disparu et ~/bin n'est plus dans le PATH.
+Symptôme attendu : en SSH, le prompt redevient celui par défaut du système,
+les alias et les fonctions personnelles ont disparu et ~/bin n'est plus dans
+le PATH.
 Taper "bash" une fois connecté fait tout revenir.
 EOF

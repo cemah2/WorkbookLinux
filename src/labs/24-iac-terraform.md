@@ -50,8 +50,8 @@ management partout dans le module). Dans les exemples, le nœud s'appelle
 `pve` : vérifie avec `hostname` sur le nœud et adapte.
 
 Les VM créées par ce module portent les VMID **9100 à 9199** et les adresses
-**10.10.10.100 à 10.10.10.129** : elles ne touchent jamais aux cinq VM du lab
-(9001 à 9005). Il faut environ 6 Go de RAM libre sur le nœud pour le lab
+**10.10.10.100 à 10.10.10.129** : elles ne touchent jamais aux sept VM du lab
+(9001 à 9007). Il faut environ 6 Go de RAM libre sur le nœud pour le lab
 central ; si tu es juste, arrête `lab-db` et `lab-rhel` le temps du module.
 
 ```bash
@@ -145,7 +145,7 @@ image cloud --(qm / Packer)--> template --(tofu clone + cloud-init)--> VM
 * Trois entrées : **user-data** (`#cloud-config`, YAML), **meta-data**
   (`instance-id`, `local-hostname`), **network-config** (v1 ou v2 netplan).
 * Sur Proxmox, le datasource est **NoCloud** : le disque `ide2` (`cloudinit`)
-  est une ISO étiquetée `cidata` régénérée à chaque `qm set` cloud-init.
+  est une ISO étiquetée `cidata`, régénérée au démarrage de la VM (ou par `qm cloudinit update`) après un changement d'option cloud-init.
 * Ce qui est **per-instance** (users, clés, hostname, `runcmd`) ne rejoue que
   si `instance-id` change. Proxmox calcule l'`instance-id` à partir des
   options cloud-init : modifier `--memory` ne rejoue rien ; modifier
@@ -221,7 +221,7 @@ qm template 9100
 `pvesh delete /nodes/pve/qemu/9111 --purge 1`. Les actions longues renvoient
 un **UPID** de tâche. Depuis `lab-adm`, `curl` fait pareil avec l'en-tête
 `Authorization: PVEAPIToken=terraform@pve!tofu=<uuid>` sur
-`https://10.10.10.1:8006/api2/json/...`.
+`https://10.10.10.1:8006/api2/json/.. .`.
 
 ### HCL et cycle de vie
 
@@ -236,7 +236,9 @@ provider "proxmox" {            # endpoint et token : variables d'environnement
   insecure = true               # PROXMOX_VE_ENDPOINT / PROXMOX_VE_API_TOKEN
 }
 variable "vms" {
-  type = map(object({ vm_id = number, host = number,
+  type = map(object({
+    vm_id = number
+    host  = number
                       cores = optional(number, 1) }))
 }
 locals { ips = { for k, v in var.vms : k => cidrhost("10.10.10.0/24", v.host) } }
@@ -378,11 +380,11 @@ première de la liste `var.names`. Que propose le plan ?
 
 a) 1 to destroy
 b) 1 to destroy, 2 to change (renommage sur place)
-c) 2 to destroy et 2 to add, plus 1 to destroy : les index se décalent
-d) 3 to destroy, 2 to add
+c) 2 to add, 3 to destroy : les index se décalent
+d) 3 to destroy, 3 to add
 
 **Q24.7** — `variable "token" { sensitive = true }`. Que se passe-t-il avec
-`output "t" { value = var.token }` ? **Deux réponses correctes.**
+`output "t" { value = var.token }` ? **Trois réponses correctes.**
 
 a) `tofu plan` refuse : « Output refers to sensitive values »
 b) avec `sensitive = true` sur l'output, `tofu output -raw t` affiche la valeur
@@ -581,8 +583,7 @@ ces quatre expressions dans `locals` et un `output` par expression.
 **E24.5** — Écris `~/lab24/e04/templates/hosts.tftpl` et une ressource
 `local_file` qui génère `hosts.lab2` au format `/etc/hosts` (une ligne
 `ip nom nom.lab.local` par VM, triée par IP). Vérifie que deux `apply`
-successifs ne changent rien, puis que modifier le template change le fichier
-**sans** le recréer (`~`, pas `-/+`).
+successifs ne changent rien, puis modifie le template et lis le plan : le fichier est-il modifié sur place (`~`) ou recréé ( `-/+`)? Explique.
 
 **E24.6** — Dans `~/lab24/e06/`, crée trois fichiers `vm-<nom>.txt` avec
 `count` sur la liste `["adm", "web", "db"]`. Applique. Retire `"adm"` de la
@@ -624,7 +625,7 @@ premier `ssh` réussi.
 été utilisé, quel `instance-id`, le user-data reçu tel quel, combien de
 secondes a duré le premier boot (`cloud-init analyze show`), et la liste des
 modules per-instance exécutés. Puis, depuis le nœud, remplace la clé SSH
-(`qm set 9110 --sshkeys ...`) et redémarre : la nouvelle clé est-elle
+(`qm set 9110 --sshkeys .. .`) et redémarre : la nouvelle clé est-elle
 déployée ? Explique le résultat avec `instance-id`.
 
 **E24.12** — Écris un script `~/lab24/bin/pve.sh` (bash, `set -euo pipefail`)
@@ -723,7 +724,7 @@ veut un seul `tofu apply`, une variable par VM, et un `plan` lisible en revue.
 Travaille dans `~/lab24/02-lab2/`. Le token vient de `~/lab24/.env`
 (`set -a; . ~/lab24/.env; set +a`).
 
-1. `versions.tf` : `required_version`, provider `bpg/proxmox` (`~> 0.7`).
+1. `versions.tf` : `required_version`, provider `bpg/proxmox` (`-> 0.7`).
    `providers.tf` : `endpoint`/`api_token` **par variables d'environnement**
    (`PROXMOX_VE_ENDPOINT`, `PROXMOX_VE_API_TOKEN`), `insecure = true`.
 2. Commence par **une** ressource `proxmox_virtual_environment_vm "web"`
@@ -898,7 +899,7 @@ bash check_M24_04.sh
 ## 24.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf20` (poste de travail)
+Avant chaque Break & Fix : `qm snapshot 9001 avant-bf24` (poste de travail)
 et une copie de l'état : `tofu state pull > ~/lab24/backup-$(date +%s).json`.
 Les scripts de panne lisent `~/lab24/.env` et agissent sur les VM 9100+
 uniquement. Ils s'exécutent avec `sudo` depuis `lab-adm` ; la réparation se
@@ -1045,7 +1046,7 @@ Cahier des charges, dans `~/lab24/04-modules/` (état distant sur MinIO) :
    `*.tfstate` ou `.env`), `.gitignore` complet, `README.md` avec le schéma
    d'enchaînement et la procédure de rotation du token.
 8. Livrable : le dépôt taggé, `plan.txt` de la reconstruction complète, et
-   `~/lab24/rapports/d20.md` : durée du `deploy` complet, ce qui est
+   `~/lab24/rapports/d24.md` : durée du `deploy` complet, ce qui est
    idempotent et ce qui ne l'est pas, les trois risques que tu vois pour un
    passage en production (état, token, template non versionné) et comment tu
    les traiterais.

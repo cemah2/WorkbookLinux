@@ -15,13 +15,19 @@ q 'select 1' | grep -q 1 && ok "PostgreSQL répond" \
   || ko "PostgreSQL ne répond pas (pg_lsclusters, journalctl -u postgresql@16-main)"
 
 # 2. les utilisateurs peuvent se connecter, plusieurs à la fois
+#    (tant que max_connections=8 attend le restart de 12h30, seules
+#    max_connections - places réservées sont ouvertes à un non-superuser)
+MC0=$(q 'show max_connections'); RES=$(q 'show superuser_reserved_connections')
+RC=$(q 'show reserved_connections'); CIBLE=$(( ${MC0:-0} - ${RES:-3} - ${RC:-0} ))
+[ "$CIBLE" -gt 10 ] && CIBLE=10; [ "$CIBLE" -lt 1 ] && CIBLE=1
 export PGPASSWORD='F4ctura-Pr0d-2026!'
-NB=$( for i in $(seq 1 10); do
+NB=$( for i in $(seq 1 "$CIBLE"); do
         ( psql -q -h 127.0.0.1 -U factura -d factura \
             -c 'select pg_sleep(2)' >/dev/null 2>&1 && echo ok ) &
       done; wait ) ; NB=$(printf '%s\n' "$NB" | grep -c ok)
-[ "$NB" -ge 10 ] && ok "10 connexions applicatives simultanées acceptées" \
-  || ko "seulement $NB/10 connexions simultanées passent (pg_stat_activity ?)"
+[ "$NB" -ge "$CIBLE" ] \
+  && ok "$CIBLE connexions applicatives simultanées acceptées" \
+  || ko "seulement $NB/$CIBLE connexions simultanées passent (pg_stat_activity ?)"
 
 # 3. le fuiteur de sessions
 if pgrep -f /usr/local/bin/etl-compta >/dev/null; then

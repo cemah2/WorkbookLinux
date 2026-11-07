@@ -138,9 +138,9 @@ même « topic », et le nom exact du handler devient secondaire), et
 :::
 
 ::: piege
-Depuis ansible-core 2.15, un `notify` vers un handler inexistant est une
-erreur fatale (`The requested handler 'reload nginx' was not found`) — mais
-seulement si la tâche est `changed`. Sur une version plus ancienne, ou si le
+Avec le réglage par défaut (`error_on_missing_handler = True`), un `notify` vers un handler inexistant est une
+erreur fatale (`The requested handler 'reload nginx' was not found` `in either the main handlers list nor in the listening handlers list`) — mais
+seulement si la tâche est `changed`. Si ce réglage est désactivé, ou si le
 template est `ok`, tu ne verras rien. Et non, l'ordre de déclaration
 (réponse d) est indifférent : les handlers sont résolus après l'analyse
 complète du play.
@@ -231,10 +231,8 @@ autre précaution, la tâche tourne une fois **par hôte** du play. `run_once:
 true` la limite au premier hôte du lot, et le résultat (`register`) est
 copié vers tous les autres. C'est la forme canonique.
 
-c) obtient le même résultat à la main : `when: inventory_hostname ==
-play_hosts[0]` ne laisse passer que le premier hôte. C'est plus verbeux et
-`play_hosts` est déprécié au profit de `ansible_play_hosts`, mais ça marche
-et on le voit dans des playbooks anciens.
+c) obtient le même résultat à la main : `when: inventory_hostname == ansible_play_hosts[0]` ne laisse passer que le premier hôte. C'est plus verbeux, mais ça marche
+et on le voit dans des playbooks anciens (souvent écrit avec `play_hosts`, déprécié).
 :::
 
 ::: piege
@@ -271,22 +269,19 @@ list` final matérialise le générateur Jinja2 en liste (sinon tu affiches
 
 ---
 
-**Q23.11** — *`--check` : `'dict object' has no attribute 'stdout'` sur une
-tâche qui lit `r.stdout` après `register: r` d'un `command`.*
+**Q23.11** — `--check` *: `list`* `object has no element 0` *sur une tâche qui lit `r`*`.stdout_lines[0]` *après `register`*`: r` *d'un `command`.*
 
-**Réponse : b)** en `--check`, `command` n'est pas exécuté et `r` n'a pas de
-`stdout`.
+**Réponse : b)** en `--check`, `command` n'est pas exécuté :
+`stdout` est vide et `stdout_lines` une liste vide.
 
 ::: pourquoi
 En mode simulation, `command`/`shell` sont sautés (`skipped`), sauf si la
 tâche porte `check_mode: false`. La variable enregistrée existe quand même,
-mais avec le contenu d'un résultat *skipped* : `{"changed": false,
-"skipped": true, "skip_reason": "..."}`. La tâche suivante fait
-`r.stdout` → l'attribut n'existe pas → erreur de variable indéfinie.
+mais avec le contenu d'un résultat *skipped* : `{"changed": false, "skipped": true, "rc": 0, "stdout": "", "stdout_lines": [], "msg": "Command would have run if not in check mode"}`. La tâche suivante lit
+`r.stdout_lines[0]` → la liste est vide → erreur de variable indéfinie. (Sur un résultat sauté par un `when`, c'est `stdout` lui-même qui manque : `'dict object' has no attribute 'stdout'`.)
 
 Trois façons propres de gérer ça : `check_mode: false` sur le `command` s'il
-est en lecture seule (un `cat`, un `sha256sum`), `when: r.stdout is
-defined` sur la tâche consommatrice, ou `r.stdout | default('')`. La
+est en lecture seule (un `cat`, un `sha256sum`), `when: not ansible_check_mode` sur la tâche consommatrice, ou `r.stdout_lines | first | default('')`. La
 première est la bonne dans 90 % des cas : une commande qui ne modifie rien
 peut tourner en `--check`, et c'est souvent elle qui décide de la suite.
 :::
@@ -346,21 +341,20 @@ avec un autre mot de passe que celui de l'équipe — le scénario de BF23.3.
 
 ---
 
-**Q23.14** — *`get_url` avec `force: true`, `changed` à chaque fois. Deux
-corrections.*
+**Q23.14** — `get_url` *avec `force`*`: true` *retélécharge à chaque fois. Deux corrections.*
 
 **Réponses : a) et b)**
 
 ::: pourquoi
 `get_url` est idempotent par défaut : si `dest` existe, il ne télécharge pas
-(sauf `force: true`, qui retélécharge et compare ensuite). Retirer `force`
+(sauf `force: true`, qui retélécharge à chaque passage et ne rapporte `changed` que si le contenu a changé). Retirer `force`
 et garder un `dest` stable suffit à ne plus rien retélécharger. Mais on ne
 sait alors pas si le fichier local est bon.
 
 `checksum: "sha256:<empreinte>"` (ou `sha256:<URL d'un fichier de sommes>`)
 ajoute la vérification : le fichier présent est haché **avant** tout
 téléchargement ; s'il correspond, `ok` sans contact réseau ; sinon
-téléchargement, puis échec si le fichier reçu ne correspond pas non plus.
+téléchargement, puis échec si le fichier reçu ne correspond pas non plus. Ce court-circuit n'existe que **sans** `force: true` (avec `force`, le téléchargement a lieu quoi qu'il arrive) : d'où le « remplacer » de a).
 C'est la forme demandée dans L23.1 : intégrité **et** idempotence.
 :::
 
@@ -1006,14 +1000,13 @@ lab-web | FAILED | rc=2 >>
 ls: cannot access '/etc/*.conf': No such file or directory
 ls: cannot access '|': No such file or directory
 ls: cannot access 'wc': No such file or directory
-ls: cannot access '-l': No such file or directory
 ```
 
 Forme qui marche :
 
 ```bash
 ansible all -m ansible.builtin.shell -a 'ls /etc/*.conf | wc -l'
-# ou, sans shell ni glob, en laissant find faire le filtrage :
+# ou, sans glob du shell, en laissant find faire le filtrage :
 ansible all -m ansible.builtin.shell \
   -a "find /etc -maxdepth 1 -name '*.conf' | wc -l"
 ```
@@ -1021,7 +1014,7 @@ ansible all -m ansible.builtin.shell \
 ::: pourquoi
 `command` exécute le binaire directement avec la liste d'arguments
 découpée : le glob `*.conf` n'est pas développé (c'est le shell qui fait
-ça), et `|`, `wc`, `-l` deviennent des arguments de `ls`, d'où quatre
+ça), `|` et `wc` deviennent des noms de fichiers pour `ls` (et `-l` son option « format long »), d'où trois
 messages `cannot access`. `shell` passe la chaîne entière à `/bin/sh -c`,
 qui développe le glob et construit le pipeline.
 
@@ -1110,11 +1103,11 @@ sont égaux et que `owner`/`group`/`mode` correspondent, il ne touche à rien.
 C'est le mécanisme de l'idempotence côté module : comparer avant d'agir.
 En `--check`, `copy` fait cette comparaison mais s'arrête avant l'écriture,
 et `--diff` montre ce qu'il **aurait** écrit. Le code couleur (jaune =
-`changed`, vert = `ok`, rouge = `failed`, violet = `unreachable`, cyan =
+`changed`, vert = `ok`, rouge = `failed`, rouge vif = `unreachable`, cyan =
 `skipped`) est le même dans les playbooks.
 
 Le `\n` dans `content=` est interprété par l'analyseur `clé=valeur` d'Ansible
-: sans lui, `/etc/motd` n'a pas de saut de ligne final et le prompt de
+sans lui, `/etc/motd` n'a pas de saut de ligne final et le prompt de
 connexion colle au texte. `mode=0644` est explicite pour ne pas dépendre
 de l'`umask` de la cible (et `ansible-lint` l'exige dans les playbooks).
 :::
@@ -1162,8 +1155,7 @@ yamllint playbooks/paquets.yml && ansible-lint playbooks/paquets.yml
 `ansible.builtin.package` est un module « générique » : il lit le fact
 `ansible_facts['pkg_mgr']` (`apt` ou `dnf`) et délègue au vrai module. Les
 quatre noms de paquets sont identiques sur Ubuntu et Rocky, ce qui rend la
-tâche unique possible ; dès qu'un nom diffère (`python3-psycopg2` vs
-`python3-psycopg2` ici, mais `apache2` vs `httpd` ailleurs), il faut une
+tâche unique possible ; dès qu'un nom diffère (`apache2` vs `httpd`, `python3-libselinux` qui n'existe que sur Rocky), il faut une
 variable par famille d'OS.
 
 `package` ne connaît pas `update_cache`/`cache_valid_time`, qui sont propres
@@ -1178,8 +1170,7 @@ correctement l'installation en consultant le cache local.
 ::: piege
 Passer une liste à `name:` en une seule tâche est important : `apt` fait
 alors **une** transaction. Avec `loop:` sur la liste, tu obtiens quatre
-transactions, quatre fois plus lent, et `ansible-lint` le signale
-(`package-latest`/`no-loop-on-package`).
+transactions, quatre fois plus lent.
 :::
 
 ---
@@ -1651,9 +1642,9 @@ est chiffrée — pratique pour un secret isolé, mais on préfère le fichier
 `vault_password_file` d'`ansible.cfg`, d'où l'absence de prompt.
 
 En `-v`, `debug` n'affiche rien de plus que son message. Mais la tâche
-`command` sans `no_log` montre en `-v` le dictionnaire de résultat complet
-: `cmd`, `stdout`, et `invocation.module_args` — le secret y figure trois
-fois, et donc trois fois dans le journal de la CI. `no_log: true` remplace
+`command` sans `no_log` montre en `-v` le dictionnaire de résultat 
+: `cmd` et `stdout`, puis en `-vvv` `invocation.module_args` — le secret y figure deux à trois
+fois, et donc autant de fois dans le journal de la CI. `no_log: true` remplace
 tout par `the output has been hidden due to the fact that 'no_log: true'
 was specified for this result`, à tous les niveaux de verbosité. Règle :
 `no_log` sur **toute** tâche dont un paramètre ou une sortie contient un
@@ -1721,7 +1712,7 @@ installée, listée.*
 ```bash
 cd ~/lab23
 ansible-galaxy role init roles/motd
-rm -r roles/motd/{tests,vars,files,handlers,meta}
+rm -r roles/motd/{tests,vars,files,handlers,meta,templates}
 tree roles/motd
 # roles/motd
 # ├── README.md
@@ -2228,7 +2219,7 @@ sur le contrôleur) et ne réécrit pas une ligne déjà présente. `copy` avec
 un sudoers cassé ne sort jamais du répertoire temporaire. `timezone`,
 `systemd_service`, `ufw`, `firewalld` comparent l'état voulu à l'état réel.
 `get_url` avec `checksum: sha256:<URL>` télécharge d'abord la petite liste
-de sommes, y cherche la ligne du fichier `dest`, et hache le fichier local :
+de sommes, y cherche la ligne du fichier nommé dans l'URL, et hache le fichier local :
 s'il correspond, rien n'est retéléchargé. `unarchive` avec `creates` et
 `copy remote_src` (compare les sommes) complètent la chaîne.
 
@@ -2253,10 +2244,9 @@ avec `--limit lab-ops` et une console ouverte.
 
 **`checksum: sha256:<URL>`** : la liste `sha256sums.txt` de node_exporter
 contient plusieurs lignes ; Ansible cherche celle dont le nom de fichier
-correspond au **basename de `dest`**. Si tu nommes le fichier `ne.tar.gz`
-(comme dans Q23.14), aucune ligne ne correspond et la tâche échoue avec
-`Unable to find a checksum for file`. D'où le `dest` qui garde le nom
-d'origine.
+correspond au **basename de l'**`url` (pas de `dest` : un `dest` nommé `ne.tar.gz`
+, comme dans Q23.14, fonctionne). Une URL qui ne se termine pas par le nom du fichier (`?download=1`, lien « latest ») ne correspond à aucune ligne et la tâche échoue avec
+`Unable to find a checksum for file`. 
 
 **`ssh.service` sur Ubuntu 24.04** est activé par socket (`ssh.socket`).
 `state: restarted` sur `ssh.service` fonctionne, mais si tu changes le port
@@ -3240,10 +3230,8 @@ raisonnable, et c'est le **playbook** qui fait le lien avec l'inventaire
 (`"{{ prometheus_host }}/32"`). L'autre équipe passera son propre CIDR.
 Idem pour l'URL de base (miroir interne) et les chemins.
 
-**`include_tasks` dynamique.** `firewall_{{ ansible_facts['os_family']
-}}.yml` sélectionne le fichier à l'exécution ; un OS non prévu (`Suse`)
-échoue avec un message clair (`Could not find or access
-'firewall_Suse.yml'`), ce qui est préférable à un `when` silencieux.
+**`include_tasks` dynamique.** `firewall_{{ ansible_facts['os_family'] }}.yml` sélectionne le fichier à l'exécution ; un OS non prévu (`Suse`)
+échoue avec un message clair (`Could not find or access 'firewall_ Suse.yml'`), ce qui est préférable à un `when` silencieux.
 `include_tasks` (dynamique) plutôt qu'`import_tasks` (statique) parce que
 le nom dépend d'un fact, inconnu au moment de l'analyse.
 
@@ -3302,7 +3290,7 @@ Ce qu'on lit :
 * Passage 2, `lab-web` : `useradd: user 'deploy' already exists` (rc=9),
   puis, une fois commentée, `mkdir: cannot create directory '/srv/deploy':
   File exists`.
-* Passage 3 et suivants : `chown`, `echo >>` et `systemctl restart`
+* Passage 3 et suivants : `chown`, `echo »` et `systemctl restart`
   réussissent toujours, donc `changed` toujours, et une ligne de plus dans
   `/etc/sudoers.d/deploy` — qui n'est d'ailleurs jamais validé et pas en
   `0440`.
@@ -3433,8 +3421,7 @@ taire » mais « quel état veut-elle obtenir ».
 
 ### **BF23.2** — « Le groupe db a disparu »
 
-*`ansible db -m ping` : `Could not match supplied host pattern` ; `all` ne
-ping que `localhost`. Interdit : restaurer l'ancien fichier.*
+`ansible db -m ping` *: `Could`* `not match supplied host pattern` *; `all` ne trouve plus aucun hôte. Interdit : restaurer l'ancien fichier.*
 
 **Diagnostic pas à pas**
 
@@ -3490,8 +3477,8 @@ ansible-inventory --graph
 ```
 
 `db` contient `lab_db` (souligné) : un **nouvel** hôte, sans `ansible_host`,
-créé par la faute de frappe, alors que `lab-db` est retombé dans
-`ungrouped`. `ansible db -m ping` répondrait maintenant `UNREACHABLE` sur
+créé par la faute de frappe, alors que `lab-db` n' est plus que dans
+`ubuntu`. `ansible db -m ping` répondrait maintenant `UNREACHABLE` sur
 `lab_db` (nom non résoluble). Deuxième erreur trouvée.
 
 **Cause racine** : deux erreurs d'édition. Une tabulation en début de ligne
@@ -3992,7 +3979,9 @@ sur le même modèle (`nginx_vitrine` sur `web`, `postgresql_vitrine` sur
 | `common` | L23.1 sans node_exporter | `common_packages`, `common_timezone`, `common_ssh_allow_groups`, `common_service_user`, `common_service_uid`, `common_service_pubkey` |
 | `nginx_vitrine` | L23.2 (+ tâches contenu/vhost taguées `content`, gardées par `nginx_vitrine_content_only`) | `vitrine_server_name`, `vitrine_root`, `vitrine_tls_dir`, `vitrine_version`, `nginx_vhost_dir`, `nginx_user` |
 | `postgresql_vitrine` | L23.3 | `vitrine_db_name`, `vitrine_db_user`, `vitrine_db_password`, `vitrine_db_client`, `pg_version`, `pg_listen_addresses` |
-| `node_exporter` | L23.5 | inchangé |
+| `node_exporter` | L23.5 | inchangé, sauf `node_exporter_allowed_cidr` |
+|  |  | `: "127.0.0.1/32"` (valeur neutre : le CIDR du lab vient de |
+|  |  | `prometheus_host`, dans `group_vars`) |
 
 Exemple, `roles/common/tasks/main.yml` :
 
@@ -4124,7 +4113,7 @@ dans l'un d'eux est détectée avant la première tâche. L'ordre importe :
 supervisés dès leur mise en service.
 
 Le `Makefile` n'est pas de la décoration : c'est l'interface que la CI du
-module 24 appellera (`make lint`, `make check`), et la garantie que
+module 25 appellera (`make lint`, `make check`), et la garantie que
 « déployer » est **une** commande identique sur tous les postes. `VERSION
 ?= 1.0.0` donne un défaut surchargeable (`make rolling VERSION=2.1.0`),
 l'équivalent Make du `defaults/main.yml`.

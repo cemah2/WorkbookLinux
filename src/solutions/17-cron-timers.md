@@ -106,7 +106,8 @@ puis exécute `/bin/sh -c 'tar czf /srv/sauv/f-$(date +'`. La substitution de
 commande `$(` n'est jamais fermée : `dash` s'arrête avant même d'appeler `tar`.
 
 ```console
-$ printf 'F).tgz /srv/factura/data\n' | /bin/sh -c 'tar czf /srv/sauv/f-$(date +'
+$ printf 'F).tgz /srv/factura/data\n' \
+    | /bin/sh -c 'tar czf /srv/sauv/f-$(date +'
 /bin/sh: 1: Syntax error: end of file unexpected (expecting ")")
 $ echo $?
 2
@@ -152,14 +153,15 @@ où l'utilisateur est implicite (c'est le propriétaire du fichier de spool).
 ```
 
 Sans ce champ, cron lit `/opt/factura/bin/factura-collecte.sh` comme le nom de
-l'utilisateur, ne le trouve pas dans `/etc/passwd`, et rejette la ligne. Il ne
-rejette pas le fichier : les autres lignes valides sont conservées.
+l'utilisateur, ne le trouve pas dans `/etc/passwd`, et rejette la ligne — et avec elle tout le fichier : le cron de Debian/Ubuntu ignore un fichier contenant une erreur de syntaxe, lignes valides comprises.
 
 La trace est dans le journal, jamais sur ton terminal :
 
 ```console
-$ journalctl -t CRON --since today | grep -i factura-collecte
-cron[812]: (*system*factura-collecte) ERROR (Unknown username)
+$ journalctl -u cron --since today | grep -i factura-collecte
+cron[812]: Error: bad username; while reading /etc/cron.d/factura-collecte
+cron[812]: (*system*factura-collecte) ERROR (Syntax error, this crontab
+    file will be ignored)
 ```
 
 Cette ligne apparaît au moment où cron **relit** le fichier, c'est-à-dire dans la
@@ -172,7 +174,7 @@ date de modification de `/etc/crontab`, de `/etc/cron.d/` et des spools, et
 recharge tout seul. Redémarrer `cron.service` ne sert à rien — sauf à masquer le
 vrai problème pendant qu'on cherche ailleurs.
 
-a) est fausse aussi : les fichiers de `/etc/cron.d` sont des **fichiers de
+d) est fausse aussi : les fichiers de `/etc/cron.d` sont des **fichiers de
 configuration**, pas des scripts. Ils doivent être en `0644`, appartenir à root,
 et surtout **ne pas être exécutables**. Un fichier exécutable y est ignoré par
 certaines versions. Le nom du fichier, lui, suit les règles de `run-parts` :
@@ -225,9 +227,9 @@ de root.
 
 ---
 
-**Q17.6** — *`docker: command not found` en cron seulement.*
+**Q17.6** — `docker: command not found` *en cron seulement, binaire en `/`*`usr/local/bin`*.*
 
-**Réponse : b)** `/usr/bin` n'est pas dans le `PATH` de cron.
+**Réponse : b)** `/usr/local/bin` n'est pas dans le `PATH` de cron.
 
 ::: pourquoi
 Un job cron démarre dans un environnement **quasiment vide**, construit par le
@@ -245,16 +247,14 @@ petit jeu de variables :
 
 Tout le reste vient des lignes `VARIABLE=valeur` écrites en tête de la crontab.
 
-Dans le cas présent, `docker` est en `/usr/bin` **et** `/usr/bin` est bien dans
-le `PATH` de cron — donc b) est fausse pour Docker précisément… mais c'est la
-réponse attendue parce que l'énoncé pose la question de la cause **la plus
-probable** d'un `command not found` en cron, et que dans la quasi-totalité des
-cas le binaire est en `/usr/local/bin`, `/usr/sbin` ou `/snap/bin`, tous absents
-du `PATH` de cron. C'est exactement ce que fait BF17.1.
+Dans le cas présent, `docker` est en `/usr/local/bin`, que
+le `PATH` de cron (`/usr/bin:/bin`) ne contient pas : le shell ne le trouve pas et sort en 127. C'est la
+quasi-totalité des `command not found` en cron — binaire en `/usr/local/bin`, `/usr/sbin` ou `/snap/bin`, tous absents
+de ce `PATH` minimal. Un `docker` installé par le paquet (`/usr/bin/docker`) aurait été trouvé. C'est exactement le ressort de BF17.1.
 
 Les trois corrections possibles, par ordre de robustesse :
 
-1. **chemin absolu** dans le script : `/usr/bin/docker`. Le plus sûr.
+1. **chemin absolu** dans le script : `/usr/local/bin/docker`. Le plus sûr.
 2. **`PATH=` en tête de la crontab** ou du fichier de `/etc/cron.d`. Vaut pour
    toutes les lignes du fichier, invisible depuis le script.
 3. `export PATH=...` **dans le script lui-même**. C'est la bonne pratique pour un
@@ -264,11 +264,11 @@ Les trois corrections possibles, par ordre de robustesse :
 ::: piege
 c) mérite un mot : un alias ou une fonction shell expliquerait l'inverse (ça
 marche en interactif, pas en script), mais `which docker` répondant
-`/usr/bin/docker` écarte l'hypothèse — `which` est un binaire externe, il ne voit
+`/usr/local/bin/docker` écarte l'hypothèse — `which` est un binaire externe, il ne voit
 ni alias ni fonction. Pour trancher, `type -a docker` dans la session : s'il
 affiche autre chose qu'un chemin, c'est un masquage.
 
-a) décrit un vrai problème (appartenance au groupe `docker`), mais il produit
+d) décrit un vrai problème (appartenance au groupe `docker`), mais il produit
 `permission denied` sur `/var/run/docker.sock`, pas `command not found`. Lire
 le message d'erreur **exact** évite une heure d'enquête.
 :::
@@ -283,11 +283,11 @@ le message d'erreur **exact** évite une heure d'enquête.
 Ce dump est la première chose à produire devant un « ça marche à la main ».
 Deux conclusions en sortent immédiatement.
 
-**a) `PATH=/usr/bin:/bin`** : `ss` est installé en `/usr/sbin/ss` sur Ubuntu.
-Il est introuvable. Même chose pour `ip`, `iptables`, `service`, `useradd`,
-`tcpdump` : tous les outils d'administration vivent dans les `sbin`, absents du
+**a) `PATH=/usr/bin:/bin`** : `nft` est installé en `/usr/sbin/nft`.
+Il est introuvable. Même chose pour `iptables`, `service`, `useradd`,
+`tcpdump` : les outils d'administration vivent dans les `sbin`, absents du
 `PATH` de cron. C'est pour ça que les jobs cron de root échouent aussi, alors
-qu'un shell root a bien les `sbin` dans son `PATH`.
+qu'un shell root a bien les `sbin` dans son `PATH`. Attention, la liste varie : sur Ubuntu, `ip` et `ss` sont en `/usr/bin` (donc trouvés), sur Rocky ils sont en `/usr/sbin`.
 
 **b) `SHELL=/bin/sh`** : sur Ubuntu, `/bin/sh` est un lien vers `dash`. Si la
 commande de la crontab contient `[[ ]]`, `source`, `function`, `local` hors
@@ -394,9 +394,7 @@ flock -w 5 /var/lock/x.lock cmd      # attend 5 s puis abandonne
 ::: piege
 d) est fausse : `flock` crée le fichier s'il n'existe pas. Mais il faut que le
 **répertoire** existe et soit accessible en écriture par l'utilisateur du job —
-piège classique quand le job tourne sous un compte de service et que le verrou
-est en `/var/lock` (mode `0755`, propriété root). Utilise `/run/lock/` avec un
-sous-répertoire créé par `RuntimeDirectory=` ou `tmpfiles.d`, ou un chemin sous
+piège classique quand le job tourne sous un compte de service : `/var/lock` (lien vers `/run/lock`) est en `1777` sur Ubuntu, mais en `0755` root sur Rocky 9, où un compte de service ne peut pas y créer son fichier. Utilise un sous-répertoire de `/run/lock/` créé par `RuntimeDirectory=` ou `tmpfiles.d`, ou un chemin sous
 `/var/lib/<app>/`.
 
 Piège numéro deux : le verrou est **consultatif**. Il ne bloque que les
@@ -432,7 +430,7 @@ précisément ce que cette construction empêche.
 Ce que fait anacron ensuite, à partir de `/etc/anacrontab` :
 
 ```text
-# période (jours)  délai (min)  identifiant   commande
+# période   délai  identifiant   commande
 1                  5            cron.daily    run-parts --report /etc/cron.daily
 7                  10           cron.weekly   run-parts --report /etc/cron.weekly
 @monthly           15           cron.monthly  run-parts --report /etc/cron.monthly
@@ -503,8 +501,8 @@ rapporte. Pour figer le comportement, on ajoute explicitement le fuseau :
 OnCalendar=*-*-* 02:30:00 UTC
 ```
 
-Cette forme est acceptée depuis systemd 252 ; Ubuntu 24.04 embarque systemd 255,
-elle est donc disponible.
+Le suffixe `UTC` est accepté depuis toujours, un nom de zone (`Europe/Paris`) depuis systemd 233 ; Ubuntu 24.04 embarque systemd 255,
+les deux formes sont donc disponibles.
 :::
 
 ---
@@ -542,7 +540,7 @@ quand aucune échéance n'a été ratée : un serveur redémarré trois fois dan
 journée produirait trois rapports. Les deux directives se combinent d'ailleurs
 très bien, mais elles ne répondent pas à la même question.
 
-c) `RemainAfterElapse=` (défaut `yes`) décide si le timer reste chargé après son
+b) `RemainAfterElapse=` (défaut `yes`) décide si le timer reste chargé après son
 dernier déclenchement ; il ne rattrape rien. d) `AccuracySec=1h` élargit la
 fenêtre de tir, ce qui ne sert à rien quand la machine est éteinte.
 
@@ -593,7 +591,7 @@ pendant une intervention. Et comme le timer n'est pas activé, elle ne tourne
 jamais la nuit. Le symptôme rapporté est « la sauvegarde tourne quand elle veut ».
 
 Règle à appliquer partout : **un service déclenché par timer n'a pas de section
-`[Install]`**. Sans elle, `systemctl enable factura-sauv.service` échoue avec
+`[Install]`**. Sans elle, `systemctl enable factura-sauv.service` n'active rien et affiche
 `The unit files have no installation config`, ce qui transforme l'erreur en
 message clair au lieu d'un comportement silencieux. C'est une protection gratuite.
 :::
@@ -639,7 +637,7 @@ et économiser l'énergie — ce qui est un objectif de portable, pas de serveur
 le même instant. Sa valeur par défaut est `1min`, et `AccuracySec=1us` est la
 façon d'obtenir un déclenchement à la seconde près.
 
-c) `OnUnitActiveSec=1d` remplacerait l'horaire fixe par une cadence glissante :
+b) `OnUnitActiveSec=1d` remplacerait l'horaire fixe par une cadence glissante :
 l'heure d'exécution dériverait chaque jour. d) `Persistent=true` ne concerne que
 le rattrapage.
 :::
@@ -687,7 +685,7 @@ machines qui écrivent dans le même fichier partagé : là, il faut un verrou
 réseau.
 
 Enfin, pour éviter qu'une collecte bloquée n'empêche toutes les suivantes
-indéfiniment, on ajoute `RuntimeMaxSec=` au service : systemd la tue au-delà du
+indéfiniment, on ajoute `TimeoutStartSec=` au service (`RuntimeMaxSec=` est sans effet sur un `Type=oneshot`) : systemd la tue au-delà du
 délai et le cycle repart.
 :::
 
@@ -894,16 +892,16 @@ des valeurs. Écrire `1-31` au lieu de `*` change le comportement : `1-31` est
 est identique. C'est une source de bugs authentique.
 
 L'astuce `1-7 * *` + test sur `date +\%u` fonctionne parce que le premier vendredi
-du mois tombe forcément entre le 1er et le 7. Même logique pour le dernier
-vendredi : `0 3 24-31 * *` avec le même test.
+du mois tombe forcément entre le 1er et le 7. Le dernier
+vendredi n'a pas de plage fixe (22–28 en février, 25–31 en mai) : on écrit `0 3 * * 5` et on teste que dans sept jours on aura changé de mois, `[ "$(date -d '+7 days' +\%m)" != "$(date +\%m)" ]`.
 :::
 
 ::: piege
 Deux erreurs d'écriture reviennent tout le temps. D'abord `%u` non échappé, qui
 tronque la commande (Q17.3). Ensuite l'oubli que `&&` dans une crontab est
 interprété par `/bin/sh` : si la condition est fausse, le code retour de la
-ligne est non nul, et cron considère que la tâche a échoué — ce qui génère un
-mail si `MAILTO` est positionné. Terminer la ligne par `|| true` évite le bruit.
+ligne est non nul. cron l'ignore (il ne réagit qu'à la sortie), mais le jour où la ligne migre sous un outil qui juge le code retour (timer systemd, sonde), chaque jour « non vendredi » devient un
+échec. `if …; then …; fi` évite ce faux échec sans masquer celui du script.
 
 En timer systemd, tout ceci disparaît : `OnCalendar=Fri *-*-01..07 03:00:00`
 exprime directement « le premier vendredi du mois », avec un vrai ET, vérifiable
@@ -920,8 +918,8 @@ $ systemd-analyze calendar --iterations=3 "Fri *-*-01..07 03:00:00"
 
 **Réponse attendue — cinq étapes.**
 
-1. **Confirmer que la tâche est déclenchée.** `journalctl -t CRON --since today
-   | grep <script>`. Si la ligne `CMD (...)` n'apparaît pas, le problème est dans
+1. **Confirmer que la tâche est déclenchée.** `journalctl -t CRON --since today |
+   grep <script>`. Si la ligne `CMD (...)` n'apparaît pas, le problème est dans
    la planification (syntaxe, champ utilisateur, fichier non relu), pas dans le
    script. On s'arrête là.
 2. **Récupérer le message d'erreur.** Il est très probablement perdu : c'est le
@@ -995,7 +993,7 @@ l'historique, `systemctl status x` donne le dernier code retour.
 **3. Contrôle des ressources.** Chaque service a son cgroup :
 `CPUQuota=50%`, `MemoryMax=512M`, `IOWeight=`, `Nice=`, plus le durcissement
 (`PrivateTmp=`, `ProtectSystem=strict`, `User=`). Un `mysqldump` qui dérape ne
-met plus la production à genoux. Et `RuntimeMaxSec=30min` tue une tâche bloquée.
+met plus la production à genoux. Et `TimeoutStartSec=30min` (pour un `oneshot`) tue une tâche bloquée.
 
 **4. Gestion d'échec.** `OnFailure=alerte@%n.service` déclenche une action
 **automatique** en cas d'échec, sans écrire de `if` ni de `||` dans le script.
@@ -1256,7 +1254,8 @@ témoin **uniquement en cas de succès**. Une seconde tâche, indépendante, vé
 périodiquement l'âge du témoin et échoue s'il dépasse un seuil. C'est L17.5.
 
 ```bash
-age=$(( ($(date +%s) - $(stat -c %Y /var/lib/factura/derniere-sauvegarde)) / 3600 ))
+temoin=/var/lib/factura/derniere-sauvegarde
+age=$(( ($(date +%s) - $(stat -c %Y "$temoin")) / 3600 ))
 [ "$age" -le 26 ] || { echo "sauvegarde vieille de ${age} h" >&2; exit 1; }
 ```
 
@@ -1441,14 +1440,14 @@ La première : « de 08:00 à 20:00 » n'est pas exprimable en une ligne, parce 
 `8-20` inclut 20:10, 20:20… jusqu'à 20:50. Il faut soit accepter la dérive, soit
 deux lignes. En systemd, une seule expression suffit :
 `OnCalendar=Mon..Fri *-*-* 08..20:00/10:00` — mais elle a le même défaut ; la
-forme exacte demande `Mon..Fri *-*-* 08..19:00/10,20:00`.
+forme exacte demande deux lignes `OnCalendar=` dans le même `[Timer]` (elles se cumulent) : `Mon..Fri *-*-* 08..19:00/10:00` et `Mon..Fri *-*-* 20:00:00`.
 
 La deuxième : cron ne connaît pas « le dernier jour du mois ». Il faut énumérer,
 et distinguer les mois de 31 et de 30 jours. C'est fragile et illisible. systemd
 a l'opérateur `~`, compté depuis la fin du mois :
 
 ```console
-$ systemd-analyze calendar --iterations=2 "*-03,06,09,12-~01 23:45:00"
+   $ systemd-analyze calendar --iterations=2 "*-03,06,09,12~01 23:45:00"
     Next elapse: Wed 2026-09-30 23:45:00 CEST
    Iteration #2: Thu 2026-12-31 23:45:00 CET
 ```
@@ -1488,8 +1487,7 @@ Deux points de méthode.
 
 Le format `%F %T` donne `2026-09-18 22:14:01`, mais les **deux** `%` doivent être
 échappés : le premier coupe la commande, le second serait converti en saut de
-ligne. Sans échappement, la commande devient `date '+` — qui affiche une ligne
-vide et sort en 0, donc sans la moindre alerte. C'est le pire cas : un bug muet.
+ligne. Sans échappement, la commande devient `date '+` : apostrophe non fermée, `/bin/sh` sort en erreur de syntaxe, et comme la redirection `>>` était après le `%`, rien n'arrive dans le fichier ; l'erreur part dans un mail qui n'existe pas (`MAILTO=""`). C'est le pire cas : un bug muet.
 
 `$HOME` est bien substitué, parce que c'est le **shell** appelé par cron qui fait
 la substitution, et que cron positionne `HOME`. En revanche, `~` ne fonctionne
@@ -1540,11 +1538,11 @@ PATH=/usr/bin:/bin
 ```
 
 ::: pourquoi
-Cinq variables. Une session SSH interactive en compte trente à cinquante.
+Six variables. Une session SSH interactive en compte trente à cinquante.
 Ce fichier est la pièce à conviction de tous les diagnostics du module : garde-le.
 
 L'absence la plus lourde de conséquences est `PATH`. Les suivantes sont
-`LANG`/`LC_ALL` — un script qui trie avec `sort` ou compare des dates formatées
+`LC_ALL`/`LC_*` (seul `LANG` est posé, via PAM) — un script qui trie avec `sort` ou compare des dates formatées
 ne produit pas le même résultat en `C` et en `fr_FR.UTF-8` — et toutes les
 variables applicatives (`JAVA_HOME`, `NVM_DIR`, `KUBECONFIG`, `AWS_PROFILE`,
 `DOCKER_HOST`) que le `.bashrc` posait.
@@ -1684,7 +1682,8 @@ conclure à tort que le script n'a pas tourné.
 **E17.8** — *Sortie d'un script vers le journal, sous étiquette.*
 
 ```bash
-/opt/factura/bin/factura-rapport.sh 2>&1 | logger -t factura-rapport -p user.info
+/opt/factura/bin/factura-rapport.sh 2>&1 \
+  | logger -t factura-rapport -p user.info
 journalctl -t factura-rapport --since '-10min'
 ```
 
@@ -2033,8 +2032,8 @@ systemctl list-timers --all
 
 ```console
 NEXT                        LEFT     LAST                        PASSED  UNIT
-Sat 2026-09-19 00:00:00 CEST 4h 17min Fri 2026-09-18 00:00:11 CEST 19h ago logrotate.timer
-Sat 2026-09-19 06:15:00 CEST 10h      Fri 2026-09-18 06:15:02 CEST 13h ago factura-rapport.timer
+Sat 2026-09-19 00:00 4h   Fri 2026-09-18 00:00 19h ago logrotate.timer
+Sat 2026-09-19 06:15 10h  Fri 2026-09-18 06:15 13h ago factura-rapport.timer
 -                            -        -                           -       factura-orphelin.timer
 ```
 
@@ -2109,8 +2108,8 @@ réglage de fond : UTC sur les serveurs, point.
 
 Le **suffixe de fuseau** dans l'expression (`22:00:00 UTC`,
 `09:00:00 Europe/Paris`) verrouille l'interprétation de cette expression-là,
-indépendamment du réglage système. Disponible depuis systemd 252, donc sur
-Ubuntu 24.04 (systemd 255). C'est la ceinture par-dessus les bretelles : l'unité
+indépendamment du réglage système. Disponible de longue date ( systemd 233 pour les noms de zone), donc sur
+Ubuntu 24.04 (systemd 255) comme sur Rocky 9 (systemd 252). C'est la ceinture par-dessus les bretelles : l'unité
 reste correcte même si quelqu'un change le fuseau de la machine.
 
 Cron n'a **aucun** équivalent. Une crontab suit le fuseau système, sans
@@ -2269,7 +2268,8 @@ exit 0
 # /etc/cron.d/factura-sauvegarde   (0644, root:root)
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 MAILTO=""
-30 2 * * * factura flock -n /run/lock/factura-sauv.lock /opt/factura/bin/factura-sauvegarde-nuit.sh 2>&1 | logger -t factura-sauv
+30 2 * * * factura flock -n --verbose /run/lock/factura-sauv.lock
+ /opt/factura/bin/factura-sauvegarde-nuit.sh 2>&1 | logger -t factura-sauv
 ```
 
 **La recette.**
@@ -2308,8 +2308,8 @@ valide de 45 octets qui écrase les précédentes par rotation. C'est le scénar
 noms ne contiennent pas de saut de ligne, ce qui est garanti ici par le format du
 nom.
 
-**`flock -n` dans la crontab.** Le `-n` fait échouer immédiatement la seconde
-exécution. Comme `flock` sort en 1 et que la sortie passe par `logger`, la
+`flock -n --verbose` **dans la crontab.** Le `-n` fait échouer immédiatement la seconde
+exécution, en code 1 mais **sans rien écrire**. `--verbose` lui fait dire `flock: failed to get lock` ; comme la sortie passe par `logger`, la
 collision laisse une trace datée dans le journal.
 
 **`2>&1 | logger -t`.** Tout, sur un seul canal, étiqueté. `MAILTO=""` évite le
@@ -2353,7 +2353,7 @@ ExecStart=/opt/factura/bin/factura-sauvegarde-nuit.sh
 # contraintes de ressources
 CPUQuota=50%
 MemoryMax=512M
-RuntimeMaxSec=30min
+TimeoutStartSec=30min
 
 # durcissement, gratuit
 PrivateTmp=true
@@ -2400,7 +2400,7 @@ sudo sed -i 's|^30 2|#MIGRE-VERS-TIMER-2026-09-18 30 2|' \
 
 Réponse au point 7 : si le timer se déclenche alors que le service tourne encore,
 **rien ne se passe**. systemd ne démarre jamais deux instances d'une même unité ;
-la demande est fusionnée avec le job en cours (Q17.15). `RuntimeMaxSec=30min`
+la demande est fusionnée avec le job en cours (Q17.15). `TimeoutStartSec=30min`
 garantit qu'un blocage ne gèle pas le cycle indéfiniment.
 
 ::: pourquoi
@@ -2422,9 +2422,9 @@ processus ne peut pas consommer plus d'un demi-cœur, quel que soit le nombre de
 threads. **`MemoryMax=512M`** est une limite dure : au-delà, le cgroup déclenche
 l'OOM killer sur le service seul, sans toucher au reste de la machine.
 
-**`RuntimeMaxSec=30min`** est ce que cron ne sait pas faire du tout : au-delà,
+`TimeoutStartSec=30min` est ce que cron ne sait pas faire du tout : au-delà,
 systemd envoie `SIGTERM` puis `SIGKILL`, et l'unité passe en `failed` avec
-`Result=timeout` — donc `OnFailure=` se déclenche.
+`Result=timeout` — donc `OnFailure=` se déclenche. Pour un `Type=oneshot`, toute l'exécution est la phase de démarrage : c'est `TimeoutStartSec=` (désactivé par défaut pour ce type) qui la borne, `RuntimeMaxSec=` y est sans effet.
 
 **`ProtectSystem=strict`** monte tout le système de fichiers en lecture seule
 pour ce service ; `ReadWritePaths=` rouvre précisément ce qu'il doit écrire. Un
@@ -2483,8 +2483,12 @@ OnFailure=factura-alerte@%n.service
 [Service]
 Type=oneshot
 ExecStart=/opt/factura/bin/factura-cert-check.sh \
-          /etc/factura/tls/portail.crt 30
+          /etc/factura/tls/portail.crt 7
 ```
+
+Le certificat posé par le setup expire dans une douzaine de jours : avec un
+seuil de 30, le contrôle échouerait dès la première exécution. On retient 7 pour
+que le chemin nominal passe, et on provoque l'échec explicitement.
 
 ```ini
 # /etc/systemd/system/factura-cert.timer
@@ -2614,7 +2618,7 @@ fi
 
 AGE=$(( ( $(date +%s) - $(stat -c %Y "$TEMOIN") ) / 3600 ))
 if [ "$AGE" -gt "$SEUIL" ]; then
-  echo "ALERTE : derniere sauvegarde reussie il y a ${AGE} h (seuil ${SEUIL} h)" >&2
+  echo "ALERTE : derniere sauvegarde il y a ${AGE} h (seuil ${SEUIL} h)" >&2
   exit 1
 fi
 echo "OK : derniere sauvegarde reussie il y a ${AGE} h"
@@ -2723,7 +2727,7 @@ sudo journalctl -t factura-collecte --since '-20min'
 
 # 3. où est ce binaire, et qui le voit ?
 command -v factura-inventaire        # /usr/local/bin/factura-inventaire
-sudo -u factura sh -c 'echo $PATH'   # secure_path de sudo : contient /usr/local/bin
+sudo -u factura sh -c 'echo $PATH'   # secure_path : /usr/local/bin y est
 
 # 4. quel PATH cron applique-t-il vraiment ?
 sudo cat /etc/cron.d/factura-collecte
@@ -2737,8 +2741,8 @@ ce binaire est en `/usr/local/bin`, hors de ce `PATH`. Le script sort en 127.
 **Correctif** (interdit de toucher au script) :
 
 ```bash
-sudo sed -i 's|^PATH=.*|PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|' \
-  /etc/cron.d/factura-collecte
+P=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+sudo sed -i "s|^PATH=.*|PATH=$P|" /etc/cron.d/factura-collecte
 # vérification sans attendre 5 minutes
 sudo runuser -u factura -- env -i PATH=/usr/local/bin:/usr/bin:/bin \
   HOME=/srv/factura /opt/factura/bin/factura-collecte.sh
@@ -2754,7 +2758,8 @@ le `PATH` par la valeur de `secure_path` définie dans `/etc/sudoers`.
 
 ```console
 $ sudo grep secure_path /etc/sudoers
-Defaults    secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+   Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:\
+   /sbin:/bin"
 ```
 
 `/usr/local/bin` y figure. Les deux méthodes naturelles de test — lancer le script
@@ -2803,7 +2808,7 @@ $ systemctl list-timers --all | grep factura-hebdo
 ```
 
 Que des tirets : le timer est chargé mais **inactif**. Aucune échéance n'est
-programmée. La tâche n'est plus planifiée.
+programmée. La tâche n'est plus planifiée. (Si systemd a déchargé l'unité inactive, la ligne manque : `systemctl list-unit-files 'factura-hebdo*'` montre alors le timer `disabled`.)
 
 **Diagnostic.**
 
@@ -2859,7 +2864,7 @@ Le piège d'après-coup : « je remets le timer en route, l'affaire est classée
 Non. Le service est resté `enabled`, donc il tournera encore à chaque démarrage,
 en plus des lundis. Il faut le `disable`, et supprimer la section `[Install]` du
 fichier `.service` pour que l'erreur ne puisse pas être refaite — `enable` sur ce
-service échouera alors avec un message clair.
+service n'activera plus rien et le dira clairement.
 
 Autre piège : croire que `Persistent=true` aurait rattrapé les trois semaines
 manquées. Non : `Persistent=` n'agit qu'au **démarrage du timer**. Un timer
@@ -2886,7 +2891,7 @@ wait; cat /srv/factura/etat/compteur.txt; echo
 ```console
 19:40:06 compteur : 4820 -> 5020
 19:40:06 compteur :  -> 200
-502 0200          <- deux écritures entremêlées
+5020200           <- deux écritures collées
 ```
 
 **Mécanisme.** Le script fait une séquence **lecture → calcul → troncature →
@@ -3001,15 +3006,16 @@ La substitution `$(` n'est jamais refermée :
 
 ```console
 $ sudo journalctl -t CRON --since '-5min' | tail -2
-cron[1533]: (factura) CMD (tar czf /srv/factura/backups/data-$(date +)
+cron[1533]: (factura) CMD (tar czf /srv/factura/backups/data-$(date +%F).tgz
+    /srv/factura/data 2>&1 | logger -t factura-archivage)
 cron[1533]: (CRON) info (No MTA installed, discarding output)
 $ /bin/sh -c 'tar czf /srv/factura/backups/data-$(date +'
 /bin/sh: 1: Syntax error: end of file unexpected (expecting ")")
 ```
 
-Noter que le pipe vers `logger` fait lui aussi partie de ce qui est passé sur
+La ligne `CMD` reproduit la commande **telle qu'écrite** dans la crontab, `%` compris; la troncature n'y est pas visible. L'indice est la ligne suivante : la commande a produit une sortie, que cron a voulu poster par mail. Le pipe vers `logger` fait lui aussi partie de ce qui est passé sur
 stdin : l'erreur ne part donc **pas** dans le journal étiqueté, seulement dans le
-mail — inexistant. D'où le silence.
+mail — inexistant. D'où le silence sous `factura-archivage`, et la reproduction à la main avec `/bin/sh -c` pour obtenir le message.
 
 **Correctif dans la crontab :**
 
@@ -3037,17 +3043,16 @@ Ensuite, la commande **fonctionne parfaitement** quand on la copie-colle dans un
 shell. Impossible de reproduire l'erreur par le test naturel — c'est la même
 famille de piège que BF17.1.
 
-Enfin, le message d'erreur parle du **shell** et non de `tar`, ce qui oriente le
-diagnostic dans la mauvaise direction. Le vrai indice est la ligne `CMD` du
-journal : elle montre la commande **telle que cron l'a réellement lancée**, donc
-tronquée. Un coup d'œil à cette ligne et le mécanisme saute aux yeux.
+Enfin, le message d'erreur, une fois reproduit, parle du **shell** et non de `tar`, ce qui oriente le
+diagnostic dans la mauvaise direction. Le vrai indice est le couple `CMD` + `discarding output` du
+journal : la commande produit une sortie que personne ne lit, et un `%` figure dans la ligne `CMD`. Un coup d'œil à cette ligne et le mécanisme saute aux yeux.
 
 Formes correctes de l'échappement :
 
 ```cron
 0 2 * * * cmd $(date +\%F)          # dans une substitution
-0 2 * * * cmd `date +\%Y\%m\%d`     # chaque % s'échappe séparément
-0 2 * * * printf '100\%% termine\n' # un % littéral s'écrit \%
+   0 2 * * * cmd `date +\%Y\%m\%d`     # un antislash par signe
+   0 2 * * * printf '100\%\% ok\n'  # deux signes, deux antislashs
 ```
 :::
 
@@ -3080,7 +3085,8 @@ différent, la vigilance est la même.
 ```bash
 #!/usr/bin/env bash
 # audit-planif.sh — inventaire et audit des tâches planifiées d'un hôte.
-# stdout : rapport Markdown. stderr : trace de diagnostic. 0 = RAS, 1 = anomalies.
+# stdout : rapport Markdown. stderr : trace de diagnostic.
+# code retour : 0 = RAS, 1 = anomalies.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -3118,7 +3124,7 @@ while IFS=: read -r u _; do
       case "$cmd" in
         *'/dev/null'*) anomalie "crontab $u : sortie jetée — \`$cmd\`" ;;
       esac
-    done
+    done || true    # crontab -l sort en 1 sans crontab (voir le piège 3)
 done < <(getent passwd)
 
 # --- 2. /etc/crontab et /etc/cron.d -----------------------------------

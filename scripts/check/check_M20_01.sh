@@ -16,8 +16,8 @@ BASE_IMG=/var/lib/libvirt/images/ubuntu-24.04-base.qcow2
   || ko "/dev/kvm absent (virtualisation imbriquée : cpu host + nested=1 sur le nœud)"
 id -nG | tr ' ' '\n' | grep -qx libvirt && ok "membre du groupe libvirt" \
   || ko "pas dans le groupe libvirt (adduser, puis nouvelle session)"
-grep -qs 'LIBVIRT_DEFAULT_URI=qemu:///system' ~/.bashrc ~/.profile \
-  ~/.config/libvirt/libvirt.conf 2>/dev/null \
+grep -qsE 'LIBVIRT_DEFAULT_URI=qemu:///system|uri_default *= *"qemu:///system"' \
+  ~/.bashrc ~/.profile ~/.config/libvirt/libvirt.conf 2>/dev/null \
   && ok "URI qemu:///system fixée de façon persistante" \
   || ko "LIBVIRT_DEFAULT_URI=qemu:///system absent de ~/.bashrc"
 $V net-info default 2>/dev/null | grep -q 'Active: *yes' \

@@ -351,10 +351,13 @@ VITRINE_LOG=/var/log/vitrine/api.log
 VITRINE_DEP_HOST=api-interne.lab.local
 VITRINE_DEP_PORT=8081
 VITRINE_DEP_REPLI=127.0.0.1
-VITRINE_FUITE=0
-VITRINE_FD=0
+# VITRINE_FUITE et VITRINE_FD valent 0 par défaut dans le code. Ne pas
+# les définir ici : EnvironmentFile= l'emporte sur Environment=, un
+# drop-in ne pourrait plus les régler.
 ENVEOF
 fi
+# idempotence : retire ces deux clés d'un api.env installé plus tôt
+sed -i '/^VITRINE_FUITE=/d; /^VITRINE_FD=/d' "$ETC/api.env"
 chown root:vitrine "$ETC/api.env"
 chmod 0640 "$ETC/api.env"
 
@@ -515,7 +518,8 @@ set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
 
 N="${1:-5}"
-REP="${REP_BREAK:-$HOME/workbook/scripts/break}"
+H_LAB=$(getent passwd "${SUDO_USER:-root}" | cut -d: -f6)
+REP="${REP_BREAK:-$H_LAB/workbook/scripts/break}"
 [ -d "$REP" ] || REP=/root/workbook/scripts/break
 [ -d "$REP" ] || { echo "répertoire des scripts break introuvable : \
 définis REP_BREAK" >&2; exit 1; }

@@ -40,7 +40,7 @@ grep -qsE '^\s*nf_conntrack\s*$' /etc/modules-load.d/*.conf \
   || ko "nf_conntrack absent de /etc/modules-load.d : la clé sera ignorée \
 au boot"
 if [ -d /run/systemd/system ]; then
-  journalctl -u systemd-sysctl -b --no-pager 2>/dev/null | \
+  sudo journalctl -u systemd-sysctl -b --no-pager 2>/dev/null | \
     grep -qiE 'cannot|failed|Couldn' \
     && ko "systemd-sysctl a émis une erreur à ce boot (journalctl -u \
 systemd-sysctl -b)" \
@@ -71,8 +71,8 @@ if [ "$(cat /sys/kernel/kexec_crash_loaded 2>/dev/null)" = 1 ]; then
 else
   ko "kdump non chargé : kdump-config show / systemctl status kdump-tools"
 fi
-if ls /var/crash/*/dump* >/dev/null 2>&1 || ls /var/crash/*/vmcore* \
-   >/dev/null 2>&1; then
+if sudo ls /var/crash/*/dump* >/dev/null 2>&1 || \
+   sudo ls /var/crash/*/vmcore* >/dev/null 2>&1; then
   ok "un dump existe dans /var/crash (test réel effectué)"
 else
   ko "aucun dump dans /var/crash : le test SysRq 'c' n'a pas été fait"
@@ -94,7 +94,7 @@ if [ -x "$S" ]; then
   ok "script $S exécutable"
   head -5 "$S" | grep -q 'set -euo pipefail' && ok "set -euo pipefail" \
     || ko "le script n'a pas set -euo pipefail en tête"
-  OUT=$(sudo -n "$S" 2>/dev/null); RC=$?
+  OUT=$("$S" 2>/dev/null); RC=$?
   L=$(printf '%s\n' "$OUT" | grep -cE '^\[ ?(OK|FAIL) ?\]')
   [ "$L" -ge 12 ] && ok "le script affiche $L lignes [ OK ]/[FAIL]" \
     || ko "le script n'affiche que $L lignes [ OK ]/[FAIL] (12 attendues)"

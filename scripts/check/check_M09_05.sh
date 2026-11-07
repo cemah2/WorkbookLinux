@@ -42,7 +42,7 @@ if command -v chronyc >/dev/null 2>&1; then
   chronyc tracking 2>/dev/null | grep -q 'Leap status *: Normal' \
     && ok "chronyc tracking : Leap status Normal (synchronisé)" \
     || ko "chrony n'est pas synchronisé (chronyc sources -v)"
-  C=$(sudo -n chronyc clients 2>/dev/null | grep -cE '^10\.10\.10\.' || true)
+  C=$(sudo chronyc clients 2>/dev/null | grep -cE '^10\.10\.10\.' || true)
   [ "${C:-0}" -ge 1 ] && ok "$C client(s) du lab vu(s) par chronyc clients" \
     || ko "aucun client 10.10.10.x vu (clients configurés ? serveur \
 redémarré avant eux ?)"

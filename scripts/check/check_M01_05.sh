@@ -69,7 +69,10 @@ if PATH="$PATH_SALE" "$AUDIT" > "$TMP/sale.md" 2>/dev/null; then
 else
   ok "un PATH pollué fait sortir le script en 1"
 fi
-if grep -qF '.' "$TMP/sale.md" && grep -qi 'inexistant\|nexiste' "$TMP/sale.md"
+# '.' seul : entre backticks/guillemets, isolé, ou « répertoire courant »
+MOTIF_POINT='`\.`|"\."|courant|(^|[[:space:]:])\.([[:space:]:]|$)'
+if grep -qiE "$MOTIF_POINT" "$TMP/sale.md" &&
+   grep -qi 'inexistant\|nexiste' "$TMP/sale.md"
 then
   ok "les deux anomalies de PATH sont signalées nommément"
 else

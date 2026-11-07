@@ -2,13 +2,13 @@
 
 ## 10.3 Quiz — QCM
 
-**Q10.1** — *`apt upgrade` affiche « The following packages have been kept back ».*
+**Q10.1** — `apt-get upgrade` *affiche « The following packages have been kept back ».*
 
 **Réponse : b)** leur mise à jour exigerait d'installer ou de supprimer d'autres
 paquets, ce qu'`upgrade` s'interdit.
 
 ::: pourquoi
-`apt upgrade` a un contrat très précis, et c'est ce contrat qui produit le
+`apt-get upgrade` a un contrat très précis, et c'est ce contrat qui produit le
 message : **il ne supprime jamais un paquet installé et n'en installe jamais un
 nouveau**. Il ne fait que remplacer une version par une autre, paquet pour
 paquet.
@@ -16,8 +16,10 @@ paquet.
 Le cas typique est le méta-paquet `linux-generic`. Sa nouvelle version dépend de
 `linux-image-6.8.0-52-generic`, qui n'est pas installé. Mettre à jour
 `linux-generic` obligerait donc à **installer** un paquet supplémentaire.
+
+`apt-get`
 `upgrade` refuse, et signale le paquet comme *kept back*. `apt full-upgrade`,
-qui a le droit d'installer et de supprimer, passe sans broncher.
+qui a le droit d'installer et de supprimer, passe sans broncher. Nuance à connaître : la commande `apt upgrade` (sans `-get`) est un peu plus permissive — elle **accepte d'installer** de nouveaux paquets (c'est `apt-get upgrade --with-new-pkgs`), mais **refuse toujours d'en supprimer**. Avec `apt upgrade`, le même noyau serait donc monté; un *kept back* sous `apt upgrade` signale une suppression nécessaire (changement de nom de bibliothèque) ou un déploiement progressif (voir le piège).
 
 Comment on tranche en trois secondes :
 
@@ -35,7 +37,7 @@ a) est le piège classique : `hold` et *kept back* produisent le même symptôme
 apparent mais ont des causes opposées. Un `hold` est une **décision humaine**
 enregistrée dans la base dpkg ; un *kept back* est une **conséquence
 arithmétique** du refus d'`upgrade` de toucher à la liste des paquets installés.
-Sur les noyaux, il existe un troisième cas depuis Ubuntu 22.04 : le
+Sur les noyaux, il existe un troisième cas depuis Ubuntu 21.04 : le
 **déploiement progressif** (*phased updates*), qui affiche
 `The following upgrades have been deferred due to phasing:`. Celui-là se lève
 tout seul en quelques jours, et on ne le force pas sans raison.
@@ -116,15 +118,12 @@ La distinction est fondamentale et revient tout le temps en entretien :
 
 ```bash
 sudo apt install -y apt-file && sudo apt-file update
-apt-file search /usr/sbin/nginx     # -> nginx-core: /usr/sbin/nginx
-apt-file list nginx-core            # inverse : fichiers d'un paquet non installé
+apt-file search /usr/sbin/nginx     # -> nginx: /usr/sbin/nginx
+apt-file list nginx           # inverse : fichiers d'un paquet non installé
 ```
 
-Attention à un détail qui piège : sur Ubuntu 24.04, `dpkg -S /bin/ls` répond
-`no path found matching pattern /bin/ls`, alors que `dpkg -S /usr/bin/ls` répond
-`coreutils`. La fusion `/usr` (`/bin` est un lien vers `/usr/bin`) fait que la
-base dpkg ne connaît que les chemins canoniques. Le réflexe est
-`dpkg -S "$(readlink -f "$(command -v ls)")"`.
+Attention à un détail qui piège : sur un système à `/usr` fusionné (`/bin` est un lien vers `/usr/bin`), la base dpkg n'enregistre qu'**un** des deux chemins pour chaque fichier — celui que le paquet a livré. Selon le paquet, `dpkg -S /bin/ls` ou `dpkg -S` `/usr``/bin``/ls` peut répondre `no path found matching pattern`. Le réflexe est d'essayer les deux formes, ou
+`dpkg -S "$(readlink -f "$(command -v ls)")"` puis la forme courte.
 :::
 
 ::: rhel
@@ -179,8 +178,8 @@ n'importe quel contenu, signé ou non, modifié en route ou non. C'est exactemen
 la porte d'entrée d'une attaque sur le chemin. On le voit pourtant partout dans
 les scripts de CI.
 
-d) `apt-key adv --recv-keys` cumule deux fautes : la commande est supprimée
-depuis Ubuntu 22.04 (`Command apt-key is deprecated`), et surtout elle installe
+b) `apt-key adv --recv-keys` cumule deux fautes : la commande est dépréciée
+depuis Ubuntu 22.04 (`Warning: apt-key is deprecated`), et surtout elle installe
 la clé dans le trousseau **global**, où elle vaut pour tous les dépôts. Voir
 Q10.6.
 :::
@@ -278,7 +277,7 @@ Résultat, sur une machine à jour :
 ```console
 $ sudo apt upgrade
 The following packages will be DOWNGRADED:
-  age apt base-files binutils bsdutils coreutils curl dpkg e2fsprogs
+  apt base-files binutils bsdutils coreutils curl dpkg e2fsprogs
   git gnupg gzip less libc6 ... (plusieurs centaines)
 ```
 
@@ -421,7 +420,7 @@ a) `--force-confnew` écrase silencieusement toutes les configurations locales d
 parc. Sur 200 serveurs, c'est un incident majeur découvert au redémarrage d'un
 service.
 
-d) `--force-all` est le bouton rouge : il désactive **toutes** les protections
+b) `--force-all` est le bouton rouge : il désactive **toutes** les protections
 de dpkg, y compris les vérifications de dépendances et les refus d'écraser les
 fichiers d'un autre paquet. Il existe pour sortir d'une situation désespérée,
 manuellement, en sachant ce qu'on fait — jamais dans un automate.
@@ -545,7 +544,7 @@ fichier est créé par le service et supprimé par logrotate.
 L'usage sérieux de `rpm -V`, c'est de chercher les **binaires** modifiés :
 
 ```bash
-rpm -Va --nofiles --noghost 2>/dev/null | grep -vE '^\S+\s+c '
+rpm -Va --noconfig --noghost 2>/dev/null
 rpm -Va | awk '$2 != "c" && $1 ~ /5/'   # contenu modifié hors conffile
 ```
 
@@ -564,20 +563,19 @@ sommes du dépôt).
 
 **Q10.15** — *`dnf install nodejs` installe la 16 au lieu de la 20.*
 
-**Réponse : b)** un flux de module (`nodejs:16`) est activé et masque les autres.
+**Réponse : b)** aucun flux n' est activé : les versions modulaires sont filtrées, `dnf` installe le paquet non modulaire (16).
 
 ::: pourquoi
 Les **modules** (AppStream, RHEL 8 et 9) permettent au dépôt de contenir
 plusieurs versions majeures du même logiciel. Chaque version majeure est un
-**flux** (*stream*). La règle qui surprend tout le monde : **activer un flux
-masque tous les autres**, y compris pour les dépendances.
+**flux** (*stream*). Sur RHEL/Rocky 9, la version initiale (Node.js 16) est livrée en RPM **non modulaire**, les suivantes (18, 20, 22) en flux, **sans flux par défaut**. Tant qu'aucun flux n'est activé, les paquets modulaires sont filtrés : `dnf install nodejs` ne voit que la 16. Et à l'inverse, **activer un flux masque tout le reste**, y compris pour les dépendances.
 
 ```bash
 dnf module list nodejs
 # Name     Stream   Profiles          Summary
-# nodejs   16 [e]   common [d], ...   Javascript runtime
 # nodejs   18       common [d], ...   Javascript runtime
 # nodejs   20       common [d], ...   Javascript runtime
+# nodejs   22       common [d], ...   Javascript runtime
 #   [e] = enabled, [d] = default, [x] = disabled, [i] = installed
 
 sudo dnf module reset nodejs        # on repart de zéro
@@ -644,7 +642,7 @@ désinstalle, se déploie avec Ansible et se retrouve dans `dpkg -S`.
 ::: piege
 `checkinstall` promettait exactement ça en automatique : il exécute
 `make install` sous surveillance et fabrique un paquet à partir des fichiers
-touchés. Il est abandonné (dernière version de 2010, retiré des dépôts Debian),
+touchés. Il n' est quasiment plus maintenu (dernière version publiée en 2010, encore présent dans `universe` sous forme d'instantané Git),
 il rate les fichiers créés indirectement, produit des métadonnées bancales et
 tourne en root sur du code de build arbitraire. On cite son existence, on ne
 s'en sert pas. Les outils actuels sont `fpm`, `nfpm`, ou `dpkg-deb` à la main
@@ -663,8 +661,8 @@ Ce message vient de la PEP 668. Ubuntu 24.04 dépose un fichier
 appartient au gestionnaire de paquets système, ne le modifie pas ».
 
 Le problème qu'il résout est réel et grave : `sudo pip install` écrit dans
-`/usr/lib/python3/dist-packages`, là où apt a installé ses paquets. pip ne
-connaît pas dpkg ; il écrase une bibliothèque dont dépend un outil système écrit
+`/usr/local/lib/python3.12/dist-packages`, qui passe **avant** `/usr/lib/python3/dist-packages` ( où apt a installé ses paquets) dans `sys.path`. pip ne
+connaît pas dpkg ; il masque ou remplace une bibliothèque dont dépend un outil système écrit
 en Python — sur Ubuntu, cela inclut `apt_pkg`, `netplan`, `cloud-init`,
 `unattended-upgrades`. On casse alors le gestionnaire de paquets avec le
 gestionnaire de paquets d'un autre langage, et on ne peut plus réparer avec apt.
@@ -760,7 +758,7 @@ cherche à résoudre.
 5. **Passage à dpkg.** apt appelle `dpkg --unpack` pour chaque paquet, dans un
    ordre calculé pour respecter les `Pre-Depends`, puis `dpkg --configure`.
 6. **Déballage.** dpkg extrait `data.tar.*`, écrit les fichiers, enregistre la
-   liste dans `/var/lib/dpkg/info/nginx-core.list` et les sommes des conffiles
+   liste dans `/var/lib/dpkg/info/nginx.list` et les sommes des conffiles
    dans `/var/lib/dpkg/status`.
 7. **Configuration.** dpkg exécute `postinst`, qui déclenche `debconf` si
    besoin, crée l'utilisateur système, active l'unité systemd
@@ -791,14 +789,13 @@ rend l'état `iU` possible — déballé, pas configuré — et donc réparable 
 
 **Réponse attendue**
 
-`apt upgrade` ne fait que remplacer des versions : il n'installe et ne supprime
-jamais de paquet. `apt full-upgrade` (alias `dist-upgrade`) a le droit de faire
-les deux pour atteindre l'état cible.
+`apt upgrade` ne fait que remplacer des versions : il ne supprime
+jamais de paquet (et `apt-get upgrade`, plus strict, n'en installe pas non plus de nouveau). `apt full-upgrade` (alias `dist-upgrade`) a le droit d'installer et de supprimer pour atteindre l'état cible.
 
-Exemple concret : le passage de `linux-image-6.8.0-45-generic` à
-`-6.8.0-52-generic`. Le méta-paquet `linux-generic` dépend du nouveau nom de
-paquet, qui n'est pas installé. `upgrade` refuse et affiche *kept back* ;
-`full-upgrade` installe le nouveau noyau.
+Exemple concret : une bibliothèque qui change de nom de paquet à
+la montée de version (`libssl3` → `libssl3t64` lors de la transition `time64` de 24.04). Installer la nouvelle exige de
+**supprimer** l'ancienne : `upgrade` refuse et affiche *kept back* ;
+`full-upgrade` fait la transition. Autre exemple, propre à `apt-get upgrade` : un nouveau `linux-image-*` tiré par `linux-generic`, qui exige d'**installer** un paquet.
 
 En production : `upgrade` dans l'automate, `full-upgrade` à la main. Un
 automate qui a le droit de supprimer des paquets finit un jour par supprimer le
@@ -813,7 +810,7 @@ des dépôts au moment de l'exécution. C'est le même raisonnement qui fait qu'
 autorise un déploiement automatique et pas une migration de schéma automatique.
 
 Corollaire honnête, qu'il faut donner : sur une machine qui ne fait jamais que
-des `upgrade`, les paquets *kept back* s'accumulent, dont les noyaux. Il faut
+des `upgrade`, les paquets *kept back* s'accumulent ( les noyaux, si c'est `apt-get upgrade` qui tourne; les transitions de bibliothèques dans tous les cas). Il faut
 donc une revue périodique — c'est exactement ce que produit le script du défi D10.
 :::
 
@@ -1173,13 +1170,13 @@ une machine unique ; ce n'est pas une stratégie.
 **E10.1** — *Nombre de paquets réellement installés.*
 
 ```bash
-dpkg-query -f '${db:Status-Abbrev}\n' -W | grep -c '^ii'
+dpkg-query -f '${db:Status-Abbrev}\n' -W | grep -c '^.i '
 ```
 
 ::: pourquoi
 `dpkg -l | wc -l` est faux deux fois : il compte les cinq lignes d'en-tête, et
 il compte les paquets en état `rc` (supprimés, conffiles conservés) comme
-installés. `dpkg-query -W` ne sort que des données, une ligne par paquet, et
+installés. Le motif `^.i` retient tout paquet dont l'**état réel** (deuxième caractère) est `i`, y compris ceux retenus par `hold` (`hi`), qui sont bien installés. `dpkg-query -W` ne sort que des données, une ligne par paquet, et
 `${db:Status-Abbrev}` donne les trois caractères d'état. C'est la forme
 scriptable, et son format est stable — contrairement à l'affichage de `dpkg -l`,
 qui tronque les noms selon la largeur du terminal.
@@ -1369,10 +1366,10 @@ Trois outils, trois usages, et il faut les distinguer :
 
 ```console
 $ apt-cache policy
- 500 https://security.ubuntu.com/ubuntu noble-security/main amd64 Packages
+ 500 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages
      release v=24.04,o=Ubuntu,a=noble-security,n=noble,l=Ubuntu,c=main,b=amd64
      origin security.ubuntu.com
- 100 https://archive.ubuntu.com/ubuntu noble-backports/main amd64 Packages
+ 100 http://archive.ubuntu.com/ubuntu noble-backports/main amd64 Packages
      release v=24.04,o=Ubuntu,a=noble-backports,n=noble,l=Ubuntu,c=main,b=amd64
 ```
 
@@ -1522,7 +1519,7 @@ L'alternative durable, si l'on veut qu'un paquet vienne toujours des backports :
 
 ```ini
 # /etc/apt/preferences.d/60-backports-nginx.pref
-Package: nginx nginx-common nginx-core
+   Package: nginx nginx-common
 Pin: release a=noble-backports
 Pin-Priority: 600
 ```
@@ -1651,7 +1648,8 @@ peut pas empaqueter proprement — c'est un critère de qualité à part entièr
 python3 -m venv ~/lab10/venv-outil
 ~/lab10/venv-outil/bin/pip install --quiet requests
 ~/lab10/venv-outil/bin/python -c 'import requests; print(requests.__file__)'
-# /home/mathieu/lab10/venv-outil/lib/python3.12/site-packages/requests/__init__.py
+# /home/mathieu/lab10/venv-outil/lib/python3.12/site-packages/requests/
+#   __init__.py
 
 # preuve que le système n'a pas bougé
 python3 -c 'import requests' 2>&1 | tail -1
@@ -1687,7 +1685,7 @@ démontre que l'arborescence système n'a pas été touchée. C'est exactement c
 
 ### **L10.1** — Inventaire logiciel avant migration
 
-*Produire un rapport d'inventaire reproductible sur les cinq VM.*
+*Produire un rapport d'inventaire reproductible sur toutes les VM Ubuntu.*
 
 **Script attendu** (`~/lab10/bin/inventaire.sh`)
 
@@ -1703,9 +1701,9 @@ etat() { dpkg-query -f \
 printf '# Inventaire logiciel — %s — %s\n\n' "$(hostname -f)" "$(date +%F)"
 
 printf '## Paquets installés\n\n'
-INST=$(etat | grep -c '^ii ')
+INST=$(etat | grep -c '^.i ')        # ii et hi : installés
 RC=$(etat | grep -c '^rc ')
-printf -- '- installés (ii) : **%d**\n' "$INST"
+printf -- '- installés (ii, hi) : **%d**\n' "$INST"
 printf -- '- supprimés avec conffiles restants (rc) : %d\n\n' "$RC"
 
 printf '## Installés manuellement\n\n'
@@ -1728,7 +1726,7 @@ fi
 printf '## Hors dépôt officiel\n\n'
 printf 'Paquets installés dont la version ne figure dans aucun dépôt\n'
 printf 'configuré : ils ne seront PAS réinstallés automatiquement.\n\n'
-HORS=$(dpkg-query -f '${binary:Package}\n' -W 2>/dev/null \
+HORS=$(etat | awk '/^.i / {print $2}' \
   | while read -r p; do
       apt-cache policy "$p" 2>/dev/null | awk -v P="$p" '
         /^ \*\*\*/      {vu=1; next}
@@ -1775,7 +1773,7 @@ installée est marquée `***`. Juste en dessous, indentées, figurent les
 
 ```text
  *** 1.2.0 500
-        500 file:/srv/depot-lab ./ Packages      <- vient d'un dépôt
+           500 http://127.0.0.1:8099 ./ Packages   <- vient d'un dépôt
         100 /var/lib/dpkg/status
 ```
 
@@ -1795,7 +1793,7 @@ ne les remettra, et on s'en aperçoit trois semaines plus tard quand l'agent de
 sauvegarde ne tourne plus.
 
 Deuxième point de méthode : le script est en **lecture seule** et sort du
-Markdown sur stdout. On peut donc le lancer sur les cinq VM depuis `lab-adm` :
+Markdown sur stdout. On peut donc le lancer sur les autres VM depuis `lab-adm` :
 
 ```bash
 for h in 10.10.10.11 10.10.10.12 10.10.10.14; do
@@ -1830,10 +1828,13 @@ gpg --show-keys --with-fingerprint /srv/depot-lab/depot-lab.asc
 ```
 
 ```console
-pub   rsa3072 2026-09-18 [SCEAR]
+pub   rsa3072 2026-09-18 [SCEA]
       B92E A8B6 8C03 11BE 89F5  9CED 70D3 F6C8 4D69 95D5
 uid                      Depot Lab Interne <depot@lab.local>
 ```
+
+(La clé est générée par `setup_M10.sh` : l'empreinte et l'identifiant ci-dessus
+sont des valeurs d'exemple, les tiens seront différents.)
 
 ```bash
 # 2. installer la clé, dé-armurée, lisible par _apt
@@ -1948,8 +1949,8 @@ apt-cache madison outil-lab
 ```
 
 ```console
- outil-lab |      1.2.0 | file:/srv/depot-lab ./ Packages
- outil-lab |      1.0.0 | file:/srv/depot-lab ./ Packages
+ outil-lab |      1.2.0 | http://127.0.0.1:8099 ./ Packages
+ outil-lab |      1.0.0 | http://127.0.0.1:8099 ./ Packages
 ```
 
 ```bash
@@ -1961,7 +1962,7 @@ sudo apt install --allow-downgrades outil-lab=1.0.0
 # 3. geler par épinglage
 sudo tee /etc/apt/preferences.d/50-outil-lab.pref >/dev/null <<'EOF'
 # Gel outil-lab 1.0.0 — INC-3390 — la 1.2.0 casse la facturation.
-# Revue : 2026-12-01, a lever des validation de la 1.2.1.
+# Revue : 2026-12-01, a lever des la validation de la 1.2.1.
 Package: outil-lab
 Pin: version 1.0.0
 Pin-Priority: 1001
@@ -1978,9 +1979,9 @@ outil-lab:
   Candidate: 1.0.0
   Version table:
      1.2.0 500
-        500 file:/srv/depot-lab ./ Packages
+        500 http://127.0.0.1:8099 ./ Packages
  *** 1.0.0 1001
-        500 file:/srv/depot-lab ./ Packages
+        500 http://127.0.0.1:8099 ./ Packages
         100 /var/lib/dpkg/status
 ```
 
@@ -2277,7 +2278,7 @@ dont la priorité est la même que celle des dépôts de base. Deux conséquence
 un paquet d'EPEL peut **remplacer** un paquet de base lors d'une mise à jour, et
 l'ajouter en production sans protection est la cause classique des « ma machine
 RHEL a des paquets que le support refuse de dépanner ». La protection se pose
-avec le plugin `dnf-plugin-priorities` (`priority=99` sur EPEL) ou en excluant
+avec l'option native `priority=` du fichier `.repo` (une valeur plus grande est **moins** prioritaire : `priority=1` sur BaseOS/AppStream, EPEL au défaut 99) ou en excluant
 explicitement ce qui doit rester en version distribution :
 
 ```ini
@@ -2325,9 +2326,9 @@ dpkg-query -f '${db:Status-Abbrev} ${binary:Package}\n' -W | grep -v '^ii '
 
 ```console
 $ dpkg --audit
-The following packages have been unpacked but not yet configured.
-They must be configured using dpkg --configure or the configure
-menu option in dselect for them to work:
+The following packages are only half configured, probably due to problems
+configuring them the first time.  The configuration should be retried using
+dpkg --configure <package> or the configure menu option in dselect:
  outil-lab            Outillage interne du lab (module 10)
 ```
 
@@ -2552,9 +2553,9 @@ outil-lab:
   Candidate: 1.0.0            <- la candidate n'est PAS la plus récente
   Version table:
      1.2.0 500
-        500 file:/srv/depot-lab ./ Packages
+        500 http://127.0.0.1:8099 ./ Packages
  *** 1.0.0 1001               <- priorite 1001 : un epinglage
-        500 file:/srv/depot-lab ./ Packages
+        500 http://127.0.0.1:8099 ./ Packages
         100 /var/lib/dpkg/status
 ```
 
@@ -2625,7 +2626,8 @@ dpkg-query -f '${binary:Package}\n' -W | while read -r p; do
   pol=$(apt-cache policy "$p" 2>/dev/null)
   inst=$(printf '%s' "$pol" | awk '/Installed:/ {print $2}')
   cand=$(printf '%s' "$pol" | awk '/Candidate:/ {print $2}')
-  dispo=$(apt-cache madison "$p" 2>/dev/null | awk -F'|' 'NR==1 {gsub(/ /,"",$2); print $2}')
+  dispo=$(apt-cache madison "$p" 2>/dev/null \
+          | awk -F'|' 'NR==1 {gsub(/ /,"",$2); print $2}')
   [ -n "$dispo" ] && [ "$cand" = "$inst" ] && [ "$dispo" != "$inst" ] \
     && printf '  %s : installe %s, dispo %s, candidate %s\n' \
               "$p" "$inst" "$dispo" "$cand"
@@ -2687,26 +2689,27 @@ sudo apt-get -s upgrade | head -20
 ```console
 Calculating upgrade...
 The following packages will be DOWNGRADED:
-  age apt base-files binutils binutils-common bsdutils bzip2 coreutils
-  curl dbus dpkg dpkg-dev e2fsprogs git gnupg gzip jq less libc6 ...
+  apt base-files binutils binutils-common bsdutils bzip2 coreutils
+  curl dbus dpkg dpkg-dev e2fsprogs git gnupg gzip less libc6 ...
 ```
 
 ```bash
 # 2. « DOWNGRADED » : le mot-clé oriente tout le diagnostic.
 #    Une rétrogradation de masse ne peut venir que d'une priorité > 1000.
-apt-cache policy sed
+apt-cache policy libc6
 ```
 
 ```console
-sed:
-  Installed: 4.9-2build1
-  Candidate: 4.9-2build1
+libc6:
+  Installed: 2.39-0ubuntu8.4
+  Candidate: 2.39-0ubuntu8
   Version table:
-     4.9-2ubuntu0.24.04.1 500
-        500 https://archive.ubuntu.com/ubuntu noble-updates/main amd64
-        500 https://security.ubuntu.com/ubuntu noble-security/main amd64
- *** 4.9-2build1 1001            <- 1001 sur un paquet quelconque
-       1001 https://archive.ubuntu.com/ubuntu noble/main amd64 Packages
+ *** 2.39-0ubuntu8.4 500
+        500 http://archive.ubuntu.com/ubuntu noble-updates/main amd64
+        500 http://security.ubuntu.com/ubuntu noble-security/main amd64
+        100 /var/lib/dpkg/status
+     2.39-0ubuntu8 1001            <- 1001 sur un paquet quelconque
+       1001 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages
 ```
 
 ```bash
@@ -2781,7 +2784,7 @@ il n'y a que deux endroits possibles, `/etc/apt/preferences` et
 
 Le deuxième réflexe — `apt-cache policy` sur un paquet **au hasard**, sans
 rapport avec le sujet — est ce qui distingue un diagnostic d'une devinette. Si
-`sed` est épinglé à 1001, l'épinglage est global. Si `sed` est normal, il est
+`libc6` est épinglé à 1001, l'épinglage est global. Si `libc6` est normal, il est
 ciblé et on cherche ailleurs. Une commande, une bifurcation.
 
 Et le point de fond, qui dépasse apt : **`a=noble` n'est pas « Ubuntu 24.04 »,
@@ -2896,7 +2899,8 @@ else
   printf '| fichier | Package: | priorité | portée |\n|---|---|---|---|\n'
   while read -r f; do
     [ -n "$f" ] || continue
-    c="/etc/apt/preferences.d/$f"; [ "$f" = preferences ] && c=/etc/apt/preferences
+    c="/etc/apt/preferences.d/$f"
+    [ "$f" = preferences ] && c=/etc/apt/preferences
     pk=$(awk -F': *' '/^Package:/ {print $2; exit}' "$c")
     pr=$(awk -F': *' '/^Pin-Priority:/ {print $2; exit}' "$c")
     if [ "$pk" = '*' ]; then portee='**GLOBALE**'; signaler
@@ -2916,7 +2920,8 @@ else signaler; printf '```text\n%s\n```\n\n' "$ANO"; fi
 
 printf '## Conffiles et résidus\n\n'
 MOD=$(dpkg -V 2>/dev/null | awk '$2 == "c" {print $3}' || true)
-printf -- '- conffiles modifiés : %d\n' "$(printf '%s' "$MOD" | grep -c . || true)"
+NMOD=$(printf '%s' "$MOD" | grep -c . || true)
+printf -- '- conffiles modifiés : %d\n' "$NMOD"
 RES=$(find /etc \( -name '*.dpkg-dist' -o -name '*.dpkg-old' \
                 -o -name '*.ucf-dist' \) 2>/dev/null || true)
 if [ -n "$RES" ]; then
@@ -2965,7 +2970,9 @@ sudo tee /etc/apt/apt.conf.d/52unattended-upgrades-local >/dev/null <<'EOF'
 // prompt dpkg a chaque mise a jour du paquet, et nos reglages seraient
 // perdus ou sauvegardes en .dpkg-old selon la reponse de l operateur.
 // Les fichiers de /etc/apt/apt.conf.d sont lus par ordre alphabetique :
-// 52 passe apres 50, donc nos valeurs gagnent.
+*/ 52 passe apres 50, donc nos valeurs simples gagnent. Les LISTES, elles,
+*/ s'ajoutent a celles de 50 : #clear les vide avant de les redefinir.
+#clear Unattended-Upgrade::Allowed-Origins;
 
 Unattended-Upgrade::Allowed-Origins {
     "${distro_id}:${distro_codename}-security";
@@ -3012,7 +3019,7 @@ l'option `--force-conf*` du parc, soit la configuration locale est écrasée
 silencieusement, soit la nouvelle version du mainteneur atterrit en
 `.dpkg-dist` et n'est jamais relue. Le bon réflexe, valable bien au-delà d'apt,
 est : **un fichier à soi dans un répertoire `.d`, nommé pour passer après**.
-`/etc/apt/apt.conf.d/` est lu dans l'ordre alphabétique, d'où le `52`.
+`/etc/apt/apt.conf.d/` est lu dans l'ordre alphabétique, d'où le `52`. Piège propre à apt : une valeur simple est remplacée, mais une **liste** (`Allowed-Origins`) se cumule avec celle de `50unattended-upgrades` — d'où le `#clear` qui la vide avant de la redéfinir.
 
 **Le rapport sur stdout, la trace sur stderr.** Ce n'est pas une coquetterie :
 c'est ce qui rend le script composable. `etat-paquets.sh > rapport.md` produit un

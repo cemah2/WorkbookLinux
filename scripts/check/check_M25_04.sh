@@ -19,20 +19,20 @@ json() { python3 -c "import sys,json; d=json.load(sys.stdin); $1" 2>/dev/null; }
 
 # --- 1. la tâche piège est corrigée ---------------------------------------
 PB=$(api "$REPO/raw/ansible/site.yml")
-printf '%s' "$PB" | python3 - <<'EOF' && ok "site.yml : la tâche nginx -t a changed_when: false" \
+DOC="$PB" python3 - <<'EOF' && ok "site.yml : la tâche nginx -t a changed_when: false" \
   || ko "site.yml : la tâche « nginx -t » doit porter changed_when: false (et check_mode: false)"
-import sys, yaml
-p = yaml.safe_load(sys.stdin)
+import os, sys, yaml
+p = yaml.safe_load(os.environ["DOC"])
 t = [x for x in p[0]["tasks"] if "nginx -t" in str(x.get("ansible.builtin.command", ""))]
 assert t and t[0].get("changed_when") is False
 EOF
 
 # --- 2. workflow ansible ----------------------------------------------------
 WA=$(api "$REPO/raw/.gitea/workflows/ansible.yaml")
-printf '%s' "$WA" | python3 - <<'EOF' && ok "ansible.yaml : lint, check (PR, --check --diff), apply (push main, needs lint, concurrency)" \
+DOC="$WA" python3 - <<'EOF' && ok "ansible.yaml : lint, check (PR, --check --diff), apply (push main, needs lint, concurrency)" \
   || ko "ansible.yaml : attendu jobs lint / check (pull_request, --check --diff) / apply (push sur main, needs, concurrency)"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); j = w["jobs"]
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"]); j = w["jobs"]
 assert "ansible-lint" in str(j["lint"]["steps"])
 c = j["check"]; a = j["apply"]
 assert "pull_request" in str(c.get("if", "")) and "--check" in str(c["steps"]) and "--diff" in str(c["steps"])
@@ -48,10 +48,10 @@ printf '%s' "$WA" | grep -qE 'ansible_become_pass(word)?=' \
 
 # --- 3. workflow tofu -----------------------------------------------------
 WT=$(api "$REPO/raw/.gitea/workflows/tofu.yaml")
-printf '%s' "$WT" | python3 - <<'EOF' && ok "tofu.yaml : plan (fmt, validate, plan -out, artefact) et apply gardé par workflow_dispatch + confirm + actor" \
+DOC="$WT" python3 - <<'EOF' && ok "tofu.yaml : plan (fmt, validate, plan -out, artefact) et apply gardé par workflow_dispatch + confirm + actor" \
   || ko "tofu.yaml : attendu plan (fmt -check, validate, plan -out, upload-artifact) et apply (workflow_dispatch, inputs.confirm == 'apply', gitea.actor, runs-on lab-shell)"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); j = w["jobs"]
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"]); j = w["jobs"]
 on = w.get("on") or w.get(True)
 assert "confirm" in on["workflow_dispatch"]["inputs"]
 p = j["plan"]; a = j["apply"]
@@ -67,9 +67,13 @@ EOF
 BP=$(api "$REPO/branch_protections/main")
 if printf '%s' "$BP" | json 'assert d.get("branch_name")=="main"'; then
   ok "main de factura-infra protégée"
-  printf '%s' "$BP" | json 'c=d["status_check_contexts"]; assert "ansible / lint" in c and "tofu / plan" in c' \
+  printf '%s' "$BP" | json '
+import fnmatch
+c = d["status_check_contexts"]
+assert any(fnmatch.fnmatch("ansible / lint (push)", x) for x in c)
+assert any(fnmatch.fnmatch("tofu / plan (pull_request)", x) for x in c)' \
     && ok "status checks « ansible / lint » et « tofu / plan » requis" \
-    || ko "status checks attendus : ansible / lint, tofu / plan"
+    || ko "status checks attendus : motifs « ansible / lint (*) » et « tofu / plan (*) »"
 else
   ko "aucune protection sur main de factura-infra"
 fi

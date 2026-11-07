@@ -6,7 +6,7 @@ set -euo pipefail
 
 SAUV=/root/.breakfix-backup
 CIBLE=/srv/factura/archives
-IMG=/var/lib/lab11/bf10-02.img
+IMG=/var/lib/lab11/bf11-02.img
 mkdir -p "$SAUV" "$(dirname "$IMG")" "$CIBLE"
 
 # --- mémoriser ce qui était monté là ------------------------------------

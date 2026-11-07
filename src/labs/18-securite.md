@@ -33,7 +33,7 @@
 
 Temps estimé : 8 h (module copieux, prévois deux sessions)
 Prérequis : modules 03 (permissions), 04 (utilisateurs et sudo), 08 (systemd),
-11 (réseau), 12 (SSH), 13 (nginx). Le module 14 couvre le durcissement SSH lui-même :
+12 (réseau), 14 (SSH), 15 (nginx). Le module 14 couvre le durcissement SSH lui-même :
 ici on ne refait pas `sshd_config`, on protège ce qu'il y a autour.
 :::
 
@@ -129,7 +129,7 @@ te montre ce que **le noyau** applique. Quand les deux divergent, le noyau a rai
 | `ufw status numbered` | règles **avec leur numéro** (indispensable) |
 | `ufw insert 1 deny from 10.0.0.0/8` | insère en tête |
 | `ufw delete 4` / `ufw delete allow 80/tcp` | supprime par numéro / par règle |
-| `ufw limit 22/tcp` | 6 connexions / 30 s par IP, puis DROP |
+| `ufw limit 22/tcp` | 6 connexions / 30 s par IP, puis REJECT |
 | `ufw app list` / `ufw allow 'Nginx Full'` | profils de `/etc/ufw/applications.d/` |
 | `ufw logging medium` | journalise dans `/var/log/ufw.log` |
 | `ufw reset` | tout efface (et désactive) |
@@ -301,7 +301,7 @@ d) `ufw` refuse la troisième règle comme redondante
      To                         Action      From
      --                         ------      ----
 [ 1] 22/tcp                     DENY IN     Anywhere
-[ 2] 80,443/tcp (Nginx Full)    ALLOW IN    Anywhere
+[ 2] Nginx Full                 ALLOW IN    Anywhere
 [ 3] 22/tcp                     ALLOW IN    10.10.10.10
 ```
 
@@ -319,7 +319,7 @@ sudo firewall-cmd --add-port=8080/tcp
 ```
 
 Le dev confirme que ça marche. Trois jours plus tard, après un reboot, ça ne marche
-plus. Pourquoi, et quelle commande aurait évité ça ? **Deux réponses correctes.**
+plus. Pourquoi, et quelle commande aurait évité ça ? **Trois réponses correctes.**
 
 a) la règle était en runtime uniquement, perdue au redémarrage
 b) `firewall-cmd --permanent --add-port=8080/tcp` puis `--reload`
@@ -442,7 +442,7 @@ c) restreindre `dmesg` aux utilisateurs privilégiés
 d) activer l'ASLR du noyau
 
 **Q18.15** — Un dev a poussé `.env` contenant le mot de passe de production, puis a
-fait `git rm .env && git commit -m "oups"` et poussé. **Deux réponses correctes.**
+fait `git rm .env & git commit -m "oups"` et poussé. **Deux réponses correctes.**
 
 a) le secret est toujours lisible dans l'historique du dépôt
 b) le `git rm` suffit, l'objet est supprimé du dépôt distant
@@ -456,7 +456,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout srv.key \
   -out srv.crt -days 365 -subj "/CN=app.lab.local"
 ```
 
-`curl https://app.lab.local` (avec le CA importé) échoue quand même. Pourquoi ?
+Chrome (avec ce certificat importé comme autorité) le refuse quand même avec `NET::ERR_CERT_COMMON_ NAME_INVALID`. Pourquoi ?
 
 a) `rsa:2048` est refusé depuis OpenSSL 3
 b) le certificat n'a pas de `subjectAltName` : les clients modernes ignorent le `CN`
@@ -924,7 +924,7 @@ bash check_M18_05.sh
 ## 18.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf15`. Le snapshot `snap-clean`
+Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf18`. Le snapshot `snap-clean`
 reste le filet de sécurité (`qm rollback <vmid> snap-clean`), mais l'utiliser vaut
 échec : l'objectif est de diagnostiquer, pas de rembobiner. Pour BF18.1 et BF18.4,
 garde la **console Proxmox** ouverte : tu risques de perdre SSH.
@@ -990,9 +990,8 @@ lignes: 10
 sudo bash break_M18_03.sh
 ```
 
-**Symptôme utilisateur** : `curl https://app.lab.local` échoue avec
-`SSL certificate problem: certificate has expired`, aussi bien depuis `lab-adm` que
-depuis `lab-web` elle-même. Le navigateur affiche un avertissement plein écran.
+**Symptôme utilisateur** : sur `lab-web` elle-même, `curl https://app.lab.local` échoue avec
+`SSL certificate problem: certificate has expired` ; depuis `lab-adm`, la même commande échoue aussi. Le navigateur affiche un avertissement plein écran.
 nginx est démarré, `systemctl status nginx` est vert, le port 443 écoute, et le
 fichier de configuration n'a pas été modifié depuis trois mois.
 
@@ -1016,8 +1015,7 @@ lignes: 10
 sudo bash break_M18_04.sh
 ```
 
-**Symptôme utilisateur** : depuis `lab-adm`, `ssh 10.10.10.11` reste bloqué puis
-sort en `Connection timed out`. Depuis `lab-db`, la même commande fonctionne
+**Symptôme utilisateur** : depuis `lab-adm`, `ssh 10.10.10.11` échoue immédiatement avec `Connection refused`. Depuis `lab-db`, la même commande fonctionne
 immédiatement. `ping 10.10.10.11` depuis `lab-adm` répond. `ufw status` sur `lab-web`
 montre bien `22/tcp ALLOW IN 10.10.10.10`. Le service `ssh` est actif et n'a pas été
 modifié.
@@ -1067,7 +1065,7 @@ Cahier des charges :
      sans expiration, dernières connexions ;
    * **mises à jour** : mises à jour de sécurité en attente, automatisation active
      ou non, date du dernier `apt/dnf update` ;
-   * **sysctl** : valeurs constatées contre valeurs attendues pour les dix clés du
+   * **sysctl** : valeurs constatées contre valeurs attendues pour au moins dix des clés du
      rappel express ;
    * **SUID/SGID** : différence avec la base de référence
      `~/lab18/baseline-suid.txt` produite par le setup ;

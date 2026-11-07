@@ -53,6 +53,13 @@ chmod 0644 "$UDROP"
 DERNIER=$(grep -ao 'seq=[0-9]*' "$FIC" 2>/dev/null | tail -1 | cut -d= -f2)
 [ -n "${DERNIER:-}" ] || DERNIER=20000
 
+# la génération produite par la rotation de la nuit (avant le trou)
+if [ ! -f "$LOGD/acces.log.1.gz" ] && [ -s "$FIC" ]; then
+  tr -d '\0' < "$FIC" | gzip -c > "$LOGD/acces.log.1.gz"
+  chown factura:adm "$LOGD/acces.log.1.gz" 2>/dev/null || true
+  chmod 0640 "$LOGD/acces.log.1.gz"
+fi
+
 python3 - "$FIC" "$DERNIER" <<'PYEOF'
 import datetime as dt
 import os
@@ -84,7 +91,7 @@ fi
 cat <<'EOF'
 
 Symptôme attendu : « ls -lh /var/log/factura/acces.log » annonce 800 Mo,
-« du -h » sur le même fichier en annonce une douzaine, « wc -l » compte
+« du -h » sur le même fichier en annonce moins d'un, « wc -l » compte
 quelques milliers de lignes, et les numéros de séquence sautent de
 plusieurs centaines après chaque rotation. « less » affiche des ^@.
 EOF

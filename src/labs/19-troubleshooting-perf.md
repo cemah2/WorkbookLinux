@@ -223,7 +223,7 @@ procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
 | `st` | % CPU **volé** par l'hyperviseur | > 5 % : le problème est sur Proxmox |
 
 La première ligne de `vmstat` est une moyenne **depuis le boot** : on la
-jette et on lit à partir de la deuxième.
+jette et on lit à partir de la deuxième. Sur Ubuntu 24.04 (procps 4), une dernière colonne `gu` (temps passé à exécuter des invités KVM) suit `st`.
 
 ### `iostat -xz 1` colonne par colonne
 
@@ -274,7 +274,7 @@ cat /proc/pressure/cpu /proc/pressure/memory /proc/pressure/io
 rien d'utile). `avg10/60/300` = fenêtres glissantes en secondes. Un
 `memory full` > 0 durable = thrash ; un `io some` élevé = disque saturé ;
 `cpu some` = file d'attente CPU. Existe aussi par cgroup
-(`/sys/fs/cgroup/<unité>/cpu.pressure`) : c'est ce que lit `systemd-oomd`.
+(`/ sys/fs/cgroup/system.slice/<unité>/memory.pressure`, `cpu.pressure`, `io.pressure`) : `systemd-oomd` lit `memory.pressure`.
 Plus lisible que la charge moyenne : la charge mélange CPU et E/S, PSI les
 sépare.
 
@@ -379,11 +379,11 @@ b) le temps où la VM voulait du CPU mais où l'hyperviseur l'a donné à quelqu
 c) le temps de vol de cache L3 par les autres VM : il faut épingler les vCPU
 d) le temps d'attente disque de l'hôte : il faut changer le stockage
 
-**Q19.4** — `free -m` affiche `total 3924`, `used 3420`, `free 118`,
+**Q19.4** — `free -m` affiche `total 3924`, `used 1184`, `free 118`,
 `buff/cache 2860`, `available 2740`. Faut-il ajouter de la RAM ?
 
 a) oui, `free` est à 118 Mo
-b) oui, `used` dépasse 85 % du total
+b) oui, `buff/cache` occupe plus de 70 % de la RAM
 c) non, `available` est à 2740 Mo : le cache sera rendu à la demande
 d) impossible à dire sans `vmstat`
 
@@ -1231,7 +1231,7 @@ bash check_M19_07.sh
 ## 19.7 Break & Fix ★★★
 
 ::: attention
-Avant **chaque** Break & Fix : `qm snapshot 9002 avant-bf16-XX`. Le rollback
+Avant **chaque** Break & Fix : `qm snapshot 9002 avant-bf19-XX`. Le rollback
 `qm rollback 9002 snap-clean` reste le filet de sécurité, mais l'utiliser vaut
 échec : l'objectif est de réparer une machine qu'on ne peut pas rembobiner, ce
 qui est exactement la situation en production.
@@ -1443,9 +1443,10 @@ vérification) juge le résultat **et** ta trace écrite.
 **Mise en place** (par le correcteur, ou par toi sans regarder la sortie) :
 
 ```bash
-# sur lab-web, en root
 qm snapshot 9002 avant-examen     # depuis Proxmox, obligatoire
-sudo bash ~/lab19/bin/tirage-pannes.sh 5 > /root/examen-tirage.txt
+# puis sur lab-web (la redirection doit aussi se faire en root) :
+sudo bash ~/lab19/bin/tirage-pannes.sh 5 \
+  | sudo tee /root/examen-tirage.txt >/dev/null
 # le tirage applique les 5 pannes et enregistre la liste dans un
 # fichier que le candidat n'ouvre pas.
 ```

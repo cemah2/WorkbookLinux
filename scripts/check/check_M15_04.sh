@@ -26,13 +26,14 @@ systemctl cat pg-sauvegarde.timer 2>/dev/null | grep -qi 'Persistent=yes' \
   && ok "Persistent=yes" || ko "Persistent=yes absent du timer"
 
 # --- dernière sauvegarde -----------------------------------------------
-LAST="$(sudo -n ls -d /var/backups/postgresql/*/ 2>/dev/null | tail -1)"
+# glob développé par root : le répertoire est en 0750 postgres
+LAST="$(sudo -n sh -c 'ls -d /var/backups/postgresql/*/' 2>/dev/null | tail -1)"
 if [ -n "$LAST" ]; then
   ok "répertoire de sauvegarde : $LAST"
   sudo -n test -s "$LAST/globals.sql" && ok "globals.sql non vide" || ko "globals.sql absent ou vide"
   sudo -n test -s "$LAST/factura_demo.dump" && ok "factura_demo.dump non vide" \
     || ko "factura_demo.dump absent ou vide"
-  if sudo -n test -f "$LAST/SHA256SUMS" || sudo -n ls "$LAST"/*.sha256 >/dev/null 2>&1; then
+  if sudo -n test -f "$LAST/SHA256SUMS" || sudo -n sh -c "ls '$LAST'/*.sha256" >/dev/null 2>&1; then
     if sudo -n bash -c "cd '$LAST' && { [ -f SHA256SUMS ] && sha256sum -c --quiet SHA256SUMS || cat *.sha256 | sha256sum -c --quiet; }" >/dev/null 2>&1
     then ok "sommes SHA256 valides"; else ko "sommes SHA256 invalides ou illisibles"; fi
   else ko "aucun fichier .sha256 / SHA256SUMS"; fi

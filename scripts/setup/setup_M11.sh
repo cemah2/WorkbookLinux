@@ -229,10 +229,24 @@ fi
 titre "Disques de travail"
 
 TROUVES=()
-for d in "${CANDIDATS[@]}"; do
-  disque_libre "$d" && TROUVES+=("$d")
-  [ "${#TROUVES[@]}" -ge 2 ] && break
-done
+# Relance (ex. --raid5 après E11.21) : les disques réels déjà retenus sont
+# désormais partitionnés, membres d'un RAID ou PV. On les garde tels quels
+# au lieu de basculer à tort sur des disques simulés.
+A1=""; A2=""; ASIM=""
+if [ -f "$ENVF" ]; then
+  A1="$(sed -n 's/^DISQUE1=//p' "$ENVF")"
+  A2="$(sed -n 's/^DISQUE2=//p' "$ENVF")"
+  ASIM="$(sed -n 's/^LAB11_SIMULE=//p' "$ENVF")"
+fi
+if [ "$ASIM" = "0" ] && [ -b "$A1" ] && [ -b "$A2" ]; then
+  TROUVES=("$A1" "$A2")
+  info "disques déjà retenus par un setup précédent ($ENVF)"
+else
+  for d in "${CANDIDATS[@]}"; do
+    disque_libre "$d" && TROUVES+=("$d")
+    [ "${#TROUVES[@]}" -ge 2 ] && break
+  done
+fi
 
 SIMULE=0
 if [ "${#TROUVES[@]}" -ge 2 ]; then
@@ -295,7 +309,7 @@ ATT
   if [ -d /run/systemd/system ]; then
     cat > /etc/systemd/system/lab11-loop.service <<'UNIT'
 [Unit]
-Description=Lab 10 - rattache les disques simules en loop device
+Description=Lab 11 - rattache les disques simules en loop device
 DefaultDependencies=no
 After=local-fs-pre.target systemd-udevd.service
 Before=local-fs.target lvm2-activation-early.service
@@ -380,7 +394,7 @@ DISQUE2=$DISQUE2
 # Troisième disque (RAID5, E11.22), toujours un loop device ; vide sinon.
 DISQUE3=$DISQUE3
 # 1 = disques simulés par fichiers-images + loop devices
-LAB10_SIMULE=$SIMULE
+LAB11_SIMULE=$SIMULE
 EOF
 chmod 0644 "$ENVF"
 info "$ENVF écrit"

@@ -87,9 +87,9 @@ La chaîne exacte, à savoir citer en entretien :
 4. `migration.sh` n'a pas de gestionnaire pour `SIGHUP` : l'action par défaut est
    la terminaison. Le script meurt.
 
-`&` ne détache de rien : le job reste dans le même groupe de processus, la même
-session, et le même terminal de contrôle. Il change juste de groupe de processus
-de premier plan.
+`&` ne détache de rien : le job reste dans la même
+session et garde le même terminal de contrôle. Bash lui donne seulement son propre groupe de processus, qui n'est pas celui
+de premier plan — d'où l'immunité au `Ctrl-C`, qui trompe et fait croire à un détachement.
 :::
 
 ---
@@ -222,7 +222,7 @@ utiliser `Type=exec`.
 
 ---
 
-**Q8.8** — *Unité créée à la main, puis `systemctl start` directement.*
+**Q8.8** — *Unité déjà chargée, modifiée à la main, puis `systemctl`* `restart`*.*
 
 **Réponse : b)** il manque `systemctl daemon-reload`.
 
@@ -234,9 +234,7 @@ réanalyse `/etc/systemd/system`, `/run/systemd/system` et
 `/usr/lib/systemd/system`, reconstruit le graphe, **sans** toucher aux services
 en cours d'exécution.
 
-Symptôme sans `daemon-reload` : `Failed to start factura-api.service: Unit
-factura-api.service not found.` — et, si l'unité existait déjà et que tu l'as
-modifiée, systemd te prévient au `status` suivant :
+Symptôme sans `daemon-reload` : systemd relance l'unité telle qu'il l'a gardée en mémoire, donc l'ancien `ExecStart=`, et te prévient au `status` suivant :
 
 ```text
 Warning: The unit file, source configuration file or drop-ins of
@@ -244,7 +242,7 @@ factura-api.service changed on disk. Run 'systemctl daemon-reload' to reload
 units.
 ```
 
-À retenir : `daemon-reload` recharge la **configuration de systemd** ;
+Nuance de version : depuis systemd 246, une unité **nouvelle**, jamais chargée, est relue à la volée quand on la démarre (systemd détecte que les répertoires d'unités ont changé); le `daemon-reload` reste obligatoire dès que l'unité est déjà chargée, et c'est le réflexe à garder dans tous les cas. À retenir : `daemon-reload` recharge la **configuration de systemd** ;
 `systemctl reload <unité>` recharge la configuration **de l'application**. Ce
 sont deux choses sans rapport, et les confondre est l'erreur de débutant la plus
 fréquente sur ce module.
@@ -335,7 +333,7 @@ ExecStart=
 ExecStart=/opt/factura/bin/factura-api.py --port 9090
 ```
 
-Le même motif s'applique à `Environment=`, `ReadWritePaths=`, `After=`. C'est
+Le même motif s'applique à `Environment=` et `ReadWritePaths=`. Exception à connaître : les **dépendances** ( `After=` , `Wants=`, `Requires=`) ne se vident pas par affectation vide — un drop-in ne peut qu'en **ajouter**, il faut `systemctl edit --full` pour en retirer une. C'est
 exactement la raison pour laquelle `systemctl edit` d'un service avec `ExecStart`
 est une source d'erreur permanente, et pourquoi `systemctl cat` est la seule
 réponse fiable à la question « qu'est-ce qui est réellement appliqué ? ».
@@ -460,7 +458,7 @@ ponctuel se gère avec un timer (module 17), pas avec `Restart=`.
 
 ---
 
-**Q8.15** — *Lecture d'un `systemctl status ssh` (deux réponses).*
+**Q8.15** — *Lecture d'un `systemctl`* `status rsyslog` *(deux réponses).*
 
 **Réponses : a) et b)**
 
@@ -468,11 +466,12 @@ ponctuel se gère avec un timer (module 17), pas avec `Restart=`.
 Décorticage de la ligne `Loaded:`, mot à mot :
 
 ```text
-Loaded: loaded (/usr/lib/systemd/system/ssh.service; disabled; preset: enabled)
-        |        |                                  |         |
-        |        chemin du fichier réellement chargé |         |
-        l'unité est chargée en mémoire              |         |
-                                    état d'activation au boot |
+Loaded: loaded (/usr/lib/systemd/system/rsyslog.service; disabled;
+        |        |                                       |
+        |        chemin du fichier réellement chargé     |
+        l'unité est chargée en mémoire                   |
+                                       état d'activation au boot
+                preset: enabled)
                                               ce que le paquet recommandait
 ```
 
@@ -491,6 +490,8 @@ Loaded: loaded (/usr/lib/systemd/system/ssh.service; disabled; preset: enabled)
 La ligne `Active: active (running)` répond à a). Les deux lignes sont
 **indépendantes** : un service peut tourner sans être activé au boot (a + b,
 exactement notre cas), ou être activé au boot sans tourner.
+
+`disabled` ne suffit pas toujours à conclure « ne reviendra pas au boot » : une unité peut être tirée par une **autre** unité. Le cas d'école est justement `ssh` sur Ubuntu 24.04 : `ssh.service` y est `disabled`, mais `ssh.socket` est `enabled` et le démarre à la première connexion — `status` l'indique par une ligne `TriggeredBy: ● ssh.socket`. Avant de conclure sur b), regarde `TriggeredBy:` et `systemctl list-dependencies --reverse`.
 :::
 
 ---
@@ -1102,7 +1103,7 @@ Ce que mesure `systemd-analyze security` : il inspecte une quarantaine de
 directives d'isolation, attribue à chacune un poids selon l'exposition qu'elle
 laisse ouverte, et en tire un score de 0.0 (isolé) à 10.0 (exposé), assorti d'une
 appréciation (`OK`, `MEDIUM`, `EXPOSED`, `UNSAFE`). Il fonctionne aussi
-hors-ligne sur un fichier, avec `--offline=true`.
+hors-ligne sur un fichier, avec `- -offline=true`.
 
 Pourquoi le score seul ne suffit pas :
 
@@ -1400,7 +1401,7 @@ recevoir : le processus 5121 n'exécute plus une seule instruction depuis son
 `exit(0)`. Le noyau accepte le signal, le met en file, et la file ne sera jamais
 lue.
 
-Tuer le père produit l'effet en **deux temps**, qu'il faut savoir raconter :
+Tuer le père produit l'effet en **trois temps**, qu'il faut savoir raconter :
 
 1. le père meurt, le zombie devient orphelin ;
 2. le noyau le **ré-adopte** immédiatement : son PPID passe à 1 ;
@@ -1651,8 +1652,7 @@ Le PPID du processus ne change pas entre avant et après la coupure : il reste
 celui du shell de `tmux`. Ce qui change, c'est que ce shell n'a **jamais** eu ton
 `sshd` pour ancêtre. Le premier `tmux new` a démarré un **serveur `tmux`**, un
 démon détaché qui tourne dans sa propre session (`setsid`), et le client `tmux`
-de ton terminal ne fait que lui parler par une socket UNIX dans
-`/run/user/1000/tmux-1000/`.
+de ton terminal ne fait que lui parler par une socket UNIX, `/tmp/tmux-1000/default` par défaut (`tmux -L` ou `TMUX_TMPDIR` la déplacent).
 
 Quand ton SSH tombe, seul le **client** meurt. Le serveur, ses fenêtres et tes
 processus n'ont rien vu passer : ils n'ont pas de terminal de contrôle lié à ta
@@ -2008,9 +2008,9 @@ Le scope est **supprimé** par systemd dès que son dernier processus meurt :
 
 ```bash
 sudo journalctl -k --since -5m | grep -m1 'Memory cgroup out of memory'
-# Memory cgroup out of memory: Killed process 4412 (factura-gourman)
+# Memory cgroup out of memory: Killed process 4412 (python3)
 #   total-vm:… anon-rss:204800kB … oom_score_adj:0
-#   (le nom entre parenthèses est `comm`, tronqué à 15 caractères)
+#   (le nom entre parenthèses est `comm` : l'interpréteur, pas le script)
 systemctl status run-r3f9c….scope 2>&1 | head -3
 # Unit run-r3f9c….scope could not be found.     ← scope déjà collecté
 journalctl -o cat _SYSTEMD_UNIT=run-r3f9c….scope   # rien : sorties au terminal
@@ -2073,9 +2073,9 @@ systemd-run --unit=api-slice --slice=factura.slice -p User=factura \
 systemd-cgls /factura.slice
 # Control group /factura.slice:
 # ├─charge-slice.service
-# │ ├─5120 /bin/bash /opt/factura/bin/factura-charge.sh 2
-# │ ├─5121 /bin/bash /opt/factura/bin/factura-charge.sh 2
-# │ └─5122 /bin/bash /opt/factura/bin/factura-charge.sh 2
+# │ ├─5120 bash /opt/factura/bin/factura-charge.sh 2
+# │ ├─5121 bash /opt/factura/bin/factura-charge.sh 2
+# │ └─5122 bash /opt/factura/bin/factura-charge.sh 2
 # └─api-slice.service
 #   └─5130 python3 /opt/factura/bin/factura-api.py
 systemd-cgtop -1 | grep -E '^Control|factura'
@@ -2268,7 +2268,7 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemd-analyze verify /etc/systemd/system/factura-api.service
+systemd-analyze verify /etc/systemd/system/factura-api.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now factura-api
 systemctl status factura-api
@@ -2460,7 +2460,6 @@ TimeoutStopSec=20s
 LogsDirectory=factura
 LogsDirectoryMode=0750
 StateDirectory=factura
-RuntimeDirectory=factura
 ReadWritePaths=/srv/factura/data
 
 # --- isolation ---
@@ -2506,8 +2505,10 @@ sudo systemd-run --uid=factura --pty \
   --property=ProtectSystem=strict touch /etc/preuve
 # touch: cannot touch '/etc/preuve': Read-only file system
 
-ls /tmp/preuve-a-moi                       # existe dans ton /tmp
-sudo systemctl show -p ControlGroup factura-api
+touch /tmp/preuve-a-moi                    # dans TON /tmp
+sudo systemd-run --uid=factura --pty -p PrivateTmp=yes ls /tmp
+# (vide : le service voit un /tmp privé, preuve-a-moi n'y est pas)
+systemctl show -p ControlGroup factura-api
 cat /sys/fs/cgroup/system.slice/factura-api.service/memory.max
 # 268435456
 cat /sys/fs/cgroup/system.slice/factura-api.service/cpu.max
@@ -2541,7 +2542,7 @@ systemctl show -p LimitNOFILE --value ssh.service    # valeur d'origine
 
 ```text
 /etc/systemd/system/     <- local, priorite MAXIMALE (tes unites, tes masques)
-/run/systemd/system/     <- transitoire, disparait au reboot (systemd-run)
+   /run/systemd/system/     <- volatil, disparait au reboot (--runtime)
 /usr/lib/systemd/system/ <- fourni par les paquets, ECRASE a chaque mise a jour
 ```
 
@@ -2550,8 +2551,7 @@ Sur Ubuntu 24.04, `/lib` est un lien vers `/usr/lib` (*merged usr*) :
 
 Un **fichier** de même nom dans un répertoire plus prioritaire remplace
 entièrement celui du dessous. Les **drop-ins** (`unité.service.d/*.conf`) sont
-cumulatifs : tous sont lus, dans l'ordre lexicographique de leur nom, et **tous
-ceux des trois répertoires s'appliquent**, ceux d'`/etc` en dernier. D'où la
+cumulatifs : ceux des trois répertoires s'appliquent, triés **par nom de fichier**, quel que soit leur répertoire; un drop-in de même nom dans un répertoire plus prioritaire remplace celui du dessous. D'où la
 convention de nommage numérotée `10-`, `50-`, `90-`.
 
 **`systemctl edit` contre `systemctl edit --full`** : le premier crée un drop-in,
@@ -2647,7 +2647,7 @@ Le marqueur à regarder est le **SID** (identifiant de session), colonne `sid` d
   shell — c'est la ré-adoption par PID 1, pas un détachement.
 * `tmux` : SID du serveur `tmux`, créé par un `setsid()` au premier lancement.
   Ton SSH n'a jamais été dans cette session.
-* `systemd-run` : SID de PID 1. Le processus n'a jamais été à toi.
+* `systemd-run` : une session à lui (systemd fait un `setsid()` par service), PPID 1. Le processus n'a jamais été à toi.
 
 **Ce qu'on retient pour la production** : `systemd-run`. Raisons, dans l'ordre
 d'importance :
@@ -2697,7 +2697,7 @@ non nuls, `curl` qui traîne), puis l'OOM killer global intervient :
 
 ```bash
 sudo journalctl -k --since -5m | grep -E 'Out of memory|oom_score_adj'
-# Out of memory: Killed process 4412 (factura-gourman) total-vm:… anon-rss:…
+# Out of memory: Killed process 4412 (python3) total-vm:… anon-rss:…
 ```
 
 Ici c'est le gourmand qui meurt, parce qu'il est de loin le plus gros au
@@ -2781,10 +2781,10 @@ systemctl status factura-lots | head -8
 # Main PID: 5301 (code=killed, signal=KILL)
 cat /sys/fs/cgroup/batch.slice/memory.events        # oom_kill 1 (hiérarchique)
 sudo journalctl -k --since -5m | grep -A1 'Memory cgroup out of memory'
-# Memory cgroup out of memory: Killed process 5301 (factura-gourman) …
+# Memory cgroup out of memory: Killed process 5301 (python3) …
 # oom-kill:constraint=CONSTRAINT_MEMCG,…,
 #   oom_memcg=/batch.slice/factura-lots.service,
-#   task_memcg=/batch.slice/factura-lots.service,task=factura-gourman,…
+#   task_memcg=/batch.slice/factura-lots.service,task=python3,…
 journalctl -u factura-lots --since -5m | tail -4
 # factura-gourmand.py[5301]: alloue 280 Mo
 # systemd[1]: factura-lots.service: A process of this unit has been killed by
@@ -3269,7 +3269,7 @@ complet des surcharges de la machine.
 :::
 
 **Prévention** : versionner `/etc/systemd/system` dans Git (ou le gérer par
-Ansible, module 24), et faire du `systemctl cat` — pas du `cat` — le réflexe de
+Ansible, module 23), et faire du `systemctl cat` — pas du `cat` — le réflexe de
 première lecture d'un service. Le script de conformité du défi D8 formalise
 exactement ça : il compare la liste des drop-ins appliqués à une liste attendue.
 
@@ -3297,18 +3297,19 @@ et un durcissement poussé sous 2.5 — en pratique, l'unité de L8.4 atteint d�
 ```ini
 ### /etc/systemd/system/factura-api.service.d/10-preprod.conf
 [Service]
-Environment=FACTURA_PORT=8081
+EnvironmentFile=/etc/factura/api-preprod.env
 MemoryMax=128M
+printf 'FACTURA_PORT=8081\n' | sudo tee /etc/factura/api-preprod.env
 ```
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart factura-api
-systemctl show -p Environment,MemoryMax --value factura-api
+systemctl show -p EnvironmentFiles,MemoryMax --value factura-api
 curl -s http://127.0.0.1:8081/sante
 ```
 
-**3. Le runbook** (structure attendue, le contenu est à rédiger)
+Pourquoi un second fichier et non `Environment=FACTURA_PORT=8081` dans le drop-in : `EnvironmentFile=` est **toujours** appliqué après `Environment=`, quel que soit l'ordre d'écriture. Comme `/etc/factura/api.env` contient déjà `FACTURA_PORT=8080`, un `Environment=` serait écrasé et le port resterait 8080. `EnvironmentFile=` étant une directive de liste, le drop-in **ajoute** un fichier lu après le premier, et c'est la dernière valeur lue qui gagne. **3. Le runbook** (structure attendue, le contenu est à rédiger)
 
 ```markdown
 # Runbook — factura-api

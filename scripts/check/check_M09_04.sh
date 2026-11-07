@@ -68,8 +68,8 @@ fi
 ls "$HOME_DIR"/lab09/udev/*.rules >/dev/null 2>&1 \
   && ok "une règle udev de nommage est rédigée dans ~/lab09/udev" \
   || ko "aucune règle .rules dans ~/lab09/udev"
-if grep -lsq 'NAME=' /etc/udev/rules.d/*.rules /etc/systemd/network/*.link \
-   2>/dev/null; then
+if grep -lsqE 'NAME=|^Name=' /etc/udev/rules.d/*.rules \
+   /etc/systemd/network/*.link 2>/dev/null; then
   ko "une règle de renommage est INSTALLÉE (elle devait rester à blanc)"
 else
   ok "aucune règle de renommage installée pour de bon"

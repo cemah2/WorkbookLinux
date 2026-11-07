@@ -54,7 +54,7 @@ fi
 cat <<'EOF'
 
 Symptôme attendu : depuis lab-adm (10.10.10.10), « ssh 10.10.10.11 »
-reste bloqué puis sort en « Connection timed out ». Depuis lab-db, la
+échoue immédiatement avec « Connection refused ». Depuis lab-db, la
 même commande fonctionne immédiatement.
 « ping 10.10.10.11 » depuis lab-adm répond, et « ufw status » sur
 lab-web affiche bien 22/tcp ALLOW IN 10.10.10.10. Le service ssh est

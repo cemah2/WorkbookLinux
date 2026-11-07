@@ -370,7 +370,7 @@ Prêt. Points d'entrée :
   $BIN/factura-legacy.sh     démon qui se détache (Type=forking)
   $BIN/factura-charge.sh     occupe n coeurs (nice, renice, top)
   $BIN/factura-gourmand.py   mange la RAM (MemoryMax, OOM killer)
-  $BIN/factura-zombie.sh     fabrique un processus en état Z
+  $BIN/factura-zombie.py     fabrique un processus en état Z
   $ETC/api.env               fichier d'environnement du service
   $LOGD/                     journaux applicatifs (propriétaire factura)
   $BASE/units/               ton atelier d'écriture d'unités

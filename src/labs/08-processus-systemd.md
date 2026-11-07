@@ -74,7 +74,7 @@ sudo apt install -y htop tmux psmisc procps lsof python3 curl \
 ::: rhel
 Sous Rocky 9 : `sudo dnf install -y htop tmux psmisc procps-ng lsof python3
 curl sysstat iproute`. Attention à deux écarts qui reviennent dans le module :
-Rocky monte `/tmp` sur le disque et non en tmpfs, et `systemd-analyze security`
+`systemd-oomd` n'y est pas activé par défaut ( sur Ubuntu 24.04, il l'est), et `systemd-analyze security`
 y affiche des scores légèrement différents parce que SELinux est comptabilisé
 (module 18).
 :::
@@ -323,7 +323,7 @@ plus fréquente des unités maison.
 |---|---|
 | `simple` | dès le `fork()` — ne détecte même pas un binaire absent |
 | `exec` | après un `execve()` réussi — préférer à `simple` |
-| `forking` | quand le processus **initial** sort ; exige `PIDFile=` |
+| `forking` | quand le processus **initial** sort; `PIDFile=` très recommandé |
 | `oneshot` | quand le processus a **fini** ; avec `RemainAfterExit=yes` |
 | `notify` | quand l'application envoie `READY=1` (`sd_notify`) |
 
@@ -408,8 +408,8 @@ b) systemd voit le processus principal sortir aussitôt, considère le service
 c) tout fonctionne, `Type=` n'a d'incidence que sur les journaux
 d) `systemctl status` affiche `active (exited)` et le démon tourne
 
-**Q8.8** — Tu viens de créer `/etc/systemd/system/factura-api.service` à la main
-avec `vim`. Tu tapes `systemctl start factura-api`. Que manque-t-il ?
+**Q8.8** — Le service `factura-api` tourne déjà. Tu viens de modifier son `ExecStart=` dans `/etc/systemd/system/factura-api.service` 
+avec `vim`, puis tu tapes `systemctl restart factura-api` : l'ancienne commande est relancée. Que manque-t-il ?
 
 a) rien
 b) `systemctl daemon-reload`
@@ -452,7 +452,7 @@ c) les deux commandes sont lancées, dans l'ordre
 d) les drop-ins ne peuvent pas contenir de `ExecStart=`
 
 **Q8.12** — Une application Java tombe à 1024 descripteurs ouverts alors que
-`/etc/security/limits.conf` contient `* nofile 65536`. Pourquoi ?
+`/etc/security/limits.conf` contient `* - nofile 65536`. Pourquoi ?
 
 a) `limits.conf` exige un redémarrage complet de la machine
 b) `limits.conf` est appliqué par `pam_limits` aux **sessions** (login, SSH,
@@ -480,10 +480,11 @@ b) `active (exited)`
 c) `inactive (dead)`
 d) `failed (exited)`
 
-**Q8.15** — Sur `lab-web`, `systemctl status ssh` affiche :
+**Q8.15** — Sur `lab-web`, `systemctl status rsyslog` affiche :
 
 ```text
-Loaded: loaded (/usr/lib/systemd/system/ssh.service; disabled; preset: enabled)
+Loaded: loaded (/usr/lib/systemd/system/rsyslog.service; disabled;
+                preset: enabled)
 Active: active (running) since Fri 2026-09-18 09:02:11 CEST; 2h 4min ago
 ```
 
@@ -515,7 +516,7 @@ d) `PrivateTmp=no`
 **Q8.18** — Le journal du noyau contient :
 
 ```text
-Out of memory: Killed process 3412 (factura-gourmand) total-vm:2489312kB,
+Out of memory: Killed process 3412 (python3) total-vm:2489312kB,
 anon-rss:2101248kB, file-rss:0kB, shmem-rss:0kB, UID:998 pgtables:4212kB
 ```
 
@@ -553,7 +554,7 @@ c) `systemd-oomd` a tué le service à cause de la pression mémoire globale
 d) le service a fait `exit(137)` de lui-même
 
 **Q8.21** — `factura-charge.sh 2` (deux processus qui brûlent chacun un
-cœur) est lancé par `systemd-run --scope -p CPUQuota=50%`. `lab-web` a deux
+cœur) est lancé par `systemd-run - -scope -p CPUQuota=50%`. `lab-web` a deux
 vCPU. Que montre `top` et pourquoi ?
 
 a) chaque processus à 50 % : le quota s'applique par processus
@@ -805,7 +806,7 @@ comment la rendre temporaire.
 
 ::: contexte
 Le support remonte que l'API met plusieurs secondes à répondre depuis ce matin.
-Le monitoring n'est pas encore branché sur cette VM (module 21). On te demande un
+Le monitoring n'est pas encore branché sur cette VM (module 16). On te demande un
 diagnostic de premier niveau et une mesure de mitigation immédiate, sans
 redémarrer quoi que ce soit.
 :::

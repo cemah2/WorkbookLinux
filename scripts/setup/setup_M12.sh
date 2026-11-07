@@ -11,7 +11,7 @@ LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 
 BASE="$LAB_HOME/lab12"
 HOSTN="$(hostname -s)"
-SAUV=/root/.m11-backup
+SAUV=/root/.m12-backup
 mkdir -p "$SAUV"
 
 # interface portant la route par défaut (ens18 sur les VM du lab)
@@ -45,6 +45,14 @@ fi
     cp -a /etc/resolv.conf "$SAUV/resolv.conf.orig"
   fi
 }
+
+# L12.3 : l'entrée « oubliée » qui court-circuite le DNS (lab-adm).
+# Posée une seule fois : relancer le setup ne la remet pas une fois corrigée.
+if [ "$HOSTN" = lab-adm ] && [ ! -f "$SAUV/hosts.l12-3" ]; then
+  grep -qE '[[:space:]]www\.lab\.local' /etc/hosts \
+    || printf '10.10.10.99\twww.lab.local www\n' >> /etc/hosts
+  touch "$SAUV/hosts.l12-3"
+fi
 
 # ---------------------------------------------------------------------
 # 2. Bac à sable de l'apprenant
@@ -168,7 +176,9 @@ if [ "$HOSTN" = lab-adm ] && command -v dnsmasq >/dev/null 2>&1; then
 # systemd-resolved qui occupe deja 127.0.0.53:53
 bind-interfaces
 listen-address=10.10.10.10
-no-dhcp-interface=
+# amont explicite : ne pas relire /etc/resolv.conf (stub 127.0.0.53, qui
+# renverrait vers ce même dnsmasq une fois L12.2 faite -> boucle)
+no-resolv
 domain=lab.local
 local=/lab.local/
 expand-hosts
@@ -181,6 +191,8 @@ address=/lab-web.lab.local/10.10.10.11
 address=/lab-db.lab.local/10.10.10.12
 address=/lab-rhel.lab.local/10.10.10.13
 address=/lab-ops.lab.local/10.10.10.14
+address=/lab-git.lab.local/10.10.10.15
+address=/lab-virt.lab.local/10.10.10.16
 
 cname=www.lab.local,lab-web.lab.local
 cname=shop.lab.local,lab-web.lab.local
@@ -239,7 +251,10 @@ if [ ! -s "$PCAP" ] && command -v tcpdump >/dev/null 2>&1; then
   CIBLE=10.10.10.11
   ping -c1 -W1 "$CIBLE" >/dev/null 2>&1 || CIBLE=127.0.0.1
   IF_CAP="$IFACE"
-  [ "$CIBLE" = 127.0.0.1 ] && IF_CAP=lo
+  # cible locale (setup lancé sur lab-web lui-même) : le trafic passe par lo
+  if [ "$CIBLE" = 127.0.0.1 ] || ip -o -4 addr | grep -q " $CIBLE/"; then
+    IF_CAP=lo
+  fi
   tcpdump -i "$IF_CAP" -nn -w "$PCAP" \
     "host $CIBLE and tcp port 8199" >/dev/null 2>&1 &
   TPID=$!

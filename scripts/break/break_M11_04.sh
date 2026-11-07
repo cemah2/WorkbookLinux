@@ -46,7 +46,7 @@ fi
 
 # ======================= Cause B : le VG est plein ====================
 if command -v lvs >/dev/null 2>&1 && lvs "$VG/$LV" >/dev/null 2>&1; then
-  LIBRE_M=$(vgs --noheadings --units m --nosuffix -o vg_free "$VG" \
+  LIBRE_M=$(LC_ALL=C vgs --noheadings --units m --nosuffix -o vg_free "$VG" \
     | tr -d ' ' | cut -d. -f1)
   if [ "${LIBRE_M:-0}" -gt 64 ]; then
     lvs "$VG/$SNAP" >/dev/null 2>&1 && lvremove -y "$VG/$SNAP" >/dev/null || true
@@ -65,7 +65,7 @@ cat <<'EOF'
 Symptôme attendu :
   - « sudo umount /srv/factura/archives » répond « target is busy » alors
     que le service factura est arrêté ;
-  - « sudo lvextend -L +1G -r /dev/vg_data/lv_pgdata » répond
+  - « sudo lvextend -L +512M -r /dev/vg_data/lv_pgdata » répond
     « Insufficient free space », alors que le groupe avait été
     dimensionné large.
 EOF

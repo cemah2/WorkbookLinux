@@ -100,7 +100,7 @@ ignorés**
 
 ::: pourquoi
 Proxmox génère trois fichiers dans l'ISO `cidata` : `user-data`,
-`meta-data`, `network-config` (plus `vendor-data`). `--cicustom user=...`
+`meta-data`, `network-config` (plus `vendor-data`). `- -cicustom user=...`
 dit « pour le fichier `user-data`, prends ce snippet **au lieu** de ce que tu
 aurais généré ». Les options `--ciuser`, `--cipassword`, `--sshkeys` ne
 servent qu'à fabriquer le `user-data` généré : elles n'ont plus aucun effet.
@@ -114,8 +114,7 @@ se fait avec `qm cloudinit dump 9110 user` avant/après (L24.1, étape 3).
 
 **Q24.6** — *`count = 3`, on retire le premier élément de `var.names`.*
 
-**Réponse : c) 2 to destroy et 2 to add, plus 1 to destroy : les index se
-décalent**
+**Réponse : c) 2 to add, 3 to destroy : les index se décalent**
 
 ::: pourquoi
 Avec `count`, l'identité d'une instance est son **index** : `lab[0]`,
@@ -124,9 +123,7 @@ Avec `count`, l'identité d'une instance est son **index** : `lab[0]`,
 `adm`), `lab[1]` doit s'appeler `db`, et `lab[2]` n'a plus de définition.
 Pour un `local_file` dont le nom est dans `filename` (E24.6), chaque
 « renommage » est un `-/+` : le plan résume `2 to add, 0 to change,
-3 to destroy`. La ligne de résumé (d) donne les mêmes nombres, mais c) est la
-seule proposition qui nomme la **cause**, le décalage d'index, et c'est ce
-qu'on attend en entretien. `for_each` indexe par clé : retirer `"adm"` donne
+3 to destroy`. La proposition d) annonce trois créations : il n'y a plus que deux éléments dans la liste, donc `lab[2]` n'est pas recréé. `for_each` indexe par clé : retirer `"adm"` donne
 `1 to destroy` et rien d'autre.
 :::
 
@@ -143,7 +140,7 @@ supprimer une.
 **Q24.7** — *`variable "token" { sensitive = true }` et `output "t" { value =
 var.token }`.*
 
-**Réponses : b) et d)** — et a) est également vraie telle qu'elle est écrite.
+**Réponses : a), b) et d)**
 
 ::: pourquoi
 Trois faits vérifiables en E24.15 :
@@ -158,8 +155,8 @@ Trois faits vérifiables en E24.15 :
   .attributes` et `outputs.t.value`), comme toute valeur d'attribut
   (proposition d).
 
-La seule proposition fausse est c). L'énoncé annonce deux bonnes réponses :
-retiens b) et d), qui sont celles qui comptent pour la sécurité, et sache que
+La seule proposition fausse est c) :
+rien n'est chiffré ni omis dans l'état. Retiens surtout b) et d), qui sont celles qui comptent pour la sécurité;
 a) décrit fidèlement le message d'erreur.
 :::
 
@@ -207,8 +204,7 @@ vers la VM**
 Sur Proxmox, `--ipconfig0`, `--ciuser`, `--sshkeys`, `--cicustom` ne sont que
 des **options de configuration** stockées dans `/etc/pve/qemu-server/9110.conf`.
 Elles ne servent à rien tant qu'un lecteur `cloudinit` (`ide2:
-local-lvm:cloudinit`) n'est pas attaché : c'est lui que Proxmox régénère à
-chaque `qm set` sous forme d'ISO étiquetée `cidata`, et c'est cette ISO que le
+local-lvm:cloudinit`) n'est pas attaché : c'est lui que Proxmox régénère au démarrage sous forme d'ISO étiquetée `cidata`, et c'est cette ISO que le
 datasource NoCloud cherche au démarrage. Sans elle, ds-identify ne trouve
 aucun datasource et cloud-init ne configure rien : la VM garde le hostname
 `ubuntu` de l'image, pas de réseau statique, pas d'utilisateur. C'est
@@ -283,9 +279,9 @@ portable, mais rien n'oblige) et l'évalue avec les variables de la map. La
 syntaxe de template accepte l'interpolation `${...}` et les **directives**
 `%{ for k, v in vms }` … `%{ endfor }`, `%{ if }` … `%{ endif }`. Les noms de
 variables d'un template sont libres : `ansible_host` n'est un mot réservé
-nulle part. Seule finesse : `\n` dans un template est un saut de ligne
-littéral, et les marqueurs `~` (`%{ for ~}`) permettent d'avaler les blancs
-autour des directives pour un fichier propre (L24.4, étape 5).
+nulle part. Seule finesse, qui ne fait pas échouer mais donne un fichier faux : dans un **fichier** de template, `\n` n'est **pas** une séquence d'échappement (elle ne l' est que dans une chaîne HCL entre guillemets); il sort tel quel, antislash et `n`, et tout l'inventaire tient sur une ligne. On écrit un vrai retour à la ligne
+dans le fichier, et les marqueurs `~` (`%{ for ~}`) avalent les blancs
+autour des directives (L24.4, étape 5).
 :::
 
 ---
@@ -296,7 +292,7 @@ autour des directives pour un fichier propre (L24.4, étape 5).
 boot**
 
 ::: pourquoi
-Depuis Proxmox VE 8.1, l'option cloud-init `ciupgrade` existe et vaut **1**
+Depuis Proxmox VE 8, l'option cloud-init `ciupgrade` existe et vaut **1**
 par défaut : Proxmox ajoute `package_upgrade: true` au user-data généré, et
 cloud-init fait un `apt-get dist-upgrade` complet au premier démarrage. Sur
 une image cloud vieille de quelques semaines, c'est plusieurs dizaines de
@@ -404,10 +400,10 @@ signe qu'on essaie d'écraser l'état d'un autre projet.
    `local-lvm`) et la configuration, y compris les options cloud-init du
    template (`ciuser`, `sshkeys`, `ipconfig0`, `ide2: cloudinit`).
 2. `qm set 9110 --ipconfig0 ip=10.10.10.110/24,gw=10.10.10.1` modifie la
-   configuration ; Proxmox **régénère** immédiatement l'ISO `cidata` du lecteur
+   configuration (changement en attente, `qm cloudinit pending`) ; au `qm start`, Proxmox **régénère** l'ISO `cidata` du lecteur
    `ide2` : trois fichiers `user-data` (YAML `#cloud-config` avec `users`,
    `ssh_authorized_keys`, `hostname`), `meta-data` (`instance-id: <sha1 de la
-   config cloud-init>`, `local-hostname`) et `network-config` (netplan v1 avec
+   config cloud-init>`, `local-hostname`) et `network-config` (format réseau cloud-init v1 avec
    l'IP statique).
 3. Au boot, le générateur systemd de cloud-init lance `ds-identify`, qui
    cherche un support étiqueté `cidata`/`CIDATA` : trouvé sur `/dev/sr0`, le
@@ -417,8 +413,8 @@ signe qu'on essaie d'écraser l'état d'un autre projet.
 5. Étape `init` (réseau up) : cloud-init compare l'`instance-id` reçu à celui
    de `/var/lib/cloud/instance` (absent au premier boot) → c'est une
    **nouvelle instance** : les modules **per-instance** s'exécutent (`users-groups`
-   crée `mathieu` avec la clé, `ssh` génère les clés d'hôte, `growpart` et
-   `resizefs` agrandissent `/`, `write_files`).
+   crée `mathieu` avec la clé, `ssh` génère les clés d'hôte, `write_files`); `growpart` et
+   `resizefs` (per- always) agrandissent `/`.
 6. Étapes `config` puis `final` : `package_update`, `packages`, `runcmd`
    (qemu-guest-agent activé), `final_message`. `cloud-init status` passe à
    `done`.
@@ -427,8 +423,8 @@ signe qu'on essaie d'écraser l'état d'un autre projet.
 
 **Au redémarrage** : même `instance-id` (la config n'a pas changé) → les
 modules per-instance sont **sautés** (sémaphores dans
-`/var/lib/cloud/instance/sem/`), seuls les modules **per-boot** (`growpart`,
-`resizefs`, `set_hostname`, réseau) et `per-always` rejouent. Un
+`/var/lib/cloud/instance/sem/`), seuls les modules **per-always** (dits « per-boot » : `growpart`,
+`resizefs`, `update_hostname`, réseau) rejouent. Un
 `qm set --sshkeys` change le hash, donc l'`instance-id` : au boot suivant,
 cloud-init voit une nouvelle instance et redéploie users et clés (E24.11).
 
@@ -958,8 +954,8 @@ resource "local_file" "hosts" {
 
 ```bash
 tofu apply -auto-approve && cat hosts.lab2
-# 11.10.10.101 lab2-adm lab2-adm.lab.local
-# 11.10.10.102 lab2-web lab2-web.lab.local
+# 10.10.10.101 lab2-adm lab2-adm.lab.local
+# 10.10.10.102 lab2-web lab2-web.lab.local
 # ...
 tofu apply -auto-approve      # No changes. Your infrastructure matches...
 sed -i 's/ne pas éditer/genere, ne pas editer/' templates/hosts.tftpl
@@ -969,7 +965,7 @@ tofu plan
 #       ~ content = <<-EOT # forces replacement
 ```
 
-**Point de rigueur** : le résultat observable est bien « une seule ressource
+**Réponse** : le résultat observable est « une seule ressource
 touchée, le fichier réécrit », mais le symbole est `-/+`, pas `~`. Chez
 `hashicorp/local`, **tous** les arguments de `local_file` (`content`,
 `filename`, `file_permission`…) sont déclarés `RequiresReplace` : le provider
@@ -985,7 +981,7 @@ ligne qui suit la directive, sinon chaque itération produirait une ligne
 vide. L'idempotence du second apply tient à ce que `content` est recalculé
 à l'identique et comparé à l'état : `local_file` stocke aussi un hash
 (`content_md5`, `content_sha256`) qui permet de détecter une modification
-manuelle du fichier au refresh — teste `echo x >> hosts.lab2 && tofu plan`.
+manuelle du fichier au refresh — teste `echo x » hosts.lab2 && tofu plan`.
 :::
 
 ---
@@ -1285,7 +1281,7 @@ echo "agent après $(( $(date +%s) - $(cat /tmp/t0) )) s"
 qm guest cmd 9110 network-get-interfaces \
   | jq -r '.[] | select(.name != "lo") | .["ip-addresses"][]
            | select(.["ip-address-type"] == "ipv4") | .["ip-address"]'
-# 11.10.10.110
+# 10.10.10.110
 # variante API :
 pvesh get /nodes/pve/qemu/9110/agent/network-get-interfaces --output-format json
 ```
@@ -1333,8 +1329,8 @@ sudo cloud-init analyze show | tail -8
 # Total Time: 38.9 seconds
 # 1 boot records analyzed
 ls /var/lib/cloud/instance/sem/
-# config_apt_configure  config_growpart  config_set_hostname  config_ssh
-# config_users_groups   config_write_files  config_scripts_user ...
+# config_apt_configure  config_set_hostname  config_ssh  config_users_groups
+# config_write_files  config_scripts_user ...   (pas de growpart : per-always)
 ```
 
 Sur le nœud, changement de clé puis redémarrage :
@@ -1348,9 +1344,7 @@ qm reboot 9110
 
 Sur `ci-test` après reboot : `cloud-init query instance_id` donne la
 **nouvelle** valeur, `/var/lib/cloud/instances/` contient deux répertoires,
-et `~mathieu/.ssh/authorized_keys` contient la clé `test2` (cloud-init
-**remplace** la liste pour les utilisateurs qu'il gère). Le `ssh` avec
-l'ancienne clé échoue, `ssh -i /root/keys/test2` depuis le nœud réussit.
+et `~mathieu/.ssh/authorized_keys` contient la clé `test2` : la nouvelle clé est déployée, `ssh -i /root/keys/test2` depuis le nœud réussit. Constate aussi si l'ancienne clé est toujours présente : cloud-init **ajoute** les clés déclarées au fichier existant, il ne purge pas celles qu'il n'a plus dans son user-data (à vérifier sur ta VM).
 Remets ta clé (`qm set 9110 --sshkeys /root/keys/mathieu.pub`, reboot) avant
 L24.1.
 
@@ -1870,7 +1864,7 @@ plan).
 `--cicustom` exige que le stockage expose le type `snippets` **et** que le
 fichier existe au moment du `qm start` : sinon la VM démarre sans user-data,
 sans message. Après modification du snippet sur le nœud, Proxmox ne régénère
-l'ISO qu'au prochain `qm set` ou démarrage, et cloud-init ne rejoue que si
+l'ISO qu'au prochain démarrage (ou `qm cloudinit update`), et cloud-init ne rejoue que si
 l'`instance-id` change (le hash inclut le contenu du `cicustom`, donc oui).
 :::
 
@@ -1922,6 +1916,7 @@ resource "proxmox_virtual_environment_vm" "web" {
   tags            = ["lab2", "tofu"]
   on_boot         = true
   stop_on_destroy = true
+  scsi_hardware   = "virtio-scsi-single" # comme le template (iothread)
 
   clone {
     vm_id = 9100
@@ -1999,8 +1994,10 @@ Ce qu'on note dans `notes.md` en lisant le plan :
 
 ```text
 (known after apply) : id, ipv4_addresses, ipv6_addresses, mac_addresses,
-  network_interface_names, disk.path_in_datastore, clone (bloc), vm_id non
-  (fixé), initialization.interface = "ide2" (fixé), started = true (défaut).
+  network_interface_names, disk.path_in_datastore,
+  network_device.mac_address, initialization.*_file_id et .type ;
+  connus : vm_id (fixé), clone.vm_id, initialization.interface = "ide2",
+  started = true (défaut).
 agent.timeout = "15m" (valeur par défaut affichée dans le plan).
 Plan: 1 to add, 0 to change, 0 to destroy.
 ```
@@ -2017,7 +2014,7 @@ tofu plan
 
 Si le plan n'est pas vide, les dérives classiques avec un clone :
 `cpu.type` (si tu ne l'avais pas déclaré, le provider compare `qemu64`
-implicite à `x86-64-v2-AES` hérité du template), `operating_system.type`,
+implicite à `x86-64-v2-AES` hérité du template), `scsi_hardware` (défaut `virtio-scsi-pci` chez bpg, alors que le template est en `virtio-scsi-single`, seul contrôleur où `iothread` agit), `operating_system.type`,
 `vga`, `serial_device`, `disk.file_format`. Le remède est de **déclarer la
 valeur réelle** (comme ci-dessus) ; `ignore_changes` reste pour les
 attributs que Proxmox recalcule seul (`network_device[0].mac_address` si
@@ -2098,6 +2095,7 @@ resource "proxmox_virtual_environment_vm" "lab" {
   tags            = sort(concat(["lab2", "tofu"], each.value.tags))
   on_boot         = true
   stop_on_destroy = true
+  scsi_hardware   = "virtio-scsi-single" # comme le template (iothread)
 
   clone {
     vm_id = var.template_id
@@ -2356,8 +2354,8 @@ Terminal 1 : `yes` (ou `no`), le verrou est libéré. Verrou orphelin simulé :
 ```bash
 tofu apply &                 # attend la confirmation en arrière-plan
 sleep 5; kill -9 %1          # meurt sans libérer
-tofu plan 2>&1 | grep -A1 'ID:'
-tofu force-unlock 7c1c8a3e-4d5b-4e6f-9a1b-2c3d4e5f6a7b
+tofu plan 2>&1 | grep -A1 'ID:'   # nouvel ID : celui du verrou orphelin
+tofu force-unlock <ID-lu-ci-dessus>
 # Do you really want to force-unlock? yes
 # OpenTofu state has been successfully unlocked!
 ```
@@ -2453,7 +2451,8 @@ tofu plan
 #   ~ memory { ~ dedicated = 3072 -> 4096 }
 # Plan: 0 to add, 1 to change, 0 to destroy.
 tofu plan -refresh-only
-# Plan: 0 to add, 0 to change, 0 to destroy.   (ne propose que l'état)
+# This is a refresh-only plan, so OpenTofu will not take any actions to
+# undo these. ...                   (pas de ligne « Plan: » : état seul)
 ```
 
 Option 1, revenir au code : `tofu apply -auto-approve` → Proxmox repasse à
@@ -2672,6 +2671,7 @@ resource "proxmox_virtual_environment_vm" "this" {
   tags            = sort(var.tags)
   on_boot         = true
   stop_on_destroy = true
+  scsi_hardware   = "virtio-scsi-single" # comme le template (iothread)
 
   clone {
     vm_id = var.template_id
@@ -2928,10 +2928,12 @@ SRC='git::file:///home/mathieu/lab24//modules/vm-ubuntu?ref=v0.1.0'
 sed -i "s|source   = \"../modules/vm-ubuntu\"|source   = \"$SRC\"|" main.tf
 tofu init -upgrade   # Downloading git::file:///home/mathieu/lab24?ref=v0.1.0...
 tofu plan | tail -1        # No changes.
-sed -i 's/default = 2048/default = 4096/' ../modules/vm-ubuntu/variables.tf
-git -C ~/lab24 commit -qam "memory 4096 par défaut"
+# une valeur par défaut que la racine ne surcharge pas (memory l'est)
+sed -i 's/default = "lab.local"/default = "lab2.local"/' \
+  ../modules/vm-ubuntu/variables.tf
+git -C ~/lab24 commit -qam "domaine lab2.local par défaut"
 tofu init -upgrade && tofu plan | tail -1     # toujours No changes : ref=v0.1.0
-git -C ~/lab24 checkout -q -- modules/vm-ubuntu/variables.tf   # on annule
+git -C ~/lab24 revert -q --no-edit HEAD       # on annule (nouveau commit)
 ```
 
 **Étape 5 — inventaire.** Ajoute `local` aux `required_providers` de
@@ -3060,10 +3062,9 @@ run "parc_lab2" {
 
 ```bash
 cd ~/lab24/04-modules && tofu test
-# tests/vms.tftest.hcl... in progress
-#   run "parc_lab2"... pass
-# tests/vms.tftest.hcl... tearing down
 # tests/vms.tftest.hcl... pass
+#   run "parc_lab2"... pass
+#
 # Success! 1 passed, 0 failed.
 pip install --user pre-commit && pre-commit install && pre-commit run -a
 bash ~/workbook/scripts/check/check_M24_04.sh
@@ -3126,10 +3127,11 @@ donc trouvé une VM 9105 et l'a rafraîchie. Confirmation côté Proxmox :
 ```bash
 ssh root@10.10.10.1 'qm config 9105 | grep -E "^(name|memory|ipconfig0|tags)"'
 # name: sandbox-julien
-ssh root@10.10.10.1 'grep -h "qmclone\|qmdestroy" /var/log/pve/tasks/index \
-  | grep ":9105:" | tail -3'
-# ...:qmdestroy:9105:root@pam:      (la nôtre, détruite à la main)
-# ...:qmclone:9100:root@pam:        (le clone de Julien vers 9105)
+ssh root@10.10.10.1 'grep -hE ":(qmdestroy:9105|qmclone:9100):" \
+  /var/log/pve/tasks/index | tail -3'
+# ...:qmdestroy:9105:terraform@pve!tofu:   (la nôtre, détruite à la main)
+# ...:qmclone:9100:terraform@pve!tofu:     (clone de Julien ; l'UPID porte
+#                                           le VMID source, pas 9105)
 tofu state show 'module.vm["lab2-ops"].proxmox_virtual_environment_vm.this' \
   | grep -E '^\s*(id|name|vm_id)'
 ```
@@ -3482,8 +3484,8 @@ dans l'image ; à chaque démarrage, son générateur systemd exécute
 trouvé : avec la politique par défaut (`notfound=disabled`), il a
 **désactivé** cloud-init pour ce boot (`Cloud-init disabled by
 cloud-init-generator`), sans écrire `/var/lib/cloud/instance` ni aucun
-sémaphore — la VM a démarré avec le hostname et les comptes de l'image
-brute (`ubuntu`, sans mot de passe). Au second boot, le lecteur est là :
+sémaphore — la VM a démarré avec le hostname de l'image
+brute (`ubuntu`) et aucun compte utilisateur (c'est cloud-init qui crée même `ubuntu`). Au second boot, le lecteur est là :
 ds-identify trouve `cidata`, retient NoCloud, et cloud-init voit une
 instance dont l'`instance-id` n'a jamais été enregistré : c'est un premier
 boot au sens de cloud-init, tous les modules per-instance s'exécutent.
@@ -3500,7 +3502,7 @@ série montre le journal de boot et `ds-identify` en cas de doute.
 ::: pourquoi
 Le datasource NoCloud est passif : il attend un support **étiqueté**
 `cidata`. Proxmox fabrique ce support à la volée dans le volume
-`vm-<id>-cloudinit` à chaque changement de configuration cloud-init, et
+`vm-<id>-cloudinit` au démarrage (ou par `qm cloudinit update`), et
 seulement si un lecteur existe pour le recevoir. La séparation « options
 dans la configuration » / « lecteur qui les transporte » est la clé du
 diagnostic : `qm config` dit s'il y a un transport, `qm cloudinit dump` dit
@@ -3742,7 +3744,7 @@ git tag v1.0.0 && cd 04-modules && tofu init -upgrade
 
 **4. `lab2-db` et `scsi1`** : `extra_disks = [5]` ci-dessus produit
 `disk { interface = "scsi1" size = 5 }`. Vérification après apply :
-`ssh mathieu@10.10.10.103 lsblk` montre `sdb 5G`, non formaté (le module 05
+`ssh mathieu@10.10.10.103 lsblk` montre `sdb 5G`, non formaté (le module 11
 LVM s'en charge, ou Ansible).
 
 **5. Test** `tests/deploy.tftest.hcl` :
@@ -3838,7 +3840,7 @@ image cloud --(make-template.sh)--> 9100 --(module vm-ubuntu, snippet)--> VM
 
 **8. Livrable** : `git tag v1.0.0`, `plan.txt` de la reconstruction
 (`Plan: 11 to add, 0 to change, 0 to destroy.` : 5 VM, 5 snippets, 1
-inventaire), et `~/lab24/rapports/d20.md`, dont le contenu attendu :
+inventaire), et `~/lab24/rapports/d24.md`, dont le contenu attendu :
 
 ```markdown
 # D24 — rapport
@@ -3874,7 +3876,7 @@ n'accepte que `plan.bin` impose la revue de plan par construction, et
 snippet par VM généré par `templatefile` corrige la limite de L24.1 (un
 hostname en dur) et réunit identité et paquets de base dans un seul
 artefact revu en PR ; le prix, la recréation à chaque changement de
-user-data, est exactement le modèle immutable de QO24.5. `extra_disks` en
+userdata, est exactement le modèle immutable de QO24.5. `extra_disks` en
 `dynamic "disk"` montre le bon usage de `dynamic` : un nombre variable de
 blocs **identiques**, pas de la logique. Enfin, `-target` pour contourner
 `prevent_destroy` est la seule voie documentée ; toute autre (retirer la

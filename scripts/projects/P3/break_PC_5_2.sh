@@ -26,9 +26,10 @@ server {
 EOF
 mkdir -p /var/www/html
 echo '<h1>Welcome to nginx!</h1>' > /var/www/html/index.html
-printf '%s upgrade nginx 1.24.0-1 -> 1.24.0-2ubuntu1 : \
-/etc/nginx/sites-available/factura.conf conserve sous .dpkg-old\n' \
-  "$(date '+%F %T')" >> /var/log/factura/deploy.log
+printf '%s upgrade nginx 1.24.0-1 -> 1.24.0-2ubuntu1 : %s\n' \
+  "$(date '+%F %T')" \
+  '/etc/nginx/sites-available/factura.conf conserve sous .dpkg-old' \
+  >> /var/log/factura/deploy.log
 [ -d /run/systemd/system ] && { nginx -t >/dev/null 2>&1 \
   && systemctl reload nginx || systemctl restart nginx; } 2>/dev/null || true
 

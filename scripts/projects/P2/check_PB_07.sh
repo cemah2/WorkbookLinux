@@ -75,10 +75,11 @@ grep -qE '^promote:' "$REPO/Makefile" 2>/dev/null \
 for e in staging prod; do
   case $e in staging) W=$STG;; *) W=$PRD;; esac
   echo "-- $e ($W)"
-  r "$W" 'test -x /srv/factura/bin/switch.sh' \
+  # /srv/factura est en 0750 deploy : lecture par sudo (mathieu)
+  r "$W" 'sudo test -x /srv/factura/bin/switch.sh' \
     && ok "$e : /srv/factura/bin/switch.sh exécutable" \
     || ko "$e : bin/switch.sh absent ou non exécutable"
-  ST=$(r "$W" 'cat /srv/factura/state.env')
+  ST=$(r "$W" 'sudo cat /srv/factura/state.env')
   ACT=$(echo "$ST" | awk -F= '/^ACTIVE=/{print $2}')
   [ "$ACT" = blue ] || [ "$ACT" = green ] \
     && ok "$e : state.env ACTIVE=$ACT" \
@@ -98,11 +99,12 @@ for e in staging prod; do
     ko "$e : smoke.sh échoue ($(grep FAIL /tmp/smoke.$$ | head -1))"
   fi
   rm -f /tmp/smoke.$$
-  r "$W" 'grep -c "switch ->" /srv/factura/switch.log' | grep -qE '^[1-9]' \
+  r "$W" 'sudo grep -c "switch ->" /srv/factura/switch.log' \
+    | grep -qE '^[1-9]' \
     && ok "$e : switch.log contient au moins une bascule" \
     || ko "$e : switch.log vide (aucune bascule bleu/vert effectuée ?)"
 done
-r "$STG" 'grep -q "rollback" /srv/factura/switch.log' \
+r "$STG" 'sudo grep -q "rollback" /srv/factura/switch.log' \
   && ok "staging : une ligne rollback dans switch.log (test v9.9.9)" \
   || ko "staging : aucune ligne rollback dans switch.log (test de rollback à faire)"
 [ "$(curl -fsS -m 5 "http://$PRD/version" | jq -r .version)" != "v9.9.9" ] \

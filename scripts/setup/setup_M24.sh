@@ -391,6 +391,6 @@ cat <<EOF
   e02 e04 e06 e13      -> exercices ; 02-lab2 03-remote 04-modules -> labs
   modules/vm-ubuntu/   -> module à écrire (L24.4)
   ansible/base.yml     -> playbook fourni (L24.4)
-Outils : $(command -v tofu >/dev/null && tofu version | head -1 || echo "tofu ABSENT (voir 20.1)") ;\
+Outils : $(command -v tofu >/dev/null && tofu version | head -1 || echo "tofu ABSENT (voir 24.1)") ;\
  $(command -v cloud-init >/dev/null && echo "cloud-init OK" || echo "cloud-init ABSENT")
 EOF

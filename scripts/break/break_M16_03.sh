@@ -34,9 +34,15 @@ chmod 0644 "$DROP"
 [ -f "$UDROP" ] && [ ! -f "$SAUV/M16_03.unit.conf" ] && \
   cp -a "$UDROP" "$SAUV/M16_03.unit.conf"
 
+# EnvironmentFile= (api.env) l'emporte sur Environment= : on passe donc
+# par un second fichier d'environnement, lu après api.env.
+cat > /etc/factura/debit.env <<'EOF'
+FACTURA_PERIODE=0.01
+EOF
+chmod 0644 /etc/factura/debit.env
 cat > "$UDROP" <<'EOF'
 [Service]
-Environment=FACTURA_PERIODE=0.01
+EnvironmentFile=/etc/factura/debit.env
 EOF
 chmod 0644 "$UDROP"
 

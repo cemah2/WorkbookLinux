@@ -70,8 +70,8 @@ docker compose config 2>/dev/null | grep -A3 'postgres:' | grep -q healthcheck \
 docker compose config 2>/dev/null | grep -q 'condition: service_healthy' \
   && ok "depends_on avec condition service_healthy" \
   || ko "depends_on sans condition : l'API démarre avant la base"
-docker compose config 2>/dev/null | grep -E '^\s+- (published|target):' \
-  | grep -qE '5432|6379' \
+docker compose config 2>/dev/null \
+  | grep -qE '^\s+(- )?(published|target): "?(5432|6379)"?$' \
   && ko "postgres ou redis publie son port sur l'hôte" \
   || ok "postgres/redis non publiés sur l'hôte"
 # stack en marche ?

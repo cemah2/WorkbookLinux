@@ -418,7 +418,7 @@ UPDATE invoices i SET total_cents = s.t
 FROM (SELECT invoice_id, sum(qty * unit_cents) t FROM invoice_lines
       GROUP BY invoice_id) s WHERE s.invoice_id = i.id;
 -- Aucun index sur invoices.customer_id, invoice_lines.invoice_id,
--- customers.email : c'est voulu (E15.10, L15.5).
+-- customers.email : c'est voulu (Q15.13, E15.10).
 CREATE VIEW v_invoice_totals AS
   SELECT i.id, i.number, c.name AS customer, i.issued_on, i.status,
          i.total_cents / 100.0 AS total_eur

@@ -143,11 +143,11 @@ faut suivre le cycle de vie, y compris la destruction.
 inventory          = inventory/hosts.yml
 remote_user        = mathieu
 private_key_file   = ~/.ssh/id_ed25519
-interpreter_python = auto_silent   # sinon [WARNING] à chaque hôte
-forks              = 10            # hôtes traités en parallèle (défaut 5)
+interpreter_python = auto_silent   ; sinon [WARNING] à chaque hôte
+forks              = 10            ; hôtes traités en parallèle (défaut 5)
 roles_path         = roles
 collections_path   = collections
-callback_result_format = yaml      # sorties lisibles au lieu du JSON
+callback_result_format = yaml      ; sorties lisibles au lieu du JSON
 vault_password_file = .vault_pass
 retry_files_enabled = False
 # host_key_checking = False        # NON : préfère ssh-keyscan
@@ -155,11 +155,11 @@ retry_files_enabled = False
 become        = True
 become_method = sudo
 [ssh_connection]
-pipelining = True    # 1 connexion par tâche au lieu de 3 ; sudo sans requiretty
+pipelining = True    ; 1 connexion par tâche au lieu de 3, sudo sans requiretty
 ssh_args   = -o ControlMaster=auto -o ControlPersist=60s
 ```
 
-### Inventaire
+### Dans `ansible.cfg`, un commentaire en fin de ligne commence par `;` : un `#` n'est reconnu qu'en début de ligne, sinon il fait partie de la valeur. Inventaire
 
 ```ini
 # INI : groupes, variables d'hôte, groupe de groupes
@@ -242,7 +242,8 @@ injoignable, 1 erreur générale.
         src: vhost.conf.j2
         dest: /etc/nginx/sites-available/vitrine.conf
         mode: "0644"
-        validate: nginx -t -c /dev/null -p /etc/nginx || true
+        # validate: exige %s (fichier temporaire) ; inutilisable sur un
+        # vhost seul, voir L23.2
       notify: Reload nginx
 
   handlers:
@@ -308,7 +309,7 @@ géré par plusieurs `lineinfile` finit toujours divergent : dès deux lignes,
 "{{ ansible_facts['os_family'] }}"        # Debian / RedHat
 "{{ inventory_hostname }}"                # nom dans l'inventaire
 "{{ hostvars['lab-db']['ansible_host'] }}"
-"{{ play_hosts }}" "{{ ansible_play_batch }}"  # hôtes du play / du lot serial
+"{{ ansible_play_hosts }}" "{{ ansible_play_batch }}"  # hôtes du play / du lot
 ```
 
 Template : `{% for h in groups['all'] %}...{% endfor %}`,
@@ -343,7 +344,7 @@ roles/nginx/{defaults,vars,tasks,handlers,templates,files,meta}/main.yml
 
 Précédence (croissante) : `defaults/main.yml` < `group_vars/all` <
 `group_vars/*` < `host_vars` < `vars:` du play < `vars_files` < `vars/main.yml`
-du rôle < `set_fact`/`register` < variables de tâche < `-e` (extra vars,
+du rôle < variables de tâche < `set_fact`/`register` \< `-e` (extra vars,
 **toujours gagnant**). `ansible-galaxy role init roles/nginx` crée le
 squelette ; `ansible-galaxy collection install -r requirements.yml` installe
 les collections déclarées (`name`, `version`).
@@ -377,7 +378,8 @@ conteneur : `create → converge → idempotence → verify → destroy`.
 | `Decryption failed (no vault secrets were found that could decrypt)` | mauvais mot de passe vault | `ansible-vault view` |
 | `Attempting to decrypt but no vault secrets found` | aucun mot de passe fourni | `vault_password_file`, `--ask-vault-pass` |
 | `Could not match supplied host pattern` | groupe absent / inventaire non parsé | `ansible-inventory --graph` |
-| `The task includes an option with an undefined variable` | variable non définie | `-e`, `default()`, `ansible-inventory --host` |
+| `The task includes an option with` |  |  |
+| `an undefined variable` | variable non définie `-` | `-e`, `default()`, `ansible-inventory -host` |
 
 ---
 
@@ -491,7 +493,7 @@ d) Ansible annule les changements sur `lab-web`
 
 a) `delegate_to: localhost` + `run_once: true`
 b) `local_action` seule
-c) `ansible.builtin.copy` avec `when: inventory_hostname == play_hosts[0]` +
+c) `ansible.builtin.copy` avec `when: inventory_hostname == ansible_play_hosts[0]` +
    `delegate_to: localhost`
 d) `connection: local` sur chaque hôte
 
@@ -507,16 +509,16 @@ d) `{{ web | map('ansible_host') }}`
 
 ```text
 fatal: [lab-web]: FAILED! => {"msg": "The task includes an option with an
-undefined variable. The error was: 'dict object' has no attribute 'stdout'"}
+undefined variable. The error was: list object has no element 0"}
 ```
 
-sur une tâche qui utilise `r.stdout` après `register: r` d'un `command`.
+sur une tâche qui utilise `r.stdout_lines[0]` après `register: r` d'un `command`.
 Cause la plus probable ?
 
 a) le `command` a échoué
-b) en `--check`, `command` n'est pas exécuté et `r` n'a pas de `stdout`
+b) en `--check`, `command` n'est pas exécuté : `r` est un résultat *skipped* dont `stdout` est vide et `stdout_lines` une liste vide
 c) `register` ne fonctionne pas avec `command`
-d) il faut `r.stdout_lines`
+d) il faut `r.stdout`
 
 **Q23.12** — Quelle tâche est idempotente **et** signale correctement les
 changements ?
@@ -538,11 +540,9 @@ d) le fichier est corrompu
 
 **Q23.14** — Une tâche `ansible.builtin.get_url` télécharge
 `node_exporter-1.9.1.linux-amd64.tar.gz` vers `/tmp/ne.tar.gz` avec
-`force: true` (« pour être sûr d'avoir la dernière version »). Elle est
-`changed` à chaque exécution. Quelle correction rend la tâche idempotente
-**sans** retélécharger inutilement ? **Deux réponses correctes.**
+`force: true` (« pour être sûr d'avoir la dernière version »). Elle retélécharge l'archive à chaque exécution. Quelle correction évite ce téléchargement inutile ? **Deux réponses correctes.**
 
-a) ajouter `checksum: "sha256:<empreinte>"` : le fichier présent est comparé
+a) remplacer `force: true` par `checksum: "sha256:<empreinte>"` : le fichier présent est comparé
    avant tout téléchargement
 b) retirer `force: true` et garder un `dest` stable : un fichier existant
    n'est pas retéléchargé
@@ -797,7 +797,7 @@ Aucune tâche ne doit boucler.
 ::: contexte
 Quatre VM ont été installées à la main par trois personnes différentes. Les
 fuseaux horaires ne concordent pas, `sshd` accepte encore les mots de passe
-sur deux d'entre elles, aucune n'a de pare-feu, et Prometheus (module 16) ne
+sur deux d'entre elles, aucune n'a de pare-feu, et Prometheus (module 26) ne
 voit rien. Ticket : « Appliquer la baseline du service à toutes les machines,
 et garantir qu'une machine réinstallée la reçoit en une commande. »
 :::
@@ -895,8 +895,7 @@ variables, pas recopié à la main entre les deux distributions.
    `changed_when: false` — explique dans un commentaire pourquoi
    `validate:` sur un fichier de vhost seul ne fonctionne pas.
 5. `index.html` généré par template dans `vitrine_root`, propriétaire
-   `nginx_user`, contenant `vitrine {{ vitrine_version }} sur
-   {{ inventory_hostname }}`.
+   `nginx_user`, contenant `vitrine {{ vitrine_version }} sur {{ inventory_hostname }}`.
 6. Handler `Reload nginx` (reload, pas restart). Service actif et activé.
    Pare-feu : `80/tcp` et `443/tcp` ouverts (ufw ou firewalld selon l'OS).
 7. Dernière tâche : `uri` vers `https://{{ ansible_host }}/` avec
@@ -1043,8 +1042,7 @@ paramétrable, documenté, validé, sans rien qui dépende de ton inventaire.
    `ansible_facts['os_family']`, `firewall_Debian.yml` ou
    `firewall_RedHat.yml` (utilise `include_tasks` avec un nom construit
    dynamiquement).
-4. `templates/node_exporter.service.j2` avec `{{ node_exporter_extra_args |
-   join(' ') }}`, handler `Restart node_exporter`, `meta/main.yml` renseigné
+4. `templates/node_exporter.service.j2` avec `{{ node_exporter_extra_args | join(' ') }}`, handler `Restart node_exporter`, `meta/main.yml` renseigné
    (`galaxy_info.platforms`, `min_ansible_version`),
    `meta/argument_specs.yml` qui type chaque variable (`str`, `bool`, `list`)
    et documente chacune.
@@ -1070,7 +1068,7 @@ bash check_M23_05.sh
 ## 23.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf19`. Les pannes ne
+Avant chaque Break & Fix : `qm snapshot 9001 avant-bf23`. Les pannes ne
 touchent que `~/lab23/` sur `lab-adm` (BF23.1 déploie aussi sur les cibles,
 mais tout est réversible depuis Ansible). Snapshot de secours : `snap-clean`,
 mais l'utiliser vaut échec, on répare du code.
@@ -1118,7 +1116,7 @@ sudo bash break_M23_02.sh
 [WARNING]: No hosts matched, nothing to do
 ```
 
-et `ansible all -m ansible.builtin.ping` ne ping que `localhost` avec des
+et `ansible all -m ansible.builtin.ping` ne trouve plus aucun hôte, avec des
 avertissements. Le playbook `baseline.yml` n'a rien changé.
 
 **Interdit** : revenir à l'ancien fichier depuis Git ou une sauvegarde,
@@ -1207,7 +1205,7 @@ Tout ce que tu as écrit dans ce module vit dans des playbooks disparates. Le
 service veut **un** dépôt `~/lab23/factura-infra` que n'importe quel membre
 de l'équipe peut cloner, dont une seule commande applique tout le parc, qui
 passe en CI, et dans lequel aucun secret n'est lisible. C'est ce dépôt qui
-sera repris en module 24 pour être exécuté par un pipeline.
+sera repris en module 25 pour être exécuté par un pipeline.
 :::
 
 Cahier des charges :
@@ -1244,7 +1242,7 @@ factura-infra/
    non idempotente, vault) avec pour chacune la commande de diagnostic et le
    correctif.
 8. Bonus : `molecule init scenario -r node_exporter` avec le driver
-   `podman` (module 24 pour l'outillage) et un `converge.yml` ; si Molecule
+   `podman` (module 22 pour l'outillage) et un `converge.yml` ; si Molecule
    n'est pas installable, décris dans le README ce que la séquence
    `molecule test` ferait sur ce rôle.
 

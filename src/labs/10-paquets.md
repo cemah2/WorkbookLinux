@@ -106,7 +106,7 @@ dpkg              déballe, configure, tient la base /var/lib/dpkg ;
 .deb              ar(1) : debian-binary + control.tar.* + data.tar.*
 ```
 
-@fig(paquets-couches): `apt` résout et télécharge, `dpkg` installe et tient la base ; dépôts et clés en amont, miroir `dnf`/`rpm` côté Rocky.
+@fig(paquets-couches): `apt` / `apt-get` **dpkg fichiers installés** — `/usr`, `/etc`, `/var` appelle avec les `.deb` triés écritdpkg `-l`, `-L`, `-S` lisent ici dépôts `sources.list.d/*.sources /etc/apt/keyrings/` **Debian / Ubuntu** `apt update` où et signé par qui **RHEL / Rocky : mêmes couches, autres noms dnf rpm** ≈ `apt` + `sources` + `keyrings` ≈ `dpkg apt` résout et télécharge, `dpkg` installe et tient la base ; dépôts et clés en amont, miroir `dnf`/`rpm` côté Rocky.
 
 `apt` (2014) est la surface *humaine* : couleurs, barre de progression, sortie
 qui change entre versions. `apt-get`/`apt-cache` ont une interface **stable**,
@@ -118,7 +118,8 @@ lui-même dans un pipe : `WARNING: apt does not have a stable CLI interface.`
 | Commande | Ce qu'elle fait vraiment |
 |---|---|
 | `apt update` | rafraîchit les **index**, n'installe rien |
-| `apt upgrade` | met à jour, **n'enlève jamais** un paquet installé |
+| `apt upgrade` | met à jour, **n'enlève jamais** un paquet installé (`apt-get` |
+|  | `upgrade` n'en installe pas non plus de nouveau) |
 | `apt full-upgrade` | met à jour, **et supprime** si c'est le seul chemin |
 | `apt dist-upgrade` | synonyme de `full-upgrade` côté `apt-get` |
 | `apt install p=1.2` | version précise ; `-t noble-backports` pour une suite |
@@ -131,7 +132,7 @@ lui-même dans un pipe : `WARNING: apt does not have a stable CLI interface.`
 `upgrade` vs `full-upgrade` : la règle est « ai-je le droit de supprimer ? ».
 Une montée de version de bibliothèque qui change de nom de paquet
 (`libfoo5` → `libfoo6`) exige une suppression : `upgrade` la refuse et laisse le
-paquet **kept back**, `full-upgrade` l'accepte. Sur un serveur, `upgrade` est le
+paquet **kept back**, `full-upgrade` l'accepte. Nuance entre les deux interfaces : `apt-get upgrade` refuse aussi d'**installer** un nouveau paquet (un nouveau `linux-image-*` tiré par `linux-generic`, par exemple), alors qu'`apt upgrade` l'accepte. Sur un serveur, `upgrade` est le
 comportement voulu par défaut ; `full-upgrade` se fait les yeux ouverts.
 
 ### dpkg, la couche du dessous
@@ -154,7 +155,8 @@ ii   installé, tout va bien
 iU   désiré installé, déballé mais PAS configuré  -> dpkg --configure -a
 iF   désiré installé, configuration à moitié faite (postinst en échec)
 rc   supprimé, conffiles conservés                -> dpkg --purge pour finir
-iH   retenu (hold)
+iH   déballage interrompu (half-installed)        -> apt-get -f install
+hi   retenu (hold) et installé
 ```
 
 `/var/lib/dpkg/status` **est** la base : un fichier texte. `status-old` en est
@@ -170,7 +172,7 @@ est dans `/etc/apt/sources.list.d/ubuntu.sources` :
 
 ```ini
 Types: deb
-URIs: https://archive.ubuntu.com/ubuntu/
+URIs: http://archive.ubuntu.com/ubuntu/
 Suites: noble noble-updates noble-backports
 Components: main universe restricted multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
@@ -205,8 +207,7 @@ sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
 puis `Signed-By: /etc/apt/keyrings/docker.gpg` dans la source.
 
-`apt-key add` est **supprimé** depuis Ubuntu 22.04 (`Command apt-key is
-deprecated`), pour une raison de fond : une clé posée dans le trousseau global
+`apt-key add` est **déprécié** depuis Ubuntu 22.04 (`Warning: apt-key is deprecated. Manage keyring files in trusted.gpg.d instead`) et sa suppression est annoncée, pour une raison de fond : une clé posée dans le trousseau global
 (`/etc/apt/trusted.gpg`, `/etc/apt/trusted.gpg.d/`) authentifie **tous** les
 dépôts de la machine. La clé de Docker pouvait signer un faux `libc6`.
 `Signed-By` restreint une clé à un dépôt : c'est le principe du moindre privilège
@@ -217,7 +218,7 @@ appliqué à la distribution logicielle.
 ```ini
 # /etc/apt/preferences.d/50-nginx.pref
 Package: nginx nginx-common
-Pin: release o=nginx,c=stable
+Pin: release o=nginx
 Pin-Priority: 600
 ```
 
@@ -334,7 +335,7 @@ application, `pipx` pour un outil en ligne de commande. Idem côté Node :
 
 ## 10.3 Quiz — QCM
 
-**Q10.1** — Sur `lab-web`, `sudo apt upgrade` affiche :
+**Q10.1** — Sur `lab-web`, `sudo apt-get upgrade` affiche :
 
 ```text
 The following packages have been kept back:
@@ -414,7 +415,7 @@ outil-lab:
  *** 1.2.0 100
         100 /var/lib/dpkg/status
      1.0.0 1001
-        500 file:/srv/depot-lab ./ Packages
+        500 http://127.0.0.1:8099 ./ Packages
 ```
 
 Que va faire `sudo apt install outil-lab` ?
@@ -508,12 +509,12 @@ d) `rpm -V` compare au dépôt, il faut donc être connecté
 que le dépôt AppStream contient aussi la 20. Pourquoi ?
 
 a) la 20 est dans EPEL, pas dans AppStream
-b) un flux de module (`nodejs:16`) est activé et masque les autres
+b) aucun flux n'est activé : les versions modulaires (`nodejs:20`) sont filtrées, et `dnf` installe le paquet non modulaire (16)
 c) `dnf` installe toujours la plus ancienne version disponible
 d) il manque `--allowerasing`
 
 **Q10.16** — Un développeur te demande d'installer un outil en faisant
-`sudo ./configure && sudo make && sudo make install` dans `/usr` sur le serveur
+`sudo ./configure && sudo make & sudo make install` dans `/usr` sur le serveur
 de production. Quelles objections sont fondées ? **Trois réponses correctes.**
 
 a) rien ne trace les fichiers déposés : `dpkg -S` ne les retrouvera jamais
@@ -644,7 +645,7 @@ compter les lignes d'en-tête ni les paquets en état `rc`.
 **E10.2** — Trouve quel paquet fournit le fichier `/usr/bin/ss`, puis liste tous
 les fichiers de configuration (sous `/etc`) que ce paquet livre.
 
-**E10.3** — Le binaire `/usr/sbin/nft` n'existe pas sur la machine. Trouve quand
+**E10.3** — Suppose que le binaire `/usr/sbin/nft` n'existe pas sur la machine (si `nftables` est déjà installé, prends `/usr/sbin/tcpdump` ou `/usr/bin/htop`). Trouve quand
 même le nom du paquet qui le fournirait.
 
 **E10.4** — Affiche la liste des paquets que **tu** as demandés explicitement,
@@ -711,7 +712,7 @@ dans trois mois. On te demande un état des lieux : ce qui est installé, ce qui
 a été installé à la main, ce qui ne vient d'aucun dépôt (donc ce que personne
 ne remettra automatiquement après migration), et ce qui a été modifié en local.
 Livrable : un rapport + le script qui le produit, pour pouvoir le rejouer sur
-les cinq VM.
+les autres VM.
 :::
 
 1. Écris `~/lab10/bin/inventaire.sh`. Il n'installe rien, ne modifie rien, et
@@ -952,7 +953,7 @@ sudo bash check_M10_05.sh
 ## 10.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf09`. Le snapshot de secours
+Avant chaque Break & Fix : `qm snapshot 9001 avant-bf10`. Le snapshot de secours
 reste `snap-clean` (`qm rollback 9001 snap-clean`), mais l'utiliser vaut échec de
 l'exercice. Sur une machine où `apt` ne fonctionne plus, on ne répare pas avec
 `apt` : c'est tout l'intérêt de ces pannes.

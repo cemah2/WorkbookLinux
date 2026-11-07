@@ -31,7 +31,7 @@ garantit pas de sortir d'un opérateur en attente ; ce n'est pas un `Esc`.
 
 ---
 
-**Q6.2** — *Curseur en colonne 1 de `    server_name "ancien-frontal…";`, on tape `ci"`.*
+**Q6.2** — *Curseur sur le `s` de `server_name`* `"ancien-frontal…";`*, on tape `ci`*`"`*.*
 
 **Réponse : b)** vim supprime le contenu entre guillemets et passe en insertion.
 
@@ -66,9 +66,8 @@ pas la fin de ligne : sur une chaîne coupée sur deux lignes, il ne trouve rien
 ::: pourquoi
 Une substitution vim travaille sur des **sous-chaînes**, pas sur des mots ni sur
 des chemins. `opt` correspond aussi dans `options`, `optimisation`, `adopter` ou
-`/opt/legacy`. Sur le `deploy.sh` du lab, la ligne de commentaire
-« pas modifier les chemins » n'est pas touchée, mais le mot `/opt/legacy` du
-vhost, lui, devient `/srv/legacy` alors qu'on voulait le laisser.
+`/opt/legacy`. Sur le `factura.conf` du lab, les chemins `/opt/legacy` du
+bloc hérité deviendraient `/srv/legacy` alors qu'on voulait les laisser; sur `deploy.sh`, le commentaire historique serait réécrit lui aussi.
 
 Trois façons d'écrire la bonne commande :
 
@@ -219,8 +218,8 @@ jamais le problème puisqu'il n'y a pas de frappe simulée.
 
 ::: pourquoi
 Dès l'ouverture d'un fichier, vim crée `.nomdufichier.swp` **dans le répertoire
-du fichier** (puis dans `~/.vim/swap` ou `/tmp` si le premier est en lecture
-seule). Il y journalise toutes les modifications non enregistrées, avec le nom
+du fichier** (puis dans `~/tmp`, `/var/tmp` ou `/tmp` si le premier est en lecture
+seule : c'est le défaut de l'option `'directory'`). Il y journalise toutes les modifications non enregistrées, avec le nom
 d'hôte et le PID du processus propriétaire. En sortie propre, il l'efface.
 
 Un swap présent signifie donc l'une de deux choses, et le message te dit
@@ -255,16 +254,16 @@ C'est en quittant l'insertion, par `Esc`, que vim **réplique** le texte insér�
 sur toutes les autres lignes du bloc. Le `Esc` n'est pas une politesse de sortie,
 c'est l'ordre d'exécution.
 
-Le geste complet pour commenter 30 lignes :
+Le geste complet, appliqué au bloc 39-71 de `factura.conf` (33 lignes) :
 
 ```text
-gg 39G      aller sur la première ligne à commenter
+39G         aller sur la première ligne à commenter
 Ctrl-V      mode bloc
 32j         étendre jusqu'à la dernière
 I #  Esc    insérer en tête de bloc, puis propager
 ```
 
-Pour décommenter : `Ctrl-V`, `32j`, `l` (pour englober le `#` et l'espace), `x`.
+Pour décommenter : `Ctrl-V`, `32j`, `x` (ajoute `l` avant `x` seulement si tu avais inséré `#`, dièse et espace).
 :::
 
 ::: piege
@@ -454,7 +453,7 @@ Résultat : `~/backup/mardi/` est une arborescence **complète**, parcourable et
 restaurable telle quelle, qui n'occupe en propre que les fichiers modifiés.
 
 ```bash
-du -sh ~/backup/lundi ~/backup/mardi   # ~10 Go chacun, comptés séparément
+du -sh ~/backup/mardi                  # ~10 Go : mesuré seul, tout est compté
 du -sh --total ~/backup/lundi ~/backup/mardi  # ~10,1 Go : du ne compte
                                               # l'inode partagé qu'une fois
 stat -c '%h %n' ~/backup/mardi/un/fichier/inchange   # 2 liens
@@ -555,7 +554,7 @@ d'un `.tar.gz` sans le parcourir).
 
 Son format enregistre un champ « attributs externes » où les outils Unix glissent
 le mode POSIX, mais rien n'oblige un extracteur à le respecter, et l'explorateur
-Windows ne le fait pas. Les propriétaires ne sont pas dans le format. Les liens
+Windows ne le fait pas. Les propriétaires (UID/GID) ne figurent que dans un champ d'extension propre à Info-ZIP, que seul `unzip` lancé en root restitue et que Windows ignore. Les liens
 symboliques ne sont conservés que par certaines implémentations, et pas par
 l'extracteur intégré de Windows — ils arrivent en fichiers texte contenant le
 chemin, ou suivis et dupliqués.
@@ -579,7 +578,7 @@ transforme en archive gigantesque. Même famille de problème que `tar -h`.
 
 **Réponse attendue** — trois arguments d'exploitation, pas de confort :
 
-1. **Disponibilité**. `vi` est le seul éditeur garanti par POSIX, présent sur
+1. **Disponibilité**. `vi` est le seul éditeur plein écran garanti par POSIX, présent sur
    toute installation, y compris minimale. En cellule de crise sur une machine
    sans réseau, dans un conteneur de dépannage, sur une appliance, dans un
    initramfs ou un shell de secours, `nano` peut manquer, `vi` non.
@@ -594,7 +593,7 @@ transforme en archive gigantesque. Même famille de problème que `tar -h`.
 
 Deux situations où aucun autre éditeur n'est disponible : un système démarré en
 mode secours (`rescue.target`) pour réparer `/etc/fstab` ; un conteneur
-d'images « distroless » ou une VM cloud minimale où seul `busybox vi` existe.
+Alpine ou BusyBox, ou une VM cloud minimale, où seul `busybox vi` existe.
 
 ::: pourquoi
 La bonne réponse en entretien ne dit jamais « c'est plus rapide quand on sait ».
@@ -638,11 +637,8 @@ fichier temporaire ni pipeline.
 :::
 
 ::: piege
-`:g/motif/normal ...` échoue silencieusement si une des touches passées à
-`normal` laisse vim en mode insertion : la suite des lignes reçoit alors du texte
-au lieu de commandes. On termine donc par `Esc` explicite quand la commande le
-demande (`:g/x/normal A;<Ctrl-V><Esc>`), ou on utilise `:normal!` pour ignorer
-les remappages de l'utilisateur — indispensable dans un script.
+`:normal` termine de lui-même une insertion restée ouverte (comme un `Esc`) : `:g/x/normal A;` suffit, rien ne déborde sur la ligne suivante. Le vrai piège est double. `:normal` ne comprend pas la notation `<Esc>` : pour enchaîner d'autres touches après une insertion, il faut `:exe "normal A;\<Esc>j"`. Et `:normal` subit
+les remappages de l'utilisateur : dans un script, on écrit `:normal!`.
 :::
 
 ---
@@ -714,7 +710,7 @@ Conséquences concrètes :
 * un fichier modifié pendant sa propre lecture est incohérent en interne :
   `tar` le signale (`file changed as we read it`) et sort en 1 ;
 * un fichier supprimé après que `tar` l'a listé mais avant de le lire produit
-  `No such file or directory`, également en code 1 ;
+  `File removed before we read it`, également en code 1 ;
 * pour une base de données, c'est rédhibitoire : les fichiers de données et le
   journal de transactions sont lus à des instants différents, et la base
   restaurée peut refuser de démarrer.
@@ -796,9 +792,8 @@ repose pas sur les tailles et les dates.
 `-z` est un réflexe à interroger. Sur du texte à travers un lien WAN lent, il
 divise le temps par trois. Sur des données déjà compressées (images, vidéos,
 archives) ou en réseau local à 1 Gb/s, il ne fait que saturer le CPU et ralentir
-le transfert. `scp`, quant à lui, est déconseillé depuis OpenSSH 9, où il
-s'appuie désormais sur SFTP par défaut : ses jours de commande de référence sont
-derrière lui.
+le transfert. `scp`, quant à lui, 
+s'appuie sur SFTP depuis OpenSSH 9.0 (le protocole scp historique est déprécié) : cela corrige ses failles, pas son absence de reprise.
 :::
 
 ---
@@ -950,7 +945,7 @@ df—                        supprimer jusqu'au tiret cadratin inclus
 
 `` `a `` va à la marque **à la colonne exacte** où elle a été posée ; `'a` va au
 **premier caractère non blanc** de cette ligne. Même distinction pour
-`` `` `` et `''`.
+`` `` '`et`'''.
 
 ::: pourquoi
 Les marques minuscules (`a`–`z`) sont locales au tampon, les majuscules
@@ -1002,8 +997,8 @@ avec un contrôle visuel entre chaque — là où `:%s` applique tout d'un coup.
 **E6.3** — *Substitution avec plage et confirmation dans `deploy.sh`.*
 
 ```vim
-:1,12s#/opt/factura#/srv/factura#gc
-:17,$s#/opt/factura#/srv/factura#gc
+:1,11s#/opt/factura#/srv/factura#gc
+:16,$s#/opt/factura#/srv/factura#gc
 ```
 
 puis, pour vérifier :
@@ -1013,7 +1008,7 @@ puis, pour vérifier :
 ```
 
 ou depuis le shell : `grep -n '/opt/factura' ~/lab06/edition/deploy.sh`, qui ne
-doit plus rendre que les lignes 13 à 16.
+doit plus rendre que la ligne 13 (dans le bloc de commentaires 12 à 15).
 
 Pendant la confirmation, `y` remplace, `n` passe, `a` accepte tout le reste,
 `q` arrête, `l` remplace puis arrête.
@@ -1093,7 +1088,6 @@ chaque ligne.
 ```vim
 :g/DEBUG/d
 :g/ERROR/normal A  <-- a traiter
-:%s/$//            " juste pour forcer un rafraîchissement, facultatif
 ```
 
 Le fichier passe de 145 à **85** lignes (60 lignes `DEBUG` supprimées).
@@ -1108,8 +1102,8 @@ exécution. La commande `A` est en mode normal, elle ajoute en fin de ligne ;
 
 Pour compter sans modifier, `:%s/ERROR//gn` est l'astuce à connaître : le
 drapeau `n` **ne remplace rien** et affiche seulement
-`13 matches on 13 lines` (le journal contient cinq lignes `ERROR` strictement
-identiques, que L6.2 dédoublonnera). C'est le `grep -c` de vim.
+`13 matches on 13 lines` (le journal contient six lignes `ERROR` strictement
+identiques — une d'origine et cinq doublons — que L6.2 dédoublonnera). C'est le `grep -c` de vim.
 :::
 
 ---
@@ -1215,7 +1209,7 @@ vim /etc/factura/frontal.conf
 ```
 
 Vérification que le tampon et le disque coïncident : `:w` ne doit plus rien
-proposer, et `:!cat %` (ou `:!diff % -` en interactif) montre le contenu réel.
+proposer, `:!cat %` montre le contenu réel, et `:w !diff % -` ( le tampon envoyé sur stdin de `diff`) ne doit rien afficher.
 
 ::: pourquoi
 Voir Q6.6 pour le mécanisme du tube. Le `:e!` final est la partie que tout le
@@ -1372,8 +1366,9 @@ pour `find -name`.
 ```bash
 cd ~/lab06/arbo/factura
 tar -cf /tmp/logs.tar logs
+TIMEFORMAT='%R s'        # le time intégré de bash : pas besoin du paquet time
 for c in "gzip -6" "gzip -9" "bzip2 -9" "xz -9" "zstd -19"; do
-  /usr/bin/time -f "%e s" $c -c /tmp/logs.tar > /tmp/o.z 2>/tmp/t
+  { time $c -c /tmp/logs.tar > /tmp/o.z ; } 2>/tmp/t
   printf '%-10s %10s o  %s\n' "$c" "$(stat -c %s /tmp/o.z)" "$(cat /tmp/t)"
 done
 ```
@@ -1396,7 +1391,7 @@ paie une fois, on stocke longtemps, et le format est stable et documenté.
 Deux enseignements que le tableau rend visibles. D'abord, `gzip -9` coûte deux
 fois plus de temps que `-6` pour 3 % de taille en moins : sur du texte, monter
 les niveaux de `gzip` ne rapporte presque rien. Ensuite, `bzip2` est dominé sur
-les deux axes par `xz` — plus lent **et** dix fois moins efficace ici. Il ne
+les deux axes par `xz` — plus lent **et** près de huit fois moins efficace ici. Il ne
 reste dans les scripts que par habitude.
 
 Ces chiffres dépendent beaucoup des données : sur du binaire déjà compressé
@@ -1603,7 +1598,7 @@ ci"factura.lab.local<Esc>
 " 3. commenter le bloc hérité (39 à 71) en visuel bloc
 :39<Entrée>
 Ctrl-V 32j I # Esc
-"    équivalent ex :  :39,71normal I#
+"    équivalent ex :  :39,71s/^/#/   (normal I# insérerait après l'indentation)
 
 " 4. ligne de revue, produite par une commande
 :2r !echo "\# revu le $(date -I) par $(id -un) sur $(hostname -s)"
@@ -1629,7 +1624,7 @@ numéros de ligne ; l'étape 4 insère une ligne et décale tout ce qui suit d'u
 cran. Faire l'étape 4 en premier oblige à recalculer toutes les plages. Règle
 générale : les opérations qui **changent le nombre de lignes** passent en
 dernier, ou bien on utilise des plages définies par motif plutôt que par numéro,
-par exemple `:/^# --- bloc hérité/,$normal I#`, qui reste juste quoi qu'il
+par exemple `:/^# --- bloc hérité/,$s/^/#/`, qui reste juste quoi qu'il
 arrive avant.
 
 L'étape 4 contient le piège des caractères spéciaux : sur la ligne de commande de
@@ -1758,7 +1753,7 @@ tar -xzpf ~/lab06/archives/"factura-$D.tar.gz" --numeric-owner \
     -C ~/lab06/restauration/test
 diff -r ~/lab06/arbo/factura ~/lab06/restauration/test/factura
 #  Only in .../arbo/factura: node_modules
-#  Only in .../arbo/factura: var
+#  Only in .../arbo/factura/var: cache
 #  Only in .../arbo/factura/logs: access.log   (etc.)
 ```
 
@@ -1819,7 +1814,7 @@ rsync -a --delete "${EXCL[@]}" --link-dest=../2026-09-18 \
       arbo/factura/ backup/2026-09-19/
 
 # 3. preuve du partage
-du -sh backup/2026-09-18 backup/2026-09-19      # ~9 Mo chacun
+du -sh backup/2026-09-18; du -sh backup/2026-09-19   # ~9 Mo chacun, seuls
 du -sh --total backup/2026-09-1[89]             # ~9 Mo au total
 stat -c '%h %n' backup/2026-09-1[89]/app/src/mod_01.py   # 2 liens, même inode
 stat -c '%i' backup/2026-09-1[89]/app/src/mod_01.py      # inode identique
@@ -1829,11 +1824,11 @@ cmp backup/2026-09-18/conf/factura.conf backup/2026-09-19/conf/factura.conf
 stat -c '%i' backup/2026-09-1[89]/conf/factura.conf      # inodes différents
 
 # 5. une suppression à la source
-rm arbo/factura/app/tests/test_10.py
+rm arbo/factura/app/tests/test_09.py          # test_10 : déjà pris par E6.16
 rsync -a --delete "${EXCL[@]}" --link-dest=../2026-09-19 \
       arbo/factura/ backup/2026-09-20/
-ls backup/2026-09-18/app/tests/test_10.py     # existe encore
-ls backup/2026-09-20/app/tests/test_10.py     # No such file
+ls backup/2026-09-18/app/tests/test_09.py     # existe encore
+ls backup/2026-09-20/app/tests/test_09.py     # No such file
 
 # 6. transfert reprenable vers lab-web
 rsync -aP backup/2026-09-20/ mathieu@10.10.10.11:~/backup-factura/
@@ -1846,7 +1841,7 @@ rsync -aP backup/2026-09-20/ mathieu@10.10.10.11:~/backup-factura/
 - rsync -aP : compare avant de transférer, reprend après coupure, sait
   supprimer côté destination, préserve droits et dates.
 - scp -r : pas de comparaison, pas de reprise, pas de suppression ;
-  une coupure à 99 % renvoie tout. Déconseillé depuis OpenSSH 9.
+  une coupure à 99 % renvoie tout (même en mode SFTP, OpenSSH 9+).
 - sftp : reprise possible fichier par fichier (reget/reput), mais
   manuelle et sans notion d'arborescence à synchroniser.
 ```
@@ -1861,8 +1856,8 @@ un classique d'entretien. `du -sh` sur un répertoire compte tous les fichiers
 qu'il voit : il annonce la taille pleine, parce qu'il n'a aucun moyen de deviner
 que ces inodes sont partagés avec un répertoire qu'on ne lui a pas demandé de
 regarder. `du -sh --total` sur les deux répertoires à la fois, en revanche, tient
-un registre des inodes déjà comptés et ne les compte qu'une fois : c'est
-l'occupation réelle. Et `stat -c %h` donne la preuve directe, inode par inode.
+un registre des inodes déjà comptés et ne les compte qu'une fois : le second répertoire n'affiche plus que ses fichiers propres, et le total est
+l'occupation réelle. C'est pourquoi les deux premières mesures se font dans deux commandes `du` séparées. Et `stat -c %h` donne la preuve directe, inode par inode.
 
 `--link-dest` accepte un chemin relatif **à la destination**, d'où
 `../2026-09-18` depuis `backup/2026-09-19/`. Une valeur erronée ne provoque pas
@@ -1927,8 +1922,8 @@ appartient à `root` en 644 et tu l'as ouvert sans `sudo`.
 ```bash
 # 1. récupérer AVANT toute suppression (fait à l'étape 6 ci-dessus)
 # 2. prévenir le propriétaire de la session, puis la fermer
-ps -fp "$(pgrep -f 'vim .*frontal.conf' | head -1)"
-kill "$(pgrep -f 'vim .*frontal.conf' | head -1)"   # TERM, pas KILL
+ps -fp "$(pgrep -f '^vim .*frontal.conf')"   # ^ : pas le script(1) parent
+kill "$(pgrep -f '^vim .*frontal.conf')"           # TERM, pas KILL
 # 3. appliquer les deux réglages retrouvés
 sudo cp /tmp/frontal.recovered /etc/factura/frontal.conf
 # 4. nettoyer le swap devenu orphelin
@@ -1956,9 +1951,10 @@ contenu du swap. `(E)dit anyway` ouvre une **seconde** session sur le même
 fichier : les deux écriront l'une par-dessus l'autre, et la dernière à sauver
 gagne. `(D)elete it` détruit le travail de quelqu'un.
 
-`kill` sans `-9` laisse à vim le temps de finir proprement, ce qui inclut la
-suppression de son propre swap. `kill -9`, lui, laisse un nouveau swap orphelin —
-c'est le mécanisme même qui a créé le problème.
+`kill` sans `-9` laisse à vim le temps de mettre son swap à jour avant de sortir (`Vim: Caught deadly signal TERM`,
+
+`preserving files`) : rien de ce qui était dans le tampon n'est perdu. Le swap reste sur le disque dans les deux cas, d'où l'étape 4 ; mais `kill -9` ne laisse aucune chance d'y écrire les dernières frappes, et
+c'est ainsi qu'on perd du travail.
 :::
 
 ---
@@ -1976,8 +1972,8 @@ cat /usr/local/bin/factura-backup.sh
 # 2. observer les tailles successives
 ls -lh /srv/factura/backup/
 #  4,1M  factura-2026-09-18-190611.tar.gz
-#   12M  factura-2026-09-18-190613.tar.gz
-#   20M  factura-2026-09-18-190614.tar.gz
+#  8,1M  factura-2026-09-18-190613.tar.gz
+#   28M  factura-2026-09-18-190614.tar.gz
 
 # 3. regarder ce qu'il y a DANS l'archive
 tar -tzf /srv/factura/backup/factura-...-190614.tar.gz | grep backup/
@@ -2045,16 +2041,16 @@ fatale : rien d'exploitable n'a été produit.
 
 ::: pourquoi
 GNU `tar` possède bien une protection : il refuse de s'archiver lui-même et
-affiche `file is the archive; not dumped`. Mais elle ne porte que sur le fichier
-**en cours d'écriture**, identifié par son couple périphérique/inode. Les
-archives des nuits précédentes sont, pour lui, des fichiers ordinaires : rien ne
+affiche `archive cannot contain itself; not dumped`. Mais elle ne porte que sur le fichier
+qu'il écrit **lui-même**, identifié par son couple périphérique/inode. Avec `- z`, c'est `gzip` qui écrit l'archive : `tar` ne la reconnaît plus et la lit comme n'importe quel fichier, d'où le `file changed as we read it`. Quant aux
+archives des nuits précédentes, ce sont pour lui des fichiers ordinaires : rien ne
 les distingue de données à sauvegarder. La protection donne donc un faux
 sentiment de sécurité, et c'est précisément ce qui rend cette panne si
 fréquente — elle ne se voit qu'au bout de plusieurs nuits.
 
 Second enseignement : compresser du gzip avec gzip ne gagne rien. Les archives
-imbriquées occupent leur taille pleine, d'où la progression brutale 4 Mo, 12 Mo,
-20 Mo.
+imbriquées occupent leur taille pleine, d'où la progression brutale 4 Mo, 8 Mo,
+28 Mo.
 :::
 
 ---
@@ -2067,7 +2063,7 @@ imbriquées occupent leur taille pleine, d'où la progression brutale 4 Mo, 12 M
 # 1. constater
 ls -la /var/www/factura/
 #  drwxr-xr-x www-data www-data  factura-site/
-curl -sI http://10.10.10.11/ | head -1      # HTTP/1.1 404 Not Found
+curl -sI http://10.10.10.11/ | head -1      # 404, si nginx sert ce répertoire
 
 # 2. lire la commande qui a tourné
 tail -5 /var/log/factura-sync.log
@@ -2099,10 +2095,10 @@ sudo rsync -av --delete /srv/factura-site/ /var/www/factura/
 ls /var/www/factura/
 #  css  img  index.html  js  maintenance.html
 sudo chown -R www-data:www-data /var/www/factura
-curl -sI http://10.10.10.11/ | head -1      # HTTP/1.1 200 OK
+curl -sI http://10.10.10.11/ | head -1      # 200 OK, même réserve
 
-# 4. corriger le job de nuit
-sudo vim /usr/local/bin/factura-sync.sh     # ajouter le slash final
+# 4. corriger le job de nuit (crontab, timer ou script qui porte la commande
+#    journalisée) : ajouter le slash final à la source
 ```
 
 **La précaution qui aurait tout évité** : `--dry-run` sur la première exécution
@@ -2143,7 +2139,8 @@ BK="$HOME/lab06/backup"
 AR="$BK/archives"
 LOG="$BK/backup.log"
 GARDE=7
-EXCLUS=(--exclude=node_modules --exclude=var/cache --exclude='*.log')
+# le joker est quoté deux fois : la chaîne passe par eval dans faire()
+EXCLUS=(--exclude=node_modules --exclude=var/cache "--exclude='*.log'")
 DRY=0; VERB=0; FORCE=0
 JOUR=$(date +%F)
 
@@ -2222,9 +2219,14 @@ miroir)
          | grep -v "/$JOUR\$" | sort | tail -1)
   LIEN=""; [ -n "$PREC" ] && LIEN="--link-dest=$PREC"
   OPT="-a --delete --exclude=node_modules --exclude=var/cache"
-  [ "$DRY" -eq 1 ] && OPT="$OPT --dry-run"
-  mkdir -p "$DEST"
+  if [ "$DRY" -eq 1 ]; then OPT="$OPT --dry-run"; else mkdir -p "$DEST"; fi
   rsync $OPT $LIEN "$SRC/" "$DEST/"
+  # rotation : les 7 répertoires datés les plus récents (tri sur le nom)
+  ls -1d "$BK"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] 2>/dev/null \
+    | sort -r | tail -n +$((GARDE + 1)) | while IFS= read -r d; do
+        trace "rotation : suppression de $(basename "$d")"
+        faire "rm -rf '$d'"
+      done
   if [ "$DRY" -eq 0 ]; then
     journal miroir "$((SECONDS - T0))" "$(du -sh "$DEST" | cut -f1)" 0
     printf 'miroir : %s\n' "$DEST"

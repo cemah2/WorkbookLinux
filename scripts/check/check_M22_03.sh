@@ -33,10 +33,11 @@ if [ -d "$DATA" ]; then
   OWN=$(stat -c %u "$DATA"); MODE=$(stat -c %a "$DATA")
   [ "$OWN" = 10001 ] && ok "$DATA appartient à l'UID 10001" \
     || ko "$DATA appartient à l'UID $OWN, l'API écrit avec 10001"
-  case "$MODE" in
-    *7) ko "$DATA est en $MODE : ouvert à tous (chmod 777 interdit)" ;;
-    *)  ok "$DATA en $MODE, pas d'écriture pour « autres »" ;;
-  esac
+  if (( ${MODE: -1} & 2 )); then
+    ko "$DATA est en $MODE : « autres » peuvent écrire (chmod 777 interdit)"
+  else
+    ok "$DATA en $MODE, pas d'écriture pour « autres »"
+  fi
   [ -s "$DATA/visites.log" ] && ok "visites.log écrit dans le bind mount" \
     || ko "pas de visites.log dans $DATA (l'API a-t-elle pu écrire ?)"
 else
@@ -90,7 +91,7 @@ cinsp '{{json .HostConfig.PortBindings}}' | grep -q '"8000/tcp"' \
 curl -fsS --max-time 3 http://127.0.0.1:8000/compteur 2>/dev/null \
   | grep -q compteur && ok "/compteur répond via Redis" \
   || ko "/compteur ne répond pas (REDIS_URL, réseau, cache ?)"
-if sudo -n iptables -S DOCKER-USER 2>/dev/null | grep -q '10.10.10.10'; then
+if sudo iptables -S DOCKER-USER 2>/dev/null | grep -q '10.10.10.10'; then
   ok "règle DOCKER-USER mentionnant 10.10.10.10 présente"
 else
   ko "aucune règle DOCKER-USER pour 10.10.10.10 (sudo iptables -S \

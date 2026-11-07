@@ -7,6 +7,8 @@ ko()   { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 note() { printf '  [note] %s\n' "$1"; }
 echo "== Vérification PC.4.3 =="
 SAUV=/root/.breakfix-backup; ID=PC_4_3
+[ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo (lecture redis.conf)" >&2
+                         exit 1; }
 P='F4ctura-Redis-2026'
 r() { redis-cli -a "$P" --no-auth-warning "$@" 2>/dev/null; }
 

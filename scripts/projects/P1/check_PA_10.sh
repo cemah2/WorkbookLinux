@@ -56,7 +56,8 @@ lab-web)
   done
   [ "$(systemctl --failed --no-legend | wc -l)" -eq 0 ] \
     && ok "aucune unité en échec" \
-    || ko "unités en échec : $(systemctl --failed --no-legend | awk '{print $1}' | tr '\n' ' ')"
+    || ko "unités en échec : $(systemctl --failed --no-legend \
+         | awk '{print $1}' | tr '\n' ' ')"
   command -v jq >/dev/null && {
     B="$(curl -s --max-time 5 http://127.0.0.1:8000/health)"
     echo "$B" | jq -e '.status == "ok"' >/dev/null 2>&1 \

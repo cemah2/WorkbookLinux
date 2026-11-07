@@ -166,7 +166,7 @@ maintenir `Échap` (ou `Maj`) pour le voir.
 Dépanner au menu GRUB : `e` sur l'entrée, fin de la ligne `linux`, ajouter
 `systemd.unit=rescue.target` (shell root, mot de passe requis) ou
 `init=/bin/bash` (shell sans mot de passe, racine en lecture seule :
-`mount -o remount,rw /`), puis `Ctrl-x`. Rocky : `rd.break` puis
+`mount -o remount,rw /`), puis `Ctrl-x`. Rocky : `rd.break`, `mount -o remount,rw /sysroot`,
 `chroot /sysroot`, et `touch /.autorelabel` (SELinux).
 
 | Paramètre | Effet |
@@ -234,7 +234,7 @@ vers `/etc/sysctl.conf`, lu en dernier. Un fichier sans `.conf` est ignoré.
 | `vm.swappiness` | 60 | 10 pour une base, 1 pour Kubernetes |
 | `vm.overcommit_memory` | 0 | 1 exigé par Redis, 2 pour interdire |
 | `vm.dirty_ratio` / `_background_ratio` | 20 / 10 | 10 / 5 : lisser les écritures |
-| `fs.file-max` | ~10 % RAM | plafond système de fichiers ouverts |
+| `fs.file-max` | 2⁶³−1 (systemd) | plafond système de fichiers ouverts |
 | `fs.inotify.max_user_watches` | selon RAM | IDE, agents, `inotify` limit |
 | `kernel.pid_max` | 4194304 | rarement, 32768 sur vieux systèmes |
 | `kernel.panic` | 0 | 10 : reboot automatique après panic |
@@ -1077,8 +1077,8 @@ sudo bash break_M09_05.sh
 
 **Symptôme utilisateur** : sur `lab-adm`, `apt update` échoue avec
 `Release file ... is not valid yet (invalid for another 44d ...)`, `curl
-https://` refuse tous les certificats, et les journaux affichent des dates
-« dans le futur ». Le réseau fonctionne. Le collègue a « peut-être touché à
+https://` refuse les certificats récents (`certificate is not yet valid`), et les journaux affichent des dates
+« dans le passé ». Le réseau fonctionne. Le collègue a « peut-être touché à
 l'heure pour tester un script ».
 
 **Interdit** : `curl -k`, `apt -o Acquire::Check-Valid-Until=false`, régler

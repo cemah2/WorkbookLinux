@@ -55,7 +55,7 @@ if [ -s "$RAP" ]; then
     && ok "le chiffre qui prouve le couple dominant (63) est donné" \
     || ko "le nombre d'occurrences du couple dominant manque (étape 4)"
   grep -qE 'http-nio-8080-exec-2' "$RAP" \
-    && ok "le thread sur-représenté est identifié" \
+    && ok "le thread le plus touché est identifié" \
     || note "le thread le plus touché n'est pas nommé (étape 5)"
   grep -qE 'code=5[0-9]|refus' "$RAP" \
     && ok "les codes de refus banque sont repris" \

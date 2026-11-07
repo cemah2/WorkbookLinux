@@ -62,6 +62,8 @@ lab-ops)
   getent group backup >/dev/null || groupadd -r backup
   getent passwd backup >/dev/null || useradd -r -g backup -M \
     -d /srv/backups -s /bin/sh -c "Depot de sauvegardes" backup
+  # Ubuntu fournit déjà backup (uid 34, /var/backups, nologin) : on l'aligne
+  usermod -d /srv/backups -s /bin/sh backup
   mk /srv/backups            root    root    0755
   mk /srv/backups/factura    backup  backup  0750
   mk /var/log/factura        root    adm     0750
@@ -89,7 +91,7 @@ qui lui permet de lire les journaux sans `sudo`, exactement comme pour
 
 Le compte `backup` sur `lab-ops` a un shell, contrairement à `factura` : SSH
 exécute la commande forcée de `authorized_keys` via `$SHELL -c`, un
-`nologin` la refuserait. La restriction vient de la clé (PA.7), pas du shell.
+`nologin` la refuserait. La restriction vient de la clé (PA.7), pas du shell. Or Ubuntu livre déjà un compte `backup` (uid 34, home `/var/backups`, shell `nologin`) : le `getent` le trouve, le `useradd` ne joue pas, d'où le `usermod` explicite (sans effet s'il est déjà aligné, donc idempotent).
 :::
 
 ::: piege
@@ -244,8 +246,8 @@ erreur visible vaut mieux qu'une perte silencieuse.
 * `ufw enable` sur une session SSH sans règle 22 : tu es dehors. La règle
   d'abord, `enable` ensuite, et la console Proxmox ouverte.
 * `chown postgres /var/lib/postgresql` après le montage : le point de montage
-  fraîchement monté appartient à root, et `lost+found` est à root aussi.
-  Sans le `chown`, `pg_createcluster` échoue avec « Permission denied ».
+  fraîchement monté appartient à root ( et `lost+found` aussi).
+  `pg_createcluster`, lancé en root par le paquet, crée quand même `16/main`, mais ce répertoire est le **home** de `postgres` : sans le `chown`, la clé SSH de PA.7 (`/var/lib/postgresql/.ssh`) ne pourra pas y être créée.
 :::
 
 ---
@@ -362,7 +364,8 @@ durcissement : 9.6 UNSAFE). Preuves demandées :
 ```bash
 # le service ne peut pas écrire dans /opt ni /etc
 sudo systemd-run -p User=factura -p ProtectSystem=strict -P \
-  touch /opt/factura/x            # Read-only file system
+  touch /opt/factura/x    # Permission denied (droits) ; en root :
+sudo systemd-run -p ProtectSystem=strict -P touch /etc/x   # Read-only
 # le /tmp du service est privé
 sudo ls /tmp/systemd-private-*-factura-api.service-*/tmp/
 # reload sans changement de PID
@@ -385,7 +388,7 @@ et régulier : un fichier plat, tourné par logrotate (PA.6), est plus adapté e
 se transfère tel quel vers rsyslog. `LogsDirectory=factura` crée
 `/var/log/factura` au bon propriétaire **et** le rend accessible en écriture
 malgré `ProtectSystem=strict` : c'est la directive « propre » attendue par
-l'énoncé, plutôt que `ReadWritePaths=/var/log/factura`.
+l'énoncé, plutôt que `ReadWritePaths=/var/log/factura`. Contrepartie : à chaque démarrage, systemd remet le répertoire à `User:Group` du service, donc `factura:factura` au lieu de `factura: adm` (PA.1); `mathieu` devra passer par `sudo` ou `journalctl`. Le check PA.1 accepte les deux.
 
 **`PrivateUsers=yes`** vaut à lui seul plus d'un point : le service voit un
 espace d'uid où root n'est personne. Il n'est possible que parce que le
@@ -466,6 +469,7 @@ Group=factura
 WorkingDirectory=/opt/factura/worker
 EnvironmentFile=/etc/factura/worker.env
 ExecStart=/opt/factura/venv/bin/python3 /opt/factura/worker/factura_worker.py
+SyslogIdentifier=factura-worker
 KillSignal=SIGTERM
 TimeoutStopSec=30
 Restart=always
@@ -663,18 +667,16 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;   # nginx 1.24 (Ubuntu 24.04) : pas de « http2 on »
+    listen [::]:443 ssl http2;
     server_name factura.lab.local lab-web.lab.local;
 
     ssl_certificate     /etc/nginx/ssl/factura.crt;
     ssl_certificate_key /etc/nginx/ssl/factura.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:\
-ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:\
-ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    # suites TLS 1.2 : ECDHE + AES-GCM ou ChaCha20 (TLS 1.3 a les siennes)
+    ssl_ciphers ECDHE+AESGCM:ECDHE+CHACHA20;
     ssl_session_cache shared:factura:10m;
     ssl_session_timeout 1d;
     ssl_session_tickets off;
@@ -877,7 +879,7 @@ apparaître `/var/spool/rsyslog/fwd-lab-ops.*` ; `start` sur `lab-ops` ;
 
 ```nginx
     access_log /var/log/nginx/factura.access.log factura;
-    access_log syslog:server=unix:/dev/log,facility=local5,tag=nginx_factura \
+    access_log syslog:server=unix:/dev/log,facility=local5,tag=nginx_factura
                factura;
     error_log  /var/log/nginx/factura.error.log warn;
     error_log  syslog:server=unix:/dev/log,tag=nginx_factura warn;
@@ -935,8 +937,8 @@ pas à root et que logrotate refuse de travailler dans un répertoire
 inscriptible par un autre utilisateur.
 
 **`%PROGRAMNAME%` dans le template** : un fichier par programme
-(`gunicorn.log`, `factura_worker.log`, `nginx_factura.log`, `sshd.log`)
-rend la lecture directe : pas besoin de `grep` pour isoler l'API.
+(`gunicorn.log`, `factura-worker.log`, `nginx_factura.log`, `sshd.log`)
+rend la lecture directe : pas besoin de `grep` pour isoler l'API. Le nom vient de l'identifiant syslog, par défaut le nom de l'exécutable : sans `SyslogIdentifier=factura-worker` (PA.4), le worker finirait dans `python3.log`.
 
 **Port 10514 plutôt que 514** : 514 est un port privilégié, rsyslog devrait
 démarrer root pour l'ouvrir (il le fait, puis abandonne les privilèges, mais
@@ -1061,7 +1063,7 @@ log "OK $FILE ($(du -h "$FILE" | cut -f1)) copié vers lab-ops"
 ```
 
 `/etc/systemd/system/factura-backup.service` (`lab-db` ; sur `lab-web`,
-`User=factura`, `Group=factura`, sans `ReadWritePaths=/var/lib/postgresql`) :
+`User=factura`, `Group=factura`, `ReadWritePaths=/var/backups/factura /srv/factura/.ssh` et sans `After=postgresql@16-main.service`) :
 
 ```ini
 [Unit]
@@ -1249,7 +1251,7 @@ WantedBy=multi-user.target
 
 Pour que `lab-web` et `lab-db` puissent alerter aussi, le webhook doit être
 joignable sur 10.10.10.14. Solution retenue : `FACTURA_WEBHOOK_BIND=0.0.0.0`
-dans l'unité (il reste joignable en local), et `ufw` limite 9999 aux deux
+dans l'unité, à la place de `127.0.0.1` ci-dessus (il reste joignable en local), et `ufw` limite 9999 aux deux
 émetteurs — le trafic local n'est pas filtré par ufw :
 
 ```bash
@@ -1281,11 +1283,11 @@ LINE="$(date -Is) $HOST $UNIT result=$RESULT status=$STATUS"
 echo "$LINE" >> "$LOG"
 
 if [ -f "$STATE" ] && [ $((NOW - $(cat "$STATE"))) -lt 900 ]; then
-  echo "$(date -Is) $HOST $UNIT alerte déjà envoyée il y a < 15 min" >> "$LOG"
+  echo "$(date -Is) $HOST $UNIT alerte déjà envoyée (< 15 min)" -> "$LOG"
   exit 0
 fi
-PAYLOAD=$(printf '{"host":"%s","unit":"%s","result":"%s","status":"%s",\
-"since":"%s"}' "$HOST" "$UNIT" "$RESULT" "$STATUS" "$SINCE")
+FMT='{"host":"%s","unit":"%s","result":"%s","status":"%s","since":"%s"}'
+PAYLOAD=$(printf "$FMT" "$HOST" "$UNIT" "$RESULT" "$STATUS" "$SINCE")
 if curl -fsS --max-time 5 -X POST -H 'Content-Type: application/json' \
      -d "$PAYLOAD" "$WEBHOOK" >/dev/null; then
   echo "$NOW" > "$STATE"
@@ -1304,15 +1306,16 @@ Description=Factura — alerte pour %i
 
 [Service]
 Type=oneshot
+ExecStartPre=/usr/bin/mkdir -p /var/lib/factura /var/log/factura
 ExecStart=/usr/local/sbin/factura-alerte.sh %i
-StateDirectory=factura
-LogsDirectory=factura
 ```
 
 Sur `lab-ops`, `Environment=FACTURA_WEBHOOK_URL=http://127.0.0.1:9999/`
-dans `[Service]`. `/var/lib/factura` et `/var/log/factura` existent déjà sur
-`lab-web` avec un autre propriétaire : l'unité tourne en root, ça passe ; sur
-`lab-db` et `lab-ops`, `StateDirectory=` les crée.
+dans `[Service]`. L'unité tourne en root : un `mkdir -p` suffit à créer
+`/var/lib/factura` sur `lab-db` et `lab-ops`. Surtout **pas** de
+`StateDirectory=`/`LogsDirectory=` ici : systemd ferait un `chown -R` vers
+l'utilisateur de l'unité (root) et retirerait à `factura` ses propres
+répertoires sur `lab-web`.
 
 **4. Le healthcheck sur `lab-ops`** — `/usr/local/sbin/factura-healthcheck.sh` :
 
@@ -1439,7 +1442,7 @@ panne de 3 minutes produit une alerte ; une panne de 3 heures en produit 12,
 pas 90.
 
 **Le textfile collector** : `node_exporter` expose déjà CPU, disque, réseau.
-Lui donner nos mesures métier (`factura_backup_age_seconds`) via un fichier
+Lui donner nos mesures métier (`factura_ backup_age_seconds`) via un fichier
 `.prom` signifie qu'au module 26, Prometheus les récupérera **sans rien
 changer** : les règles d'alerte s'écriront sur ces métriques. L'écriture
 atomique (`mktemp` + `mv`) évite que node_exporter lise un fichier à moitié
@@ -1450,7 +1453,7 @@ ce que l'utilisateur voit. Un contrôle sur Gunicorn en local aurait dit « tout
 va bien » pendant INC-A3, où seul le pare-feu bloquait.
 
 **`OnBootSec` + `OnUnitActiveSec`** (timer monotone) plutôt qu'`OnCalendar`
-: pour une cadence courte, on veut « 2 minutes après la fin du précédent »,
+pour une cadence courte, on veut « 2 minutes après la fin du précédent »,
 pas « aux minutes paires ». Et si `lab-ops` redémarre, le premier contrôle
 part une minute après le boot.
 :::
@@ -1467,7 +1470,7 @@ part une minute après le boot.
   la main en root puis par le timer : le fichier appartient à root, lisible
   par tous — pas de souci. Mais un `mktemp` dans `/var/lib/prometheus/
   node-exporter/` exige que ce dossier soit inscriptible par l'utilisateur du
-  service (root ici).
+  service (root ici). `DynamicUser=yes` + `LogsDirectory=factura` sur `lab-ops` : systemd déplace `/var/log/factura` (créé root :adm en PA.1) vers `/var/log/private/factura` et laisse un lien symbolique. `alertes.log` et `webhook.log` y cohabitent, mais `ls -ld /var/log/factura` te surprendra (le check PA.1 reconnaît ce lien). Si tu préfères un compte dédié (`User= factura-webhook`), crée-le avec `useradd -r` et donne-lui l'écriture sur le dossier.
 * La preuve « une seule alerte » : si tu la fais juste après un test manuel
   qui a déjà envoyé une alerte, l'anti-tempête l'avale et tu crois que la
   chaîne est cassée. `rm /var/lib/factura/alerte-*.last` avant le test.
@@ -1514,7 +1517,7 @@ sudo install -d -m 0700 -o pme-ops -g pme-ops /home/pme-ops/.ssh
 
 ```bash
 #!/usr/bin/env bash
-# factura-logs [unité] [-n N] — journaux Factura, sans pager, sans shell
+# factura-logs [unité] [N] — journaux Factura, sans pager, sans shell
 set -euo pipefail
 U="${1:-factura-api}"; N="${2:-100}"
 case "$U" in factura-api|factura-worker|factura-backup) ;;
@@ -1825,7 +1828,7 @@ les trois choses que mes incidents m'ont fait ajouter » vaut beaucoup.
    commentaire « hardening 2026-09 ». Première règle qui correspond gagne :
    le `reject` capte tout avant la règle `scram-sha-256` plus bas.
 5. `ls -l /etc/postgresql/16/main/pg_hba.conf` et
-   `sudo journalctl _COMM=sudo --since friday | grep pg_hba` : qui, quand.
+   `sudo journalctl _COMM=sudo --since -3d | grep pg_hba` : qui, quand.
 
 **Cause racine** : une règle `reject` insérée en tête de `pg_hba.conf`,
 sans ticket ni test, rechargée un vendredi soir. `pg_hba.conf` est évalué
@@ -1896,7 +1899,7 @@ curl -s 'http://127.0.0.1:8000/invoices?limit=50' \
 ```
 
 **Pourquoi la supervision n'a rien vu** : le healthcheck teste `/health`
-(base et Redis joignables : vrai), `factura_worker_alive` (le worker tourne
+(base et Redis joignables : vrai), `factura_ worker_alive` (le worker tourne
 et pose son battement de cœur : vrai) et la longueur de la file (vide, parce
 que le worker consomme et échoue vite : vrai). Tous les signaux de
 *liveness* sont verts ; le signal métier — « des factures finissent en

@@ -225,7 +225,7 @@ printf '\xef\xbb\xbfhote;ip;env\nlab-web;10.10.10.11;prod\nlab-db;10.10.10.12;pr
 # 7. Scripts volontairement mal écrits (exercices guidés)
 # ---------------------------------------------------------------------
 cat > "$BASE/casse/mutable.py" <<'EOF'
-"""E23 — pourquoi la deuxième liste contient-elle la première ?"""
+"""E27 — pourquoi la deuxième liste contient-elle la première ?"""
 
 
 def ajouter_hote(nom, liste=[]):
@@ -240,7 +240,7 @@ print("recette :", recette)
 EOF
 
 cat > "$BASE/casse/purge.py" <<'EOF'
-"""E23 — purge des fichiers temporaires d'un répertoire passé en argument."""
+"""E27 — purge des fichiers temporaires d'un répertoire passé en argument."""
 import os
 import sys
 
@@ -250,7 +250,7 @@ print("purge faite")
 EOF
 
 cat > "$BASE/casse/lecture.py" <<'EOF'
-"""E23 — lit un CSV de clients et affiche les villes."""
+"""E27 — lit un CSV de clients et affiche les villes."""
 import sys
 
 for ligne in open(sys.argv[1]).read().split("\n"):
@@ -259,7 +259,7 @@ for ligne in open(sys.argv[1]).read().split("\n"):
 EOF
 
 cat > "$BASE/casse/stock.py" <<'EOF'
-"""E23 — un service qui tourne sans rien dire : où sont les messages ?"""
+"""E27 — un service qui tourne sans rien dire : où sont les messages ?"""
 import time
 
 def traiter(lot):

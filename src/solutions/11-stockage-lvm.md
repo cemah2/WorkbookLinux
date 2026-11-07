@@ -294,9 +294,9 @@ VG. Vérifie toujours avec `lvs` avant de relancer une commande d'extension.
 Les attributs de `lvs` se lisent position par position. Pour un snapshot :
 
 ```text
-s w i - a - s - - -
-│ │ │   │   └── état de la cible : (s)napshot, (I)nvalide
-│ │ │   └────── état d'activation : (a)ctif
+s w i - I - s - - -
+│ │ │   │   └── type de cible : (s)napshot
+│ │ │   └────── état : (a)ctif, (I)nvalide
 │ │ └────────── allocation : (i)nherited
 │ └──────────── permissions : (w)ritable
 └────────────── type de volume : (s)napshot
@@ -354,7 +354,7 @@ sort | uniq -c | sort -rn | head` donne les répertoires par nombre d'entrées.
 ::: piege
 (c) — un fichier supprimé mais tenu ouvert — produit le symptôme **inverse** :
 `df` dit plein, `du` dit vide. C'est un autre incident, traité au module 02.
-(a) un volume en lecture seule renvoie `EROFS` : `Read-only file system`, pas
+(d) un volume en lecture seule renvoie `EROFS` : `Read-only file system`, pas
 `ENOSPC`. (d) un quota dépassé renvoie `EDQUOT` : `Disk quota exceeded`. Le message
 d'erreur exact désigne toujours la bonne piste — encore faut-il le lire au lieu de
 lire « disque plein ».
@@ -371,7 +371,7 @@ Chaque couche connaît sa taille et ignore celle des autres. Il faut les pousser
 **de bas en haut**, dans l'ordre de l'empilement :
 
 ```text
-disque virtuel /dev/sda   50 Go  <- qm resize (hyperviseur)
+disque virtuel /dev/sda   60 Go  <- qm resize (hyperviseur)
  └─ partition /dev/sda3   28 Go  <- growpart
      └─ PV LVM            28 Go  <- pvresize
          └─ VG ubuntu-vg          (l'espace libre apparaît ici)
@@ -495,8 +495,8 @@ Vérification sans redémarrer : `sudo swapoff -a && sudo swapon -a && swapon --
 Deux pièges classiques sur les fichiers de swap. Les droits : `chmod 600` est
 obligatoire, sinon `swapon` refuse — et pour cause, le fichier contient des pages
 mémoire de tous les processus. Et le système de fichiers hôte : sur **btrfs**, un
-fichier créé par `fallocate` est rejeté (extents non écrits, copie sur écriture) ; il
-faut le créer avec `btrfs filesystem mkswapfile` ou passer par `dd`. Sur ext4 et XFS,
+fichier de swap ordinaire est rejeté (copie sur écriture) ; il
+faut le créer avec `btrfs filesystem mkswapfile`, ou poser `chattr +C` sur un fichier vide avant de le remplir — `dd` seul ne change rien. Sur ext4 et XFS,
 `fallocate` convient.
 :::
 
@@ -533,23 +533,22 @@ déverrouillage réseau par `dracut-sshd` / `dropbear-initramfs`.
 
 ---
 
-**Q11.17** — *Montage NFS dans `fstab` sans `_netdev`.*
+**Q11.17** — *Un ext4 sur disque iSCSI dans `fstab`, sans `_netdev` ni `nofail`.*
 
 **Réponse : b)** le montage échoue au démarrage, le boot part en maintenance.
 
 ::: pourquoi
 Sans `_netdev`, systemd classe le montage parmi les systèmes de fichiers locaux :
 l'unité `.mount` générée est ordonnée avant `local-fs.target`, qui est atteint bien
-avant que le réseau ne soit configuré. `mount.nfs` tente de joindre le serveur,
-échoue, et fait échouer `local-fs.target`, donc `multi-user.target`, donc
+avant que le réseau et `iscsid` ne soient prêts. Le périphérique n'existe pas encore, l'unité `.device` attend 90 s, le montage
+échoue et fait échouer `local-fs.target`, donc `multi-user.target`, donc
 `emergency.target`. Le symptôme est celui de BF11.1, avec une cause différente.
 
 `_netdev` déplace l'unité dans `remote-fs.target`, qui est ordonné après
-`network-online.target`. Pour les types réconnus comme réseau — `nfs`, `nfs4`,
-`cifs`, `glusterfs` — systemd le déduit du type et l'ajoute tout seul dans les
-versions récentes. Mais l'écrire reste la bonne pratique : ça documente l'intention
-et ça couvre les cas où le type est indirect (un `iscsi` monté en ext4, par exemple,
-où systemd ne peut pas deviner).
+`network-online.target` (et `remote-fs-pre.target`, que `open-iscsi.service` précède). Pour les types reconnus comme réseau — `nfs`, `nfs4`,
+`cifs`, `glusterfs` — systemd le déduit du type et l'ajoute tout seul : un montage NFS sans `_netdev` ne produit **pas** ce symptôme. L'écrire reste la bonne pratique pour NFS aussi ( ça documente l'intention),
+et c'est **indispensable** dès que le type ne trahit pas le réseau : ext4 ou XFS sur iSCSI, sur un disque `rbd`,
+sur un `nbd`.
 
 La ligne complète d'un montage NFS de production :
 
@@ -681,8 +680,7 @@ d'ouverture de session.
 
 ---
 
-**Q11.22** — *`fio` : 7 980 IOPS, `clat` moyen 4 005 µs, `iostat` : `r_await` 4 ms,
-`aqu-sz` 31,8.*
+**Q11.22** — `fio` *: 7 980 IOPS, `clat` moyen 4 005 μs, `iostat` : `r_await` 4 ms, `aqu`*`-sz` *31,8.*
 
 **Réponse : b)**
 
@@ -692,7 +690,7 @@ Loi de Little : *requêtes en vol = débit × temps de séjour*. 7 980 IOPS × 4
 histoire : `fio` maintient 32 requêtes en permanence, le périphérique en sert ~8 000
 par seconde, chacune attend donc en moyenne 4 ms **dans la file**. La latence du
 support lui-même est bien plus faible : à `iodepth=1` on mesurerait quelques
-centaines de µs sur un SSD. C'est pour ça qu'un test de latence se fait à
+centaines de μs sur un SSD. C'est pour ça qu'un test de latence se fait à
 `iodepth=1` et un test de débit à `iodepth` élevé, et qu'on ne compare jamais les
 deux.
 :::
@@ -806,7 +804,7 @@ pointer le nouveau périphérique `/dev/vg/snap` sur l'origine.
 Ensuite, à chaque écriture sur l'origine :
 
 1. le device-mapper intercepte l'écriture ;
-2. il regarde si le *chunk* concerné (64 Ko par défaut) a déjà été copié ;
+2. il regarde si le *chunk* concerné (4 Kio par défaut, `lvcreate -c`) a déjà été copié ;
 3. si non : il **lit l'ancien contenu du chunk sur l'origine, l'écrit dans la zone
    d'exception du snapshot**, note la correspondance dans la table, puis laisse
    l'écriture se faire sur l'origine ;
@@ -902,7 +900,7 @@ système de fichiers qui découvre les nouveaux blocs) est de la comptabilité.
 | Agrandir | en ligne, `resize2fs` | en ligne, `xfs_growfs` |
 | Réduire | oui, hors ligne | **impossible** |
 | Gros fichiers, gros volumes | correct | conçu pour, extents + AG parallèles |
-| Réparation | `e2fsck`, robuste, bien documenté | `xfs_repair`, exige du RAM, dernier recours |
+| Réparation | `e2fsck`, robuste, bien documenté | `xfs_repair`, exige de la RAM, dernier recours |
 | Coût d'un `fsck` | linéaire avec le nombre d'inodes : long sur gros volume | pas de `fsck` périodique, rejeu du journal au montage |
 
 * **Volume de logs** : ext4. Beaucoup de petits fichiers, rotation permanente,
@@ -1080,7 +1078,7 @@ ce remontage, d'où le `mount -o remount,rw /`. En `emergency.target` en revanch
 
 * `nofail` — le montage peut échouer sans faire échouer `local-fs.target` ;
 * `x-systemd.device-timeout=10s` — ramène l'attente de 1 min 30 s à 10 s.
-  (Le timeout par défaut de 90 s vient de `DefaultTimeoutStartSec` appliqué à l'unité
+  (Le timeout par défaut de 90 s vient de `DefaultDeviceTimeoutSec` appliqué à l'unité
   `.device` que systemd génère pour attendre l'apparition de l'UUID.)
 
 ::: pourquoi
@@ -1342,8 +1340,12 @@ ls -l /dev/disk/by-id/ | grep 'sdb$'
 ```
 
 ```console
-lrwxrwxrwx 1 root root 9 sept. 18 14:02 scsi-0QEMU_HARDDISK_scsi1 -> ../../sdb
-lrwxrwxrwx 1 root root 9 sept. 18 14:02 wwn-0x5000c500a1b2c3d4 -> ../../sdb
+lrwxrwxrwx 1 root root 9 sept. 18 14:02 scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
+  -> ../../sdb
+
+Sur une VM Proxmox, le « numéro de série » est celui que QEMU présente : drive-scsi1 par défaut (on peut
+en fixer un dans les options du disque). Sur un disque physique, on lit ici le modèle et le vrai numéro de série,
+et souvent un lien wwn-0x... en plus.
 ```
 
 ::: pourquoi
@@ -1359,7 +1361,7 @@ chacune sert :
 
 `by-id` est **le** bon identifiant pour désigner un disque physique : dans une
 configuration ZFS, dans un `mdadm.conf`, dans une procédure de remplacement (« retire
-le disque dont le numéro de série finit par c3d4 »). `by-uuid` désigne un contenu,
+le disque dont le numéro de série finit par 7F3K »). `by-uuid` désigne un contenu,
 `by-id` désigne un objet matériel.
 :::
 
@@ -1372,9 +1374,9 @@ le disque dont le numéro de série finit par c3d4 »). `by-uuid` désigne un co
 sudo blkid -U 8f3c1a2b-4d5e-6f70-8192-a3b4c5d6e7f8
 findmnt -no SOURCE /
 
-# périphérique -> UUID
-sudo blkid -s UUID -o value /dev/sda2
-lsblk -no UUID /dev/sda2
+# périphérique -> UUID (la source de /, un LV sur Ubuntu)
+sudo blkid -s UUID -o value "$(findmnt -no SOURCE /)"
+lsblk -no UUID "$(findmnt -no SOURCE /)"
 ```
 
 ::: pourquoi
@@ -1716,7 +1718,7 @@ Dans `fstab`, on écrit la première forme. Dans un script, les deux premières 
 sûres ; `dm-N` jamais.
 
 L'attribut `-wi-ao----` se lit : volume linéaire (`-`), inscriptible (`w`),
-allocation héritée (`i`), **a**ctif, **o**uvert (monté). Un LV `-wi-a-----` est actif
+allocation héritée (`i`), **actif**, **ouvert** (monté). Un LV `-wi-a-----` est actif
 mais non monté ; un `-wi-------` n'est même pas activé, ce qui explique pourquoi il
 n'apparaît pas dans `lsblk`.
 :::
@@ -1791,6 +1793,9 @@ un snapshot proprement : `-l 15%ORIGIN`).
 
 ```bash
 sudo lvs -o +devices
+# lv_sauv (E11.13) occupe tout sdc1 : pvmove n'aurait aucun extent libre
+# où déplacer lv_pgdata. On le réduit (il n'est pas formaté) :
+sudo lvreduce -y -L 1G vg_data/lv_sauv
 sudo pvmove /dev/sdb1
 sudo lvs -o +devices
 ```
@@ -1798,7 +1803,7 @@ sudo lvs -o +devices
 ```console
   LV        VG      Attr       LSize Devices
   lv_pgdata vg_data -wi-ao---- 3,00g /dev/sdb1(0)
-  lv_sauv   vg_data -wi-a----- 1,99g /dev/sdc1(0)
+  lv_sauv   vg_data -wi-a----- 1,00g /dev/sdb1(768)
 
   /dev/sdb1: Moved: 12,50%
   /dev/sdb1: Moved: 41,67%
@@ -1816,7 +1821,7 @@ relance, `pvmove --abort` l'annule).
 
 C'est **le** geste qui justifie LVM à lui seul en exploitation : remplacer un disque
 qui commence à remonter des erreurs SMART, migrer d'un stockage local vers un SAN,
-vider un PV avant de rendre un LUN — le tout sans fenêtre de maintenance.
+vider un PV avant de rendre un LUN — le tout sans fenêtre de maintenance. Prérequis évident mais souvent oublié : il faut **de la place libre sur les PV de destination**, sinon `pvmove` répond `No extents available for allocation`.
 
 Ce que ça coûte : c'est lent (le débit du plus lent des deux PV) et ça consomme des
 E/S. Sur une production sensible, on lance avec `ionice -c3` et on surveille
@@ -1972,7 +1977,7 @@ le support.
 blocs, dispersés, 32 requêtes en vol simultanément. C'est la charge d'une base de
 données, et c'est le seul chiffre qui compte pour un SGBD. Un disque rotatif fait
 150 IOPS et 200 Mo/s séquentiels ; un NVMe fait 500 000 IOPS et 3 Go/s. Le rapport
-entre les deux est de 1 à 1,5 en séquentiel et de 1 à 3 000 en aléatoire — d'où
+entre les deux est de 1 à 15 en séquentiel et de 1 à 3 000 en aléatoire — d'où
 l'inutilité totale du `dd` pour qualifier un stockage de base de données.
 :::
 
@@ -2031,11 +2036,11 @@ sudo cryptsetup luksFormat --type luks2 /dev/sdc1
 ```console
 WARNING!
 ========
-Cette action écrasera définitivement les données sur /dev/sdc1.
+This will overwrite data on /dev/sdc1 irrevocably.
 
 Are you sure? (Type 'yes' in capital letters): YES
-Saisissez la phrase secrète pour /dev/sdc1 :
-Vérifiez la phrase secrète :
+Enter passphrase for /dev/sdc1:
+Verify passphrase:
 ```
 
 ```bash
@@ -2131,7 +2136,7 @@ données, et c'est le rappel que les superblocks 1.2 occupent les premiers 4 Ko.
 :::
 
 ::: piege
-Relancer `mdadm --detail --scan >> mdadm.conf` plusieurs fois empile des lignes
+Relancer `mdadm --detail --scan » mdadm.conf` plusieurs fois empile des lignes
 `ARRAY` identiques ; mdadm s'en accommode mais c'est illisible. Avant chaque ajout :
 `grep -c ARRAY /etc/mdadm/mdadm.conf`. Et la synchronisation initiale n'est pas
 optionnelle : le tableau est utilisable immédiatement, mais il n'est **redondant**
@@ -2332,7 +2337,7 @@ périphérique. C'est le bon choix pour un NVMe (des dizaines de files, des
 milliers de requêtes en vol) et pour un **disque de VM** : l'hyperviseur a son
 propre ordonnanceur sur le disque physique, empiler le nôtre dessus n'apporte que
 de la latence. `mq-deadline` garantit qu'une requête n'attend pas plus de 500 ms
-en lecture (2 s en écriture) et favorise les lectures : le choix sûr pour un
+en lecture (5 s en écriture) et favorise les lectures : le choix sûr pour un
 disque rotatif de serveur. `bfq` répartit le temps de disque équitablement entre
 processus, précieux sur un poste de travail, coûteux en CPU sur un serveur à
 forte charge.
@@ -2471,7 +2476,7 @@ Trois différences structurelles attendues entre les deux sorties :
    parallélisables**.
 3. **Le journal** : ext4 le décrit comme une fonctionnalité (`has_journal` dans
    `Filesystem features`), XFS l'expose comme une section dimensionnée à part
-   (`log =internal log  bsize=4096  blocks=2560`), et il peut être placé sur un
+   (`log =internal log bsize=4096 blocks=16384`), et il peut être placé sur un
    périphérique séparé.
 
 ::: pourquoi
@@ -2556,11 +2561,13 @@ rien à personne, `lv_pgdata` dit tout.
 
 ```bash
 df -h /srv/factura/db
-sudo lvextend -L 3.5G -r /dev/vg_data/lv_pgdata
+sudo lvextend -L 2.5G -r /dev/vg_data/lv_pgdata
 df -h /srv/factura/db
 
 sudo vgextend vg_data /dev/sdc1
-sudo lvextend -l +50%FREE -r /dev/vg_data/lv_pgdata
+# le PV cité en fin de commande restreint l'allocation à ce PV :
+sudo lvextend -L +512M -r /dev/vg_data/lv_pgdata /dev/sdc1
+sudo lvs -o +devices vg_data/lv_pgdata   # sdb1(0) puis sdc1(0) : 3 Go
 sudo vgs
 ```
 
@@ -2579,7 +2586,7 @@ df -h /srv/factura/db          # toujours monté, toujours accessible
 **Étape 8 — réduction, dans le bon ordre**
 
 ```bash
-sudo lvcreate -L 2G -n lv_test vg_data
+sudo lvcreate -L 1.5G -n lv_test vg_data
 sudo mkfs.ext4 /dev/vg_data/lv_test
 sudo mkdir -p /mnt/test && sudo mount /dev/vg_data/lv_test /mnt/test
 sudo dd if=/dev/urandom of=/mnt/test/donnees.bin bs=1M count=200
@@ -2598,7 +2605,7 @@ d'un raisonnement simple : **le système de fichiers doit toujours être plus pe
 égal au volume qui le porte**.
 
 Si tu fais `lvreduce` d'abord, le LV passe à 1 Go pendant que le système de fichiers
-croit encore faire 2 Go. Ses structures de fin — la sauvegarde de superblock, une
+croit encore faire 1,5 Go. Ses structures de fin — la sauvegarde de superblock, une
 partie de la table d'inodes, et les données qui s'y trouvaient — sont désormais hors
 du périphérique. Toute lecture de ces blocs renvoie une erreur d'E/S, toute écriture
 part dans le vide. `e2fsck` peut parfois rattraper la structure ; les données, non.
@@ -2635,11 +2642,11 @@ sudo tar czf /tmp/naif.tar.gz -C /srv/factura/db .
 ```
 
 ```console
-tar: ./journal.wal: le fichier a été modifié pendant sa lecture
-tar: ./comptes.dat: le fichier a diminué de 4096 octets ; complété par des zéros
+tar: ./journal.wal: file changed as we read it
+tar: ./travail-3.tmp: File shrank by 4096 bytes; padding with zeros
 ```
 
-`tar` sort en code 1. Le résultat est une archive dans laquelle `comptes.dat` a été
+`tar` sort en code 1. Le résultat est une archive dans laquelle `travail-3.tmp` a été
 lu à 14 h 03 min 12 s et `journal.wal` à 14 h 03 min 19 s : deux instants différents,
 donc un état qui n'a jamais existé. Pour une base de données, l'archive est
 inutilisable.
@@ -2662,7 +2669,7 @@ echo "code retour : $?"           # 0, aucun avertissement
 512 Mio suffisent parce que le snapshot ne stocke **pas** les données de l'origine : il
 stocke les anciennes versions des blocs modifiés pendant sa durée de vie. Une
 sauvegarde qui dure cinq minutes sur une base qui écrit 1 Mo/s produit 300 Mo de
-changements au maximum. La taille de l'origine — 3,5 Go ou 3,5 To — n'entre pas dans
+changements au maximum. La taille de l'origine — 3 Go ou 3 To — n'entre pas dans
 le calcul.
 
 **Étape 5 — surveiller le remplissage**
@@ -2733,7 +2740,8 @@ TAILLE=512M
 MNT=/mnt/snap
 DEST=/srv/sauvegardes
 
-if sudo lvs "$VG/$SNAP" >/dev/null 2>&1; then
+[ "$(id -u)" -eq 0 ] || { echo "root requis (sudo)" >&2; exit 1; }
+if lvs "$VG/$SNAP" >/dev/null 2>&1; then
   echo "ERREUR : le snapshot $VG/$SNAP existe déjà." >&2
   echo "Une sauvegarde est en cours, ou la précédente a mal fini." >&2
   exit 1
@@ -2815,8 +2823,8 @@ df -h /
 ```
 
 ```console
-CHANGED: partition=3 start=2101248 old: size=60862464 end=62963712
-                                   new: size=102805471 end=104906719
+CHANGED: partition=3 start=4198400 old: size=58714112 end=62912511
+                                   new: size=100659167 end=104857566
   Physical volume "/dev/sda3" changed
   1 physical volume(s) resized
   Size of logical volume ubuntu-vg/ubuntu-lv changed from 28,00 to 48,00 GiB.
@@ -2904,7 +2912,7 @@ Deux pièges de `growpart` à connaître :
 **Partie A — LUKS**
 
 ```bash
-sudo lvcreate -L 1G -n lv_coffre vg_data
+sudo lvcreate -L 512M -n lv_coffre vg_data
 sudo cryptsetup luksFormat --type luks2 /dev/vg_data/lv_coffre   # YES + phrase
 sudo cryptsetup luksOpen /dev/vg_data/lv_coffre coffre             # phrase
 ls -l /dev/mapper/coffre
@@ -3103,7 +3111,9 @@ sudo mdadm --detail /dev/md0 | grep -E 'State|Failed|Working'
 sudo dmesg | tail -3
 # md/raid1:md0: Disk failure on sdb1, disabling device.
 # md/raid1:md0: Operation continuing on 1 devices.
-sudo journalctl -u mdmonitor -n 3      # « Fail event on /dev/md0:lab-db »
+sudo journalctl -u mdmonitor -n 3
+# mdadm[...]: Fail event detected on md device /dev/md0, component device
+#   /dev/sdb1
 sudo mdadm /dev/md0 --remove "${DISQUE1}1"
 ```
 
@@ -3156,7 +3166,7 @@ périphériques bloc, et `/dev/md0` est resté le même périphérique bloc pend
 toute l'opération. C'est la raison de l'ordre des couches : la redondance
 **en dessous**, la souplesse **au-dessus**. Si on inversait (LVM sur `sdb1` et
 `sdc1`, puis un miroir logiciel des LV), la perte de `sdb` casserait un PV, le
-VG passerait en mode partiel, `vgchange -ay --activationmode partial` deviendrait
+VG passerait en mode partiel, `vgchange -ay - -activationmode partial` deviendrait
 nécessaire, et plus rien ne serait « transparent ».
 
 Le second enseignement est le coût de la transparence : entre les étapes 6 et 7,
@@ -3183,7 +3193,7 @@ survivant est celui sans `(F)`.
 sudo apt install -y nfs-kernel-server
 getent group factura || sudo groupadd -g 2000 factura
 sudo mkdir -p /srv/nfs/partage /srv/nfs/depots
-sudo chown root:factura /srv/nfs/partage && sudo chmod 2775 /srv/nfs/partage
+sudo chown root:factura /srv/nfs/partage && sudo chmod 2777 /srv/nfs/partage
 sudo chmod 755 /srv/nfs/depots
 echo "partage ouvert depuis $(hostname)" | sudo tee /srv/nfs/partage/LISEZMOI
 echo "artefact 1.0.0" | sudo tee /srv/nfs/depots/factura-1.0.0.txt
@@ -3234,12 +3244,12 @@ nfsstat -m | grep -o 'vers=[0-9.]*'          # vers=4.2
 sudo touch /mnt/partage-ops/par-root
 touch /mnt/partage-ops/par-mathieu
 ls -ln /mnt/partage-ops
-# -rw-r--r-- 1 65534 65534 0 ... par-root
+# -rw-r--r-- 1 65534  2000 0 ... par-root
 # -rw-r--r-- 1  1000  2000 0 ... par-mathieu
 ```
 
-`par-root` appartient à 65534 : `root_squash`. `par-mathieu` appartient à l'UID
-1000 et au GID 2000 (setgid du répertoire) : les UID circulent **en numérique**,
+`par-root` appartient à 65534 : `root_squash` (le GID 2000 vient du setgid du répertoire; c'est aussi pour que cet UID 65534 puisse écrire que le répertoire est en `2777` et non `2775`). `par-mathieu` appartient à l'UID
+1000 et au GID 2000 : les UID circulent **en numérique**,
 le serveur ne sait pas qui est « mathieu », il stocke 1000. Si l'UID 1000 est
 quelqu'un d'autre sur `lab-web`, cette personne est propriétaire du fichier
 là-bas. C'est la raison d'être d'un annuaire commun (LDAP) dès qu'on partage en
@@ -3260,7 +3270,7 @@ Sur `lab-db`, `cd /mnt/partage-ops` dans un shell. Sur `lab-ops` :
 
 ```bash
 sudo mv /srv/nfs/partage /srv/nfs/partage.old
-sudo mkdir -m 2775 /srv/nfs/partage && sudo chown root:factura /srv/nfs/partage
+sudo mkdir -m 2777 /srv/nfs/partage && sudo chown root:factura /srv/nfs/partage
 sudo exportfs -ra
 ```
 
@@ -3275,7 +3285,7 @@ sudo mount /mnt/partage-ops
 # avec automount : systemctl restart 'mnt-partage\x2dops.automount'
 ```
 
-Un *file handle* NFS identifie un inode côté serveur (numéro d'inode + génération
+Un *file handle* NFS identifie un inode côté serveur (numéro d'inode + génération +
 + FS). Le client en garde un pour chaque fichier ou répertoire ouvert. Quand
 l'objet est supprimé côté serveur, le handle ne correspond plus à rien : `ESTALE`.
 Le client ne peut pas « rafraîchir » tout seul : il faut re-résoudre le chemin
@@ -3568,7 +3578,7 @@ généralement déjà en écriture — mais on vérifie toujours avec `findmnt /
 
 **D'où viennent les 90 secondes.** `systemd-fstab-generator` crée, pour chaque source
 en `UUID=`, une unité `.device` représentant l'attente de
-`/dev/disk/by-uuid/9c1f...`. Cette unité hérite de `DefaultTimeoutStartSec`, soit 90 s
+`/dev/disk/by-uuid/9c1f...`. Cette unité hérite de `DefaultDeviceTimeoutSec` (`/etc/systemd/system.conf`), soit 90 s
 sur Ubuntu. systemd attend donc qu'`udev` annonce le périphérique, ce qui n'arrive
 jamais, puis abandonne. `x-systemd.device-timeout=10s` dans les options de `fstab`
 remplace cette valeur pour ce montage précis.
@@ -3641,12 +3651,12 @@ df -i /srv/factura/archives
 sudo touch /srv/factura/archives/test && echo "écriture rétablie"
 ```
 
-**Correctif durable** — le bon formatage :
+**Correctif durable** — le bon formatage, au moment de (re)créer le volume qui porte `/srv/factura/archives` (le `/ dev/sdb1` de L11.1, ou un LV dédié) :
 
 ```bash
-sudo mkfs.ext4 -N 2000000 /dev/vg_data/lv_archives
+sudo mkfs.ext4 -N 2000000 /dev/sdb1
 # ou, en ratio :
-sudo mkfs.ext4 -i 4096 /dev/vg_data/lv_archives
+sudo mkfs.ext4 -i 4096 /dev/sdb1
 ```
 
 ::: pourquoi
@@ -3691,7 +3701,7 @@ montre encore des blocs libres, inaccessibles à l'utilisateur).
 ### **BF11.3** — *Le snapshot a débordé*
 
 **Cause racine** : `break_M11_03.sh` a créé un snapshot volontairement sous-dimensionné
-(quelques dizaines de Mio) puis a généré sur l'origine un volume d'écritures supérieur
+(32 Mio) puis a généré sur l'origine un volume d'écritures supérieur
 à sa capacité. La zone de copie sur écriture est pleine, le device-mapper a invalidé
 le snapshot.
 
@@ -3703,8 +3713,8 @@ sudo lvs -o lv_name,vg_name,attr,size,origin,data_percent
 
 ```console
   LV        VG      Attr       LSize  Origin    Data%
-  lv_pgdata vg_data owi-aos--- 3,50g
-  snap_pg   vg_data swi-I-s---  64,00m lv_pgdata 100,00
+  lv_pgdata vg_data owi-aos--- 3,00g
+  snap_pg   vg_data swi-I-s---  32,00m lv_pgdata 100,00
 ```
 
 L'attribut `swi-I-s---` est la signature. Position par position :
@@ -3745,10 +3755,10 @@ sudo umount /mnt/snap && sudo lvremove -y /dev/vg_data/snap_pg
    conditions réelles : lancer la sauvegarde, relever `data_percent` à la fin,
    multiplier par trois.
 2. **Surveillance** — `lvs -S 'data_percent>70'` dans le script de supervision, avec
-   alerte. Et le filet de sécurité du noyau :
+   alerte. Et le filet de sécurité de LVM (`dmeventd`) :
 
 ```ini
-# /etc/lvm/lvm.conf
+# /etc/lvm/lvm.conf, section activation { ... }
 snapshot_autoextend_threshold = 70
 snapshot_autoextend_percent = 20
 ```
@@ -3764,7 +3774,7 @@ Le mécanisme, à raconter dans l'ordre :
 1. à la création, LVM alloue une zone d'exception vide et une table de correspondance.
    **Aucune donnée n'est copiée** ;
 2. à chaque écriture sur l'origine, le device-mapper vérifie si le *chunk* concerné
-   (64 Ko par défaut) a déjà été sauvegardé. Si non, il lit l'ancien contenu, l'écrit
+   (4 Kio par défaut) a déjà été sauvegardé. Si non, il lit l'ancien contenu, l'écrit
    dans la zone d'exception, note la correspondance, puis laisse l'écriture se faire ;
 3. quand la zone d'exception est pleine, il ne peut plus sauvegarder l'ancien
    contenu. Il ne peut donc plus garantir la vue figée qu'il promettait. Plutôt que
@@ -3848,15 +3858,15 @@ sudo umount /srv/factura/archives        # cette fois, ça passe
 **Cause B — l'extension : le VG est plein à cause d'un snapshot oublié**
 
 ```bash
-sudo lvextend -L +1G -r /dev/vg_data/lv_pgdata
-# Insufficient free space: 256 extents needed, but only 0 available
+sudo lvextend -L +512M -r /dev/vg_data/lv_pgdata
+# Insufficient free space: 128 extents needed, but only 0 available
 
 sudo vgs
 ```
 
 ```console
   VG      #PV #LV #SN Attr   VSize VFree
-  vg_data   1   3   1 wz--n- 4,99g    0
+  vg_data   1   3   1 wz--n- <5,00g    0
 ```
 
 `#SN 1` : il y a un **snapshot**. `VFree 0` : il a mangé tout le reste.
@@ -3868,16 +3878,17 @@ sudo lvs -o lv_name,attr,size,origin,data_percent,lv_time
 ```console
   LV        Attr       LSize  Origin    Data%  Time
   lv_pgdata owi-aos--- 3,00g
-  snap_pg   swi-a-s---  1,50g lv_pgdata  2,10  2026-08-24 02:30:11 +0200
+  lv_test   -wi-a-----  1,00g
+  snap_pg   swi-a-s---  <1,00g lv_pgdata  2,10  2026-08-24 02:30:11 +0200
 ```
 
-Un snapshot créé le 24 août, rempli à 2 %, qui immobilise 1,5 Go depuis trois
-semaines : la sauvegarde du 24 août s'est interrompue sans nettoyer.
+Un snapshot créé le 24 août, rempli à 2 %, qui immobilise ~ 1 Go depuis trois
+semaines : la sauvegarde du 24 août s'est interrompue sans nettoyer. (Dans le lab, `lv_time` affiche l'heure réelle du `break` ; en production, c'est cette colonne qui date l'oubli.)
 
 ```bash
 sudo lvremove -y /dev/vg_data/snap_pg
 sudo vgs                                  # VFree est revenu
-sudo lvextend -L +1G -r /dev/vg_data/lv_pgdata
+sudo lvextend -L +512M -r /dev/vg_data/lv_pgdata
 ```
 
 **Règle d'exploitation à retenir (les trois lignes demandées)**
@@ -3999,7 +4010,7 @@ tableau tourne sur un seul disque depuis, sans que rien ne l'ait signalé.
 
 ```bash
 sudo mdadm /dev/md0 --remove /dev/sdb1
-sudo mdadm /dev/md0 --re-add /dev/sdb1    # superblock intact : resync courte
+sudo mdadm /dev/md0 --re-add /dev/sdb1    # rapide si bitmap, sinon refusé
 # si --re-add refuse (« not possible ») : --add, reconstruction complète
 watch -n1 cat /proc/mdstat
 sudo mdadm --detail /dev/md0 | grep -E 'State|Active'
@@ -4046,7 +4057,7 @@ remonter dans la supervision avec la même sévérité qu'un service arrêté.
 
 `--re-add` est possible parce que le superblock du membre *faulty* est intact et
 que mdadm crée par défaut un *write-intent bitmap* sur les tableaux de plus de
-100 Go (ici, il n'y en a pas : `--re-add` fait une resync complète mais courte).
+100 Go (ici, il n'y en a pas : `--re-add` est refusé et c'est `--add`, avec une reconstruction complète, courte sur 5 Go, qui s'applique).
 Sur un vrai volume avec bitmap, `--re-add` après un faux positif (câble, reset
 de contrôleur) ne resynchronise que les bandes modifiées : quelques minutes au
 lieu d'une journée.
@@ -4055,7 +4066,7 @@ lieu d'une journée.
 ::: piege
 Deux erreurs classiques. `mdadm --add` sans `--remove` préalable : `mdadm: Cannot
 open /dev/sdb1: Device or resource busy`, parce que le membre *faulty* occupe
-toujours son emplacement. Et `mdadm --assemble --force` ou `--create` pour
+toujours son emplacement. Et `mdadm --assemble --force` ou `- -create` pour
 « réparer » : le premier n'a de sens que sur un tableau arrêté, le second
 détruit. Un tableau **actif et dégradé** se répare avec `--remove` / `--add`,
 rien d'autre.
@@ -4231,7 +4242,13 @@ sudo update-initramfs -u
 sudo pvcreate /dev/md0
 sudo vgcreate vg_sauv /dev/md0
 sudo lvcreate -l 60%VG -n lv_coffre vg_sauv
-sudo vgs                          # ~40 % libres, volontairement
+# la base à sauvegarder vit désormais dans le même groupe :
+sudo lvcreate -L 1G -n lv_pgdata vg_sauv
+sudo mkfs.ext4 -L pgdata /dev/vg_sauv/lv_pgdata
+sudo mount /dev/vg_sauv/lv_pgdata /mnt              # recopie du jeu de données
+sudo cp -a /srv/factura/db/. /mnt/ && sudo umount /mnt
+sudo mount /dev/vg_sauv/lv_pgdata /srv/factura/db    # + ligne fstab
+sudo vgs                          # ~20 % libres, volontairement
 
 # --- LUKS par-dessus --------------------------------------------------
 sudo cryptsetup luksFormat --type luks2 /dev/vg_sauv/lv_coffre
@@ -4253,7 +4270,7 @@ echo "/dev/mapper/coffre  /srv/sauvegardes  ext4 \
 sudo systemctl daemon-reload && sudo mount /srv/sauvegardes
 ```
 
-**Pourquoi 40 % de libre dans le VG** : c'est la réserve qui permet (a) de créer les
+**Pourquoi laisser du libre dans le VG** (les 40 % hors `lv_coffre`, dont 20 % restent non alloués une fois `lv_pgdata` posé) : c'est la réserve qui permet (a) de créer les
 snapshots de sauvegarde, (b) de laisser l'auto-extension de `lvm.conf` faire son
 travail quand un snapshot approche du seuil, (c) d'étendre `lv_coffre` le jour où il
 se remplit, sans commander de matériel. Un VG alloué à 100 % est un VG où l'on a perdu
@@ -4266,7 +4283,7 @@ toute capacité de manœuvre.
 # /opt/factura/bin/sauvegarde.sh — sauvegarde cohérente par snapshot LVM
 set -euo pipefail
 
-VG=vg_data
+VG=vg_sauv
 LV=lv_pgdata
 SNAP=snap_sauv
 MNT=/mnt/snap-sauvegarde
@@ -4286,6 +4303,7 @@ if lvs "$VG/$SNAP" >/dev/null 2>&1; then
 fi
 
 # --- 2. refus si le VG n'a pas la place pour le snapshot ---------------
+export LC_ALL=C          # tailles LVM avec un point décimal, pas une virgule
 TAILLE_LV_K=$(lvs --noheadings --units k --nosuffix -o lv_size "$VG/$LV" \
   | tr -d ' ')
 BESOIN_K=$(awk -v t="$TAILLE_LV_K" 'BEGIN{printf "%d", t*0.10}')
@@ -4355,12 +4373,12 @@ done < <(df --output=source,pcent,ipcent,target -x tmpfs -x devtmpfs \
 
 # --- 3. snapshots vieux ou pleins -------------------------------------
 if command -v lvs >/dev/null 2>&1; then
-  while read -r nom pct date_c _; do
+  while read -r nom pct jour heure tz; do
     [ -z "${nom:-}" ] && continue
     awk -v p="$pct" 'BEGIN{exit !(p>70)}' && ko "snapshot $nom à ${pct} %"
-    AGE=$(( ( $(date +%s) - $(date -d "$date_c" +%s) ) / 3600 ))
+    AGE=$(( ( $(date +%s) - $(date -d "$jour $heure $tz" +%s) ) / 3600 ))
     [ "$AGE" -gt 24 ] && ko "snapshot $nom créé il y a ${AGE} h (limite 24 h)"
-  done < <(lvs --noheadings -o lv_name,data_percent,lv_time \
+  done < <(LC_ALL=C lvs --noheadings -o lv_name,data_percent,lv_time \
              -S 'origin!=""' 2>/dev/null)
 fi
 
@@ -4416,10 +4434,23 @@ WantedBy=timers.target
 ```
 
 ```ini
+# /etc/systemd/system/verif-stockage.service
+[Unit]
+Description=Supervision du stockage factura
+
+[Service]
+Type=oneshot
+ExecStart=/opt/factura/bin/verif-stockage.sh
+
+
 # /etc/systemd/system/verif-stockage.timer
+[Unit]
+Description=Supervision du stockage toutes les 15 minutes
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=15min
+[Install]
+WantedBy=timers.target
 ```
 
 ```bash
@@ -4437,7 +4468,7 @@ cat /proc/mdstat
 
 ```console
 md0 : active raid1 sdb1[0] sdc1[1](F)
-      5238784 blocks super 1.2 [2/1] [U_]
+      5237760 blocks super 1.2 [2/1] [U_]
 ```
 
 `[2/1]` : deux membres attendus, un seul opérationnel. `[U_]` : le second est tombé.
@@ -4445,7 +4476,7 @@ md0 : active raid1 sdb1[0] sdc1[1](F)
 
 ```bash
 sudo /opt/factura/bin/verif-stockage.sh
-# [ALERTE] tableau mdadm dégradé : md0 : active raid1 sdb1[0] sdc1[1](F)
+# [ALERTE] RAID dégradé : md0 : active raid1 sdb1[0] sdc1[1](F)
 
 sudo mdadm /dev/md0 --remove /dev/sdc1
 sudo mdadm /dev/md0 --add /dev/sdc1
@@ -4454,8 +4485,8 @@ watch -n 2 cat /proc/mdstat
 
 ```console
 md0 : active raid1 sdc1[2] sdb1[0]
-      5238784 blocks super 1.2 [2/1] [U_]
-      [=========>...........]  recovery = 47.3% (2478912/5238784)
+      5237760 blocks super 1.2 [2/1] [U_]
+      [=========>...........]  recovery = 47.3% (2478912/5237760)
       finish=0.3min speed=137717K/sec
 ```
 
@@ -4469,9 +4500,11 @@ md0 : active raid1 sdc1[2] sdb1[0]
                                                   │          │
                                                   │          └─ ext4
                                                   │              │
-                                                  └─ 40 % libres │
-                                                                 ▼
-                                                        /srv/sauvegardes
+                                                  │              ▼
+                                                  │     /srv/sauvegardes
+                                                  ├─ LV lv_pgdata ─ ext4
+                                                  │     ─ /srv/factura/db
+                                                  └─ ~20 % libres (snapshots)
 ```
 
 **Pourquoi LUKS au-dessus de LVM et pas en dessous** — la réponse argumentée attendue :

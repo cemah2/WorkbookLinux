@@ -19,7 +19,7 @@ if [ ! -f "$SAUV/M12_02.resolv.state" ]; then
 fi
 
 # --- on remplace le lien par un fichier réel pointant dans le vide ------
-# 11.10.10.250 : adresse du réseau de lab où rien ne répond. Les paquets
+# 10.10.10.250 : adresse du réseau de lab où rien ne répond. Les paquets
 # partent, personne ne répond : chaque résolution coûte le timeout plein.
 rm -f /etc/resolv.conf
 cat > /etc/resolv.conf <<'EOF'

@@ -47,9 +47,8 @@ embarqué, non.
 ::: pourquoi
 Les facilités `local0` à `local7` portent les codes **16 à 23**. `local3` vaut
 donc 19. journald stocke la facilité dans le champ indexé `SYSLOG_FACILITY`, et
-les filtres `CHAMP=valeur` sont la façon native de l'interroger. `journalctl`
-n'a pas d'option `--facility`, contrairement à ce que suggère d) : on filtre par
-champ.
+les filtres `CHAMP=valeur` sont la façon native de l'interroger. Depuis systemd 245, `journalctl`
+`--facility``=local3 -p warning` est un équivalent lisible (`--facility=help` liste les noms); d) est fausse parce que `-p` n'accepte que des priorités : `Unknown log level local3.warning`.
 
 Vérification immédiate :
 
@@ -61,10 +60,10 @@ journalctl SYSLOG_FACILITY=19 -n 5 -o verbose
 `-o verbose` affiche tous les champs de l'entrée : c'est la carte de ce qu'on
 peut filtrer. On y voit `SYSLOG_FACILITY=19`, `PRIORITY=4`,
 `SYSLOG_IDENTIFIER=mathieu` (le tag par défaut de `logger`, c'est le nom
-d'utilisateur), `_UID`, `_COMM=logger`.
+d'utilisateur), `_UID`, `_ COMM=logger`.
 
 a) est fausse car `-t` filtre le **tag** (`SYSLOG_IDENTIFIER`), pas la facilité.
-c) invente une unité `local3.service` qui n'existe pas.
+b) invente une unité `local3.service` qui n'existe pas.
 :::
 
 ---
@@ -365,7 +364,7 @@ n'existe pas sur du matériel physique. Sur Proxmox, on la regarde en face du
 
 ---
 
-**Q16.13** — *`%util 99.8`, `await 340.00`, `aqu-sz 28.4`, 20 IOPS.*
+**Q16.13** — `%util 99.8`*, `r_await`* `340.00`*, `aqu`*`-sz 28.4`*, 20 IOPS.*
 
 **Réponse : a)** le disque est le goulot d'étranglement.
 
@@ -376,7 +375,7 @@ Il faut lire les quatre chiffres ensemble, aucun ne suffit seul :
   99,8 : le disque n'a pas eu une milliseconde de repos.
 * `aqu-sz` = longueur moyenne de la file. 28 requêtes en attente en permanence,
   c'est un embouteillage.
-* `await` = temps total moyen d'une requête, **file d'attente comprise**.
+* `r_await` (et `w_await`) = temps total moyen d'une requête, **file d'attente comprise**.
   340 ms, alors qu'un SSD SATA répond en 0,1 à 1 ms et un disque mécanique en
   5 à 15 ms.
 * 20 IOPS pour tout ça : le débit utile est ridicule au regard de l'attente.
@@ -419,9 +418,9 @@ Chaque morceau compte :
   `jq -c` ou par un pipeline. `json-pretty` est fait pour l'œil humain, pas pour
   un script.
 
-b) est piégeuse : `-p` accepte bien un intervalle, mais dans l'ordre
-`FROM..TO` en partant de la priorité la plus haute (`-p 0..3`), et surtout elle
-ne borne pas la fin de la fenêtre — `--today` ne remplace pas `--until`. c) et
+b) est piégeuse : `-p` `err..emerg` est accepté (journalctl remet l' intervalle dans l'ordre
+), mais `--today` n'existe pas (`unrecognized option`) et rien
+ne borne la fin de la fenêtre — seul `--until` le fait. c) et
 d) inventent une syntaxe qui n'existe pas.
 :::
 
@@ -484,11 +483,10 @@ une fois réveillé. Alerter sur les symptômes, diagnostiquer par les causes.
 
 ---
 
-**Q16.17** — *`sar -u 1 3` : `Cannot open /var/log/sysstat/sa18`.*
+**Q16.17** — `sar -u` *: `Cannot`* `open /var/log/sysstat/sa18`*, alors que `sar`* `-u 1 3` *fonctionne.*
 
-**Réponse : b)** avec un intervalle, `sar` mesure en direct ; c'est `sar -u` seul
-qui lit le fichier du jour, lequel n'existe pas tant que la collecte n'est pas
-activée.
+**Réponse : b)** `sar -u` sans intervalle relit le fichier du jour, lequel n'existe pas tant que la collecte n'est pas
+activée; avec un intervalle, `sar` mesure en direct.
 
 ::: pourquoi
 `sysstat` a deux visages qu'on confond systématiquement :
@@ -567,8 +565,8 @@ Les points de perte, dans l'ordre où on les rencontre en production :
 
 * **étape 3** : la sortie standard n'est pas structurée. Une ligne sans préfixe
   `<N>` arrive en `PRIORITY=6` (`info`), y compris si l'application la destinait
-  à stderr — stderr donne simplement `_TRANSPORT=stderr`, pas une priorité plus
-  grave. D'où le conseil du §16.2 : préfixer `<3>` en tête de ligne, ou utiliser
+  à stderr — stdout et stderr arrivent tous deux en `_TRANSPORT=stdout`, sans priorité plus
+  grave. D'où le conseil : préfixer `<3>` en tête de ligne, ou utiliser
   la bibliothèque systemd.
 * **étape 4** : le limiteur de débit (`RateLimitBurst`). Messages jetés, un
   compte rendu `Suppressed N messages` est écrit. C'est BF16.3.
@@ -717,10 +715,9 @@ si `vmstat` montre du `si`/`so` soutenu. »
 
 ::: pourquoi
 Le calcul de `MemAvailable` par le noyau, pour ceux qui veulent le détail :
-mémoire libre, moins la réserve basse (`low watermark`), plus la moitié du cache
-de pages récupérable, plus la part récupérable des dalles (`SReclaimable`). La
-moitié seulement, parce qu'une partie du cache est activement utilisée et que la
-libérer coûterait des relectures disque.
+mémoire libre, moins la réserve basse (`low watermark`), plus le cache
+de pages et les dalles récupérables (`SReclaimable`), chacun diminué du plus petit de deux termes : sa moitié ou la réserve basse. Le noyau suppose ainsi qu'une petite part du cache est indispensable et que la
+libérer coûterait des relectures.
 
 L'erreur symétrique existe aussi : croire qu'`available` haut garantit tout.
 Une application qui réserve d'un coup 8 Go sur une machine qui en a 6 de
@@ -740,7 +737,7 @@ obsolètes depuis 2014.
 
 ::: pourquoi
 Mécanisme : journald compte les messages **par unité** (par cgroup) dans une
-fenêtre glissante de `RateLimitIntervalSec` (30 s par défaut). Au-delà de
+fenêtre fixe de `RateLimitIntervalSec` (30 s par défaut). Au-delà de
 `RateLimitBurst` messages (10 000 par défaut) dans la fenêtre, tout le reste est
 **jeté** jusqu'à la fin de la fenêtre, et journald écrit une entrée
 `Suppressed N messages from <cgroup>`. Le burst effectif est modulé à la hausse
@@ -945,7 +942,7 @@ définitivement perdus.
 sudo mkdir -p /var/log/journal
 sudo systemd-tmpfiles --create --prefix /var/log/journal
 sudo systemctl restart systemd-journald
-journalctl --flush
+sudo journalctl --flush
 # ou : Storage=persistent dans /etc/systemd/journald.conf.d/10-persistant.conf
 
 ls -ld /var/log/journal /var/log/journal/*/
@@ -1009,7 +1006,9 @@ collecteur, sans passer par le démon local — très pratique pour tester L16.2
 ```bash
 journalctl _COMM=sudo --since -24h --no-pager
 journalctl _COMM=sudo --since -24h -o json --no-pager \
-  | jq -r '[._SOURCE_REALTIME_TIMESTAMP, ._UID, .MESSAGE] | @tsv'
+  | jq -r '[(._AUDIT_LOGINUID // "?"), .MESSAGE] | @tsv'
+_UID vaudrait 0 : sudo est setuid root. L'utilisateur d'origine est dans _AUDIT_LOGINUID (UID de connexion)
+et, en clair, en tête de MESSAGE (mathieu : TTY=pts/1 ; ... ; COMMAND=...).
 ```
 
 ::: pourquoi
@@ -1130,7 +1129,7 @@ Deux points de mécanique.
 Le `& stop` (syntaxe moderne ; l'ancienne était `& ~`) signifie « pour les
 messages qui viennent d'être traités par la règle précédente, arrêter là ». Sans
 lui, le message continue son chemin et sera **aussi** attrapé par la règle
-`*.*;auth,authpriv.none -/var/log/syslog` de `/etc/rsyslog.conf`. C'est la
+`*.*;auth,authpriv.none -/var/log/syslog` de `50-default.conf`. C'est la
 réponse à « et uniquement là ».
 
 L'ordre de lecture compte : rsyslog lit `/etc/rsyslog.d/*.conf` par ordre
@@ -1283,7 +1282,7 @@ fichier de test oublié dans `logrotate.d` est une source d'incident classique.
 awk -v c="$(nproc)" '{printf "1min=%s 5min=%s 15min=%s coeurs=%d ratio=%.2f\n",
   $1, $2, $3, c, $1/c}' /proc/loadavg
 
-lire() { awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8, $6}' /proc/stat; }
+lire() { awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9, $6}' /proc/stat; }
 read -r T1 W1 < <(lire); sleep 1; read -r T2 W2 < <(lire)
 awk -v t1="$T1" -v w1="$W1" -v t2="$T2" -v w2="$W2" \
     'BEGIN {printf "iowait = %.2f %%\n", 100*(w2-w1)/(t2-t1)}'
@@ -1291,7 +1290,7 @@ vmstat 1 2 | tail -1
 ```
 
 ::: pourquoi
-`/proc/loadavg` contient six champs :
+`/proc/loadavg` contient cinq champs :
 `0.58 0.24 0.12 3/412 5294` — les trois moyennes, puis
 `runnables/total de tâches`, puis le dernier PID attribué. Le quatrième champ
 est intéressant en soi : un numérateur durablement élevé confirme une file de
@@ -1307,7 +1306,7 @@ la machine est pleine ; au-dessus de 2, il y a deux fois plus de demandeurs que
 de ressources — à condition que la charge soit à dominante CPU (Q16.10).
 
 Sur la seconde partie : les compteurs de `/proc/stat` sont **cumulés depuis
-le démarrage**, exprimés en `jiffies` (1/100 s sur un noyau configuré à `CONFIG_HZ=100`). Une seule lecture
+le démarrage**, exprimés en centièmes de seconde (`USER_HZ` = 100, quel que soit le `CONFIG_HZ` du noyau). Une seule lecture
 donne donc la moyenne depuis le boot, ce qui ne sert à rien : sur une machine
 qui tourne depuis trois mois, l'incident d'hier est invisible. Il faut **deux
 relevés et une différence**.
@@ -1373,13 +1372,12 @@ qu'on surveille de près, ce qui reste très peu coûteux.
 
 Les fichiers sont nommés par jour du mois : `sa17` est le 17 du mois courant,
 écrasé le 17 du mois suivant. `HISTORY` dans `/etc/sysstat/sysstat` contrôle la
-rétention (28 jours par défaut sur Ubuntu).
+rétention (7 jours par défaut sur Debian/ Ubuntu, 28 dans la version amont).
 :::
 
 ::: rhel
-Sous Rocky 9, les fichiers sont dans `/var/lib/sa/` et la collecte est activée
-dès l'installation du paquet, via `sysstat-collect.timer` également. Il n'y a pas
-de fichier `/etc/default/sysstat` : la configuration est dans
+Sous Rocky 9, les fichiers sont dans `/var/lib/sa/` et la collecte passe aussi par `sysstat-collect.timer`, armé par `sudo systemctl enable --now sysstat`. Il n'y a pas
+de fichier `/etc/default/sysstat` ni de variable `ENABLED` : la configuration est dans
 `/etc/sysconfig/sysstat`.
 :::
 
@@ -1637,7 +1635,7 @@ Trois erreurs classiques sur ce lab :
 sudo tee /etc/logrotate.d/factura >/dev/null <<'EOF'
 /var/log/factura/app.log /var/log/factura/erreurs.log {
     daily
-    size 100M
+    maxsize 100M
     rotate 14
     compress
     delaycompress
@@ -1689,12 +1687,9 @@ sudo grep factura /var/lib/logrotate/status
 ```
 
 ::: pourquoi
-**`su root adm` n'est pas facultatif.** Depuis logrotate 3.8, si le répertoire
-qui contient les logs n'appartient pas à root, logrotate refuse de tourner et
-affiche `Ignoring ... because parent directory has insecure permissions`. La
-directive `su <user> <group>` lui dit sous quelle identité effectuer les
-opérations sur ce bloc. Ici le répertoire est à `factura:adm` : `su root adm`
-donne à logrotate les droits d'écriture par le groupe.
+`su root adm`, la ceinture de sécurité. Si le répertoire
+des logs est inscriptible par un groupe autre que root (ou par tous), logrotate refuse de le traiter : `error: skipping "/var/log/factura/app.log" because parent directory has insecure permissions (...) Set "su" directive in config file ...`. La
+directive `su <user> <group>` lui dit sous quelle identité opérer sur ce bloc. Ici le répertoire est en `factura:adm` `0750`, le contrôle ne se déclenche pas encore; `su` rend le bloc robuste le jour où quelqu'un passe le répertoire en `0770` pour le groupe `adm`.
 
 **`sharedscripts` change le nombre d'exécutions.** Par défaut, `postrotate`
 s'exécute **une fois par fichier tourné** — avec deux fichiers dans le bloc, le
@@ -1708,11 +1703,11 @@ silencieusement si le fichier PID est périmé — pire, il peut tuer un process
 sans rapport qui a récupéré le numéro. `systemctl kill` vise le cgroup de
 l'unité : toujours juste, toujours au bon processus.
 
-**`daily` et `size 100M` ensemble.** Les deux déclencheurs cohabitent : logrotate
+`daily` **et `maxsize`** `100M` **ensemble.** Les deux déclencheurs cohabitent : logrotate
 tourne le fichier si le jour a changé **ou** si la taille dépasse 100 Mo. C'est
 ce qu'on veut en production — un rythme régulier, plus un garde-fou contre la
-rafale. Attention à ne pas confondre avec `minsize`, qui signifie « tourner au
-rythme prévu, mais seulement si la taille dépasse ».
+rafale. Surtout pas `size 100M` : `size` est exclusif des intervalles de temps (la dernière directive l'emporte), `daily` serait ignoré. Ne pas confondre non plus avec `minsize` ( « au
+rythme prévu, mais seulement si la taille dépasse »). Et `maxsize` n'est évalué qu'au passage de logrotate, une fois par jour avec le timer par défaut.
 
 **Vérifier l'inode prouve le mécanisme.** Après rotation avec `create`,
 `app.log.1` porte l'inode de l'ancien `app.log`, et `app.log` en a un nouveau.
@@ -1726,7 +1721,7 @@ ni rouvrir ni être redémarrée sans coupure — cas d'un binaire propriétaire
 :::
 
 ::: piege
-`/var/lib/logrotate/status` (Ubuntu) ou `/var/lib/logrotate.status` (Rocky) est
+`/var/lib/logrotate/status` (Ubuntu) ou `/var/lib/logrotate/logrotate.status` (Rocky) est
 l'endroit où logrotate mémorise la date de dernière rotation de **chaque
 fichier**. Deux conséquences que l'on découvre douloureusement :
 
@@ -1751,7 +1746,8 @@ dry run totalement sûr.
 set -euo pipefail
 
 CSV="${CSV:-/var/log/factura/metriques.csv}"
-DISQUE="${DISQUE:-$(findmnt -no SOURCE / | sed 's#/dev/##;s#[0-9]*$##')}"
+# partition/disque sous / (traverse LVM : ubuntu-vg -> sda3)
+DISQUE="${DISQUE:-$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -1)}"
 COEURS=$(nproc)
 
 # --- CPU : deux releves de /proc/stat, jamais le cumule depuis le boot.
@@ -1772,14 +1768,15 @@ ST=$(pct $(( st2 - st1 )))
 read -r L1 _ _ _ _ < /proc/loadavg
 RATIO=$(awk -v l="$L1" -v c="$COEURS" 'BEGIN{printf "%.2f", l/c}')
 
-# --- memoire (en Mo) et swap (pages/s)
+# --- memoire (en Mo) et swap (Kio/s)
 MEMDISPO=$(awk '/^MemAvailable:/{printf "%d", $2/1024}' /proc/meminfo)
 read -r SI SO < <(vmstat 1 2 | tail -1 | awk '{print $7, $8}')
 
-# --- disque : %util et await du peripherique systeme
+# --- disque : %util et await (max de r_await, w_await) du disque systeme
 if command -v iostat >/dev/null 2>&1; then
-  read -r UTIL AWAIT < <(iostat -xz 1 2 "/dev/$DISQUE" 2>/dev/null \
-    | awk -v d="$DISQUE" '$1==d {u=$NF; a=$(NF-6)} END{print u+0, a+0}')
+  read -r UTIL AWAIT < <(iostat -xz 1 2 "$DISQUE" 2>/dev/null \
+    | awk -v d="$DISQUE" '$1==d {u=$NF; a=($6>$12?$6:$12)}
+                          END{print u+0, a+0}')
 else
   UTIL=-1; AWAIT=-1
 fi
@@ -1872,10 +1869,9 @@ plus proche du métier. La grille :
 :::
 
 ::: piege
-L'extraction de `%util` avec `awk` sur `iostat` est fragile : le nombre de
+L'extraction avec `awk` sur `iostat` est fragile : le nombre de
 colonnes a changé entre sysstat 11 et 12 (ajout de `d/s`, `dkB/s` pour les
-opérations `discard`). D'où l'usage de `$NF` et `$(NF-6)` plutôt que d'indices
-fixes, et un test `command -v iostat` pour dégrader proprement — c'est le point
+opérations `discard`, et de `f/s` pour les *flush*), et la colonne `await` unique a disparu au profit de `r_await` (`$6`) et `w_await` (`$12`). D'où `$NF` pour `%util` plutôt qu'un indice fixe, et un test `command -v iostat` pour dégrader proprement — c'est le point
 6 du défi. En production, on préfère lire directement `/proc/diskstats`, dont le
 format est stable depuis vingt ans.
 :::
@@ -1912,7 +1908,7 @@ sudo ufw allow from 10.10.10.0/24 to any port 9100 proto tcp
 commandes de démarrage, et systemd refuse l'unité
 (`Service has more than one ExecStart= setting, which is only allowed for
 Type=oneshot`). La ligne vide remet la liste à zéro avant de la redéfinir. Le
-même mécanisme vaut pour `Environment=`, `ExecStartPre=`, `After=`.
+même mécanisme vaut pour `Environment=`, `ExecStartPre=` — mais pas pour les dépendances ( `After=`, `Wants=`), qu'un drop-in peut seulement compléter.
 
 **Pourquoi restreindre l'écoute.** `/metrics` expose la liste des systèmes de
 fichiers, des interfaces, des utilisateurs connectés, la version du noyau et les
@@ -1937,7 +1933,9 @@ toujours et n'apprend rien.
 | latence | `http_request_duration_seconds` (applicatif) | p99 > 2 s / 5 min |
 | trafic | `rate(http_requests_total[5m])` | pas de seuil, contexte |
 | erreurs | `rate(http_requests_total{code=~"5.."}[5m])` | > 1 % / 5 min |
-| saturation | `node_load1 / node_cpu_count`, file applicative | > 2 / 15 min |
+| saturation | `node_load1` / nb de CPU (`count` des |  |
+|  | `node_cpu_seconds_total{mode=` |  |
+|  | `"idle"}`), file applicative | > 2 / 15 min |
 
 | Ressource | Utilisation | Saturation |
 |---|---|---|
@@ -1946,7 +1944,7 @@ toujours et n'apprend rien.
 | disque | `rate(node_disk_io_time_seconds_total[5m])` | `node_filesystem_avail_bytes` |
 
 La colonne « erreurs » de USE, souvent oubliée :
-`node_network_receive_errs_total`, `node_disk_io_errors_total`, et le comptage
+`node_network_receive_errs_total`, les erreurs d'E/S du noyau (`dmesg`, SMART : `node_exporter` n'a pas de compteur d'erreurs disque par défaut), et le comptage
 des entrées de journal de priorité `err`.
 
 **Ce qui réveille la nuit** : la latence p99 et le taux de 5xx (symptômes
@@ -2237,7 +2235,7 @@ pourquoi tant d'incidents de ce type finissent en « le serveur perd nos logs »
 ```bash
 # 1. les deux tailles ne concordent pas
 ls -lh /var/log/factura/acces.log        # 800M  (taille apparente)
-du -h  /var/log/factura/acces.log        # 12M   (blocs alloues)
+du -h  /var/log/factura/acces.log        # 240K  (blocs alloues)
 wc -l  /var/log/factura/acces.log        # 4000 lignes
 
 # 2. la preuve du trou : la carte des extents
@@ -2252,7 +2250,8 @@ sudo zgrep -ao 'seq=[0-9]*' /var/log/factura/acces.log.1* | tail -1
 # 4. la configuration de rotation
 cat /etc/logrotate.d/factura-acces
 
-# 5. comment l'application ouvre son fichier
+# 5. comment l'application est lancee et ouvre son fichier
+systemctl cat factura-ecrivain     # drop-in : --sans-append, sans --hup
 sudo ls -l /proc/$(pgrep -f factura-ecrivain)/fd | grep acces
 sudo cat /proc/$(pgrep -f factura-ecrivain)/fdinfo/3   # champ flags
 ```
@@ -2261,7 +2260,7 @@ sudo cat /proc/$(pgrep -f factura-ecrivain)/fdinfo/3   # champ flags
 
 * `copytruncate` dans `/etc/logrotate.d/factura-acces` ;
 * l'application ouvre son fichier **sans `O_APPEND`** et conserve son
-  descripteur.
+  descripteur : le drop-in `10-sans-append.conf` la lance avec `--sans-append`, et sans `--hup`.
 
 La première explique le trou de numérotation (lignes écrites pendant la copie,
 détruites par la troncature). La seconde explique la taille apparente : après
@@ -2271,11 +2270,14 @@ suivante a lieu à cet offset et le noyau crée un trou de zéros.
 **Correctif**
 
 ```bash
-# 1. sortir de copytruncate : l'application sait reagir a SIGHUP
+# 1. relancer l'appli en mode append et avec --hup (sans toucher au code)
+sudo rm /etc/systemd/system/factura-ecrivain.service.d/10-sans-append.conf
+sudo systemctl daemon-reload
+# 1 bis. sortir de copytruncate : l'application sait reagir a SIGHUP
 sudo tee /etc/logrotate.d/factura-acces >/dev/null <<'EOF'
 /var/log/factura/acces.log {
     daily
-    size 100M
+    maxsize 100M
     rotate 8
     compress
     delaycompress
@@ -2434,8 +2436,8 @@ if [ "$ECHECS" -gt 0 ]; then crit "$ECHECS unite(s) systemd en echec"; fi
 
 # --- 9. verdict ----------------------------------------------------------
 # Toujours des if/then ici : « test && action » renvoie 1 quand le test
-# est faux, et sous set -e cette liste fait sortir le script avec 1 —
-# c'est-a-dire « avertissement » alors que tout va bien.
+# est faux ; en derniere commande du script (ou d'une fonction), ce 1
+# devient le code retour — « avertissement » alors que tout va bien.
 printf '\n## VERDICT\n\n'
 if [ "${#ANOMALIES[@]}" -eq 0 ]; then
   echo "Aucune anomalie."
@@ -2502,9 +2504,9 @@ justifications attendues, par exemple :
 
 | Alerte | Condition | Astreinte |
 |---|---|---|
-| `ServiceIndisponible` | `up == 0` pendant 2 min | oui |
-| `LatenceP99Degradee` | p99 > 2 s pendant 5 min | oui |
-| `DisquePleinDans4h` | `predict_linear(avail[6h], 4*3600) < 0` | oui |
+| `ServiceIndisponibleup` | `== 0` pendant 2 min | oui |
+| `LatenceP99Degradeep99` | \> 2 s pendant 5 min | oui |
+| `DisquePleinDans4hpredict_linear` | `(avail[6h], 4*3600) < 0` | oui |
 
 Et à ne **pas** mettre en astreinte : `CPUEleve`, `ChargeElevee`,
 `MemoireUtilisee` — ce sont des tableaux de bord, pas des réveils.

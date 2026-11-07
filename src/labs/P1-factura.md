@@ -68,7 +68,7 @@ Le cahier des charges de la direction, tel qu'elle l'a formulé :
   (« que demanderais-tu aux devs ? »).
 * Chaque jalon produit un **livrable** et se valide par un script `check_PA_YY`.
   Le check vérifie le résultat, pas la méthode. Les scripts sont dans
-  `~/workbook/scripts/projects/P1/`.
+  `~/workbook/scripts/projects/P1/`. Sur `lab-web`, `lab-db` et `lab-ops`, lance-les avec `sudo` : ils lisent des fichiers protégés via `sudo -n` et afficheraient sinon de faux échecs.
 * Tu tiens un **journal de bord** (`~/P1/journal.md` sur `lab-adm`) : date,
   jalon, ce que tu as fait, ce qui a coincé. Il compte dans la note.
 * Tu gardes une **copie de chaque fichier de configuration** que tu écris dans
@@ -158,6 +158,7 @@ par lire ce qu'elle attend de lui.
 | lab-web, lab-db | lab-ops | 22 | rsync des sauvegardes |
 | lab-ops | web, db | 9100 | node_exporter |
 | lab-ops | lab-web | 443 | healthcheck, `/api/metrics` |
+| lab-web, lab-db | lab-ops | 9999 | alertes vers le webhook (option PA.8) |
 
 ### Arborescence sur `lab-web`
 
@@ -219,7 +220,7 @@ shell, une arborescence conforme au FHS avec les bons propriétaires.
 * Sur `lab-adm` : `~/P1/pki/` créé (mode 0700), première entrée du journal.
 * `setup_P1.sh` a été lancé sur les quatre VM.
 
-**Modules mobilisés** : 02 (FHS), 03 (permissions), 04 (comptes), 11 (`/etc/hosts`).
+**Modules mobilisés** : 02 (FHS), 03 (permissions), 04 (comptes), 12 (`/etc/hosts`).
 
 **Indices**
 
@@ -228,7 +229,7 @@ shell, une arborescence conforme au FHS avec les bons propriétaires.
 * `install -d -o factura -g factura -m 0750 /srv/factura/exports` fait en une
   commande ce que `mkdir` + `chown` + `chmod` font en trois.
 * Pourquoi `/var/log/factura` appartient-il au groupe `adm` ? Regarde qui est
-  dans ce groupe sur Ubuntu et ce que ça permet à `mathieu`.
+  dans ce groupe sur Ubuntu et ce que ça permet à `mathieu`. `getent passwd backup` sur `lab-ops` avant de créer quoi que ce soit : Ubuntu a déjà un compte `backup`. Adapte-le (`usermod`) plutôt que d'en créer un autre.
 
 **Livrable** : `~/P1/conf/lab-web/hosts`, un script `~/P1/bin/pa1-terrain.sh`
 idempotent qui crée comptes et arborescence sur la machine où il tourne (tu
@@ -283,8 +284,8 @@ authentifiées, dont les données vivent sur un volume dédié.
 * Les mots de passe sont notés dans `~/P1/conf/SECRETS.md` sur `lab-adm`, en
   mode 0600. C'est ton coffre-fort provisoire (le vrai viendra plus tard).
 
-**Modules mobilisés** : 09 (apt, dépôts), 10 (LVM, fstab), 11 (écoute, `ss`),
-15 (ufw, mots de passe).
+**Modules mobilisés** : 10 (apt, dépôts), 11 (LVM, fstab), 12 (écoute, `ss`),
+15 (PostgreSQL, Redis, rôles), 18 (ufw, mots de passe).
 
 **Indices**
 
@@ -353,7 +354,7 @@ ce qu'il doit.
   `/opt/factura` ni dans `/etc`, et que le `/tmp` du service est privé.
 
 **Modules mobilisés** : 03, 04, 08 (unités, durcissement, `systemd-analyze
-security`), 09 (venv, paquets `python3-venv`, `libpq`), 13 (journal).
+security`), 10 (venv, paquets `python3-venv`, `libpq`), 16 (journal).
 
 **Indices**
 
@@ -361,7 +362,7 @@ security`), 09 (venv, paquets `python3-venv`, `libpq`), 13 (journal).
   l'API. Mais installe quand même `postgresql-client` sur `lab-web` : tu en
   auras besoin pour diagnostiquer.
 * `LogsDirectory=factura` crée `/var/log/factura` avec le bon propriétaire et
-  l'ajoute automatiquement aux chemins accessibles en écriture.
+  l'ajoute automatiquement aux chemins accessibles en écriture. Il le remet aussi au groupe du service (`factura:factura`, et non plus `adm`) à chaque démarrage : le check PA.1 l'admet, note-le dans le journal.
 * `systemd-analyze security factura-api.service` liste chaque directive
   manquante avec son poids. Attaque par les plus lourdes.
 * Si le service refuse de démarrer après le durcissement, `journalctl -u
@@ -421,7 +422,7 @@ facture en moins de 15 s, et qu'on peut arrêter sans perdre de travail.
   dans Redis par le worker) et `factura_queue_length 0` au repos.
 
 **Modules mobilisés** : 08 (signaux, `Type=`, `Restart=`, umask),
-13 (journalctl), 16 (méthode de diagnostic).
+16 (journalctl), 19 (méthode de diagnostic).
 
 **Indices**
 
@@ -496,8 +497,8 @@ en-têtes de sécurité.
 * `/etc/hosts` de `lab-adm` et `lab-ops` : `factura.lab.local` → 10.10.10.11
   (déjà fait en PA.1, vérifie).
 
-**Modules mobilisés** : 11 (curl, DNS, `ss`), 15 (mini-PKI, ufw, TLS, en-têtes),
-13 (formats de log).
+**Modules mobilisés** : 12 (curl, DNS, `ss`), 15 (vhost nginx, en-têtes, `proxy_pass`), 18 (mini-PKI, ufw, TLS),
+16 (formats de log).
 
 **Indices**
 
@@ -568,12 +569,12 @@ Redis) arrivent sur `lab-ops`, rangés par hôte, avec rotation partout.
 * Depuis `lab-ops`, une requête d'exemple : « toutes les erreurs de
   `factura-api` de la dernière heure, sur `lab-web` » en une commande.
 
-**Modules mobilisés** : 13 (journald, rsyslog, logrotate), 05 (`grep`, `awk`
-sur les journaux), 11 (TCP, pare-feu).
+**Modules mobilisés** : 16 (journald, rsyslog, logrotate), 05 (`grep`, `awk`
+sur les journaux), 12 (TCP), 18 ( pare-feu).
 
 **Indices**
 
-* Sur Ubuntu, rsyslog lit le journal systemd via `imjournal` : ce qui arrive à
+* Sur Ubuntu, journald relaie vers rsyslog (`ForwardToSyslog=yes`, module `imuxsock`) : ce qui arrive à
   `journalctl -u factura-api` passe aussi par rsyslog, donc part vers
   `lab-ops`. Vérifie avec `logger -t test` puis `grep test
   /var/log/remote/lab-web/test.log` sur `lab-ops`.
@@ -644,16 +645,16 @@ prouvée, et une alerte si l'un des deux échoue.
   en œuvre) ?
 
 **Modules mobilisés** : 07 (script robuste, `set -euo pipefail`, `trap`),
-12 (clés, `authorized_keys` restreint, `rrsync`), 14 (timers, `Persistent`,
-`OnFailure`), 06 (tar), 05 (`find -mtime`).
+14 (clés, `authorized_keys` restreint, `rrsync`), 17 (timers, `Persistent`,
+`OnFailure`), 06 (tar), 05 (`find -mtime`), 15 (`pg_dump`/`pg_restore`).
 
 **Indices**
 
 * `pg_dump` en `peer` : le service tourne sous `postgres`, aucun mot de passe
   n'est nécessaire, aucun `.pgpass` à protéger.
 * La clé SSH du compte `postgres` va dans `/var/lib/postgresql/.ssh/`
-  (`ssh-keygen -t ed25519 -N ''`), avec `known_hosts` pré-rempli
-  (`ssh-keyscan -H 10.10.10.14`) sinon le premier rsync de nuit restera bloqué
+  (`ssh-keygen -t ed25519 -N ''`), avec `known_hosts` pré-rempli pour le nom **et** l'IP que tu utiliseras
+  (`ssh-keyscan -H lab-ops 10.10.10.14`), sinon le premier rsync de nuit restera bloqué
   sur la question « Are you sure… ». Même chose pour `factura` sur `lab-web`
   — qui n'a pas de shell : `sudo -u factura ssh-keygen ...` marche quand
   même.
@@ -705,7 +706,7 @@ contrôle ou un timer échoue.
   9999 sur 10.10.10.14 aux deux émetteurs, ou relayer par SSH. Choisis,
   justifie) : reçoit `%i` (le nom de l'unité en échec), écrit une ligne
   horodatée dans `/var/log/factura/alertes.log` et POSTe un JSON
-  `{"host":..., "unit":..., "result":..., "since":...}` sur le webhook.
+  `{"host":..., "unit":.. ., "result":..., "since":...}` sur le webhook.
 * `/usr/local/sbin/factura-healthcheck.sh` sur `lab-ops`, lancé par
   `factura-healthcheck.timer` toutes les 2 minutes (`OnUnitActiveSec`,
   `AccuracySec=30s`), avec `OnFailure=factura-alerte@%n.service` sur le
@@ -727,8 +728,8 @@ contrôle ou un timer échoue.
   (`systemctl start` avec un dossier de destination rendu inaccessible) et
   vérifie que l'alerte arrive sur `lab-ops`.
 
-**Modules mobilisés** : 13 (`node_exporter`, textfile collector), 14 (timers
-monotones, `OnFailure`, unités modèles), 07 (script, codes de sortie), 11
+**Modules mobilisés** : 16 (`node_exporter`, textfile collector), 17 (timers
+monotones, `OnFailure`, unités modèles), 07 (script, codes de sortie), 12
 (curl, timeouts).
 
 **Indices**
@@ -812,7 +813,7 @@ et un rapport d'audit qui dit ce qui reste ouvert et pourquoi.
   risque, hors périmètre), et les trois risques résiduels que tu signalerais à
   la direction.
 
-**Modules mobilisés** : 04 (sudoers), 12 (sshd), 15 (fail2ban, sysctl,
+**Modules mobilisés** : 04 (sudoers), 14 (sshd), 18 (fail2ban, sysctl,
 lynis, unattended-upgrades, AppArmor), 03 (audit de permissions).
 
 **Indices**
@@ -890,7 +891,7 @@ t'ont appris.
   en file et exportées. Aucune unité en échec ne subsiste. Les
   `check_PA_01` à `09` passent tous à nouveau.
 
-**Modules mobilisés** : 16 (méthode, post-mortem), tous les autres.
+**Modules mobilisés** : 19 (méthode, post-mortem), tous les autres.
 
 **Indices**
 

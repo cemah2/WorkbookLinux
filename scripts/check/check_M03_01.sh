@@ -25,7 +25,7 @@ mode=$(stat -c '%a' "$DIR")
 if printf '%s' "$(stat -c '%A' "$DIR")" | grep -Eq '^d.....[sS]'; then
   ok "le bit SGID est positionné sur $DIR (mode $mode)"
 else
-  ko "SGID absent sur $DIR (chmod 2770) : les fichiers n'héritent pas du groupe"
+  ko "SGID absent sur $DIR (chmod 2770) : pas d'héritage du groupe"
 fi
 
 # --- 3. other exclu -----------------------------------------------------
@@ -36,18 +36,27 @@ else
 fi
 
 # --- 4. héritage réel : on crée un fichier de test ----------------------
-TESTU="webdev"; getent passwd "$TESTU" >/dev/null || TESTU="${SUDO_USER:-mathieu}"
+# on teste avec un compte réellement membre du groupe (webdev peut en avoir
+# été retiré par L3.2)
+TESTU=""
+for u in webdev "${SUDO_USER:-mathieu}"; do
+  if id -nG "$u" 2>/dev/null | tr ' ' '\n' | grep -qx facturation; then
+    TESTU="$u"; break
+  fi
+done
+[ -n "$TESTU" ] || TESTU="${SUDO_USER:-mathieu}"
 TMPF="$DIR/.check01.$$"
 if sudo -u "$TESTU" touch "$TMPF" 2>/dev/null; then
   g=$(stat -c '%G' "$TMPF")
   if [ "$g" = "facturation" ]; then
     ok "un fichier créé par $TESTU hérite du groupe facturation"
   else
-    ko "le fichier créé est en groupe '$g', pas facturation (vérifie le SGID)"
+    ko "le fichier créé est en groupe '$g', pas facturation (SGID ?)"
   fi
   # --- 5. droit d'écriture du groupe sur le fichier créé ---------------
   if command -v getfacl >/dev/null 2>&1; then
-    if getfacl -p "$TMPF" 2>/dev/null | grep -Eq '^group:facturation:rw|^group::rw'; then
+    if getfacl -p "$TMPF" 2>/dev/null \
+         | grep -Eq '^group:facturation:rw|^group::rw'; then
       ok "le groupe facturation a le droit d'écriture sur le fichier créé"
     else
       ko "le groupe n'a pas 'w' sur le fichier créé (ACL par défaut manquante \

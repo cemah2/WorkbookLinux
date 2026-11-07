@@ -26,7 +26,8 @@ fi
 # 2. « libérer de la RAM » : arrêt des API du staging, à midi
 sudo -u "$LAB_USER" ssh -o BatchMode=yes -o ConnectTimeout=5 "deploy@$STG_WEB" \
   'cd /srv/factura && docker ps --format "{{.Names}}" | grep api > /tmp/running.txt; \
-   docker compose --profile blue --profile green stop api-blue api-green' \
+   docker compose --env-file .env --env-file state.env \
+     --profile blue --profile green stop api-blue api-green' \
   >/dev/null 2>&1 || true
 sudo -u "$LAB_USER" ssh -o BatchMode=yes "deploy@$STG_WEB" 'cat /tmp/running.txt' \
   > "$BK/staging-api-running.txt" 2>/dev/null || true

@@ -3,7 +3,7 @@
 # Idempotent. Sauvegarde dans /root/.breakfix-backup/.
 #
 # ATTENTION : cette panne empêche RÉELLEMENT le démarrage. Prends un
-# snapshot Proxmox avant (qm snapshot 9003 avant-bf10-1) et prépare-toi
+# snapshot Proxmox avant (qm snapshot 9003 avant-bf11-1) et prépare-toi
 # à utiliser la console noVNC : le SSH ne répondra pas.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }

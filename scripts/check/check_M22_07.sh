@@ -113,7 +113,9 @@ if [ -s "$RAP" ]; then
   [ "$(grep -c . "$RAP")" -ge 30 ] && ok "rapport d'au moins 30 lignes" \
     || ko "rapport trop court"
   MANQUE=""
-  for mot in overlay runc lsns nsenter memory.max 100000 chroot; do
+  SUBUID=$(awk -F: '$1 == "dockremap" {print $2; exit}' /etc/subuid \
+    2>/dev/null)
+  for mot in overlay runc lsns nsenter memory.max "${SUBUID:-100000}" chroot; do
     grep -qi -- "$mot" "$RAP" || MANQUE="$MANQUE $mot"
   done
   [ -z "$MANQUE" ] && ok "le rapport couvre les mécanismes attendus" \

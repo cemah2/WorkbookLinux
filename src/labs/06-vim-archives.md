@@ -57,8 +57,7 @@ sudo apt install -y vim tar gzip bzip2 xz-utils zstd zip unzip cpio \
 ::: rhel
 Sous Rocky 9 : `sudo dnf install -y vim-enhanced tar gzip bzip2 xz zstd zip \
 unzip cpio rsync openssh-clients pv tree`. Attention, le paquet minimal `vim`
-de Rocky installe `vim-minimal` (la commande `vi`, sans coloration ni `:g`
-complet) : c'est **`vim-enhanced`** qu'il te faut.
+de Rocky installe `vim-minimal` (la commande `vi`, version réduite, sans coloration syntaxique) : c'est **`vim-enhanced`** qu'il te faut.
 :::
 
 Préparation du terrain de jeu (idempotent, mais il **réécrit** les fichiers
@@ -107,13 +106,13 @@ ces commandes ailleurs, `--dry-run` d'abord, toujours.
 | `%` | saute à la parenthèse, accolade ou crochet apparié |
 | `/motif` `?motif` `n` `N` `*` | recherche avant, arrière, suivant, précédent, mot sous le curseur |
 | `ma` puis `` `a `` / `'a` | pose la marque `a` / y revient (colonne exacte / début de ligne) |
-| `` `` `` / `Ctrl-O` `Ctrl-I` | position précédente / recule et avance dans la liste des sauts |
+| '`/`Ctrl-OCtrl-I' | position précédente / recule et avance dans la liste des sauts |
 
 ### Opérateurs, objets texte, répétition
 
 ```text
   [compteur] opérateur [compteur] mouvement-ou-objet
-     3           d                  w          -> d3w = dd  3 mots
+     3           d                  w          -> 3dw (= d3w) : 3 mots
 ```
 
 | Opérateur | Objet texte | Exemple |
@@ -133,9 +132,9 @@ avec un compteur de 5. C'est le multiplicateur le plus rentable de vim.
 faite, un opérateur s'applique (`d`, `y`, `>`, `u`, `:`).
 
 ```text
-Commenter 30 lignes :   Ctrl-V  30j  I  #  Esc
-Décommenter :           Ctrl-V  30j  l   x
-Ajouter en fin de bloc : Ctrl-V  30j  $  A  ;  Esc
+Commenter 30 lignes :   Ctrl-V  29j  I  #  Esc
+Décommenter :           Ctrl-V  29j  x     (l x si tu avais inséré « # »)
+Ajouter en fin de bloc : Ctrl-V  29j  $  A  ;  Esc
 ```
 
 Le `Esc` final est ce qui propage l'insertion sur toutes les lignes du bloc.
@@ -163,7 +162,7 @@ Drapeaux utiles dans un motif : `\<mot\>` limites de mot, `\c` ignore la casse,
 | Commande | Effet |
 |---|---|
 | `"ayy` / `"ap` | copie / colle via le registre nommé `a` (`"A` ajoute) |
-| `:reg` | liste les registres ; `"0` dernier yank, `""` dernier effacement |
+| `:reg` | liste les registres; `"0` dernier yank, `""` dernier yank ou effacement |
 | `:r fichier` / `:r !cmd` | insère un fichier / la sortie d'une commande sous le curseur |
 | `:e fichier` / `:e!` | ouvre un autre fichier / recharge en jetant les modifications |
 | `:ls` `:bn` `:bp` `:b 3` | liste les tampons, suivant, précédent, n° 3 |
@@ -264,8 +263,8 @@ rsync -a /src/ /dst/   ->  /dst/...       (copie son CONTENU)
 
 @fig(rsync-linkdest): Trois sauvegardes `rsync --link-dest` : les fichiers inchangés partagent leurs inodes par liens durs, seuls les fichiers modifiés sont copiés.
 
-`scp` est figé et déconseillé depuis OpenSSH 9 (protocole SFTP en dessous, pas
-de reprise, sémantique de chemins douteuse). Pour un fichier ponctuel : `scp` ou
+Depuis OpenSSH 9.0, `scp` utilise le protocole SFTP en dessous (l'ancien protocole scp est déprécié), mais il ne sait toujours pas
+reprendre un transfert ni comparer deux arborescences. Pour un fichier ponctuel : `scp` ou
 `sftp` ; pour une arborescence ou un lien instable : `rsync -aP`, qui reprend où
 il s'est arrêté.
 
@@ -292,7 +291,7 @@ b) `Esc` puis `:q!`
 c) `ZZ`
 d) `Ctrl-C` puis `:quit`
 
-**Q6.2** — Le curseur est sur la colonne 1 de cette ligne, donc sur le `s` de
+**Q6.2** — Le curseur est sur le premier caractère non blanc de cette ligne, donc sur le `s` de
 `server_name` :
 
 ```nginx
@@ -567,7 +566,7 @@ rejouant la commande précédente plutôt qu'en la retapant.
 
 **E6.3** — Dans `deploy.sh`, migre `/opt/factura` vers `/srv/factura` partout,
 avec confirmation occurrence par occurrence, **sauf** dans le bloc de
-commentaires historiques (lignes 13 à 16) qui doit rester intact. Vérifie
+commentaires historiques (lignes 12 à 15) qui doit rester intact. Vérifie
 ensuite qu'il ne reste aucun `/opt/factura` hors de ce bloc.
 
 **E6.4** — Deux usages du visuel bloc, à la suite :
@@ -739,9 +738,9 @@ puis ouvre `inc-4488.log` dans vim. **Tout doit se faire dans vim**, sans
    de fichier, la liste des commandes ex que tu as utilisées.
 
 ::: astuce
-Étape 4 : `:%s/\(T04:\)\([0-9]\{2\}\):[0-9]\{2\}/04:\2/`. Les parenthèses de
+Étape 4 : `:%s/2026-09-17T04:\([0-9]\{2\}\):[0-9]\{2\}/04:\1/`. Les parenthèses de
 capture s'échappent dans la syntaxe par défaut de vim (`\(` … `\)`), sauf si tu
-passes par `\v` (`very magic`) : `:%s/\vT04:(\d{2}):\d{2}/04:\1/`.
+passes par `\v` (`very magic`) : `:%s/\v2026-09-17T04:(\d{2}):\d{2}/ 04:\1/`.
 :::
 
 ::: check
@@ -875,7 +874,7 @@ sudo bash break_M06_01.sh
 **Symptôme utilisateur** : à l'ouverture de `/etc/factura/frontal.conf`, vim
 affiche un pavé `E325: ATTENTION`, propose un menu, et quelle que soit la
 réponse le fichier semble ne pas contenir la dernière modification du collègue,
-qui jure l'avoir faite. Par-dessus, `:w` répond `E45`.
+qui jure l'avoir faite. Par-dessus, si tu l'ouvres sans `sudo`, `:w` répond `E45`.
 
 **Interdit** : supprimer le fichier `.swp` avant d'en avoir extrait le contenu,
 réécrire la configuration de mémoire.

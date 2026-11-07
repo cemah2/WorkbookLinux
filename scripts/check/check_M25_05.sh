@@ -21,6 +21,7 @@ DEPOT="$BASE/factura"
 api() { curl -s -m 10 -H "Authorization: token $TOKEN" "$@"; }
 dig() { curl -sI -m 5 -u "$REGAUTH" \
   -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
   "$REG/v2/factura/manifests/$1" | grep -i docker-content-digest \
   | tr -d '\r' | awk '{print $2}'; }
 
@@ -57,19 +58,19 @@ fi
 
 # --- 3. workflows -----------------------------------------------------------
 WR=$(api "$REPO/raw/.gitea/workflows/release.yaml")
-printf '%s' "$WR" | python3 - <<'EOF' && ok "release.yaml : déclenché sur tags v*, jobs guard/promote/changelog/release" \
+DOC="$WR" python3 - <<'EOF' && ok "release.yaml : déclenché sur tags v*, jobs guard/promote/changelog/release" \
   || ko "release.yaml : attendu on.push.tags v*, jobs guard, promote, changelog, release"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); on = w.get("on") or w.get(True)
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"]); on = w.get("on") or w.get(True)
 assert any(t.startswith("v") for t in on["push"]["tags"]) and set(on) == {"push"}
 assert {"guard", "promote", "changelog", "release"} <= set(w["jobs"])
 assert "docker build" not in str(w["jobs"]["promote"]["steps"])
 EOF
 WP=$(api "$REPO/raw/.gitea/workflows/promote.yaml")
-printf '%s' "$WP" | python3 - <<'EOF' && ok "promote.yaml : workflow_dispatch, inputs version+confirm, gardé par actor" \
+DOC="$WP" python3 - <<'EOF' && ok "promote.yaml : workflow_dispatch, inputs version+confirm, gardé par actor" \
   || ko "promote.yaml : attendu workflow_dispatch avec inputs version et confirm, if sur gitea.actor"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); on = w.get("on") or w.get(True)
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"]); on = w.get("on") or w.get(True)
 i = on["workflow_dispatch"]["inputs"]
 assert "version" in i and "confirm" in i
 assert any("actor" in str(j.get("if", "")) for j in w["jobs"].values())

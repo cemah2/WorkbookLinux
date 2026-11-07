@@ -33,8 +33,11 @@ grep -qE 'content_type *= *"snippets"' "$MOD/main.tf" 2>/dev/null \
 grep -q 'user_data_file_id' "$MOD/main.tf" 2>/dev/null \
   && ok "module : initialization.user_data_file_id référencé" \
   || ko "module : user_data_file_id absent"
-grep -qE 'count *= *.*user_data|for_each *= *.*user_data' "$MOD/main.tf" 2>/dev/null \
-  && ok "module : snippet conditionnel (count/for_each sur user_data)" \
+# le bloc de la ressource snippet doit porter un count ou un for_each
+awk '/^resource "proxmox_virtual_environment_file"/{f=1} f && /^}/{f=0}
+     f && /^[[:space:]]*(count|for_each)[[:space:]]*=/{t=1} END{exit !t}' \
+  "$MOD/main.tf" 2>/dev/null \
+  && ok "module : snippet conditionnel (count/for_each)" \
   || ko "module : le snippet doit être créé seulement si user_data est fourni"
 for o in vm_id name ip; do
   grep -qE "output \"$o\"" "$MOD/outputs.tf" 2>/dev/null || ko "module : output \"$o\" absent"

@@ -97,9 +97,9 @@ fournit `virt-sysprep`, `virt-customize`, `virt-filesystems`.
 ::: rhel
 Sous Rocky 9 : `sudo dnf install -y qemu-kvm libvirt libvirt-client
 virt-install guestfs-tools genisoimage libosinfo python3-libvirt jq` puis
-`sudo systemctl enable --now libvirtd` et `sudo usermod -aG libvirt mathieu`.
+`sudo usermod -aG libvirt mathieu`.
 Rocky lance libvirt en **démons modulaires** (`virtqemud`, `virtnetworkd`,
-`virtstoraged`) : `journalctl -u virtqemud` remplace `journalctl -u libvirtd`.
+`virtstoraged`…), activés par socket : `for d in qemu network nodedev nwfilter secret storage; do sudo systemctl enable --now virt${d}d{,-ro,-admin}.socket; done` (`libvirtd.service` existe encore mais entre en conflit avec eux); `journalctl -u virtqemud` remplace `journalctl -u libvirtd`.
 Le binaire QEMU est `/usr/libexec/qemu-kvm`, l'utilisateur des processus est
 `qemu` (Ubuntu : `libvirt-qemu`), et le confinement est SELinux (`svirt_t`)
 au lieu d'AppArmor. `cloud-localds` n'est pas packagé : `genisoimage` fait
@@ -135,7 +135,7 @@ Plan d'adressage réservé à ce module sur le LAN de lab : **10.10.10.160 à
 ::: attention
 `lab-virt` a 6 Go : chaque VM imbriquée prend 512 Mo à 1 Go. Ne laisse jamais
 plus de quatre VM allumées en même temps, et arrête (`virsh shutdown`) celles
-d'un lab terminé. Les Break & Fix BF20.2 touchent le Netplan de `lab-virt` :
+d'un lab terminé. Le Break & Fix BF20.2 touche le Netplan de `lab-virt` :
 garde une console Proxmox (`qm terminal 9007`) sous la main.
 :::
 
@@ -206,7 +206,7 @@ virsh domcapabilities --virttype kvm | grep -A3 '<mode name='
 `shutdown` envoie un bouton ACPI que l'invité **peut ignorer** ; `destroy`
 coupe le courant. `undefine` ne supprime pas les disques sans
 `--remove-all-storage`. `virsh edit` modifie la définition **persistante** :
-un `dumpxml` sans `--inactive` sur une VM allumée montre la version en cours,
+un `dumpxml` sans `- -inactive` sur une VM allumée montre la version en cours,
 qui peut différer.
 
 ### Images disque
@@ -262,7 +262,7 @@ Dans l'invité : `lspci | grep -i virtio`, `ls /sys/bus/virtio/drivers`.
 `<cpu mode='host-passthrough'/>` expose le CPU réel (perf, imbrication
 possible, migration seulement entre CPU identiques) ;
 `host-model` = modèle nommé le plus proche + drapeaux (migrable entre hôtes
-proches) ; `custom` + `<model>x86-64-v2-AES</model>` = dénominateur commun.
+proches) ; `custom` + `<model>Westmere</model>` = dénominateur commun (`x86-64-v2-AES` est le nom Proxmox, inconnu de libvirt).
 Topologie : `<topology sockets='1' cores='2' threads='1'/>`. Pinning :
 `<cputune><vcpupin vcpu='0' cpuset='2'/></cputune>`. **Steal time** (`st` de
 `top` dans l'invité) = temps où le vCPU voulait tourner et l'hôte a donné le
@@ -278,7 +278,7 @@ les bases de données.
 |---|---|---|
 | NAT (`default`) | `<forward mode='nat'/>` + `<ip>` + `<dhcp>` | bridge `virbr0` + dnsmasq + MASQUERADE netfilter |
 | Bridge | `<forward mode='bridge'/><bridge name='br0'/>` ou `--network bridge=br0` | la VM est **sur le LAN**, comme sur `vmbr1` Proxmox |
-| Isolé | ni `<forward>` | bridge sans route : VM ↔ VM et hôte seulement |
+| Isolé | pas de `<forward>` | bridge sans route : VM ↔ VM et hôte seulement |
 | macvtap | `<interface type='direct'><source dev='eth0' mode='bridge'/>` | sans bridge, mais l'hôte ne voit pas ses VM |
 
 ```bash
@@ -358,7 +358,7 @@ journalctl -u libvirtd -n 50 ; virsh event --all --loop
 ps -o pid,user,%cpu,args -C qemu-system-x86_64 | cut -c1-120
 systemd-cgls -u machine.slice ; machinectl list
 virsh domstats vm-01 --cpu-total --balloon --block --interface
-virsh cpu-stats vm-01 ; virsh dommemstat vm-01 ; virt-top -b -n 1
+virsh cpu-stats vm-01 ; virsh dommemstat vm-01 ; virt-top -b -n 2
 aa-status | grep libvirt        # Rocky : ps -eZ | grep qemu-kvm
 ```
 
@@ -370,7 +370,7 @@ Broadcom 2024 ; **Hyper-V** : type 1 Microsoft, WSL2 ; **OpenStack** : IaaS
 multi-locataire dont Nova pilote libvirt/KVM (Neutron réseau, Cinder
 volumes, Glance images) ; **Proxmox** : QEMU/KVM + LXC + Ceph + corosync,
 simple, sans abstraction locataire ; **Firecracker** : microVM Rust (AWS
-Lambda), démarrage ~125 ms, base de Kata Containers ; **LXC** (`pct`) :
+Lambda), démarrage ~125 ms, l'un des VMM de Kata Containers ; **LXC** (`pct`) :
 conteneur système partageant le noyau de l'hôte — moins isolé, plus dense
 (module 22 pour Docker).
 
@@ -501,7 +501,7 @@ c) `virtio-net` ne fait pas de DHCP
 d) il manque `<forward mode='nat'/>` sur `br0`
 
 **Q20.13** — `virsh start import-1` échoue avec
-`Could not open '/root/import/import-1.qcow2': Permission denied` alors que
+`Cannot access storage file '/root/import/import- 1.qcow2' (as uid:64055, gid:108): Permission denied` alors que
 le fichier appartient à root en 0600 et que libvirt tourne en root. **Deux
 réponses correctes.**
 

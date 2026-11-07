@@ -124,8 +124,9 @@ printf '%s' "$CONF" | grep -qE '^\s*Defaults.*use_pty' \
   && ok "use_pty actif" \
   || note "use_pty absent : il est actif par défaut sur Ubuntu 24.04"
 
+# la valeur s'arrête à la première virgule/espace (Defaults a=b, logfile=x, c)
 LOG=$(printf '%s' "$CONF" | sed -n 's/.*logfile[[:space:]]*=[[:space:]]*//p' \
-      | tr -d '"' | head -1)
+      | tr -d '"' | sed 's/[,[:space:]].*//' | head -1)
 if [ -n "$LOG" ] && [ -s "$LOG" ]; then
   ok "le journal $LOG contient des entrées"
 elif [ -n "$LOG" ]; then

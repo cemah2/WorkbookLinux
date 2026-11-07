@@ -52,6 +52,8 @@ cd /srv/factura
 ACT=$(awk -F= '/^ACTIVE=/{print $2}' state.env)
 [ "$ACT" = blue ] && NEW=green || NEW=blue
 TAG=$(curl -fsS localhost/version | jq -r .version)
+# ports directs publiés sur l'IP de la VM seulement (BIND_IP du .env)
+IP=$(awk -F= '/^BIND_IP=/{print $2}' .env)
 sed -i "s/^TAG_$(echo $NEW | tr a-z A-Z)=.*/TAG_$(echo $NEW | tr a-z A-Z)=$TAG/" state.env
 sed -i "s/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=blue,green/" state.env
 docker compose --env-file .env --env-file state.env --profile blue --profile green \
@@ -59,7 +61,7 @@ docker compose --env-file .env --env-file state.env --profile blue --profile gre
 docker compose --env-file .env --env-file state.env --profile blue --profile green \
   up -d --force-recreate api-$NEW
 for i in $(seq 30); do
-  curl -fsS "localhost:$([ $NEW = blue ] && echo 8081 || echo 8082)/health" \
+  curl -fsS "$IP:$([ $NEW = blue ] && echo 8081 || echo 8082)/health" \
     >/dev/null 2>&1 && break; sleep 2
 done
 bin/switch.sh $NEW "redeploiement $TAG (rafraichissement)"

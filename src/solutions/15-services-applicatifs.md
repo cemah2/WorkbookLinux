@@ -69,8 +69,8 @@ n'est faite du tout.
 ::: piege
 c) : les paramètres ne sont jamais perdus par `proxy_pass`. d) : nginx ne
 produit pas de double barre ici ; il en produirait avec `location /api` (sans
-barre finale) et `proxy_pass .../` : `/apihealth`... non plus, en fait
-`/api/health` → `//health`. La cohérence des barres finales entre `location`
+barre finale) et `proxy_pass .../` : la partie `/api` est remplacée par `/` et
+`/api/health` devient `//health`. La cohérence des barres finales entre `location`
 et `proxy_pass` est le premier réflexe quand un backend reçoit un chemin
 inattendu : `/api/whoami` du setup te montre exactement ce qu'il reçoit.
 :::
@@ -134,8 +134,8 @@ appliqué ton changement.
 D'où l'enchaînement obligatoire `sudo nginx -t && sudo systemctl reload
 nginx` : `-t` fait exactement la même validation, mais **te** l'affiche.
 `restart` n'est nécessaire que pour ce que le reload ne sait pas changer :
-`user`, modules dynamiques, changement de binaire (`nginx -s reload` fait
-en réalité un *binary upgrade* possible via `USR2`, hors périmètre).
+`user`, modules dynamiques, changement de binaire (qui se fait
+à chaud par le signal `USR2`, hors périmètre).
 :::
 
 ::: piege
@@ -204,8 +204,7 @@ Une boucle de redirection, c'est une réponse `301 Location: X` renvoyée
    parle en HTTP clair sur le port 80. Toute requête arrive en HTTP, la
    règle redirige vers HTTPS, le client revient en HTTPS, l'équilibreur
    re-transmet en HTTP... La bonne information est dans l'en-tête
-   `X-Forwarded-Proto` : il faut rediriger si `$http_x_forwarded_proto !=
-   "https"`, pas si `$scheme = http`.
+   `X-Forwarded-Proto` : il faut rediriger si `$http_x_forwarded_proto != "https"`, pas si `$scheme = http`.
 
 `curl -sIL --max-redirs 5` montre la boucle : chaque `Location:` répète
 l'URL demandée. Un navigateur affiche « ERR_TOO_MANY_REDIRECTS ».
@@ -294,7 +293,7 @@ toutes les requêtes ont la même adresse source et **tous les utilisateurs
 partagent le même seau**. Il faut alors `set_real_ip_from` + `real_ip_header
 X-Forwarded-For` (module `ngx_http_realip_module`) pour que
 `$binary_remote_addr` vaille l'IP réelle. Et `10m` de zone stockent environ
-160 000 adresses : au-delà, nginx renvoie 503 à tout le monde.
+160 000 adresses : au-delà, nginx évince les états les moins récents, et seulement s'il n'y parvient pas renvoie une erreur.
 :::
 
 ---
@@ -572,7 +571,7 @@ main, c'est retirer des pages du journal comptable. Le serveur peut ne plus
 démarrer (`could not open file "pg_wal/000000010000000000000042"`) et le
 cluster est perdu — restauration depuis sauvegarde. `pg_archivecleanup` et
 `pg_resetwal` existent pour des cas précis, pas pour « faire de la place ».
-d) : `wal_level = minimal` désactive l'archivage et la réplication ; ce
+b) : `wal_level = minimal` désactive l'archivage et la réplication ; ce
 n'est pas un correctif, c'est une régression.
 :::
 
@@ -604,9 +603,9 @@ déclenche la politique `maxmemory-policy` :
 
 C'est donc `volatile-lru` (ou `volatile-lfu`) qui correspond à un usage
 mixte : les sessions se sacrifient d'abord, la file jamais. La vraie bonne
-réponse d'architecture est cependant **deux instances Redis** (ou deux
-`db`... non : la politique est globale à l'instance), une par usage, chacune
-avec sa politique. C'est ce que tu proposeras au projet A.
+réponse d'architecture est cependant **deux instances Redis** (pas deux
+`db` numérotées : la politique est globale à l'instance), une par usage, chacune
+avec sa politique. C'est ce que tu proposeras au projet P1.
 :::
 
 ::: piege
@@ -684,8 +683,8 @@ Redis est conçu pour la RAM : chaque accès à une page swappée coûte des
 millisecondes de disque, et comme il est mono-thread, une commande
 ralentie ralentit toutes les suivantes. Un Redis qui swappe est une panne,
 pas une dégradation. Vérification : `INFO memory` (`used_memory_rss` <
-`used_memory`), `free -m`, `vmstat 1` (colonnes `si`/`so` non nulles),
-`/proc/$(pidof redis-server)/status | grep VmSwap`. Parade : `maxmemory`
+`used_memory`), `free -m`, `vmstat 1` (colonnes `si`/`so` non nulles), `grep VmSwap`
+`/proc/$(pidof redis-server)/status`. Parade : `maxmemory`
 **strictement inférieur** à la RAM disponible, `vm.swappiness` bas, ou pas
 de swap du tout sur un serveur Redis dédié.
 :::
@@ -1015,7 +1014,7 @@ sais le mettre en place ».
 3. **Quelles requêtes coûtent le plus, cumulé ?** — `pg_stat_statements`
    ```sql
    SELECT calls, round(total_exec_time) AS total_ms,
-          round(mean_exec_time, 1) AS moy_ms, rows, left(query, 70)
+          round(mean_exec_time::numeric, 1) AS moy_ms, rows, left(query, 70)
    FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 10;
    ```
    Je cherche : une requête au `total_exec_time` dominant (soit très
@@ -1133,7 +1132,7 @@ combinent : RDB pour les copies, AOF pour la durabilité.
 structures sont éparses (pointeurs partout), et il est mono-thread. Si le
 noyau déplace une partie de ses pages en swap, un `GET` qui touche une page
 swappée attend le disque (millisecondes), et **toutes les commandes
-suivantes attendent derrière**. La latence passe de 100 µs à plusieurs
+suivantes attendent derrière**. La latence passe de 100 μs à plusieurs
 secondes, les clients passent en timeout et se reconnectent, ce qui
 aggrave. Ce n'est pas un ralentissement, c'est une indisponibilité.
 Détection : `INFO memory` avec `used_memory_rss < used_memory` (ratio
@@ -1568,7 +1567,7 @@ sudo systemctl stop mini-api@8002
 sudo tail -3 /var/log/nginx/factura.error.log
 # [error] ... connect() failed (111: Connection refused) while connecting
 #   to upstream, ... upstream: "http://127.0.0.1:8002/api/whoami"
-sudo grep -o 'ua=[^ ]*' /var/log/nginx/factura.access.log | tail -3
+sudo grep -oE 'ua=[^ ]+(, [^ ]+)*' /var/log/nginx/factura.access.log | tail -3
 # ua=127.0.0.1:8002, 127.0.0.1:8001      <- deux adresses : tentative puis repli
 sudo systemctl start mini-api@8002
 ```
@@ -1749,9 +1748,8 @@ Les trois mécanismes agissent à des phases différentes du traitement :
   (`$remote_addr`) qui est testée, sauf avec le module `realip`.
 
 `location = /api/login` en exact : la requête ne parcourt pas les regex,
-et `/api/login/autre` n'est pas concerné. Comme cette location a ses
-propres directives, elle **n'hérite pas** des `proxy_set_header` de
-`/api/` (même règle que `add_header`) : soit on les répète, soit on les
+et `/api/login/autre` n'est pas concerné. C'est une location **sœur** de `/api/`, pas une location imbriquée : elle n'hérite de rien de
+`/api/`, et ses propres `proxy_set_header` annulent ceux d'un éventuel niveau `server` (même règle que `add_header`) : soit on les répète, soit on les
 place dans un `snippets/proxy-factura.conf` inclus partout.
 :::
 
@@ -1960,7 +1958,8 @@ SELECT n_live_tup, n_dead_tup, last_autovacuum
 --  240000 | 60000 | (null)
 SELECT pg_size_pretty(pg_relation_size('lignes_copie'));   -- 20 MB
 VACUUM (VERBOSE) lignes_copie;
--- INFO: ... removed 60000 dead row versions in 3xxx pages ...
+-- INFO: ... pages: 0 removed, 2xxx remain ...
+--       tuples: 60000 removed, 240000 remain ...
 SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname = 'lignes_copie'; -- 0
 SELECT pg_size_pretty(pg_relation_size('lignes_copie'));   -- 20 MB : inchangé
 DROP TABLE lignes_copie;
@@ -2149,8 +2148,10 @@ l'ancien fichier, et l'AOF disparaît silencieusement.
 
 ```bash
 systemctl cat postgresql@16-main.service | grep -E '^(User|ExecStart|Type)'
-# Type=notify  User=postgres
-# ExecStart=/usr/bin/pg_ctlcluster --skip-systemctl-redirect %i start
+# Type=forking
+# ExecStart=-/usr/bin/pg_ctlcluster --skip-systemctl-redirect %i start
+# (pas de User= : pg_ctlcluster passe sous le propriétaire du cluster,
+#  postgres — colonne Owner de pg_lsclusters)
 systemctl cat redis-server.service \
   | grep -E '^(User|ExecStart|Type|ReadWrite|Protect)'
 # Type=notify  User=redis
@@ -2160,7 +2161,7 @@ systemctl cat postgresql.service | grep -E '^(Type|RemainAfterExit|ExecStart)'
 ls -la /run/postgresql/
 # drwxrwsr-x postgres postgres .   srwxrwxrwx postgres postgres .s.PGSQL.5432
 ls -la /run/redis/
-# drwxr-s--- redis redis .   (redis-server.pid ; pas de socket par défaut)
+# drwxr-sr-x redis redis .   (redis-server.pid ; pas de socket par défaut)
 ```
 
 PostgreSQL : tout le monde peut ouvrir la socket ; `pg_hba` (`local all all
@@ -2181,13 +2182,10 @@ Wants=network-online.target postgresql.service redis-server.service
 `postgresql@16-main.service` est en fait générée à partir du modèle
 `postgresql@.service` (dans `/usr/lib/systemd/system/`), qui lance
 `pg_ctlcluster` — c'est lui qui lit `/etc/postgresql/16/main/` et démarre
-le bon binaire dans `/usr/lib/postgresql/16/bin/`. `Type=notify` : le
-service est « démarré » quand le postmaster envoie `READY=1`, c'est-à-dire
-quand il **accepte les connexions** — d'où la fiabilité d'`After=`. Le
-service `redis-server` est également `notify` grâce à `--supervised
-systemd`, et l'unité Ubuntu est déjà durcie (`ProtectSystem=full`,
-`ReadWritePaths=-/var/lib/redis -/var/log/redis -/var/run/redis
--/etc/redis`).
+le bon binaire dans `/usr/lib/postgresql/16/bin/` sous le compte propriétaire du cluster. `Type=forking` : `pg_ctlcluster` attend que le postmaster **accepte les connexions** (`pg_ctl -w`) avant de rendre la main, d'où la fiabilité d'`After=`. Le
+service `redis-server` est `Type=` `notify` grâce à `--supervised
+systemd` (`User=redis`), et l'unité Ubuntu est déjà durcie (`ProtectSystem=strict`,
+`ReadWritePaths=` sur `/var/lib/redis`, `/var/log/redis`, `/var/run/redis`, `ReadWriteDirectories=-/etc/redis`).
 
 `postgresql.service` est la cible parapluie : `Wants=postgresql@16-main.service`
 généré par `postgresql-generator`, et `RemainAfterExit=on` pour qu'elle
@@ -2396,8 +2394,7 @@ Les choix qui comptent, et pourquoi :
   `location ^~ /api/`, il ne s'appliquerait pas à `= /api/upload` si on en
   créait une — chaque location exacte repart des valeurs du `server`.
 * `limit_req` sur `= /api/login` avec `nodelay` : les 6 premières passent,
-  puis 429 ; **sans** `nodelay`, `tir.sh` afficherait 12 codes 200... en
-  2 minutes, et tu croirais que la limitation ne marche pas.
+  puis 429 ; **sans** `nodelay`, le compte est le même (6 × 200, 6 × 429) mais les 5 requêtes de rafale sont retardées de 12 s en 12 s : `tir.sh` met une minute et tu crois à une panne du backend.
 * `htpasswd -c` **écrase** le fichier : pour ajouter un second
   utilisateur, sans `-c`.
 * `error_log ... warn` : les `connect() failed` sont en `error`, donc
@@ -2705,7 +2702,7 @@ for db in $(psql -Atc "SELECT datname FROM pg_database
 done
 ( cd "$DIR" && sha256sum -- * > SHA256SUMS )
 find "$DEST" -mindepth 1 -maxdepth 1 -type d -mtime +"$RETENTION" \
-  -exec rm -rf {} + -exec log "purge {}" \;
+  -print -exec rm -rf {} + | while read -r d; do log "purge $d"; done
 log "fin OK"
 ```
 
@@ -2916,9 +2913,9 @@ restaure à côté, on vérifie, on extrait ce qu'il faut (ou on bascule).
 ::: piege
 * La cible temporelle est en **fuseau de la session** ; donner l'offset
   (`+02`) évite une heure d'écart avec `timezone = 'Europe/Paris'`.
-* Une cible antérieure à la fin de la sauvegarde de base est impossible :
-  `recovery ended before configured recovery target was reached`. La base
-  `pg_basebackup` doit être **antérieure** à l'instant visé.
+* Une cible antérieure à la fin de la sauvegarde de base est impossible : `requested`
+  `recovery stop point is before consistent recovery point`. La base
+  `pg_basebackup` doit être **antérieure** à l'instant visé (et une cible au-delà du dernier WAL archivé donne `recovery ended before configured recovery target was reached`).
 * `archive_mode = on` avec un `archive_command` qui échoue en silence
   (destination pleine à 3 h du matin) remplit `pg_wal` : surveiller
   `pg_stat_archiver.failed_count` et `last_failed_time` est obligatoire
@@ -2945,6 +2942,8 @@ nopass ~* &* +@all`).
 +bind 127.0.0.1 10.10.10.12
  protected-mode yes
 +# ACL : l'application, limitée à ses préfixes, sans commandes dangereuses
++# (redis.conf n'a pas de continuation de ligne : la directive user factura
++#  tient sur UNE ligne, coupée ici pour l'impression)
 +user default off
 +user factura on >Redis-Factura-2026 ~sess:* ~user:* ~factura:* &* \
 +     +@all -@dangerous
@@ -2986,10 +2985,10 @@ python3 /opt/factura/bin/redis-app.py \
 export REDISCLI_AUTH='Redis-Admin-2026'
 redis-cli --user admin --stat            # 30 s : keys, mem, clients, req/s
 redis-cli --user admin INFO memory | grep -E \
-  '^(used_memory|used_memory_rss|used_memory_peak|maxmemory):' \
+  -e '^(used_memory|used_memory_rss|used_memory_peak|maxmemory):' \
   -e '^mem_fragmentation_ratio:'
 redis-cli --user admin INFO stats | grep -E \
-  '^(total_commands_processed|instantaneous_ops_per_sec|expired_keys|' \
+  -e '^(total_commands_processed|instantaneous_ops_per_sec|expired_keys):' \
   -e '^(evicted_keys|keyspace_hits|keyspace_misses|rejected_connections):'
 redis-cli --user admin INFO clients | grep -E 'connected_clients|blocked'
 redis-cli --user admin SLOWLOG GET 5
@@ -3350,20 +3349,22 @@ SHOW max_connections;                                        -- 20 (!)
 SELECT count(*), state, usename, application_name
   FROM pg_stat_activity WHERE backend_type = 'client backend'
  GROUP BY 2, 3, 4 ORDER BY 1 DESC;
---  17 | idle | factura_app | psql
+--  17 | idle | factura_app | factura-api
 SELECT pid, client_addr, backend_start, state_change,
        now() - state_change AS inactif_depuis, left(query, 40)
   FROM pg_stat_activity
  WHERE state = 'idle' AND usename = 'factura_app'
  ORDER BY state_change LIMIT 5;
--- des sessions idle depuis des heures, toutes ouvertes à la même seconde
+-- 17 sessions idle, toutes ouvertes à la même seconde, aucune requête
+-- depuis ; en production elles auraient des heures
 -- la clôture comptable : quelle session ? (state = active ou idle in
 --  transaction, usename différent, application_name) -> on ne la touche pas
 SELECT pg_terminate_backend(pid)
   FROM pg_stat_activity
  WHERE state = 'idle' AND usename = 'factura_app'
-   AND state_change < now() - interval '15 min';
--- 17 lignes à true
+   AND application_name = 'factura-api';
+-- 17 lignes à true  (en production : ... AND state_change < now() -
+--                    interval '15 min', pour ne tuer que l'oubli)
 ```
 
 Depuis `lab-web`, la connexion passe à nouveau.
@@ -3440,12 +3441,12 @@ sait lire `pg_stat_activity` n'a pas besoin de ce marteau.
 
 ```bash
 python3 /opt/factura/bin/redis-app.py -n 50 2>&1 | tail -1
-# redis-app: ECRITURE REFUSEE au tour 3 : OOM command not allowed when used
+# redis-app: ECRITURE REFUSEE au tour 1 : OOM command not allowed when used
 #   memory > 'maxmemory'.
 redis-cli --user admin CONFIG GET maxmemory              # 1048576  (1 Mo)
 redis-cli --user admin CONFIG GET maxmemory-policy       # noeviction
 redis-cli --user admin INFO memory | grep -E '^used_memory:|^maxmemory:'
-# used_memory:1071992   maxmemory:1048576
+# used_memory:4410232   maxmemory:1048576   (AOF rechargé au restart)
 redis-cli --user admin INFO keyspace          # db0:keys=6xxx,expires=6xxx
 redis-cli --user admin --bigkeys | tail -5    # que des sess:* de 512 o
 sudo grep -n '^maxmemory' /etc/redis/redis.conf
@@ -3576,7 +3577,7 @@ echo "OK $F $(stat -c %s "$F") octets"
 
 **Pour qu'un fichier vide ne passe plus** : le script refuse de le
 produire (ci-dessus) ; un contrôle indépendant (le healthcheck de D15 ou
-du projet A) vérifie **âge et taille** du dernier fichier ; et une
+du projet P1) vérifie **âge et taille** du dernier fichier ; et une
 restauration de test périodique — la seule preuve.
 
 ::: pourquoi
@@ -3593,8 +3594,8 @@ jour existe » est trompée.
 C'est pourquoi le script de L15.4 (sous `postgres`, `peer`, pas de
 `.pgpass`) est la meilleure réponse au besoin : il supprime la première
 cause. Quand un compte dédié est imposé, le `.pgpass` en `0600` dans son
-home, ou `PGPASSFILE=` vers un fichier `root:dumpops 0640`... non : libpq
-exige `0600` **ou moins** et un fichier appartenant à l'utilisateur ; la
+home, ou `PGPASSFILE=` vers un fichier en `0600` que `dumpops` possède — pas un `root:dumpops 0640` : libpq
+refuse tout bit groupe ou autres, quel que soit le propriétaire; la
 variante propre est un `~/.pg_service.conf` + `.pgpass`, ou un
 `EnvironmentFile=` de service systemd. Et dans tous les cas, `2>/dev/null`
 sur une commande de sauvegarde est une faute professionnelle : on
@@ -3674,12 +3675,14 @@ IIT="$(sql "SELECT count(*) FROM pg_stat_activity \
   AND state_change < now()-interval '5 min'")"
 [ "$IIT" = 0 ] && ok "aucun idle in transaction > 5 min" \
   || ko "$IIT session(s) idle in transaction > 5 min"
-LAST="$(rdb 'sudo -n ls -d /var/backups/postgresql/*/ 2>/dev/null | tail -1')"
+# le glob doit être développé par root : le répertoire est en 0750 postgres
+LAST="$(rdb "sudo -n sh -c 'ls -d /var/backups/postgresql/*/' 2>/dev/null \
+  | tail -1")"
 if [ -n "$LAST" ]; then
   AGE=$(( $(date +%s) - $(rdb "sudo -n stat -c %Y $LAST") ))
   [ "$AGE" -lt 93600 ] && ok "dernière sauvegarde : $((AGE/3600)) h" \
     || ko "sauvegarde vieille de $((AGE/3600)) h"
-  rdb "cd $LAST && sudo -n sha256sum -c --quiet SHA256SUMS" \
+  rdb "sudo -n sh -c 'cd $LAST && sha256sum -c --quiet SHA256SUMS'" \
     && ok "SHA256 valides" || ko "SHA256 invalides"
 else ko "aucune sauvegarde dans /var/backups/postgresql"; fi
 [ "$(sql 'SELECT failed_count FROM pg_stat_archiver')" = 0 ] \
@@ -3713,7 +3716,7 @@ echo "Résultat : $PASS réussis, $FAIL échoués"
 
 (Le mot de passe admin Redis est lu dans `/etc/factura/redis-admin.pass`,
 `root:root 0600`, sur `lab-db` — à créer ; la ligne `sudo -n` suppose une
-règle sudoers sans mot de passe pour `mathieu`, ce qui est le cas du lab.)
+règle sudoers sans mot de passe pour `mathieu`, ce qui est le cas du lab. Le filtre `awk` sur `access.log` compare les dates lexicalement : c'est juste dans le mois courant, ce qui suffit pour une fenêtre de 5 minutes, sauf à cheval sur un changement de mois.)
 
 **Runbook** — squelette attendu de `runbook-services.md` :
 
@@ -3750,9 +3753,9 @@ l'application terminer ses transactions.
     /etc/factura/*.env et ~/.pgpass ; reload/restart de l'application ;
     fenêtre de double validité impossible en PostgreSQL -> ordonner : appli en
     pause 2 s, ALTER, reload
-### Redis : ACL SETUSER factura >nouveau <ancien (deux mots de passe valides
-    pendant la bascule), mise à jour de l'application, puis ACL SETUSER factura
-    <ancien, ACL SAVE / CONFIG REWRITE
+### Redis : ACL SETUSER factura >nouveau (l'ancien reste valide : deux mots
+    de passe pendant la bascule), mise à jour de l'application, puis
+    ACL SETUSER factura <ancien, ACL SAVE / CONFIG REWRITE
 ## 6. Preuve : sortie de verif-services.sh
 ## Historique
 ```

@@ -37,7 +37,7 @@ ECOUTE=$(ss -tlnp 2>/dev/null | grep ':9100 ' | awk '{print $4}' | head -1)
 if [ -n "$ECOUTE" ]; then
   ok "quelque chose écoute sur le port 9100 ($ECOUTE)"
   case "$ECOUTE" in
-    0.0.0.0:9100|\[::\]:9100|*:::9100)
+    0.0.0.0:9100|\[::\]:9100|\*:9100|*:::9100)
       ko "écoute sur toutes les interfaces : restreins à $IP \
 (--web.listen-address)" ;;
     "$IP":9100) ok "écoute uniquement sur $IP" ;;

@@ -97,7 +97,7 @@ lab-ops)
   if [ -n "$L" ]; then
     ok "$EXP_RW est exporté pour 10.10.10.0/24"
     for o in rw sync no_subtree_check root_squash; do
-      echo "$L" | grep -qE "[(,]$o[,)]" \
+      echo "$L" | grep -qE "[(,]${o}[,)]" \
         && ok "option $o effective sur $EXP_RW" \
         || ko "option $o absente sur $EXP_RW (exportfs -v)"
     done
@@ -120,9 +120,13 @@ lab-ops)
   else
     ko "$EXP_RO n'est pas exporté"
   fi
-  [ -d "$EXP_RW" ] && [ "$(stat -c %a "$EXP_RW")" = "2775" ] \
-    && ok "$EXP_RW est en 2775 (setgid)" \
-    || note "$EXP_RW n'est pas en 2775 : le groupe ne se propagera pas"
+  MODE_RW=$([ -d "$EXP_RW" ] && stat -c %a "$EXP_RW" || echo "?")
+  case "$MODE_RW" in
+    2777) ok "$EXP_RW est en 2777 (setgid, root squashé peut écrire)" ;;
+    2775) note "$EXP_RW est en 2775 : root squashé (65534) ne pourra pas \
+y écrire, l'étape 6 échouera (chmod 2777)" ;;
+    *) note "$EXP_RW est en $MODE_RW : setgid attendu (2777)" ;;
+  esac
   ss -tln 2>/dev/null | grep -q ':2049 ' \
     && ok "le port 2049 écoute" \
     || ko "rien n'écoute sur 2049"

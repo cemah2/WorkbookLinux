@@ -6,7 +6,7 @@
 À la fin de ce module, je sais :
 
 * enchaîner mes commandes sans quitter le clavier (raccourcis readline, historique,
-  `Ctrl-R`, `!!`, `!$`, `fc`) et configurer un historique exploitable en équipe ;
+  `Ctrl-R`, `#!`, `!$`, `fc`) et configurer un historique exploitable en équipe ;
 * énoncer **dans l'ordre** les étapes d'expansion du shell et prédire le résultat
   d'une ligne de commande avant de l'exécuter ;
 * choisir le bon quoting (simple, double, backslash) et manipuler sans dégât des
@@ -46,8 +46,7 @@ sudo apt install -y bash-completion manpages manpages-dev less tree tldr
 ```
 
 ::: rhel
-Sous Rocky 9 : `sudo dnf install -y bash-completion man-pages man-pages-posix less tree`.
-`tldr` n'est pas empaqueté dans Rocky 9 ni EPEL 9 : installe-le avec
+Sous Rocky 9 : `sudo dnf install -y bash-completion man-pages less tree` (`man-pages-posix` n'est pas livré dans Rocky 9, on s'en passe). `tldr` n'est pas dans les dépôts de base : installe-le avec
 `python3 -m pip install --user tldr`, ou passe-t'en, ce n'est utilisé qu'en E1.14.
 :::
 
@@ -92,6 +91,7 @@ la procédure de secours est dans BF1.1 — elle fait partie du programme.
 | `HISTCONTROL=ignoreboth` | ignore les doublons consécutifs **et** les lignes préfixées d'un espace |
 | `HISTTIMEFORMAT='%F %T '` | horodate chaque entrée (stocké comme `#epoch`) |
 | `shopt -s histappend` | ajoute au fichier au lieu de l'écraser |
+| **Élément** | **Rôle** |
 | `!!` `!$` `!*` | dernière commande, son dernier argument, tous ses arguments |
 | `!nginx` / `!?nginx?` | dernière commande commençant par / contenant `nginx` |
 | `fc -l` / `fc` | liste l'historique / rouvre la dernière commande dans `$EDITOR` |
@@ -153,7 +153,8 @@ voient tout. En script, utilise `command -v`.
 |---|---|
 | login (SSH, `su -`, console) | `/etc/profile`, puis le **premier** trouvé : `~/.bash_profile`, `~/.bash_login`, `~/.profile` |
 | interactif non-login (`bash`, terminal graphique) | `/etc/bash.bashrc` puis `~/.bashrc` |
-| non interactif (`ssh h cmd`, cron, script) | `$BASH_ENV` s'il est défini ; rien sinon |
+| non interactif (cron, script, `bash -c`) | `$BASH_ENV` s'il est défini ; rien sinon |
+| `ssh h cmd` (non interactif, lancé par sshd) | `~/.bashrc`, mais coupé par sa garde `case $-` |
 
 Sur Ubuntu, `~/.profile` contient un `. "$HOME/.bashrc"` : c'est ce pont qui fait
 croire que « `.bashrc` est toujours lu ». Créer un `~/.bash_profile` court-circuite
@@ -172,11 +173,11 @@ Tout ce que tu écris après cette garde n'existe pas pour un shell non interact
 
 | Écriture | Effet |
 |---|---|
-| `> f` / `>> f` | stdout (fd 1) dans `f`, écrase / ajoute |
-| `2> f` / `2>> f` | stderr (fd 2) dans `f` |
+| `> f` / `» f` | stdout (fd 1) dans `f`, écrase / ajoute |
+| `2> f` / `2» f` | stderr (fd 2) dans `f` |
 | `> f 2>&1` | stdout dans `f`, **puis** stderr là où va déjà stdout |
 | `2>&1 > f` | stderr vers le terminal, stdout dans `f` (l'ordre compte) |
-| `&> f` / `&>> f` | les deux, raccourci bash (pas POSIX) |
+| `&> f` / `&» f` | les deux, raccourci bash (pas POSIX) |
 | `< f` | `f` sur stdin |
 | `\| tee -a f` | duplique stdout : écran **et** fichier |
 | `> /dev/null 2>&1` | silence complet |
@@ -192,7 +193,7 @@ droite, pas un alias permanent.
 ```bash
 cd -            # revient au répertoire précédent ($OLDPWD)
 pushd /etc/nginx ; pushd /var/log ; dirs -v ; popd
-CDPATH=.:/etc:/var/log      # cd sites-enabled marche depuis n'importe où
+CDPATH=.:/etc:/var/log      # cd nginx (= /etc/nginx) marche de n'importe où
 man 5 crontab   # section 5 = formats de fichiers ; 1 = commandes ; 8 = admin
 man -k sockets  # = apropos, cherche dans les descriptions
 /motif puis n   # recherche dans une page man (pager less)
@@ -316,7 +317,7 @@ c) `export PATH="$PATH:."`
 d) `PATH="$HOME/bin:$PATH"`
 
 **Q1.11** — Tu cherches la signification du champ `pass` dans `/etc/fstab`
-(le format du fichier, pas la commande). Quelle commande ?
+(le format du fichier, pas la commande). Quelle commande cible explicitement la bonne section, quel que soit le nom cherché ?
 
 a) `man fstab`
 b) `man 5 fstab`
@@ -679,7 +680,7 @@ preuve à l'appui, puis de poser la variable au bon endroit.
 5. Prouve-le : `ssh mathieu@localhost 'echo $JAVA_HOME'` doit répondre `/opt/jdk21`.
 
 ::: astuce
-Pour l'étape 1, `printf '%s %s\n' "$(date +%T)" ".bashrc" >> ~/lab01/logs/startup.log`
+Pour l'étape 1, `printf '%s %s\n' "$(date +%T)" ".bashrc" » ~/lab01/logs/startup.log`
 convient. Pense à ce qui se passe si `~/lab01/logs/` n'existe pas encore au moment
 où le fichier est lu.
 :::
@@ -751,7 +752,7 @@ sudo bash break_M01_03.sh
 ```
 
 **Symptôme utilisateur** : en SSH sur `lab-adm`, le prompt est redevenu
-`bash-5.2$`, les alias (`ll`, `hostinfo`) n'existent plus, `PATH` ne contient plus
+celui par défaut du système (plus de code retour), les alias (`ll`, `hostinfo`) n'existent plus, `PATH` ne contient plus
 `~/bin`. En revanche, si on tape `bash` une fois connecté, tout revient.
 
 **Interdit** : modifier `~/.bashrc`, il est correct.

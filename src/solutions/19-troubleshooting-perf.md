@@ -216,7 +216,7 @@ sudo lsof +L1 | head
 
 a) est utile mais donne la même réponse que `du` : rien. c) répond à une autre
 question (les inodes, quand `df` montre de la place mais que l'écriture échoue).
-d) ne trouve que des fichiers *existants*.
+b) ne trouve que des fichiers *existants*.
 :::
 
 ::: piege
@@ -614,9 +614,9 @@ D=/var/tmp/preuves-$(date +%F-%H%M%S); mkdir -p "$D"
 ps auxf            > "$D/ps.txt"
 ss -tanp           > "$D/sockets.txt"
 free -m            > "$D/memoire.txt"
-df -h; df -i      >> "$D/disque.txt"
+{ df -h; df -i; } > "$D/disque.txt"
 dmesg -T           > "$D/dmesg.txt"
-uptime; top -b -n1 > "$D/charge.txt"
+{ uptime; top -b -n1; } > "$D/charge.txt"
 systemctl --failed > "$D/unites.txt"
 journalctl --since '-30 min' > "$D/journal.txt"
 tar czf "$D.tar.gz" "$D" && scp "$D.tar.gz" mathieu@10.10.10.10:/srv/preuves/
@@ -651,7 +651,7 @@ a) et c) désignent des personnes ou des équipes : le résultat est que la
 prochaine fois, l'information remontera plus tard, ou pas du tout. Un
 post-mortem qui blâme apprend à l'organisation à cacher les incidents.
 
-d) est pire, parce qu'elle a l'air professionnelle : « erreur humaine » n'est
+b) est pire, parce qu'elle a l'air professionnelle : « erreur humaine » n'est
 jamais une cause racine, c'est l'endroit où l'analyse s'est arrêtée. Et « rappel
 des consignes » n'est pas une action corrective : rien n'a changé dans le
 système, la même erreur reste possible demain.
@@ -1062,7 +1062,7 @@ perdu son nom mais garde ses blocs : le noyau ne les libère qu'au dernier
 
 ```bash
 sudo lsof +L1                      # NLINK à 0, avec la taille et le PID
-sudo lsof +L1 | awk '{s+=$8} END {print s/1024/1024 " Mo retenus"}'
+sudo lsof +L1 | awk '{s+=$7} END {print s/1024/1024 " Mo retenus"}'
 sudo truncate -s 0 /proc/<pid>/fd/<n>
 df -h /var                         # espace rendu immédiatement
 ```
@@ -1107,7 +1107,7 @@ système** (entrée et sortie), avec un aller-retour vers le traceur. Sur un
 service qui fait 20 000 appels par seconde, la latence explose. C'est un outil
 d'atelier, pas de surveillance.
 
-`perf` échantillonne les piles à fréquence fixe (99 Hz par défaut) via les
+`perf` échantillonne les piles à fréquence fixe (4 000 Hz par défaut, 99 Hz avec `-F 99`) via les
 compteurs de performance du processeur : le coût est proportionnel à la
 fréquence, pas au travail du processus. C'est l'outil qu'on peut lancer en
 production.
@@ -1700,7 +1700,7 @@ sysctl net.ipv4.ip_local_port_range
 
 ::: pourquoi
 Le rapprochement de ces deux dernières valeurs est le calcul de capacité de
-E19.13 : 28 232 ports disponibles par défaut, chacun immobilisé 60 s après
+Q19.9 : 28 232 ports disponibles par défaut, chacun immobilisé 60 s après
 fermeture, soit environ 470 connexions sortantes par seconde vers une même
 destination. Au-delà, `EADDRNOTAVAIL`.
 
@@ -1871,7 +1871,7 @@ et se scripte mieux (`-p PID`, sortie tabulaire). `kB_ccwr/s` compte les
 
 ```bash
 df /srv/vitrine/data          # /dev/loop0 → image sur /dev/sda
-iostat -xz -p sda 1 6 | grep -E '^(Device|sda|loop0)' | tail -6
+iostat -xz 1 6 | grep -E '^(Device|sda|loop0)' | tail -6
 ```
 
 | Colonne | `fio` (lecture 4k aléatoire) | `stress-ng --hdd` (écriture 1 Mo séq.) |
@@ -2007,19 +2007,21 @@ un serveur de production.
 
 ---
 
-**E19.23** — *`/proc/meminfo`, `free`, `slabtop`, et 200 000 inodes.*
+**E19.23** — `/proc/meminfo`*, `free`, `slabtop`, et 100 000 inodes.*
 
 ```bash
-grep -E '^(MemTotal|MemFree|MemAvailable|Buffers|Cached|Shmem|Dirty)' /proc/meminfo
-grep -E '^(AnonPages|Slab|SReclaimable|SUnreclaim|SwapTotal|SwapFree)' /proc/meminfo
+grep -E '^(MemTotal|MemFree|MemAvailable|Buffers|Cached|Shmem|Dirty)' \
+  /proc/meminfo
+grep -E '^(AnonPages|Slab|SReclaimable|SUnreclaim|SwapTotal|SwapFree)' \
+  /proc/meminfo
 free -m
 ```
 
 Réconciliation (`free` en Mio = lignes de `meminfo` ÷ 1024) : `total` =
 `MemTotal` ; `free` = `MemFree` ; `shared` = `Shmem` ; `buff/cache` =
 `Buffers` + `Cached` + `SReclaimable` ; `available` = `MemAvailable` ;
-`used` = `MemTotal` − `MemFree` − `Buffers` − `Cached` − `SReclaimable`
-(depuis procps 4.0 : `used` exclut le cache). L'écart de quelques Mio vient
+`used` = `MemTotal` − `MemAvailable`
+(procps 4, Ubuntu 24.04; avec procps 3.3 c'était `MemTotal` − `MemFree` − `buff/` cache). L'écart de quelques Mio vient
 des instants de lecture différents.
 
 ```bash
@@ -2293,7 +2295,7 @@ sudo systemctl restart vitrine-api
 systemctl show vitrine-api -p MemoryMax -p MemoryHigh
 cat /sys/fs/cgroup"$(systemctl show vitrine-api -p ControlGroup \
   --value)"/memory.max        # 268435456
-journalctl -u vitrine-api | grep -i 'memory cgroup out of memory'
+journalctl -k | grep -i 'memory cgroup out of memory'
 ```
 
 ::: pourquoi
@@ -2304,8 +2306,8 @@ au-delà, l'OOM killer du cgroup tue une tâche du service — et uniquement de 
 service. C'est toute la différence avec l'OOM global : la base de données et
 `sshd` ne sont plus menacés par la fuite d'une application.
 
-L'événement apparaît dans le journal sous la forme `Memory cgroup out of
-memory: Killed process ...`, ce qui est aussi un point de détection idéal pour
+L'événement apparaît dans le journal du noyau sous la forme `Memory cgroup out of
+memory: Killed process ...` (et systemd note dans celui de l'unité `A process of this unit has been killed by the OOM killer`), ce qui est aussi un point de détection idéal pour
 une alerte.
 :::
 
@@ -2348,7 +2350,7 @@ echo "  montage : $OPT"
 case ",$OPT," in *,ro,*) alerte "monte en LECTURE SEULE" ;; esac
 
 if command -v lsof >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-  RET=$(lsof +L1 2>/dev/null | awk -v p="$PM" '$0 ~ p {s+=$8} END \
+  RET=$(lsof +L1 2>/dev/null | awk -v p="$PM" '$0 ~ p {s+=$7} END \
     {printf "%d", s/1048576}')
   echo "  fichiers supprimes encore ouverts : ${RET} Mo retenus"
   [ "${RET:-0}" -ge 100 ] && alerte "${RET} Mo retenus par des fichiers \
@@ -2369,8 +2371,8 @@ exit "$RC"
 
 ```bash
 sudo lsof +L1 | grep /srv/vitrine/data
-# python3 8312 root 3w REG 7,3 499122176 0 13 .../gros.tmp (deleted)
-sudo truncate -s 0 /proc/8312/fd/3
+# sleep 8312 root 9w REG 7,3 419430400 0 13 .../gros.tmp (deleted)
+sudo truncate -s 0 /proc/8312/fd/9
 df -h /srv/vitrine/data          # l'espace revient immédiatement
 ```
 
@@ -2384,7 +2386,7 @@ sudo dd if=/dev/zero of=/var/tmp/inodes.img bs=1M count=32
 sudo mkfs.ext4 -q -N 256 /var/tmp/inodes.img       # 256 inodes seulement
 sudo mkdir -p /mnt/inodes && sudo mount -o loop /var/tmp/inodes.img /mnt/inodes
 sudo sh -c 'i=0; while :; do : > /mnt/inodes/f$i || break; i=$((i+1)); done'
-# touch: cannot touch '/mnt/inodes/f243': No space left on device
+# sh: 1: cannot create /mnt/inodes/f244: No space left on device
 df -h /mnt/inodes    # 1% utilisé
 df -i /mnt/inodes    # 100% d'inodes utilisés
 ```
@@ -2433,9 +2435,11 @@ dns=%{time_namelookup} tcp=%{time_connect} ttfb=%{time_starttransfer}
 total=%{time_total}\n
 EOF
 curl -w '@/tmp/fmt.txt' -o /dev/null -s http://10.10.10.11:8080/produits
-# dns=0.000019 tcp=0.000312 ttfb=5.012440 total=5.012502
+# dns=0.000019 tcp=0.000312 ttfb=5.012440
+# total=5.012502
 curl -w '@/tmp/fmt.txt' -o /dev/null -s http://10.10.10.11:8080/sante
-# dns=0.000018 tcp=0.000287 ttfb=0.001204 total=0.001255
+# dns=0.000018 tcp=0.000287 ttfb=0.001204
+# total=0.001255
 ```
 
 Enseignement immédiat : le temps n'est **pas** dans la résolution du client ni
@@ -2447,7 +2451,7 @@ est instantané : le serveur lui-même va bien, c'est ce qu'il appelle qui traî
 
 ```bash
 PID=$(systemctl show vitrine-api -p MainPID --value)
-sudo timeout 10 strace -f -T -p "$PID" 2>&1 | awk '$NF ~ /<[1-9]/'
+sudo timeout 10 strace -f -T -p "$PID" 2>&1 | grep -B2 '<[1-9]'
 ```
 
 ```text
@@ -2488,7 +2492,8 @@ sudo sed -i '/^nameserver 127.0.0.77/d' /etc/resolv.conf
 sudo sed -i 's/^#\(.*api-interne\)/\1/' /etc/hosts
 getent hosts api-interne.lab.local
 curl -w '@/tmp/fmt.txt' -o /dev/null -s http://10.10.10.11:8080/produits
-# dns=0.000019 tcp=0.000301 ttfb=0.002110 total=0.002174
+# dns=0.000019 tcp=0.000301 ttfb=0.002110
+# total=0.002174
 ```
 
 Mesure de fond, à écrire dans `latence.md` : au moins deux serveurs de noms
@@ -2525,15 +2530,17 @@ partagée, pas au niveau où elle a été vue.
 #!/usr/bin/env bash
 # ~/lab19/bin/preuves.sh [destination] — capture avant réparation.
 set -uo pipefail
-# On écrit par défaut sous /var/tmp, pas sous /var/log ni dans le home :
-# si le disque de l'incident est plein, on tente /dev/shm (en RAM).
-BASE="${1:-/var/tmp}"
+# Par défaut ~/lab19/preuves (de l'utilisateur, même lancé par sudo),
+# hors de /var/log et du volume de données ; si le disque de l'incident
+# est plein, on tente /dev/shm (en RAM).
+H=$(getent passwd "${SUDO_USER:-$(id -un)}" | cut -d: -f6)
+BASE="${1:-$H/lab19/preuves}"
 if ! df --output=avail "$BASE" 2>/dev/null | tail -1 | \
      awk '{exit !($1 > 51200)}'; then
   echo "moins de 50 Mo libres sur $BASE, bascule sur /dev/shm" >&2
   BASE=/dev/shm
 fi
-D="$BASE/preuves-$(hostname -s)-$(date +%F-%H%M%S)"
+D="$BASE/$(hostname -s)-$(date +%F-%H%M%S)"
 mkdir -p "$D" || exit 1
 
 c() { printf '\n### %s\n' "$*" >> "$D/$FIC"; "$@" >> "$D/$FIC" 2>&1; }
@@ -2589,8 +2596,8 @@ datées dont une de **prévention** et une de **détection**.
 
 ::: pourquoi
 Le point 3 est le seul du lab qui soit vraiment technique, et c'est le plus
-souvent bâclé. Trois détails le distinguent d'un script naïf : il écrit dans
-`/var/tmp` (hors de `/var/log`, qui est peut-être justement le volume plein),
+souvent bâclé. Trois détails le distinguent d'un script naïf : il écrit dans `~`
+`/lab19/preuves` (hors de `/var/log` et du volume de données, qui sont peut-être justement pleins),
 il bascule sur `/dev/shm` si l'espace manque — écrire des preuves en RAM est
 acceptable le temps de les copier ailleurs —, et il **rappelle de sortir
 l'archive de la machine**. Des preuves restées sur la machine qu'on va
@@ -2752,7 +2759,7 @@ sudo perf report -i perf-apres.data --stdio --no-children 2>/dev/null \
 Gain ×25 à ×30 ; +1 Mo de RSS pour l'index (6 000 entrées). Le profil après
 correction est **plat** : le temps se répartit entre lecture CSV, calcul
 et tri, aucune fonction ne domine — c'est le signe qu'on a fini. Sur le jeu
-doublé, 0,46 s contre 0,24 : linéaire, contre 4× avec l'ancien code.
+doublé, 0,46 s contre 0,24 : linéaire. L'ancien code doublait aussi (O(N × M) est linéaire en N à M fixe) : c'est en doublant **aussi** les clients qu'il aurait quadruplé, alors que le nouveau ne ferait que doubler.
 
 **7. Décider** (`profilage.md`, points attendus) : baseline 6,4 s / hash ;
 CPU mono-thread (`pidstat`, `perf stat`) ; `perf record -g` +
@@ -3255,7 +3262,7 @@ head -1 /etc/sysctl.d/99-m16-05-reseau.conf
 
 **Cause racine** : un fichier `sysctl.d` déposé lors d'un « durcissement
 réseau » réduit la plage de ports éphémères de 28 232 à 11, double le
-`tcp_fin_timeout` (donc double la durée d'immobilisation des ports) et ramène la
+`tcp_fin_timeout` (qui allonge `FIN_WAIT_2`, pas `TIME_WAIT`, figé à 60 s) et ramène la
 table de suivi de connexions à 256 entrées. Tant que le trafic est faible, rien
 ne se voit ; dès que l'application ouvre plusieurs connexions sortantes par
 seconde, elle épuise la plage.
@@ -3264,7 +3271,10 @@ seconde, elle épuise la plage.
 
 ```bash
 sudo rm /etc/sysctl.d/99-m16-05-reseau.conf
-sudo sysctl --system            # recharge tout, y compris les défauts
+# sysctl --system ne remet PAS les défauts des clés qu'aucun fichier ne
+# définit : on repose à la main les valeurs par défaut du noyau
+sudo sysctl -w net.ipv4.ip_local_port_range="32768 60999" \
+  net.ipv4.tcp_fin_timeout=60 net.netfilter.nf_conntrack_max=65536
 sysctl net.ipv4.ip_local_port_range   # 32768 60999
 ```
 
@@ -3598,7 +3608,7 @@ journalctl -u vitrine-api -b --no-pager -o short-precise | head -40
 # 17:02:11.318 vitrine-api[4412]: en ecoute sur 0.0.0.0:8080
 # 17:02:16.205 vitrine-api.service: Service reached runtime time limit.
 #              Stopping.
-# 17:02:16.210 vitrine-api.service: Deactivated successfully.
+# 17:02:16.210 vitrine-api.service: Failed with result 'timeout'.
 # 17:02:16.211 vitrine-api.service: Scheduled restart job, restart counter
 #              is at 1.
 # ...

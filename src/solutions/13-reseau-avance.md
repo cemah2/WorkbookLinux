@@ -37,8 +37,8 @@ défaut dans un netns, le jeu de règles nftables y est vide. d) : `nsenter` et
 ::: pourquoi
 Les interfaces ont un index par namespace. Une paire veth est deux interfaces
 liées ; quand l'une est déplacée dans un autre netns, `ip link` affiche
-`nom@ifN` où `N` est l'index (`link-netnsid`) du pair **dans son namespace à
-lui**. `ip -d link show eth0` dans `c1` ajoute `link-netnsid 0` (le namespace
+`nom@ifN` où `N` est l'index du pair **dans son namespace à
+lui** (namespace désigné, lui, par `link-netnsid`). `ip -d link show eth0` dans `c1` ajoute `link-netnsid 0` (le namespace
 du pair, vu depuis `c1`), et `ip link | grep '@if'` dans le netns racine montre
 l'autre bout, `veth-c1@if5` : les deux indices se répondent.
 
@@ -68,7 +68,7 @@ Il faut distinguer trois chemins pour un paquet qui sort de `c1` :
 * vers `172.20.0.1` : la destination **est** une adresse locale du netns
   racine → chaîne **`input`**, pas `forward`.
 
-Un jeu de règles typique (module 18, ou celui de E13.11) a une chaîne `input`
+Un jeu de règles typique (module 18, ou celui de E13.11 privé de sa règle ICMP) a une chaîne `input`
 en `policy drop` qui n'autorise pas ICMP depuis `172.20.0.0/24`, alors que la
 chaîne `forward` accepte tout ce qui part de `br-lab`. Résultat : le bridge
 relaie, mais ne répond pas lui-même. `nft list chain inet filter input` et un
@@ -79,7 +79,7 @@ relaie, mais ne répond pas lui-même. `nft list chain inet filter input` et un
 a) : bridge `DOWN`, rien ne passerait, même pas `c1` ↔ `c2`. c) :
 `masquerade` ne s'applique qu'en `postrouting` sur les paquets **sortant** par
 l'interface indiquée (`oifname "ens18"`), jamais à du trafic `input`.
-d) : `172.20.0.1` est dans `172.20.0.0/24`, la route connectée suffit.
+b) : `172.20.0.1` est dans `172.20.0.0/24`, la route connectée suffit.
 :::
 
 ---
@@ -220,7 +220,7 @@ continuent. C'est le motif « les sessions ouvertes marchent, les nouvelles
 Correctif immédiat : `sysctl -w net.netfilter.nf_conntrack_max=262144` (et
 `nf_conntrack_buckets` à `max/4` via `/sys/module/nf_conntrack/parameters/
 hashsize`, sinon les listes chaînées s'allongent). Puis chercher la cause :
-`conntrack -L | awk '{print $4}' | sort | uniq -c | sort -rn | head` (par
+`conntrack -L | awk '{for(i=1;i<=NF;i++) if($i~/^src=/){print $i; next}}' | sort | uniq -c | sort -rn | head` (par
 source), ou par état (`conntrack -L | grep -c UNREPLIED`). Beaucoup d'UDP non
 répondus = scan ou DNS en boucle ; beaucoup de `TIME_WAIT` = serveur web très
 sollicité, on peut abaisser `nf_conntrack_tcp_timeout_time_wait`.
@@ -331,8 +331,7 @@ Quand `ens19` revient, le bond y retourne **si** `primary ens19` est défini et
 
 ---
 
-**Q13.13** — *Sous-interface VLAN 10 créée, mais rien ne circule, `tcpdump -e
-vlan 10` vide.*
+**Q13.13** — *Sous-interface VLAN 10 créée, mais rien ne revient : `tcpdump`* `-e vlan 10` *ne montre que les ARP sortants.*
 
 **Réponse : b)** vérifier que `vmbr1` est VLAN-aware et que le port n'est pas
 en mode access.
@@ -396,7 +395,7 @@ dynamiques où BIND gère le serial lui-même.
 ::: piege
 a) : `allow-transfer` se configure sur le **primaire** ; mal réglé, le
 secondaire journalise `transfer ... failed: REFUSED`, ce serait visible.
-d) : AXFR passe en **TCP** ; et un filtrage donnerait aussi une erreur.
+b) : AXFR passe en **TCP** ; et un filtrage donnerait aussi une erreur.
 :::
 
 ---
@@ -417,8 +416,8 @@ qui « recouvre » toutes les adresses : `bind()` échoue alors avec
 D'où les directives `interface:` (Unbound) et `listen-on { ...; }` (BIND)
 explicites dans le lab, et le piège classique : installer `bind9` sur une
 machine avec `systemd-resolved` sans toucher `listen-on` — BIND démarre
-souvent malgré tout (il se lie interface par interface), mais `dnsmasq` avec
-`bind-interfaces` ou un `named` en `listen-on { any; }` peut échouer.
+malgré tout (il se lie adresse par adresse, et `127.0.0.53` n'est l'adresse d'aucune interface), mais il prend alors aussi `10.10.10.53:53` avant Unbound; et `dnsmasq` **sans**
+`bind-interfaces` (socket joker) échoue.
 :::
 
 ---
@@ -478,8 +477,7 @@ parler de Docker.*
 2. **Forwarding** : `sysctl -w net.ipv4.ip_forward=1`, et chargement de
    `br_netfilter` pour que le trafic entre conteneurs passe aussi par
    `forward` (c'est ce qui permet l'isolation entre réseaux).
-3. **NAT de sortie** : `nft add rule ip nat POSTROUTING ip saddr
-   172.17.0.0/16 oifname != "docker0" masquerade` (Docker l'écrit via
+3. **NAT de sortie** : `nft add rule ip nat POSTROUTING ip saddr 172.17.0.0/16 oifname != "docker0" masquerade` (Docker l'écrit via
    `iptables-nft`, c'est la même chose).
 4. **Chaînes de filtrage** : `FORWARD` → `DOCKER-USER` (vide, pour toi),
    `DOCKER-ISOLATION-STAGE-1/2`, `DOCKER`, puis `established,related accept`
@@ -575,15 +573,16 @@ choses cassent alors, selon le réseau :
 Correctif (réponse par l'interface d'arrivée) :
 
 ```bash
+sudo mkdir -p /etc/iproute2/rt_tables.d
 echo "200 viab" | sudo tee /etc/iproute2/rt_tables.d/lab.conf
 ip route add 10.10.12.0/24 dev eth2 src 10.10.12.2 table viab
 ip route add default via 10.10.12.1 dev eth2 table viab
 ip rule add from 10.10.12.2 table viab priority 100
 ```
 
-Preuve sans paquet : `ip route get 192.168.2.10 from 10.10.12.2 iif eth2`
-doit répondre `via 10.10.12.1 dev eth2 src 10.10.12.2`, alors que `ip route
-get 192.168.2.10` (source par défaut) répond `via 10.10.11.1 dev eth1`.
+Preuve sans paquet : `ip route get 192.168.2.10 from 10.10.12.2`
+doit répondre `via 10.10.12.1 dev eth2`, alors que `ip route
+get 192.168.2.10` (source par défaut) répond `via 10.10.11.1 dev eth1`. Pas de `iif` ici : la réponse est émise **localement**; `from <adresse locale> iif eth2` simulerait un paquet **reçu** portant l'adresse de la machine en source, que le noyau refuse (erreur `RTNETLINK answers: ...`).
 
 ::: pourquoi
 La règle `from` fait le lien entre l'adresse **source** du paquet de réponse
@@ -1118,7 +1117,8 @@ route` (table `main`) ne change de façon visible.
 **E13.8** — *Table `secours`, marque `0x5`, routage par marque.*
 
 ```bash
-echo "150 secours" | sudo tee /etc/iproute2/rt_tables.d/lab.conf
+sudo mkdir -p /etc/iproute2/rt_tables.d
+echo "150 secours" | sudo tee /etc/iproute2/rt_tables.d/secours.conf
 sudo ip route add default via 172.20.0.13 dev br-lab table secours
 sudo ip rule add fwmark 0x5 table secours priority 100
 sudo nft add table inet mangle
@@ -1135,7 +1135,7 @@ ping -c1 -W1 198.51.100.7             # part vers c3 (qui ne relaie pas : muet)
 sudo nft delete table inet mangle
 sudo ip rule del fwmark 0x5 table secours
 sudo ip route flush table secours
-sudo rm /etc/iproute2/rt_tables.d/lab.conf
+sudo rm /etc/iproute2/rt_tables.d/secours.conf
 ```
 
 ::: pourquoi
@@ -1313,7 +1313,9 @@ deux : seul `nft list ruleset` montre l'ensemble. `iptables-restore-translate
 **E13.13** — *`nftrace` et `nft monitor trace` sur le port 8080.*
 
 ```bash
-sudo nft add rule ip nat prerouting tcp dport 8080 meta nftrace set 1
+# insert, pas add : un dnat qui matche termine la chaîne nat, une règle
+# ajoutée derrière ne serait jamais évaluée
+sudo nft insert rule ip nat prerouting tcp dport 8080 meta nftrace set 1
 sudo nft monitor trace        # terminal 1
 # terminal 2, depuis lab-web : curl -s http://10.10.10.10:8080/ >/dev/null
 ```
@@ -1322,6 +1324,8 @@ Trace (résumée) pour le SYN :
 
 ```text
 trace id 3a7f ip nat prerouting packet: iif "ens18" ... tcp dport 8080
+trace id 3a7f ip nat prerouting rule tcp dport 8080 meta nftrace set 1
+    (verdict continue)
 trace id 3a7f ip nat prerouting rule tcp dport 8080 dnat to 172.20.0.11:8000
     (verdict accept)
 trace id 3a7f inet filter forward packet: iif "ens18" oif "br-lab"
@@ -1473,7 +1477,7 @@ up() {
   ip link set "$BR" up
   for i in 1 2 3; do
     ns=c$i
-    ip netns list | grep -qx "$ns" || ip netns add "$ns"
+    [ -e "/run/netns/$ns" ] || ip netns add "$ns"
     ip -n "$ns" link show eth0 >/dev/null 2>&1 \
       || ip link add "veth-$ns" type veth peer name eth0 netns "$ns"
     ip link set "veth-$ns" master "$BR" up
@@ -1576,7 +1580,7 @@ table inet filter {
 `flush table` échoue si la table n'existe pas : la déclaration vide
 `table ip nat {}` juste avant la crée si besoin (et ne touche à rien si elle
 existe), ce qui rend le fichier rechargeable à volonté. Tout le fichier est
-appliqué en une transaction : soit tout, soit rien.
+appliqué en une transaction : soit tout, soit rien. Côté script, le test d'existence d'un netns se fait sur `/run/netns/<nom>` : `ip netns list` affiche `c1 (id: 0)` dès qu'un pair veth y a été déplacé, un `grep -x c1` échouerait au second `up`.
 
 Vérifications :
 
@@ -1672,8 +1676,10 @@ Aller : `192.168.2.10 → 10.10.12.2` via `gw2`, arrive dans `dual` par `eth2`.
 Retour :
 
 ```bash
-sudo ip -n dual route get 192.168.2.10 from 10.10.12.2 iif eth2
-# 192.168.2.10 from 10.10.12.2 via 10.10.11.1 dev eth1
+sudo ip -n gw2 route get 10.10.12.2 from 192.168.2.10 iif lan
+# 10.10.12.2 from 192.168.2.10 dev wan   -- aller : relayé par gw2
+sudo ip -n dual route get 192.168.2.10 from 10.10.12.2
+# 192.168.2.10 from 10.10.12.2 via 10.10.11.1 dev eth1   -- retour
 sudo ip netns exec gw1 tcpdump -i wan -nn icmp -c 2
 # IP 10.10.12.2 > 192.168.2.10: ICMP echo reply   -- arrive dans gw1
 ```
@@ -1728,12 +1734,12 @@ symétrique (ou une passerelle sans état) passent, les autres non.
 **Étape 4 — correction.**
 
 ```bash
+sudo mkdir -p /etc/iproute2/rt_tables.d
 echo "200 prod" | sudo tee /etc/iproute2/rt_tables.d/lab.conf
-sudo ip -n dual route del 192.168.2.0/24
 sudo ip -n dual route add 10.10.12.0/24 dev eth2 src 10.10.12.2 table prod
 sudo ip -n dual route add default via 10.10.12.1 dev eth2 table prod
 sudo ip -n dual rule add from 10.10.12.2 table prod priority 100
-sudo ip -n dual route get 192.168.2.10 from 10.10.12.2 iif eth2
+sudo ip -n dual route get 192.168.2.10 from 10.10.12.2
 # 192.168.2.10 from 10.10.12.2 via 10.10.12.1 dev eth2
 sudo ip netns exec c-prod nc -zv 10.10.12.2 9000     # succeeded
 ```
@@ -1767,8 +1773,7 @@ port, utilisateur (`meta skuid`), ou quand on veut router le trafic
 **Étape 6 — `rp_filter`.** Sans la règle de policy routing, `sysctl -w
 net.ipv4.conf.all.rp_filter=1` dans `dual` : les paquets de `192.168.2.10`
 arrivant par `eth2` sont jetés à l'entrée, parce que la route de retour vers
-`192.168.2.10` (table `main`) pointe sur `eth1` — `nstat -az IPReversePathFilter`
-(compteur `TcpExtIPReversePathFilter`) s'incrémente. Avec `2` (loose), le
+`192.168.2.10` (table `main`) pointe sur `eth1` — `ip netns exec dual` `nstat -az` `TcpExtIPReversePathFilter` s'incrémente. Avec `2` (loose), le
 noyau vérifie seulement qu'**une** route vers la source existe, par n'importe
 quelle interface : c'est la valeur pour un routeur multi-liens ou un hôte
 policy-routé (Ubuntu 24.04 met déjà `2` par défaut via
@@ -1801,15 +1806,14 @@ entré », information qui n'existe que dans la **source** de la réponse (ou
 dans une marque de connexion). `ip rule` ajoute cette dimension. Trois
 règles d'or : une table par interface secondaire, avec ses routes connectées
 **et** sa passerelle ; une règle `from <adresse de l'interface>` ; et
-`rp_filter=2`. Tout ce que `ip route get ... from ... iif` ne valide pas ne
+`rp_filter=2`. Tout ce que `ip route get ... from ...` ne valide pas ne
 marchera pas en production.
 :::
 
 ::: piege
 Oublier la route connectée dans la table dédiée (Q13.4) envoie le trafic
-local du segment à la passerelle. Et une règle `from` sans `priority` se
-place **devant** `main` (32766) mais derrière les règles ajoutées avant : l'ordre
-d'ajout compte, `ip rule` avec numéros explicites évite les surprises.
+local du segment à la passerelle. Et une règle `from` sans `priority` reçoit la plus petite priorité existante moins un : elle passe **devant** `main` (32766) et devant les règles ajoutées avant elle. L'ordre
+d'ajout compte : des numéros explicites évitent les surprises.
 :::
 
 ---
@@ -1914,15 +1918,14 @@ TSO de 64 ko).
 
 **Étape 7 — MTU cassé.** `ip link set vxlan0 mtu 1500` sur `lab-web` :
 `ping -M do -s 1472 192.168.42.12` → plus de « message too long » local (le
-paquet tient dans 1500) ; sur `lab-db`, `tcpdump -i ens18 -nn 'udp port 4789
-or (ip[6:2] & 0x1fff != 0)'` montre des paquets `length 1514` suivis de
+paquet tient dans 1500) ; sur `lab-db`, `tcpdump -i ens18 -nn 'udp port 4789 or (ip[6:2] & 0x1fff != 0)'` montre des paquets `length 1514` suivis de
 fragments `frag 0x...:...@1480` : l'externe de 1550 a été fragmenté en deux.
 Ça fonctionne (lentement) tant que rien ne filtre les fragments ; BF13.4
 montre ce qui arrive sinon. `ip link set vxlan0 mtu 1450`.
 
 **Étape 8.** `tc qdisc add dev ens18 root netem delay 50ms loss 1%` sur
 `lab-db` : le débit VXLAN tombe à quelques dizaines de Mbit/s (1 % de perte
-avec 100 ms de RTT tue le contrôle de congestion TCP : `Retr` explose) ;
+avec 50 ms de RTT en plus — `netem` n'agit que dans le sens émis par `lab-db` — tue le contrôle de congestion TCP : `Retr` explose) ;
 `tc qdisc del dev ens18 root`.
 
 **Étape 9 — conclusion type.** VXLAN : L2 étendu, sans chiffrement, coût CPU
@@ -2237,8 +2240,7 @@ plages RFC 1918, par hygiène).
 `*.local` en multicast et **pas** au DNS unicast, sauf si `local` (ou
 `lab.local`) est un domaine de recherche/routage du lien — c'est le rôle de
 `search: [lab.local]` ici. Pour un vrai réseau, préfère `lab.internal` ou
-`home.arpa`. Deuxième piège : `listen-on` de BIND par défaut est `any`, ce
-qui entre en conflit avec `127.0.0.53` et avec Unbound sur la même VM.
+`home.arpa`. Deuxième piège : `listen-on` de BIND par défaut est `any` : il se lie à toutes les adresses de la VM, dont `10.10.10.53`, et Unbound ne peut plus démarrer sur la même VM.
 :::
 
 ---
@@ -2437,8 +2439,8 @@ CPU nul.*
    table full, dropping packet` répété.
 2. `sysctl net.netfilter.nf_conntrack_max net.netfilter.nf_conntrack_count` :
    `max = 128`, `count = 128`. Une valeur de `max` ridicule.
-3. Qui remplit ? `sudo conntrack -L | awk '{print $1, $4}' | sort | uniq -c
-   | sort -rn | head` : une centaine d'entrées `udp` `src=10.10.10.10` vers
+3. Qui remplit ? `sudo conntrack -L | awk '{print $1, $4}' | sort | uniq -c |
+   sort -rn | head` : une centaine d'entrées `udp` `src=10.10.10.10` vers
    des ports variés, en `UNREPLIED`. `sudo conntrack -L -p udp | head -3` :
    timeout restant ~3 500 s alors qu'un UDP sans réponse devrait expirer en
    30 s. `sysctl net.netfilter.nf_conntrack_udp_timeout` → `3600`.
@@ -2476,7 +2478,7 @@ le noyau ne refuse que la **création** d'entrées. `conntrack -F` aurait
 « réparé » en trente secondes... et coupé toutes les sessions NATées (le
 port publié, les sorties des conteneurs) : `-D` avec un filtre est le geste
 précis. `nf_conntrack_max` par défaut est calculé sur la RAM
-(`nf_conntrack_buckets × 4`, souvent 65 536 sur 2 Go) ; Docker et Kubernetes
+(un multiple fixe de `nf_conntrack_buckets`, de l'ordre de 65 536 à 131 072 sur 2 Go selon le noyau) ; Docker et Kubernetes
 le montent eux-mêmes (kube-proxy : 131 072 par cœur).
 :::
 
@@ -2569,16 +2571,13 @@ gelés, l'autre sens fonctionne.*
    « message too long », juste un timeout. Un timeout au lieu de l'erreur
    locale signifie que l'interface accepte le paquet : `ip -d link show
    vxlan0` → `mtu 1500`. Anomalie 1.
-2. Sur `lab-db`, `sudo tcpdump -i ens18 -nn -v 'host 10.10.10.11 and
-   (udp port 4789 or ip[6:2] & 0x1fff != 0)'` pendant le `ping -s 1423` :
-   `IP (flags [+], proto UDP) 10.10.10.11 > 10.10.10.12: udp` puis `IP
-   (frag 12345:71@1480)` — le paquet externe de 1551 octets arrive en **deux
+2. Sur `lab-db`, `sudo tcpdump -i ens18 -nn -v 'host 10.10.10.11 and (udp port 4789 or ip[6:2] & 0x1fff != 0)'` pendant un `ping -M do -s 1472` (paquet interne de 1500 octets) :
+   `IP (flags [+], proto UDP) 10.10.10.11 > 10.10.10.12: udp` puis `IP (frag 12345:50@1480)` — le paquet externe de 1550 octets arrive en **deux
    fragments**. Ils arrivent, mais le tunnel ne les voit pas : `tcpdump -i
    vxlan0` sur `lab-db` ne montre rien pour ce `ping`.
 3. Des fragments qui arrivent sur `ens18` et n'atteignent pas la pile :
    `sudo nft list ruleset` sur `lab-db` → une table `inet sitefw` avec une
-   chaîne `prerouting priority -450` et la règle `ip frag-off & 0x3fff != 0
-   counter drop`, compteur non nul. Anomalie 2 : « le pare-feu du site jette
+   chaîne `raw_in` (hook `prerouting`, priorité `-450`) et la règle `ip frag-off & 0x3fff != 0 counter drop`, compteur non nul. Anomalie 2 : « le pare-feu du site jette
    les fragments », à une priorité qui précède le réassemblage (`-400`).
 4. Dans l'autre sens, `lab-db` a gardé `vxlan0` à 1450 : ses paquets
    externes font au plus 1500, jamais de fragment, donc rien à jeter.
@@ -2646,9 +2645,11 @@ réponse aléatoire du résolveur.*
    modifiée **sans** changer le serial.
 2. Sur `lab-ops`, `grep -c monitoring /etc/bind/zones/db.lab.local` → 1,
    `journalctl -u named | tail` : `zone lab.local/IN: loaded serial
-   2026091902` (le même qu'avant) puis `sending notifies`. Sur `lab-adm` :
-   `received notify for zone 'lab.local'` puis `zone lab.local/IN: notify
-   from 10.10.10.14#...: zone is up to date`. Le secondaire a vérifié et a
+   2026091902` (le même qu'avant), précédé de l'avertissement
+   `zone serial (2026091902) unchanged. zone may fail to transfer to secondaries`,
+   puis `sending notifies`. Sur `lab-adm` : `received notify for zone 'lab.local'`
+   puis `zone lab.local/IN: notify from 10.10.10.14#...: zone is up to date`.
+   Le secondaire a vérifié et a
    conclu, correctement d'après le protocole, qu'il n'y avait rien à
    transférer.
 3. Le « parfois » du résolveur : Unbound a deux `stub-addr` (`ns1`, `ns2`)
@@ -2797,7 +2798,7 @@ WAN=ens18; NFT_ROOT=/home/mathieu/lab13/nft/minicloud-root.nft
 NFT_RTR=/home/mathieu/lab13/nft/minicloud-rtr.nft
 WWW=/home/mathieu/lab13/www; ZONE=/home/mathieu/lab13/dns/minicloud.zone.inc
 
-ns_add() { ip netns list | grep -qx "$1" || ip netns add "$1"
+ns_add() { [ -e "/run/netns/$1" ] || ip netns add "$1"
            ip -n "$1" link set lo up; }
 veth_ns() { # veth_ns <ns> <ifname dans ns> <ip/len> <bridge racine>
   ip -n "$1" link show "$2" >/dev/null 2>&1 || {
@@ -2843,7 +2844,7 @@ up() {
   printf 't1-web.cloud IN A 10.100.1.11\nt1-db.cloud  IN A 10.100.1.12\n' \
     > "$ZONE"
   printf 't2-web.cloud IN A 10.100.2.11\nt2-db.cloud  IN A 10.100.2.12\n' \
-    >> "$ZONE"
+    -> "$ZONE"
 }
 ```
 
@@ -2881,7 +2882,10 @@ table inet minicloud {
     iifname "t1" oifname "t2" counter drop      # isolation
     iifname "t2" oifname "t1" counter drop
     iifname { "t1", "t2" } oifname "tr" accept  # sortie
-    iifname "tr" ct status dnat accept          # ports publiés
+    # ports publiés : PAS "ct status dnat" ici, le DNAT a eu lieu dans le
+    # conntrack du netns racine, pas dans celui de rtr (voir ci-dessous)
+    iifname "tr" ip daddr { 10.100.1.11, 10.100.2.11 } tcp dport 8000 \
+        ct state new accept
   }
   chain postrouting {
     type nat hook postrouting priority 100; policy accept;
@@ -2900,10 +2904,10 @@ doit savoir que ce préfixe est derrière `rtr`. Sans elle, `ip route get
 `dnat to 10.100.2.11:8000` (via la map), `forward` (aucune table filter :
 accept), `postrouting` (pas de masquerade, `oifname` est `tr-root`). Dans
 `rtr` (`ip netns exec rtr nft monitor trace` avec une règle `nftrace` sur
-`tcp dport 8000`) : `forward` → `iifname "tr" ct status dnat accept`…
+`tcp dport 8000`) : `forward` → on serait tenté d'écrire `iifname "tr" ct status dnat accept`…
 **non** : dans `rtr`, le paquet n'a pas été DNATé (c'est le netns racine qui
 l'a fait, chaque netns a son conntrack) : `ct status dnat` est faux dans
-`rtr`. La règle correcte dans `rtr` est `iifname "tr" ip daddr {
+`rtr`, et le paquet tomberait sur le `drop`. D'où la règle du fichier ci-dessus : `iifname "tr" ip daddr {
 10.100.1.11, 10.100.2.11 } tcp dport 8000 ct state new accept`. C'est le
 piège du défi, et la raison de l'astuce « `conntrack -L` dans chaque
 netns ».
@@ -2932,7 +2936,7 @@ le faire avec `install -m 644`), incrémenter le serial, `rndc reload`.
 `t1-web.cloud.lab.local.`.
 
 **`down`.** Tuer les processus de chaque netns (`ip netns pids`), supprimer
-les cinq netns (les veth suivent), `ip link del br-t1 br-t2` (`tr-root`
+les cinq netns (les veth suivent), `ip link del br-t1` puis `ip link del br-t2` (`tr-root`
 disparaît avec `rtr`), `nft delete table ip minicloud`, les routes vers
 `10.100.x.0/24` (elles disparaissent avec `tr-root`), `ip_forward` restauré.
 

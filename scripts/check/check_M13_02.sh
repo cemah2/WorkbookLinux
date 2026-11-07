@@ -54,11 +54,12 @@ else
 fi
 
 # --- 3. la preuve : route get, ping, TCP --------------------------------
-if ip -n dual route get 192.168.2.10 from 10.10.12.2 iif eth2 2>/dev/null \
+# réponse émise localement par dual : pas de iif (source locale = martienne)
+if ip -n dual route get 192.168.2.10 from 10.10.12.2 2>/dev/null \
    | grep -q 'via 10\.10\.12\.1 dev eth2'; then
   ok "ip route get : la réponse à c-prod sort par eth2"
 else
-  ko "ip route get ... from 10.10.12.2 iif eth2 ne sort pas via 10.10.12.1"
+  ko "ip route get 192.168.2.10 from 10.10.12.2 ne sort pas via 10.10.12.1"
 fi
 if ip netns exec c-prod ping -c1 -W1 10.10.12.2 >/dev/null 2>&1; then
   ok "ping c-prod -> dual"

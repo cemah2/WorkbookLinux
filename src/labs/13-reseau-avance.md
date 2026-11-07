@@ -263,7 +263,7 @@ bridge fdb show dev vxlan0            # 00:00:00:00:00:00 dst 10.10.10.12
 ip -d link show vxlan0
 ```
 
-@fig(vxlan-overlay): lab-web et lab-db sur l'underlay 10.10.10.0/24, `vxlan0` (VNI 42, UDP 4789) formant l'overlay 192.168.42.0/24, et la pile d'encapsulation qui explique le MTU 1450.
+@fig(vxlan-overlay): lab-web lab-db vxlan0 192.168.42.11/24 VNI 42 · MTU 1450 ens18 10.10.10.11 MTU 1500 vxlan0 192.168.42.12/24 VNI 42 · MTU 1450 ens18 10.10.10.12 MTU 1500 encapsule décapsule overlay 192.168.42.0/24 L2 étendu : `ping 192.168.42.12` underlay 10.10.10.0/24 UDP 4789 de 10.10.10.11 vers 10.10.10.12 (`bridge fdb show dev vxlan0`) la trame sur le fil, de l'extérieur vers l'intérieur lab-web et lab-db sur l'underlay 10.10.10.0/24, `vxlan0` (VNI 42, UDP 4789) formant l'overlay 192.168.42.0/24, et la pile d'encapsulation qui explique le MTU 1450.
 
 VXLAN encapsule une **trame Ethernet** complète dans UDP : c'est un L2 étendu
 sur un réseau L3. flannel (backend `vxlan`) crée exactement un `flannel.1`
@@ -378,8 +378,8 @@ Le NAT est décidé sur le **premier** paquet du flux et mémorisé dans
 conntrack ; les suivants (et les retours) sont réécrits sans repasser par les
 règles. D'où : sans conntrack, pas de NAT ; `conntrack -F` sur un routeur NAT
 coupe les sessions. Un DNAT en `prerouting` ne voit **pas** les paquets émis
-par la machine elle-même (ils passent par `output`), ni ceux d'un client situé
-sur le même segment que la cible sans SNAT de retour (hairpin).
+par la machine elle-même (ils passent par `output`); et pour un client situé
+sur le même segment que la cible, il faut en plus un SNAT de retour (hairpin), sinon la réponse court-circuite le routeur.
 
 Docker : chaînes `DOCKER`, `DOCKER-USER`, `DOCKER-ISOLATION-STAGE-1/2` dans
 `filter`, `DOCKER` dans `nat`. Seule `DOCKER-USER` est réservée à
@@ -626,8 +626,8 @@ b) `ens19`, esclave primaire, a perdu sa porteuse une fois ; le bond a basculé
 c) le bond est en panne, aucun esclave n'est actif
 d) le mode LACP a échoué à négocier
 
-**Q13.13** — Sur `lab-adm`, `tcpdump -i ens18 -nn -e vlan 10` ne montre rien,
-alors que `ip -d link show ens18.10` prouve que la sous-interface existe et que
+**Q13.13** — Sur `lab-adm`, `tcpdump -i ens18 -nn -e vlan 10` ne montre que les requêtes ARP sortantes, jamais de réponse,
+alors que `ip -d link show ens18.10` prouve que la sous-interface existe;
 `ping` sur ce VLAN ne répond pas. Que vérifies-tu en priorité côté Proxmox ?
 
 a) que la VM a au moins 2 vCPU
@@ -714,7 +714,7 @@ lignes: 12
 **QO13.3** — Une machine a deux interfaces sur deux réseaux, chacune avec sa
 passerelle. Les clients du réseau B se plaignent : le `ping` passe mais toute
 connexion TCP échoue ou se coupe. Explique le mécanisme (route asymétrique,
-`rp_filter`, pare-feu stateful en face), puis donne la configuration `ip rule`
+`rp_filter`, pare-feu stateful en face), puis donne la configuration `ip rule` +
 + table dédiée qui corrige, et la commande qui **prouve** la correction sans
 envoyer un seul paquet.
 
@@ -834,7 +834,7 @@ explique ses deux tuples.
 la table `local`. Explique trois lignes de cette table (une `local`, une
 `broadcast`, celle de `127.0.0.0/8`). Puis ajoute une route vers
 `10.10.30.0/24` via `10.10.10.99` **alors que `10.10.10.99` n'existe pas**, et
-une seconde via `192.0.2.1` avec `onlink`. Laquelle est acceptée, laquelle est
+une seconde via `192.0.2.1`, d'abord sans puis avec `onlink`. Lesquelles sont acceptées, laquelle est
 refusée, et pourquoi ?
 
 **E13.8** — Crée une table nommée `secours` (numéro 150), mets-y une route par
@@ -963,7 +963,7 @@ Travaille sur `lab-adm`. Livrables : `~/lab13/bin/minidocker.sh` (`up`,
    objet que tu as créé. Trois lignes dans le rapport.
 
 ::: astuce
-Pour un script idempotent : `ip netns list | grep -qx c1 || ip netns add c1`,
+Pour un script idempotent : `[ -e /run/netns/c1 ] || ip netns add c1` (pas `ip netns list | grep -x c1` : dès qu'un pair veth y est déplacé, la ligne devient `c1 (id: 0)`),
 `ip link show br-lab >/dev/null 2>&1 || ip link add br-lab type bridge`.
 Et `nft -f` avec `flush table ip nat` en tête de fichier remplace la table
 d'un bloc, atomiquement.
@@ -1005,9 +1005,9 @@ Maquette dans des netns sur `lab-adm` (variante réelle en fin de lab) :
    `gw1` ne connaît pas `192.168.2.0/24`, `gw2` ne connaît pas `192.168.1.0/24`
    (c'est le point).
 2. Reproduis la panne : depuis `c-prod`, `ping 10.10.12.2` puis
-   `ping 10.10.11.2`. L'un des deux échoue. Trace le trajet aller et le trajet
-   retour du paquet qui échoue avec `ip -n dual route get ... from ... iif ...`
-   et une capture dans `gw1`. Écris dans `~/lab13/rapports/policy-routing.md`
+   `ping 10.10.11.2`. L'un des deux échoue. Trace le trajet aller (paquet relayé : `ip -n gw2 route get ... from ... iif ...`) et le trajet
+   retour ( paquet émis par `dual` : `ip -n dual route get ... from ...`) du paquet qui échoue,
+   et fais une capture dans `gw1`. Écris dans `~/lab13/rapports/policy-routing.md`
    où le paquet meurt et pourquoi aucun message d'erreur ne revient.
 3. Rends la panne « intermittente » comme dans le ticket : relie `gw1` et
    `gw2` par une veth de transit (`10.10.99.0/30`) et donne à chacune la route
@@ -1020,7 +1020,7 @@ Maquette dans des netns sur `lab-adm` (variante réelle en fin de lab) :
 4. Corrige proprement : table nommée `prod` dans `/etc/iproute2/rt_tables.d/`,
    route par défaut via `10.10.12.1` dans cette table, **plus la route
    directement connectée** `10.10.12.0/24`, règle `from 10.10.12.2`. Prouve
-   avec `ip route get` (avec `from` et `iif`) que la réponse à `c-prod` sort par
+   avec `ip route get` (avec `from`) que la réponse à `c-prod` sort par
    `eth2`, puis que le TCP s'établit.
 5. Variante par marque : remplace la règle par source par une règle `fwmark`
    posée avec `nft` en `prerouting` (marque de connexion restaurée avec
@@ -1239,7 +1239,7 @@ Livrable : `~/lab13/rapports/bonding.md`.
    ligne `journalctl -k` du noyau. Rétablis la NIC : le bond revient-il sur
    `ens19` ? Pourquoi (paramètre `primary`, `primary_reselect`) ?
 5. Rends la configuration persistante avec Netplan (`bonds:` avec `parameters`
-   : `mode`, `primary`, `mii-monitor-interval`), applique avec `netplan try`,
+   `mode`, `primary`, `mii-monitor-interval`), applique avec `netplan try`,
    et vérifie après redémarrage de `lab-db`.
 6. Refais la bascule (étape 4) avec la configuration persistante et un
    `iperf3` en cours au lieu du `ping` : combien de temps le transfert

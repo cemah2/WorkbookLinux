@@ -17,7 +17,9 @@ command -v dig >/dev/null 2>&1 || {
 
 # --- 1. NSS et DNS doivent converger -----------------------------------
 NSS=$(getent hosts www.lab.local 2>/dev/null | awk '{print $1; exit}')
-DNS=$(dig +short +time=2 +tries=1 www.lab.local 2>/dev/null |
+# serveur interrogé explicitement : sans @, le stub 127.0.0.53 servirait
+# aussi /etc/hosts et masquerait la divergence
+DNS=$(dig +short +time=2 +tries=1 @10.10.10.10 www.lab.local 2>/dev/null |
       grep -E '^[0-9.]+$' | tail -1)
 
 if [ -z "$DNS" ]; then

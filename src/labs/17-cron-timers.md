@@ -31,7 +31,7 @@
 Temps estimé : 5 h
 Prérequis : module 07 (scripting bash, codes retour, redirections) et module 08
 (unités systemd, `systemctl`, `journalctl`). Le module reste utilisable seul :
-les notions systemd nécessaires sont rappelées en 14.2.
+les notions systemd nécessaires sont rappelées en 17.2.
 :::
 
 ---
@@ -124,8 +124,8 @@ ET. `0 0 1,15 * 3` s'exécute le 1er, le 15 **et** tous les mercredis.
 
 `crontab -l` liste, `crontab -e` édite (validation syntaxique à l'écriture),
 `crontab -r` **supprime tout**, `crontab -u factura -l` cible un autre compte.
-Une ligne de `/etc/cron.d` sans champ utilisateur est rejetée en silence : la
-seule trace est une ligne d'erreur dans le journal.
+Une ligne de `/etc/cron.d` sans champ utilisateur fait ignorer **tout le fichier**, en silence : la
+seule trace est une erreur dans le journal.
 
 Les répertoires `cron.daily` & co sont parcourus par **`run-parts`**, qui ignore
 tout nom contenant un point. `purge-tmp.sh` n'est **jamais** exécuté,
@@ -292,11 +292,11 @@ c) `run-parts --test /etc/cron.daily` ne le liste pas, ce qui le prouve
 d) `/etc/cron.daily` n'accepte que des liens symboliques
 
 **Q17.6** — Un script lancé à la main fonctionne, en cron il échoue avec
-`docker: command not found`. `which docker` répond `/usr/bin/docker` en session.
+`docker: command not found`. `which docker` répond `/usr/local/bin/docker` en session (binaire installé à la main).
 Quelle est la cause la plus probable ?
 
 a) l'utilisateur n'a pas les droits sur le socket Docker en cron
-b) `/usr/bin` n'est pas dans le `PATH` de cron
+b) `/usr/local/bin` n'est pas dans le `PATH` de cron
 c) `/usr/bin/docker` est en fait une fonction ou un alias défini dans `~/.bashrc`
 d) cron refuse d'exécuter les binaires en `setgid`
 
@@ -316,10 +316,10 @@ HOME=/home/mathieu
 PATH=/usr/bin:/bin
 ```
 
-Ton script utilise `ss -tlnp` et `[[ -f "$f" ]]`. Quels problèmes prévois-tu ?
+Ton script utilise `nft list ruleset` et `[[ -f "$f" ]]`. Quels problèmes prévois-tu ?
 **Deux réponses correctes.**
 
-a) `ss` est dans `/usr/sbin`, absent du `PATH` de cron
+a) `nft` est dans `/usr/sbin`, absent du `PATH` de cron
 b) `[[ ]]` n'existe pas dans `dash`, qui est le `/bin/sh` d'Ubuntu
 c) `PWD` est faux, cron démarre toujours dans `/`
 d) `LOGNAME` doit être exporté à la main, sinon `sudo` échoue
@@ -838,7 +838,7 @@ sudo bash check_M17_05.sh
 ## 17.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf14`. Le snapshot de secours
+Avant chaque Break & Fix : `qm snapshot 9002 avant-bf17`. Le snapshot de secours
 reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec de
 l'exercice : l'objectif est de diagnostiquer, pas de rembobiner.
 :::
@@ -923,8 +923,7 @@ dernière en remplaçant l'appel au script par la commande `tar` directement dan
 la planification. Depuis, plus aucune archive n'apparaît dans
 `/srv/factura/backups`, alors que celle de la veille du changement est toujours
 là. La commande, copiée-collée dans un shell, fonctionne parfaitement. Le journal
-contient une ligne de cron qui mentionne la tâche, suivie immédiatement d'une
-**erreur de syntaxe du shell**.
+contient, toutes les deux minutes, la ligne `CMD` de cron pour la tâche, suivie immédiatement de `(CRON) info (No MTA installed, discarding output)` — et rien sous l'étiquette `factura-archivage`.
 
 **Interdit** : déplacer la commande dans un script (ce sera la conclusion, pas le
 diagnostic — il faut d'abord expliquer et corriger **dans la crontab**).

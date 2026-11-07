@@ -63,9 +63,9 @@ module en conséquence.
 :::
 
 ::: attention
-Les ACL n'existent que si le système de fichiers est monté avec l'option `acl`.
-Sur Ubuntu 24.04, ext4 l'active par défaut (`mount | grep ' / '`), tu n'as rien à
-faire. Sur un montage exotique (NFS ancien, certains tmpfs), `setfacl` échouera
+Les ACL supposent un système de fichiers qui les supporte.
+Sur Ubuntu 24.04 et Rocky 9, ext4 et XFS les activent d'office (l'option `acl` est implicite et n'apparaît même plus dans `mount`), tu n'as rien à
+faire. Sur un montage exotique (NFS ancien, certains systèmes de fichiers réseau), `setfacl` échouera
 avec `Operation not supported` : c'est un diagnostic à connaître, pas un bug.
 :::
 
@@ -94,11 +94,11 @@ douteux.
 └ type : - fichier, d rép, l lien, c/b périph, p fifo, s socket
 ```
 
-Trois triades : **u**ser (propriétaire), **g**roup (groupe propriétaire),
-**o**ther (tout le reste). Un utilisateur tombe dans **une seule** catégorie, dans
+Trois triades : **user** (propriétaire), **group** (groupe propriétaire),
+**other** (tout le reste). Un utilisateur tombe dans **une seule** catégorie, dans
 cet ordre : s'il est le propriétaire, seuls les bits `u` s'appliquent, **même si**
-les bits `g`/`o` sont plus larges. Le propriétaire d'un fichier `000` ne peut pas
-le lire, alors qu'un tiers le pourrait si `o=r` — sauf que le propriétaire n'est
+les bits `g`/`o` sont plus larges. Le propriétaire d'un fichier `004` (`------r--`) ne peut pas
+le lire, alors qu'un tiers le peut : le propriétaire n'est
 jamais « other ». root ignore r/w (mais **pas** x : il lui faut au moins un bit x
 quelque part pour exécuter).
 
@@ -242,7 +242,7 @@ namei -l /srv/factura/exports/rapport.csv   # droits de chaque composant
 id mathieu                                  # groupes réels de l'utilisateur
 ls -ld /srv /srv/factura /srv/factura/exports   # traversée (x) à chaque étage
 sudo -u www-data stat /srv/factura/exports/rapport.csv   # tester en tant que...
-getenforce ; aa-status                      # écarter SELinux / AppArmor
+getenforce ; sudo aa-status                 # écarter SELinux / AppArmor
 ```
 
 Neuf fois sur dix, la cause est un `x` manquant sur un **répertoire parent**, pas
@@ -499,7 +499,7 @@ sans rendre les `.txt` exécutables, **sans** utiliser `find`. Puis refais-le av
 `find`. Compare les deux commandes.
 
 **E3.4** — Le répertoire `~/lab03/lecture` est en `r-xr-xr-x`. Tu constates que tu
-peux lire les fichiers dont tu connais le nom mais que `ls` fonctionne. Retire
+peux lire les fichiers dont tu connais le nom et que `ls` fonctionne. Retire
 maintenant le `r` pour ne garder que `x` (mode `111`) et montre par deux commandes
 que tu peux toujours `cat lecture/connu.txt` mais plus lister le contenu.
 
@@ -527,7 +527,7 @@ nouveau fichier créé par le groupe `facturation` soit lisible et modifiable pa
 groupe `webdev`. Crée ensuite un fichier de test et vérifie qu'il hérite bien de
 l'ACL.
 
-**E3.11** — L'ACL de `/srv/factura/exports` donne `u:webdev:rwx` mais `getfacl`
+**E3.11** — Reproduis d'abord la situation : `sudo setfacl -m u:webdev:rwx,m::r` `/srv/factura/exports`. L'ACL donne maintenant `u:webdev:rwx` mais `getfacl`
 affiche `#effective:r--`. Corrige le masque pour que `webdev` obtienne réellement
 ses droits en écriture, sans retoucher son entrée nominale.
 
@@ -536,7 +536,7 @@ supprimer, même par root. Prouve-le avec une tentative d'écriture, puis lève 
 protection.
 
 **E3.13** — Fais du fichier `~/lab03/audit.log` un journal **append-only** : montre
-qu'on peut y ajouter une ligne avec `>>` mais qu'on ne peut ni le vider avec `>` ni
+qu'on peut y ajouter une ligne avec `»` mais qu'on ne peut ni le vider avec `>` ni
 le supprimer.
 
 **E3.14** — Copie `/bin/sleep` en `~/lab03/bindtest`, puis donne-lui la capability
@@ -597,7 +597,7 @@ ne veux surtout pas ouvrir les bits `other`. C'est le cas d'école où les ACL s
 bonne réponse.
 :::
 
-1. Constate l'état initial : `sudo -u webdev ls /srv/factura/exports` échoue.
+1. Si tu as fait L3.1, `webdev` est membre de `facturation` : retire-le d'abord (`sudo gpasswd -d webdev facturation`), c'est un auditeur externe dans ce scénario. Constate ensuite l'état initial : `sudo -u webdev ls /srv/factura/exports` échoue.
 2. Pose une ACL sur `/srv/factura` et son contenu qui donne à l'utilisateur
    `webdev` le droit de lire les fichiers et de traverser les répertoires (`rX`),
    récursivement.
@@ -662,7 +662,7 @@ compte non privilégié tout en gardant le port 80, avec la méthode moderne.
 :::
 
 1. Lance l'API en tant qu'utilisateur non root et constate l'échec de bind sur le
-   port 80 (`Permission denied`, réservé aux ports < 1024).
+   port 80 (`Permission denied`, réservé aux ports < 1024). Sur `lab-web`, nginx occupe déjà ce port : arrête-le le temps du lab (`sudo systemctl stop nginx`) et relance-le à la fin, sinon tu obtiendras `Address already in use`.
 2. Rejette d'abord la mauvaise solution : explique en une ligne pourquoi
    `chmod u+s` (SUID root) sur ce binaire serait dangereux.
 3. Accorde la capability `cap_net_bind_service` au binaire avec `setcap`, vérifie

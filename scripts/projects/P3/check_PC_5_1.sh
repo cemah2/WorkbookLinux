@@ -27,7 +27,6 @@ from pg_roles where rolname='$ROLE'")
   || ko "le rôle a des attributs d'admin (super/createdb/createrole = $ATTR)"
 
 # 2. il peut lire
-if qd "grant usage on schema public to \"$ROLE\"" >/dev/null 2>&1; then :; fi
 SEL=$(sudo -u postgres psql -tAqd factura -c \
   "set role \"$ROLE\"; select count(*) from factures" 2>&1)
 echo "$SEL" | grep -qE '^[0-9]+$' && ok "le rôle peut lire la table factures" \

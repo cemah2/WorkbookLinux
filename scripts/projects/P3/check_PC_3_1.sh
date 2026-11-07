@@ -30,11 +30,16 @@ else
 fi
 
 # 4. contention : mot de passe et auth par mot de passe
-if grep -rqsE '^\s*PasswordAuthentication\s+yes' /etc/ssh/sshd_config \
-     /etc/ssh/sshd_config.d/ 2>/dev/null; then
-  ko "PasswordAuthentication yes encore présent (par clé uniquement attendu)"
+#    (valeur EFFECTIVE : sans directive, le défaut d'OpenSSH est « yes »)
+PA=$(sshd -T 2>/dev/null | awk '/^passwordauthentication / {print $2}')
+if [ -z "$PA" ]; then
+  grep -rqsE '^\s*PasswordAuthentication\s+yes' /etc/ssh/sshd_config \
+    /etc/ssh/sshd_config.d/ && PA=yes || PA=inconnu
+fi
+if [ "$PA" = "no" ]; then
+  ok "authentification SSH par mot de passe désactivée (sshd -T : no)"
 else
-  ok "authentification SSH par mot de passe désactivée"
+  ko "PasswordAuthentication effectif = $PA (sshd -T) : « no » attendu"
 fi
 ST=$(passwd -S deploy 2>/dev/null | awk '{print $2}')
 case "$ST" in
@@ -50,8 +55,12 @@ if command -v factura-deploy >/dev/null 2>&1; then
 fi
 
 # 6. préservation des preuves avant nettoyage
-if ls "$SAUV"/preuves-PC3* "$HOME"/astreinte/preuves/* \
-     /home/*/astreinte/preuves/* >/dev/null 2>&1; then
+PREUVE=0
+for g in "$SAUV/preuves-PC3*" "$HOME/astreinte/preuves/*" \
+         '/home/*/astreinte/preuves/*'; do
+  compgen -G "$g" >/dev/null && PREUVE=1
+done
+if [ "$PREUVE" -eq 1 ]; then
   ok "des preuves ont été collectées avant remédiation"
 else
   ko "aucune preuve collectée (auth.log, crontab, authorized_keys attendus)"

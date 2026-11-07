@@ -280,8 +280,8 @@ environnement et ton répertoire.
 C'est l'équivalent moderne de `su -`.
 
 `sudo -s` lance ton shell (`$SHELL`) avec les privilèges root, **sans** faire de
-login : tu restes dans ton répertoire courant, `HOME` reste le tien, tes variables
-survivent dans les limites d'`env_reset`.
+login : tu restes dans ton répertoire courant, et tes variables
+survivent dans les limites d'`env_reset`. Sur Ubuntu 24.04 (sudo 1.9.15), `HOME` est toutefois réinitialisé à `/root` dans les deux cas.
 
 ```console
 $ pwd ; echo $HOME
@@ -292,17 +292,17 @@ $ sudo -i -- sh -c 'pwd; echo $HOME'
 /root
 $ sudo -s -- sh -c 'pwd; echo $HOME'
 /home/karim
-/home/karim
+/root
 ```
 
 Conséquence pratique : avec `sudo -s`, un fichier créé sans chemin absolu atterrit
 dans **ton** home, appartenant à root — cause fréquente de « je ne peux plus
-écrire dans mon propre répertoire ».
+écrire dans mon propre répertoire ». Sur une configuration où
 :::
 
 ::: piege
-`sudo -s` conserve `HOME`, donc `sudo -s` puis `vim` chargera **ton** `.vimrc` en
-root. Si ton `.vimrc` source un plugin, tu exécutes du code non maîtrisé en root.
+`sudo -s` conserve `HOME` (par exemple `Defaults env_keep += "HOME"`), `sudo -s` puis `vim` charge **ton** `.vimrc` en
+root : si ton `.vimrc` source un plugin, tu exécutes du code non maîtrisé en root.
 C'est la raison pour laquelle `env_reset` et `sudo -i` sont la combinaison
 recommandée pour toute session d'administration.
 :::
@@ -467,7 +467,7 @@ diffèrent :
 * `!` : le verrou posé par `passwd -l` / `usermod -L`. Il **préfixe** le hachage
   existant, qui reste stocké dessous, et `passwd -u` le retire pour restaurer
   l'état antérieur.
-* `!!` : créé par `useradd` sur RHEL ou par `adduser --disabled-password` — aucun
+* `#!` : créé par `useradd` sur RHEL ou par `adduser --disabled-password` — aucun
   mot de passe n'a encore été défini, mais la case est réservée.
 * **vide** : le compte se connecte **sans** mot de passe. Toujours une anomalie.
 
@@ -580,8 +580,8 @@ avec le message `Account locked due to N failed logins`.
 $ sudo faillock --user karim
 karim:
 When                Type  Source     Valid
-2026-09-18 14:02:11 TTY   ssh:notty      V
-2026-09-18 14:02:14 TTY   ssh:notty      V
+2026-09-18 14:02:11 RHOST 10.10.10.10         V
+2026-09-18 14:02:14 RHOST 10.10.10.10         V
 ...
 $ sudo faillock --user karim --reset
 $ sudo faillock --user karim
@@ -888,7 +888,7 @@ est-il expiré, le mot de passe est-il périmé au-delà de la tolérance ?), pu
 volontairement peu bavard — c'est une protection. La vraie information est
 toujours côté serveur, dans `auth.log` : `Failed password`, `User karim not
 allowed because account is locked`, `Account locked due to 5 failed logins`,
-`User karim not allowed because shell /usr/sbin/nologin does not exist`.
+`pam_unix( sshd:account): account karim has expired (account expired)`. Le shell `nologin`, lui, ne laisse pas de trace de refus dans `sshd` : l'authentification réussit, c'est `nologin` qui ferme la session juste après.
 :::
 
 ::: piege
@@ -1002,8 +1002,8 @@ second terminal, la première session root restant ouverte.
 Sur Debian/Ubuntu, les fragments communs sont dans `common-auth`,
 `common-account`, `common-password`, `common-session`, inclus par chaque service
 via `@include`. `pam_limits`, lui, n'est pas dans `common-session` : il est appelé
-explicitement dans `/etc/pam.d/login`, `/etc/pam.d/sshd`, `/etc/pam.d/su` et
-`/etc/pam.d/sudo`.
+explicitement par service, dans `/etc/pam.d/login`, `sshd`, `su`, `sudo`, `sudo-i` et
+`runuser` sur Ubuntu 24.04. Un service dont la pile ne l'appelle pas (ou une unité systemd, qui ne passe pas par PAM) ignore `limits.conf`.
 :::
 
 ::: piege
@@ -1196,12 +1196,18 @@ sudo usermod -p '*' factura-api          # mot de passe inutilisable
 getent passwd factura-api
 # factura-api:x:998:998:API factura:/nonexistent:/usr/sbin/nologin
 sudo getent shadow factura-api | cut -d: -f2      # *
-su - factura-api
+su - factura-api            # depuis ton compte : mot de passe demandé
+# Password:
+# su: Authentication failure
+sudo su - factura-api       # depuis root : pas d'authentification
 # This account is currently not available.
 ```
 
 ::: pourquoi
-Le message `This account is currently not available.` vient de `/usr/sbin/nologin`
+Deux messages, deux barrières. Depuis ton compte, `su` demande le mot de passe
+de `factura-api` : `*` n'est pas un hachage valide, l'authentification échoue.
+Depuis root, `su` ne s'authentifie pas (`pam_rootok`), et le message
+`This account is currently not available.` vient de `/usr/sbin/nologin`
 lui-même : ce n'est pas une erreur de `su`, c'est le programme `nologin` qui
 s'exécute, affiche le contenu de `/etc/nologin.txt` s'il existe, et sort en 1.
 La session a donc bien été ouverte puis immédiatement refermée — d'où la nuance :
@@ -1246,7 +1252,7 @@ champ 3 à la date du jour.
 
 ```bash
 sudo passwd -l pcontrat
-sudo passwd -S pcontrat                      # pcontrat L 2026-09-04 1 60 14 10
+sudo passwd -S pcontrat                      # pcontrat L 2026-09-04 7 60 14 10
 sudo getent shadow pcontrat | cut -d: -f2 | cut -c1-6   # !$6$rE
 sudo passwd -u pcontrat
 sudo passwd -S pcontrat                      # pcontrat P ...
@@ -1527,7 +1533,7 @@ essentielles :
 * la limite ne s'applique qu'aux sessions **ouvertes après** la modification :
   les processus existants gardent les leurs (`cat /proc/<pid>/limits` le montre) ;
 * elle ne s'applique qu'aux services dont la pile PAM appelle `pam_limits` — sur
-  Debian/Ubuntu, c'est `login`, `sshd`, `su` et `sudo`, **pas** `common-session`.
+  Ubuntu 24.04, c'est `login`, `sshd`, `su`, `sudo`, `sudo``-i` et `runuser`, **pas** `common-session` (un autre service devra l'appeler explicitement).
   Un service lancé par **systemd** ignore complètement `limits.conf` : sa limite
   se pose avec `LimitNOFILE=` dans l'unité.
 
@@ -1604,10 +1610,13 @@ grep -E '^PASS_(MAX|MIN|WARN)' /etc/login.defs
 # creer-arrivants.sh — crée les comptes listés dans arrivees.csv
 set -euo pipefail
 
-CSV="${1:-$HOME/lab04/arrivees.csv}"
-RAP="$HOME/lab04/rapports/motsdepasse.txt"
-
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
+
+# sous sudo, $HOME vaut /root : on retrouve le home de l'appelant
+LAB_USER="${SUDO_USER:-$USER}"
+LAB_HOME=$(getent passwd "$LAB_USER" | cut -d: -f6)
+CSV="${1:-$LAB_HOME/lab04/arrivees.csv}"
+RAP="$LAB_HOME/lab04/rapports/motsdepasse.txt"
 [ -r "$CSV" ]        || { echo "CSV illisible : $CSV" >&2; exit 1; }
 
 install -d -m 700 "$(dirname "$RAP")"
@@ -1633,14 +1642,14 @@ while IFS=';' read -r login gecos grp; do
     printf '%s;%s\n' "$login" "$mdp" >> "$RAP"
     echo "  + $login créé (groupes : $(id -nG "$login" | tr ' ' ','))" >&2
 done < "$CSV"
-
-chmod 600 "$RAP"
+chown "$LAB_USER": "$RAP"; chmod 600 "$RAP"
 echo "Mots de passe : $RAP (à transmettre hors bande, puis à détruire)" >&2
 ```
 
 **Étape 6 — vérification**
 
 ```bash
+sudo bash ~/lab04/bin/creer-arrivants.sh
 sudo chage -l lucie | head -5
 sudo getent shadow lucie | cut -d: -f3      # 0
 id -nG hugo                                  # hugo factura
@@ -1653,7 +1662,7 @@ Le cœur pédagogique du lab est l'**ordre des opérations**. `useradd -m` copie
 — donc skel doit être prêt **avant**. `chpasswd` réécrit le champ 3 de shadow à la
 date du jour — donc `chage -d 0` doit venir **après**. Et `chage -M 90` posé
 explicitement plutôt que compté sur `login.defs` : `login.defs` n'est lu que par
-`useradd`, et seulement pour `PASS_MAX_DAYS`/`PASS_MIN_DAYS`/`PASS_WARN_AGE` au
+`useradd`, et seulement pour `PASS_ MAX_DAYS`/`PASS_MIN_DAYS`/`PASS_WARN_AGE` au
 moment de la création — poser la politique explicitement rend le script
 indépendant de l'état de la machine.
 
@@ -1715,14 +1724,12 @@ Ces quatre opérations n'écrivent que dans `/etc/passwd`, `/etc/shadow` et
 ```console
 $ sudo usermod -u 103 facturasvc
 usermod: user facturasvc is currently used by process 21916
-$ sudo usermod -d /var/lib/facturasvc facturasvc
-usermod: user facturasvc is currently used by process 21916
 ```
 
-`usermod` refuse de changer l'UID, le home ou le nom d'un compte qui a des
-processus vivants. Il n'existe **aucune option pour forcer** : il faut donc une
+`usermod` refuse de changer l'UID ou le nom d'un compte qui a des processus
+vivants (et, selon la version, le home). Il n'existe **aucune option pour forcer** : il faut donc une
 fenêtre d'arrêt. La séquence qui la réduit au minimum consiste à tout préparer
-avant, et à n'arrêter le service que pour les trois commandes qui l'exigent.
+avant, et à n'arrêter le service que pour les commandes qui l'exigent. Ici le « service » est le processus `/opt/factura/bin/factura-daemon` lancé par le script de mise en place (`pgrep -a -u facturasvc` le montre) : il n'a pas d'unité systemd, on l'arrête avec `pkill` et on le relance à la main.
 
 ```bash
 # --- préparation (service toujours en marche) ---
@@ -1734,13 +1741,14 @@ sudo install -d -o facturasvc -g facturasvc -m 750 /var/lib/facturasvc
 sudo rsync -a /home/facturasvc/ /var/lib/facturasvc/ 2>/dev/null || true
 
 # --- début de la fenêtre d'interruption ---
-sudo systemctl stop factura      # ou : sudo pkill -u facturasvc
+sudo pkill -u facturasvc         # avec une vraie unité : systemctl stop
 sudo usermod -u "$nouveau" facturasvc
 sudo groupmod -g "$nouveau" facturasvc
 sudo usermod -d /var/lib/facturasvc facturasvc
 sudo find / -xdev -uid "$ancien"  -exec chown facturasvc {} +
 sudo find / -xdev -gid "$ancien"  -exec chgrp facturasvc {} +
-sudo systemctl start factura
+sudo setsid runuser -u facturasvc -- /opt/factura/bin/factura-daemon \
+     >/dev/null 2>&1 </dev/null &
 # --- fin de la fenêtre : quelques secondes ---
 
 sudo rm -rf /home/facturasvc
@@ -1749,7 +1757,9 @@ sudo rm -rf /home/facturasvc
 **Étape 5 à 7 — preuves**
 
 ```bash
-su - facturasvc                    # This account is currently not available.
+su - facturasvc                    # depuis ton compte : Authentication failure
+sudo su - facturasvc               # depuis root : This account is currently
+                                   # not available.
 sudo su -s /bin/bash - facturasvc  # possible depuis root : voir plus bas
 sudo find / -xdev \( -nouser -o -nogroup \)    # aucune sortie
 pgrep -a -u facturasvc             # le service est reparti
@@ -1789,8 +1799,7 @@ un compte non privilégié. Confondre les deux mène à des « durcissements »
 inutiles.
 
 Deuxième piège : croire qu'on peut tout faire à chaud. `usermod` **refuse**
-(`user facturasvc is currently used by process NNNN`) de toucher à l'UID, au
-home ou au nom d'un compte dont un processus tourne, et il n'y a pas d'option
+(`user facturasvc is currently used by process NNNN`) de toucher à l'UID ou au nom d'un compte dont un processus tourne, et il n'y a pas d'option
 `--force`. Même si on contournait en éditant `/etc/passwd` à la main, les
 processus vivants garderaient l'ancien UID dans leurs credentials et perdraient
 l'accès à leurs fichiers juste après le `chown`. La fenêtre d'arrêt n'est pas une
@@ -1824,11 +1833,10 @@ Cmnd_Alias  NGINX_LOGS  = /usr/bin/journalctl -u nginx --no-pager, \
                           /usr/bin/cat /var/log/nginx/access.log
 
 # --- comment ---
-Defaults:EXPLOIT  timestamp_timeout=5, logfile=/var/log/sudo.log
-Defaults!NGINX_CTL  !env_keep
+Defaults:EXPLOIT  timestamp_timeout=5, logfile=/var/log/sudo.log, use_pty
 
-EXPLOIT FRONTAUX = (root) NOPASSWD: NGINX_CTL, NGINX_TEST
-EXPLOIT FRONTAUX = (root) PASSWD:   NGINX_LOGS
+EXPLOIT FRONTAUX = (root) NOPASSWD: NOEXEC: NGINX_CTL, NGINX_TEST
+EXPLOIT FRONTAUX = (root) PASSWD:   NOEXEC: NGINX_LOGS
 ```
 
 ```bash
@@ -1847,9 +1855,7 @@ root@lab-web:/#                          <- shell root : règle inacceptable
 `cat` n'a pas d'échappement shell : c'est le bon outil ici. `journalctl` en a un
 (son pager), neutralisé par `--no-pager` **inscrit dans la règle** — l'utilisateur
 ne peut pas l'omettre, puisque `sudoers` compare la ligne de commande complète.
-`systemctl status` pagine aussi : `sudo` le lance sans terminal de contrôle
-interactif grâce à `use_pty`, et on peut verrouiller davantage avec
-`Defaults:EXPLOIT env_keep -= "SYSTEMD_PAGER PAGER"`.
+`systemctl status` pagine aussi (et `use_pty` n'y change rien : la commande voit toujours un terminal). C'est le rôle de l'étiquette `NOEXEC:` : `sudo` interdit à la commande de lancer le moindre processus fils (via `LD_ PRELOAD`), donc ni pager ni `!sh`. `systemctl status nginx` s'affiche alors sans pager, et `systemctl restart` n'est pas gêné (il parle à systemd par D-Bus, il n'exécute rien). Vérifie sur `lab-web` : `sudo systemctl status nginx` ne doit plus ouvrir `less`.
 
 **Étape 5 — traçabilité**
 
@@ -1892,7 +1898,7 @@ fichier sur toutes les machines par Ansible.
 `NOPASSWD` et `PASSWD` se posent **par bloc de commandes**, pas par utilisateur :
 on peut donc exiger une authentification pour lire des journaux (qui contiennent
 des données) tout en dispensant du mot de passe le redémarrage de service (qui
-doit pouvoir se faire depuis un script d'astreinte).
+doit pouvoir se faire depuis un script d'astreinte). `NOEXEC` se pose au même endroit : c'est une étiquette de commande, pas un `Defaults`.
 :::
 
 ::: piege
@@ -1935,10 +1941,13 @@ password required  pam_pwhistory.so remember=3 use_authtok
 password [success=1 default=ignore] pam_unix.so obscure yescrypt use_authtok
 ```
 
-Démonstration :
+Démonstration — **en tant que** `sophie`, pas via `sudo passwd` (voir le piège plus bas) :
 
 ```console
-$ sudo passwd sophie
+$ su - sophie
+$ passwd
+Changing password for sophie.
+Current password:
 New password: sophie2026
 BAD PASSWORD: The password contains the user name in some form
 ```
@@ -1981,11 +1990,11 @@ su: Authentication failure               <- verrouillé, pas "mot de passe faux"
 mathieu@lab-adm:~$ sudo faillock --user pcontrat
 pcontrat:
 When                Type  Source   Valid
-2026-09-18 19:16:17 SVC   su-l         V
-2026-09-18 19:16:20 SVC   su-l         V
-2026-09-18 19:16:24 SVC   su-l         V
-2026-09-18 19:16:26 SVC   su-l         V
-2026-09-18 19:16:30 SVC   su-l         V
+2026-09-18 19:16:17 TTY   pts/1        V
+2026-09-18 19:16:20 TTY   pts/1        V
+2026-09-18 19:16:24 TTY   pts/1        V
+2026-09-18 19:16:26 TTY   pts/1        V
+2026-09-18 19:16:30 TTY   pts/1        V
 
 mathieu@lab-adm:~$ sudo faillock --user pcontrat --reset
 mathieu@lab-adm:~$ su - pcontrat         # ça repasse immédiatement
@@ -2064,7 +2073,7 @@ mal ordonnée ne renvoie pas d'erreur de syntaxe : elle **laisse passer** ou
 Piège secondaire : `enforcing = 1` dans `pwquality.conf` ne s'applique **pas à
 root**. Un `sudo passwd sophie` avec un mot de passe faible affiche
 `BAD PASSWORD:` puis… demande confirmation et accepte. Pour tester réellement la
-politique, il faut changer le mot de passe **en tant que l'utilisateur**.
+politique, il faut changer le mot de passe **en tant que l'utilisateur** — ou ajouter `enforce_for_root` dans `pwquality.conf`.
 :::
 
 ---
@@ -2109,7 +2118,7 @@ sudo -l -U mathieu        # la politique est de nouveau lue
 **Procédure de récupération sans session privilégiée** — c'est le vrai sujet de ce
 Break & Fix. Deux voies, par ordre de préférence :
 
-1. **Polkit**, si `policykit-1` est installé et que le compte est administrateur :
+1. **Polkit**, si `pkexec` est installé (paquet `pkexec`, ex- `policykit-1` ; présent sur Ubuntu Server 24.04 avec `polkitd`) et que le compte est membre de `sudo` (polkit le considère alors comme administrateur) :
 
    ```bash
    pkexec chmod 0440 /etc/sudoers
@@ -2142,10 +2151,10 @@ contrôles échoue, le plugin `sudoers` ne se charge pas — d'où la seconde li
 supplémentaire mais la conséquence du premier refus.
 
 Détail que peu de gens connaissent et qui change la façon de diagnostiquer :
-depuis sudo 1.9.15, une **erreur de syntaxe** dans un fichier `sudoers` n'empêche
-plus le reste de fonctionner. sudo affiche l'erreur, ignore la ligne fautive et
-applique les autres. Autrement dit, un `NOPASWD` mal orthographié ne casse pas
-`sudo` : il **retire silencieusement** un privilège. C'est plus insidieux qu'une
+depuis sudo 1.9.3 (Ubuntu 24.04 embarque 1.9.15), une **erreur de syntaxe** dans un fichier `sudoers` n'empêche
+plus le reste de fonctionner. sudo affiche l'erreur, ignore l'entrée fautive et
+applique les autres (comportement désactivable par `Defaults !error_recovery` dans `sudoers`). Autrement dit, un `NOPASWD` mal orthographié ne casse pas
+`sudo` : il **retire** un privilège. C'est plus insidieux qu'une
 panne franche, et c'est pourquoi `visudo -c` doit tourner dans la CI qui déploie
 vos fichiers `sudoers.d`.
 :::
@@ -2197,12 +2206,12 @@ sudo chage -l karim
 
 # 4. la lecture brute confirme tout en une ligne
 sudo getent shadow karim
-# karim:!$y$j9T$...:20714:1:90:14:7:20693:
+# karim:!$y$j9T$...:20714:1:90:14:7:20697:
 
 # 5. et le journal donne le motif exact vu par PAM
 sudo tail -20 /var/log/auth.log | grep karim
-# sshd: User karim not allowed because account is locked
-# su: pam_unix(su:account): account karim has expired (account expired)
+# sshd: Failed password for karim from 10.10.10.10 port 51234 ssh2
+# su: pam_unix(su-l:account): account karim has expired (account expired)
 ```
 
 **Le message change à chaque couche levée** — c'est le fil d'Ariane du
@@ -2210,7 +2219,8 @@ diagnostic :
 
 | État | `su - karim` depuis root |
 |---|---|
-| expiration + verrou + nologin | `su: Authentication failure` |
+| expiration + verrou + nologin | `Your account has expired; please contact your` |
+|  | `system administrator` |
 | après `chage -E -1` | `This account is currently not available.` |
 | après `usermod -s /bin/bash` | la session s'ouvre |
 
@@ -2300,8 +2310,10 @@ sudo grep karim /etc/group-
 
 # 4. corroborer avec les traces : qui a fait quoi, et quand
 sudo grep -E 'usermod|groupmod' /var/log/auth.log | tail -5
-# usermod[2841]: change user 'karim' groups from
-#                'sudo,deploy,factura' to 'docker'
+# usermod[2841]: delete 'karim' from group 'sudo'
+# usermod[2841]: delete 'karim' from group 'factura'
+# usermod[2841]: delete 'karim' from group 'deploy'
+# usermod[2841]: add 'karim' to group 'docker'
 ```
 
 **Correctif :**
@@ -2309,7 +2321,7 @@ sudo grep -E 'usermod|groupmod' /var/log/auth.log | tail -5
 ```bash
 sudo usermod -aG sudo,deploy,factura karim     # -a : on AJOUTE
 id -nG karim
-# karim docker sudo deploy factura
+# karim sudo factura deploy docker
 sudo -l -U karim                                # les règles reviennent
 ```
 
@@ -2346,7 +2358,7 @@ commande tapée une heure plus tôt.
 Piège de réparation : recréer les appartenances **de mémoire**. On oublie
 toujours un groupe, et le manque ne se voit que des semaines plus tard sur un
 partage précis. Les sources fiables, par ordre : `/etc/group-`, le journal
-(`auth.log`, qui trace le `change user groups from ... to ...`), la sauvegarde de
+(`auth.log`, qui trace chaque `delete 'karim' from group '...'`), la sauvegarde de
 configuration, le playbook Ansible qui gère les comptes.
 
 Piège aggravant : si tu t'appliques la commande à **toi-même** et que tu sors du
@@ -2387,7 +2399,7 @@ printf '## Comptes humains (UID >= %s)\n\n' "$UID_MIN"
 printf '| Login | UID | Groupes | Shell | Mdp |\n|---|---|---|---|---|\n'
 while IFS=: read -r u _ uid _ _ _ sh; do
     [ "$uid" -ge "$UID_MIN" ] && [ "$uid" -ne 65534 ] || continue
-    etat=$(passwd -S "$u" 2>/dev/null | awk '{print $2}')
+    etat=$(passwd -S "$u" 2>/dev/null | awk '{print $2}') || true
     printf '| %s | %s | %s | %s | %s |\n' \
            "$u" "$uid" "$(id -nG "$u" | tr ' ' ',')" "$sh" "${etat:-?}"
 done < <(getent passwd)
@@ -2419,18 +2431,16 @@ printf '```\n'
 
 # ------------------------------------------------------------------ écarts
 printf '\n## Écarts\n\n'
-
-awk -F: '$3==0 && $1!="root" {print $1}' /etc/passwd |
-    while read -r u; do ecart "UID 0 non-root : $u"; done
-
-awk -F: '$2=="" {print $1}' /etc/shadow 2>/dev/null |
-    while read -r u; do ecart "mot de passe vide : $u"; done
+while read -r u; do ecart "UID 0 non-root : $u"; done \
+    < <(awk -F: '$3==0 && $1!="root" {print $1}' /etc/passwd)
+while read -r u; do ecart "mot de passe vide : $u"; done \
+    < <(awk -F: '$2=="" {print $1}' /etc/shadow 2>/dev/null)
 
 while IFS=: read -r u _ uid _ _ _ sh; do
     if [ "$uid" -ge "$UID_MIN" ] && [ "$uid" -ne 65534 ]; then
-        max=$(getent shadow "$u" | cut -d: -f5)
+        max=$(getent shadow "$u" | cut -d: -f5) || true
         [ "${max:-99999}" -ge 99999 ] && ecart "mdp sans expiration : $u"
-        lst=$(getent shadow "$u" | cut -d: -f3)
+        lst=$(getent shadow "$u" | cut -d: -f3) || true
         if [ -n "${lst:-}" ] && [ "$lst" -gt 0 ] \
            && [ $(( AUJ - lst )) -gt 90 ]; then
             ecart "mdp inchangé depuis $(( AUJ - lst )) jours : $u"

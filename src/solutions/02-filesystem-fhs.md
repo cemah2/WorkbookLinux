@@ -92,9 +92,9 @@ Les deux noms sont strictement équivalents : il n'y a pas d'« original » et d
 Corollaire de sécurité : donner un lien physique vers un fichier sensible, c'est
 en donner une copie permanente. Retirer le fichier « original » ne retire rien du
 tout tant que l'autre nom existe, et le propriétaire du répertoire d'origine ne
-voit plus rien. C'est pour cette raison que `/tmp` porte le sticky bit et que les
-liens physiques vers des fichiers qu'on ne possède pas sont bridés par
-`fs.protected_hardlinks=1` sur les noyaux récents.
+voit plus rien. C'est pour cette raison que les
+liens physiques vers des fichiers qu'on ne possède pas (et qu'on ne peut pas modifier) sont refusés par
+`fs.protected_hardlinks=1`, actif par défaut sur Ubuntu comme sur Rocky.
 :::
 
 ---
@@ -144,13 +144,13 @@ répertoire (donc invisible pour `du`), mais compteur de liens à 0 avec un
 descripteur vivant, donc blocs non libérés (donc compté par `df`). C'est le cas
 le plus fréquent, et de très loin, sur un serveur d'applications.
 
-c) Un montage qui masque des fichiers : si des données ont été écrites dans
+b) Un montage qui masque des fichiers : si des données ont été écrites dans
 `/var/log` **avant** qu'un volume ne soit monté dessus, elles existent toujours
 sur le système de fichiers parent, cachées sous le point de montage. `du /var`
-ne les voit pas puisqu'il parcourt ce qui est monté ; `df /` les compte. On les
-révèle en montant la partition parente ailleurs, ou avec un bind mount de `/`.
+ne les voit pas puisqu'il parcourt ce qui est monté ; `df /``var` les compte. On les
+révèle en montant la partition parente ailleurs, ou avec un bind mount de `/``var`.
 
-b) est faux : `du` compte les fichiers cachés, il ne fait aucun tri sur le nom.
+c) est faux : `du` compte les fichiers cachés, il ne fait aucun tri sur le nom.
 d) est faux et inversé : c'est `du --apparent-size` qui gonfle les fichiers creux ;
 `df` et `du` par défaut comptent des **blocs réellement alloués**.
 :::
@@ -177,8 +177,8 @@ signifie « montre-moi les fichiers ouverts dont nlink est inférieur à 1 », d
 
 ```console
 # lsof -nP +L1 /srv/appdata
-COMMAND   PID USER FD TYPE  SIZE/OFF NLINK NODE NAME
-facturad 8600 root  3w  REG 228589605     0   13 /srv/appdata/incoming/
+COMMAND   PID USER FD TYPE DEVICE  SIZE/OFF NLINK NODE NAME
+facturad 8600 root  3w  REG    7,0 228589605     0   13 /srv/appdata/
                                                  ingest.dat (deleted)
 ```
 
@@ -394,7 +394,7 @@ pid : un pid survivant à un reboot est un mensonge qui fait échouer les script
 démarrage.
 
 `/var/run` est aujourd'hui un **lien symbolique** vers `/run` sur toutes les
-distributions modernes (Debian/Ubuntu depuis Jessie, RHEL depuis 7). Écrire dans
+distributions modernes (Debian depuis Wheezy, Ubuntu depuis 11.10, RHEL depuis 7). Écrire dans
 `/var/run/factura/` revient donc physiquement au même endroit ; la réponse b) est
 vraie. Mais le chemin canonique à écrire dans les scripts neufs est `/run`.
 
@@ -499,10 +499,10 @@ message trompeur. `touch` et `mkdir` échouent, alors qu'écrire **dans un fichi
 existant** continue de fonctionner : c'est la signature du problème.
 
 ```console
-$ df -h /srv/archives
-/dev/loop2  92M  41M  45M  48% /srv/archives
-$ df -i /srv/archives
-/dev/loop2  1024  1024  0  100% /srv/archives
+$ df -h /srv/appdata
+/dev/loop0  224M  110M  103M  52% /srv/appdata
+$ df -i /srv/appdata
+/dev/loop0  65536  65536  0  100% /srv/appdata
 ```
 
 Prévention : `mkfs.ext4 -i 8192` (ou `-N <nombre>`) au formatage pour les volumes à
@@ -538,9 +538,7 @@ find / -name factura.conf 2>/dev/null   # la vérité, mais lent
 Ce qu'il faut savoir en plus : `updatedb` respecte `/etc/updatedb.conf`, qui exclut
 par défaut `/tmp`, `/var/spool`, les montages réseau et les `.git` sur certaines
 distributions. Un fichier peut donc être absent **définitivement** de la base sans
-que ce soit un problème de fraîcheur. Et `locate` affiche les chemins des fichiers
-que l'utilisateur courant n'a pas forcément le droit de lire : `plocate` filtre par
-permissions, contrairement au vieux `mlocate` en mode `slocate`.
+que ce soit un problème de fraîcheur. Enfin, la base est construite par root mais `plocate` (comme `mlocate` avant lui) ne montre que les chemins dont l'utilisateur courant peut parcourir les répertoires parents.
 :::
 
 ::: piege
@@ -567,14 +565,12 @@ le swap. Deux conséquences directes et vraies :
 * c) il est reconstruit vide à chaque démarrage, puisque rien n'est écrit sur un
   support persistant.
 
-a) est fausse mais mérite attention : la taille annoncée, ici environ 980 Mio,
-**est** une limite dure, et écrire 2 Gio échouerait bien avec `No space left on
-device`. Ce qui rend l'affirmation fausse telle qu'elle est écrite, c'est que
-l'échec survient par dépassement du `size=` du montage, pas d'un disque ; mais
-l'utilisateur, lui, verra exactement ce message. Retiens surtout que `size=` est
+a) est fausse : un `tmpfs` ne « déborde » jamais sur le disque. La taille annoncée, ici environ 980 Mio,
+**est** une limite dure : écrire 2 Gio échoue avec `No space left on
+device`, exactement comme sur une partition pleine. Seul le swap peut accueillir des pages de `tmpfs`, et ça ne change pas la limite. Retiens surtout que `size=` est
 ajustable à chaud : `mount -o remount,size=2G /tmp`.
 
-d) est fausse : `/tmp` étant un système de fichiers distinct, son occupation
+b) est fausse : `/tmp` étant un système de fichiers distinct, son occupation
 n'apparaît jamais dans la ligne de `/` de `df`, et `du -x /` ne la compte pas.
 :::
 
@@ -620,7 +616,7 @@ Ce modèle explique d'un coup une série de comportements qui semblent sans rapp
 * on peut supprimer un fichier en cours d'utilisation sans faire planter le
   programme qui l'utilise — sous Windows, l'appel échoue ;
 * les mises à jour de paquets remplacent `/usr/bin/nginx` pendant que l'ancien
-  binaire tourne encore, d'où le `nginx -s reload` ou le redémarrage nécessaire ;
+  binaire tourne encore, d'où le redémarrage nécessaire (un `reload` relit la configuration mais garde l'ancien binaire en mémoire) ;
 * `ctime` change quand on modifie l'inode (permissions, propriétaire, nombre de
   liens), pas seulement le contenu : ce n'est **pas** une date de création. La date
   de création (`crtime`, `btime`) existe en ext4 mais n'est pas exposée par `stat`
@@ -667,8 +663,9 @@ Si l'écart persiste, deuxième cause : un montage qui masque des fichiers.
 
 ```bash
 findmnt -T /var/log
-sudo mkdir -p /mnt/verif && sudo mount --bind / /mnt/verif
-sudo du -sh /mnt/verif/var/log      # ce qui est caché sous le point de montage
+# bind non récursif de /var : les sous-montages (/var/log) n'y sont pas repris
+sudo mkdir -p /mnt/verif && sudo mount --bind /var /mnt/verif
+sudo du -sh /mnt/verif/log          # ce qui est caché sous le point de montage
 sudo umount /mnt/verif
 ```
 
@@ -729,9 +726,9 @@ Les trois options de `ln` à connaître pour ce cas :
   `current/X -> releases/X` **dans** l'ancienne release au lieu de remplacer le
   lien. C'est l'un des bugs de script de déploiement les plus répandus.
 
-Le remplacement par `ln -sfn` n'est d'ailleurs pas atomique : `ln` fait `unlink()`
-puis `symlink()`, et il existe une fenêtre de quelques microsecondes pendant
-laquelle `current` n'existe pas. La méthode réellement atomique :
+L'atomicité du remplacement dépend de l'outil : le `ln` de GNU coreutils 9.4 (Ubuntu 24.04) crée un lien temporaire puis le renomme, mais d'autres implémentations (BusyBox, anciens coreutils) font `unlink()`
+puis `symlink()`, avec une fenêtre pendant
+laquelle `current` n'existe pas. La méthode explicite, atomique partout :
 
 ```bash
 ln -sfn releases/2026-09-18 /srv/www/.current-tmp
@@ -820,8 +817,8 @@ un nom de fichier Unix, et `-0` dit à `xargs` de ne découper que là-dessus.
 ::: pourquoi
 Détail qui fait la différence à l'usage : le **code de retour**. Avec `\;`, `find`
 ignore l'échec de chaque commande et sort en 0. Avec `+`, `find` sort en 1 si l'une
-des exécutions a échoué. `xargs` sort en 123 si l'une des commandes a échoué, 124
-si elle a été tuée, 125 en cas de signal. Dans un script avec `set -e`, ces codes
+des exécutions a échoué. `xargs` sort en 123 si l'une des commandes a échoué (code 1 à 125), 124
+si l'une est sortie en 255, 125 si l'une a été tuée par un signal. Dans un script avec `set -e`, ces codes
 changent complètement le comportement ; il faut les connaître avant de mettre un
 `find` dans une chaîne CI.
 
@@ -1028,26 +1025,28 @@ physique quelque part. Pour retrouver l'autre nom :
 cd ~/lab02/liens/deplace
 ln -s ../source/rapport.txt lien-relatif.txt
 cat lien-relatif.txt              # fonctionne
-mv lien-relatif.txt ../copie/
-cat ../copie/lien-relatif.txt     # No such file or directory
-readlink -f ../copie/lien-relatif.txt
+mv lien-relatif.txt ../
+cat ../lien-relatif.txt           # No such file or directory
+readlink ../lien-relatif.txt      # ../source/rapport.txt
+readlink -m ../lien-relatif.txt   # /home/mathieu/lab02/source/rapport.txt
 ```
 
 Réparation, deux options :
 
 ```bash
 # 1. corriger le chemin relatif depuis le nouvel emplacement
-ln -sfn ../source/rapport.txt ~/lab02/liens/copie/lien-relatif.txt
+ln -sfn source/rapport.txt ~/lab02/liens/lien-relatif.txt
 # 2. ou basculer en absolu, insensible au déplacement du lien
-ln -sfn ~/lab02/liens/source/rapport.txt ~/lab02/liens/copie/lien-relatif.txt
+ln -sfn ~/lab02/liens/source/rapport.txt ~/lab02/liens/lien-relatif.txt
 ```
 
 ::: pourquoi
-Ici les deux répertoires `deplace` et `copie` sont au même niveau, donc
-`../source/rapport.txt` redevient valide par hasard. Le raisonnement à retenir
-reste général : le chemin est résolu depuis le **répertoire contenant le lien**.
+Depuis `~/lab02/liens`, la chaîne `../source/rapport.txt` désigne
+`~/lab02/source/rapport.txt`, qui n'existe pas. Note qu'un déplacement vers un
+répertoire frère (`liens/copie`) n'aurait rien cassé : `../source` y mène au
+même endroit. Le chemin est résolu depuis le **répertoire contenant le lien**.
 `readlink` montre la chaîne brute, `readlink -f` la résolution ; l'écart entre les
-deux est le diagnostic complet.
+deux est le diagnostic complet. Ici `-f` ne répondrait rien, car le répertoire `~/lab02/source` lui-même manque : `-m` résout sans exiger que le chemin existe.
 
 `ln -sfn` plutôt que `ln -sf` : sans `-n`, si la destination est déjà un lien vers
 un répertoire, `ln` écrit **dans** ce répertoire au lieu de remplacer le lien.
@@ -1066,7 +1065,7 @@ ln: failed to create hard link '/srv/appdata/incoming/rapport.txt'
  => '/home/mathieu/lab02/liens/source/rapport.txt': Invalid cross-device link
 ```
 
-Le code d'erreur est `EXDEV`, numéro **18** (`errno -l | grep EXDEV`).
+Le code d'erreur est `EXDEV`, numéro **18** (`errno EXDEV`, commande du paquet `moreutils`, ou `grep -w EXDEV /usr/include/asm-generic/errno-base.h`).
 
 ::: pourquoi
 Preuve indépendante que les deux chemins sont sur deux systèmes de fichiers, par
@@ -1103,9 +1102,9 @@ file -- arbo/archives/disque-vm.img liens/app.sock /etc/os-release
 ```
 
 ```console
-disque-vm.img: data
-app.sock:      socket
-/etc/os-release: symbolic link to ../usr/lib/os-release
+arbo/archives/disque-vm.img: data
+liens/app.sock:              socket
+/etc/os-release:             symbolic link to ../usr/lib/os-release
 ```
 
 ::: pourquoi
@@ -1153,7 +1152,7 @@ ajoute `-xdev` pour ne pas partir dans les montages réseau.
 **E2.7** — *Les cinq plus gros répertoires de `/var`.*
 
 ```bash
-sudo du -h --max-depth=1 -x /var 2>/dev/null | sort -h | tail -6
+sudo du -h --max-depth=1 -x /var 2>/dev/null | sort -rh | head -6
 ```
 
 ::: pourquoi
@@ -1163,10 +1162,10 @@ Trois options qui comptent :
 * `-x` : ne franchit pas les points de montage, donc `/var/log/factura` monté à
   part n'est pas compté dans `/var` — on cherche ce qui remplit **ce** système de
   fichiers ;
-* `sort -h` : tri par taille lisible (`1,5G` avant `2,0G`, et `900M` avant `1,5G`),
-  ce que `sort -n` ferait faux.
+* `sort -rh` : tri décroissant par taille lisible (`2,0G` avant `1,5G`, et `1,5G` avant `900M`),
+  ce que `sort -rn` ferait faux.
 
-`tail -6` parce que la dernière ligne est le total de `/var` lui-même. Le `2>/dev/null`
+`head -6` parce que la première ligne est le total de `/var` lui-même. Le `2>/dev/null`
 masque les répertoires non lisibles quand on n'est pas root.
 :::
 
@@ -1332,7 +1331,7 @@ trouve rien — sinon la commande lit son entrée standard et **attend indéfini
 ce qui bloque un job CI sans message d'erreur.
 
 Détail de comptage : `*.log` ne remonte pas `access.log.1`. Pour les rotations, il
-faut `-name '*.log*'` ou une expression régulière `-regex '.*\.log(\.[0-9]+)?'`.
+faut `-name '*.log*'` ou une expression régulière `-regextype posix-extended -regex '.*\.log(\.[0-9]+)?'` (le type par défaut, `emacs`, ne connaît pas les parenthèses de groupe nues).
 :::
 
 ---
@@ -1353,7 +1352,7 @@ find ~/lab02/arbo -type f -name '*.tmp' -mtime +3 -delete
 contenu du répertoire courant : `-delete` est évalué en premier, il renvoie vrai,
 et `-name` n'est plus qu'un filtre d'affichage sur des fichiers déjà détruits.
 
-`-delete` échoue silencieusement sur les répertoires non vides — c'est voulu — et
+`-delete` refuse les répertoires non vides (`Directory not empty`) — c'est voulu — et
 n'a pas besoin de `-exec rm`, donc pas de processus par fichier. Si `-delete` n'est
 pas disponible (vieux `find`), l'équivalent sûr est
 `-print0 | xargs -0 -r rm --`.
@@ -1409,7 +1408,7 @@ du noyau, contrairement au vieux `mount` sans argument qui lisait `/etc/mtab`.
 Sur une Ubuntu 24.04 par défaut, les `tmpfs` visibles sont `/run` (10 % de la RAM),
 `/dev/shm` (50 %), `/run/lock` (5 Mio) et les `/run/user/<uid>` créés par
 `pam_systemd` à chaque connexion. `/tmp` n'est un `tmpfs` que si
-`systemd-tmp.mount` est activé — ce n'est pas le défaut sur Ubuntu Server, où
+l'unité `tmp.mount` est activée — ce n'est pas le défaut sur Ubuntu Server, où
 `/tmp` fait partie de `/`.
 :::
 
@@ -1570,6 +1569,7 @@ ls -l /var/log/factura/
 
 ```bash
 journalctl --disk-usage
+# un drop-in plutôt que d'éditer journald.conf (le check accepte les deux)
 sudo mkdir -p /etc/systemd/journald.conf.d
 printf '[Journal]\nSystemMaxUse=50M\n' \
   | sudo tee /etc/systemd/journald.conf.d/50-limite.conf
@@ -1620,7 +1620,7 @@ Erreurs classiques sur ce ticket :
   le shell **non privilégié** avant que `sudo` ne s'exécute, donc `Permission
   denied`. Il faut `sudo truncate -s 0 fichier` ou
   `sudo sh -c ': > fichier'`.
-* Supprimer les `.gz` avec `ls -t | head -4 | xargs rm` : fonctionne ici, casse dès
+* Supprimer les `.gz` avec `ls -t | tail -n +3 | xargs rm` : fonctionne ici, casse dès
   qu'un nom contient une espace, et repose sur le tri de `ls` plutôt que sur les
   dates réelles.
 :::
@@ -1693,7 +1693,7 @@ processus par fichier.
 :::
 
 ::: piege
-Deux noms contiennent une espace dans cette arborescence : `logs/audit ancien.log`
+Trois noms contiennent une espace dans cette arborescence : `logs/audit ancien.log`, `uploads/CV Dupont.pdf`
 et `uploads/scan provisoire.tmp`. Toute écriture du type
 `for f in $(find ...)` ou `find ... | xargs cmd` les découpe. Le `-printf` avec
 tabulation en séparateur et le `-print0 | xargs -0` sont les deux formes sûres.
@@ -1774,10 +1774,8 @@ l'espace qu'on récupérerait en le supprimant.
 ::: piege
 Les liens physiques et les sauvegardes forment un piège classique. `rsync` sans
 `-H` recrée des copies indépendantes sur la destination : une arborescence de
-100 Gio dédoublonnée à 40 Gio redevient 100 Gio après sauvegarde. Même chose pour
-`tar` sans `--hard-dereference` inversé, `cp` sans `-a` (qui a `-d` et `-H`,
-mais pas la préservation des liens entre fichiers distincts — c'est `cp -a` ou
-`cp --preserve=links` qu'il faut). Vérifie toujours le compteur de liens après une
+100 Gio dédoublonnée à 40 Gio redevient 100 Gio après sauvegarde. 
+`tar`, lui, préserve les liens physiques par défaut (sauf `--hard-dereference`); `cp` `-r` sans `-a` ni `--preserve=links` recrée des copies indépendantes. Vérifie toujours le compteur de liens après une
 restauration.
 :::
 
@@ -1832,7 +1830,7 @@ df -h /srv/appdata        # 32K utilisés, 206M disponibles
 
 Variante acceptable si le service tolère une coupure d'une seconde :
 `sudo systemctl restart lab-ingest` — la fermeture du descripteur libère
-l'espace. Variante **inacceptable** : `reboot`.
+l'espace (dans ce lab, le simulacre recrée aussitôt son fichier et resature le volume : la troncature est la seule remise en service qui tienne). Variante **inacceptable** : `reboot`.
 
 **Prévention**
 
@@ -1883,7 +1881,7 @@ Et un réflexe à ne pas avoir : chercher le gros fichier avec
 
 ```bash
 df -h /srv/archives
-#   /dev/loop2  92M  41M  45M  48% /srv/archives
+#   /dev/loop2  92M  44M  42M  52% /srv/archives
 df -i /srv/archives
 #   /dev/loop2  1024  1024  0  100% /srv/archives
 ```
@@ -1893,9 +1891,12 @@ Une seule commande tranche : `df -i`. Les **inodes** sont à 100 %.
 ```bash
 # où sont-ils passés ?
 sudo du --inodes -x --max-depth=1 /srv/archives | sort -n
+#   1     /srv/archives/lost+found
 #   11    /srv/archives/lots
-#   1001  /srv/archives/spool
-find /srv/archives/spool -type f | wc -l      # 1000 fichiers de 10 octets
+#   1002  /srv/archives/spool
+#   1015  /srv/archives
+find /srv/archives/spool -type f | wc -l      # 1001 fichiers d'une dizaine
+                                           # d'octets
 ```
 
 **Cause racine** : le système de fichiers a été formaté avec seulement 1 024
@@ -1912,7 +1913,7 @@ sudo find /srv/archives/spool -type f -name '*.json' -mtime +0 -delete
 # ou, pour tout le spool :
 sudo find /srv/archives/spool -type f -delete
 df -i /srv/archives      # 23/1024 utilisés
-touch /srv/archives/test && echo "écriture rétablie"
+touch /srv/archives/spool/test && echo "écriture rétablie"
 ```
 
 **Pourquoi `df -h` ne montre rien** : les deux ressources sont comptées séparément.
@@ -2017,9 +2018,9 @@ les trois.
    est déjà un lien vers un répertoire crée `current/cible` **à l'intérieur** de
    l'ancienne release. Le site continue alors de servir l'ancienne version, sans
    erreur visible — encore plus difficile à diagnostiquer que cette panne-ci.
-3. **L'atomicité** : `ln -sfn` fait `unlink()` puis `symlink()`. Entre les deux,
-   `current` n'existe pas, et une requête qui tombe pile là reçoit un 404.
-   `mv -T` utilise `rename(2)`, qui remplace l'entrée de répertoire en une seule
+3. **L'atomicité** : selon l'implémentation, `ln -sfn` fait `unlink()` puis `symlink()` (BusyBox, anciens coreutils); entre les deux,
+   `current` n'existe pas, et une requête qui tombe pile là reçoit un 404. Le `ln` de coreutils 9.4 passe déjà par un nom temporaire, mais
+   `mv -T` rend la chose explicite et portable : il utilise `rename(2)`, qui remplace l'entrée de répertoire en une seule
    opération atomique.
 :::
 
@@ -2069,8 +2070,8 @@ TMPD=$(mktemp -d); trap 'rm -rf "$TMPD"' EXIT
 
 printf '# Audit systèmes de fichiers — %s\n\n' "$(hostname)"
 printf '%s — chemin analysé : `%s`\n\n' "$(date -Is)" "$CIBLE"
-[ "$ROOT" -eq 1 ] || printf '> Sans privilèges : section des fichiers \
-supprimés incomplète.\n\n'
+[ "$ROOT" -eq 1 ] || \
+  printf '> Sans privilèges : section des fichiers supprimés incomplète.\n\n'
 
 # --- montages -----------------------------------------------------------
 trace "inventaire des montages"
@@ -2138,8 +2139,9 @@ else
 fi
 printf '\n## Fichiers creux\n\n'
 find "$CIBLE" -xdev -type f -size +1M -printf '%s\t%b\t%p\n' 2>/dev/null \
-  | awk -F'\t' '$1 > 4 * $2 * 512 { printf "* `%s` : %d o annoncés, \
-%d o alloués\n", $3, $1, $2 * 512 }' > "$TMPD/creux" || true
+  | awk -F'\t' '$1 > 4 * $2 * 512 {
+      printf "* `%s` : %d o annoncés, %d o alloués\n", $3, $1, $2 * 512
+    }' > "$TMPD/creux" || true
 if [ -s "$TMPD/creux" ]; then cat "$TMPD/creux"; else printf 'Aucun.\n'; fi
 
 # --- journaux -----------------------------------------------------------
@@ -2177,7 +2179,7 @@ bash check_M02_05.sh
 ```
 
 ::: pourquoi
-Les quatre difficultés techniques de ce défi, et leur traitement.
+Les cinq difficultés techniques de ce défi, et leur traitement.
 
 **1. `set -euo pipefail` contre les pipelines qui échouent normalement.**
 `find | head -10` reçoit un `SIGPIPE` dès que `head` a ses dix lignes : avec
@@ -2208,7 +2210,7 @@ C'est ce qui permet `audit-fs.sh > rapport.md` sans polluer le Markdown, et
 :::
 
 ::: piege
-Deux détails de portabilité Ubuntu / Rocky 9 :
+Trois détails de portabilité Ubuntu / Rocky 9 :
 
 * `df -P` et `df --output` sont **mutuellement exclusifs** : on choisit
   `--output`, qui est plus précis et présent dans les deux distributions.

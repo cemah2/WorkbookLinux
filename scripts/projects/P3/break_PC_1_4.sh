@@ -14,8 +14,8 @@ date +%s > "$SAUV/$ID.debut"
 # du nouveau api.env.example du dépôt, où le port a changé.
 sed -i -E 's/^PORT=.*/PORT=8082/; s/^APP_VERSION=.*/APP_VERSION=2.4.0/' "$ENVF"
 mkdir -p /var/log/factura
-printf '%s deploy factura-api 2.3.1 -> 2.4.0 : api.env regenere depuis \
-api.env.example, service redemarre\n' "$(date '+%F %T')" \
+printf '%s deploy factura-api 2.3.1 -> 2.4.0 : %s\n' "$(date '+%F %T')" \
+  'api.env regenere depuis api.env.example, service redemarre' \
   >> /var/log/factura/deploy.log
 [ -d /run/systemd/system ] && systemctl restart factura-api.service || true
 sleep 1

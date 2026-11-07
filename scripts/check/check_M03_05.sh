@@ -30,7 +30,7 @@ fi
 
 # --- 2. arbo web : aucun fichier exécutable, 644/755 --------------------
 if [ -d "$WEB" ]; then
-  if find "$WEB" -type f -perm -111 2>/dev/null | grep -q .; then
+  if find "$WEB" -type f -perm /111 2>/dev/null | grep -q .; then
     ko "des fichiers exécutables parasites subsistent sous $WEB"
   else
     ok "aucun fichier exécutable parasite sous $WEB"
@@ -68,7 +68,8 @@ if [ -d "$EXPORTS" ]; then
     ok "$EXPORTS est en 2770 groupe facturation" || \
     ko "$EXPORTS attendu 2770 facturation (obtenu $m $g)"
   if command -v getfacl >/dev/null 2>&1; then
-    getfacl -p "$EXPORTS" 2>/dev/null | grep -q '^default:group:facturation:rw' \
+    getfacl -p "$EXPORTS" 2>/dev/null \
+      | grep -q '^default:group:facturation:rw' \
       && ok "ACL par défaut g:facturation:rw présente sur exports" \
       || ko "ACL par défaut g:facturation:rw manquante sur exports"
   else
@@ -84,7 +85,7 @@ if [ -x "$API" ]; then
   if command -v getcap >/dev/null 2>&1; then
     getcap "$API" 2>/dev/null | grep -q 'cap_net_bind_service' && \
       ok "cap_net_bind_service posée sur $API" || \
-      note "cap_net_bind_service absente sur $API (attendu si l'API bind < 1024)"
+      note "cap_net_bind_service absente sur $API (attendue pour un port < 1024)"
   fi
 fi
 

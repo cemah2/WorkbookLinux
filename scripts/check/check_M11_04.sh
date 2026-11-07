@@ -22,8 +22,8 @@ if command -v pvs >/dev/null 2>&1; then
   case "$SRC" in
     /dev/mapper/*|/dev/*-*)
       ok "/ est sur un volume logique ($SRC)"
-      VGFREE=$(vgs --noheadings --units g --nosuffix -o vg_free 2>/dev/null \
-        | head -1 | tr -d ' ' | cut -d. -f1)
+      VGFREE=$(LC_ALL=C vgs --noheadings --units g --nosuffix -o vg_free \
+        2>/dev/null | head -1 | tr -d ' ' | cut -d. -f1)
       [ "${VGFREE:-0}" -le 2 ] \
         && ok "le groupe de volumes est consommé (${VGFREE:-0} Go libres)" \
         || note "il reste ${VGFREE} Go libres dans le VG : \

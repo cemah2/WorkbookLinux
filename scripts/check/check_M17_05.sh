@@ -46,19 +46,19 @@ if [ -x "$VEILLE" ]; then
   [ -e "$TEMOIN" ] && { SAUVE=$(mktemp); cp -a "$TEMOIN" "$SAUVE"; }
 
   touch "$TEMOIN"
-  "$VEILLE" 26 >/tmp/.m14_05.frais 2>&1; RF=$?
+  "$VEILLE" 26 >/tmp/.m17_05.frais 2>&1; RF=$?
   [ "$RF" -eq 0 ] \
     && ok "témoin frais : code 0" \
     || ko "témoin fraîchement touché, code $RF au lieu de 0 \
-(/tmp/.m14_05.frais)"
+(/tmp/.m17_05.frais)"
 
   touch -d '-40 hours' "$TEMOIN"
-  "$VEILLE" 26 >/tmp/.m14_05.vieux 2>&1; RV=$?
+  "$VEILLE" 26 >/tmp/.m17_05.vieux 2>&1; RV=$?
   [ "$RV" -eq 1 ] \
     && ok "témoin vieux de 40 h avec seuil 26 h : code 1" \
     || ko "témoin antidaté de 40 h, code $RV au lieu de 1 \
-(/tmp/.m14_05.vieux)"
-  grep -qE '[0-9]+' /tmp/.m14_05.vieux \
+(/tmp/.m17_05.vieux)"
+  grep -qE '[0-9]+' /tmp/.m17_05.vieux \
     && ok "le message indique l'âge réel" \
     || ko "le message d'alerte ne donne pas l'âge du témoin en heures"
 

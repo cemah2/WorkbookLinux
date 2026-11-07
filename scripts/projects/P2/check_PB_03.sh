@@ -58,7 +58,7 @@ for h in $HOSTS; do
   r "$h" 'curl -fsS -m 3 http://127.0.0.1:9080/ready' | grep -qi ready \
     && ok "$h : promtail prêt (9080/ready)" \
     || ko "$h : promtail ne répond pas sur 9080/ready"
-  r "$h" 'docker info' | grep -q 'Server Version' \
+  r "$h" 'docker info 2>/dev/null || sudo docker info' | grep -q 'Server Version' \
     && ok "$h : docker installé" || ko "$h : docker absent ou non accessible"
   r "$h" 'cat /etc/docker/daemon.json' | grep -q 'lab-ops.lab.local:3000' \
     && ok "$h : registre lab-ops déclaré dans daemon.json" \

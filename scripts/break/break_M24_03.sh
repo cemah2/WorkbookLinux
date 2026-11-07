@@ -78,10 +78,20 @@ EOF
     git commit -qm 'debug : expose le token pour le job CI' || true
   "
 
-  # 5. l'état : l'output y est enregistré si l'apply passe (meilleur effort)
+  # 5. l'état : l'output y est enregistré si l'apply passe (meilleur effort).
+  #    On n'applique que si le plan ne touche AUCUNE ressource (02-lab2 peut
+  #    être obsolète après L24.4 : un apply aveugle détruirait les VM).
+  PLANF="$DIR/.bf24-03.plan"
   timeout 180 sudo -u "$LAB_USER" -H bash -c \
-    "set -a; . '$ENVF'; set +a; cd '$DIR' && tofu apply -auto-approve \
-     -input=false -refresh=false -lock-timeout=30s >/dev/null 2>&1" || true
+    "set -a; . '$ENVF'; set +a; cd '$DIR' \
+     && tofu plan -input=false -refresh=false -lock-timeout=30s \
+          -out='$PLANF' >/dev/null 2>&1 \
+     && tofu show -json '$PLANF' | jq -e '[.resource_changes[]? \
+          | select(.change.actions != [\"no-op\"])] | length == 0' \
+          >/dev/null \
+     && tofu apply -input=false -lock-timeout=30s '$PLANF' >/dev/null 2>&1" \
+    || true
+  rm -f "$PLANF"
 fi
 
 cat <<EOF

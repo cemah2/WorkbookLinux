@@ -121,7 +121,7 @@ Prérequis à vérifier avant de commencer (tout vient des modules 24 à 26) :
    **act_runner en mode hôte** enregistré avec le label `ops-host`
    (c'est-à-dire `ops-host:host` dans `runner.labels`), lancé par une unité
    systemd sous un compte `runner` membre du groupe `docker`, avec `nodejs`,
-   `ansible` (pipx), `trivy` et `jq` installés sur `lab-ops`. Ce runner
+   `ansible` (pipx), `trivy`, `tofu` et `jq` installés sur `lab-ops`. Ce runner
    exécute les jobs directement sur `lab-ops` : c'est ce qui lui permet de
    lancer `ansible-playbook` et `docker push` sans conteneur.
 3. **Supervision** : `lab-ops` a de la place sur les ports 9090, 9093, 3001,
@@ -285,7 +285,7 @@ commit appliquée par un hook.
   refactor test`.
 * `pre-commit run --all-files` passe sur le dépôt entier.
 * Preuve : un commit contenant `pve_api_token = "tofu@pve!factura=..."`
-  (un faux, 36 caractères hexadécimaux au bon format) est **refusé** par
+  (un faux, UUID de 36 caractères au bon format) est **refusé** par
   le hook ; un message `update stuff` est refusé ; le journal en garde la
   trace.
 * Au moins 5 commits atomiques (squelette, hooks, docs, ...), aucun
@@ -294,7 +294,7 @@ commit appliquée par un hook.
 * `docs/journal.md` commencé, `README.md` à jour (qui fait quoi, comment
   lancer les checks).
 
-**Modules mobilisés** : 17 (Git, hooks, conventions, forge), 07 (scripts).
+**Modules mobilisés** : 21 (Git, hooks, conventions, forge), 07 (scripts).
 
 **Indices**
 
@@ -309,8 +309,7 @@ commit appliquée par un hook.
 * `ansible-lint` sur un dépôt sans playbook passe trivialement ; il commence
   à mordre en PB.3. Garde le profil `production` du `.ansible-lint`.
 * Créer le dépôt par l'API :
-  `curl -u mathieu -X POST $GITEA/api/v1/user/repos -d '{"name":"factura",
-  "private":true}'`.
+  `curl -u mathieu -X POST $GITEA/api/v1/user/repos -H 'Content-Type: application/json' -d '{"name":"factura","private":true}'`.
 
 **Livrable** : le dépôt sur Gitea, `.pre-commit-config.yaml`, le hook de
 message de commit (dans `tools/` ou en ligne dans la config), `README.md`,
@@ -382,14 +381,14 @@ généré par OpenTofu ; `tofu plan` est vide après apply.
 * Preuve de « même code » : `diff envs/staging.tfvars envs/prod.tfvars` ne
   montre que des VMID, des IP et des noms.
 
-**Modules mobilisés** : 20 (bpg/proxmox, cloud-init, `for_each`,
-workspaces, `templatefile`, `local_file`), 12 (SSH, clés), 11 (IP).
+**Modules mobilisés** : 24 (bpg/proxmox, cloud-init, `for_each`,
+workspaces, `templatefile`, `local_file`), 14 (SSH, clés), 12 (IP).
 
 **Indices**
 
 * Le provider a besoin de `provider "proxmox" { ssh { agent = true
   username = "root" } }` pour envoyer les snippets sur le nœud ; lance
-  `eval $(ssh-agent) && ssh-add` avant `tofu apply`. Si l'agent te gêne,
+  `eval $(ssh-agent) & ssh-add` avant `tofu apply`. Si l'agent te gêne,
   `private_key = file("~/.ssh/id_ed25519")` marche aussi.
 * Un snippet est un fichier `local:snippets/<nom>.yaml` ; `file_name` doit
   être unique par VM, sinon les deux VM partagent le même user-data (même
@@ -438,36 +437,36 @@ et `changed=0` au second passage.
 **Cahier des charges**
 
 * Rôles dans `ansible/roles/`, chacun avec `defaults/main.yml`,
-  `tasks/main.yml`, `handlers/main.yml` si besoin, `templates/` :
+  `tasks/main.yml`, `handlers/main.yml` si besoin, `templates/` : –
   * `common` : paquets utiles (`curl jq rsync ca-certificates`), `/etc/hosts`
     avec `lab-ops`, `lab-adm` et les VM de l'environnement, compte
     **`deploy`** (uid fixe, shell bash, membre de `docker`, **sans sudo**,
     clé publique du runner CI dans `authorized_keys`), `journald` persistant
-    borné (comme en PA.6) ;
+    borné (comme en PA.6) ; –
   * `ssh_hardening` : fragment `/etc/ssh/sshd_config.d/50-factura.conf` :
     `PasswordAuthentication no`, `PermitRootLogin no`, `X11Forwarding no`,
     `MaxAuthTries 3`, `AllowUsers mathieu deploy`, validé par `sshd -t`
-    **avant** le handler de restart (un `validate:` sur le template) ;
+    **avant** le handler de restart (un `validate:` sur le template) ; –
   * `firewall` : ufw deny entrant par défaut, règles décrites dans une
     variable de groupe (`firewall_rules` : port, source, commentaire), 22
     depuis 10.10.10.10 et 10.10.10.14, puis les ports du tableau de B.1 selon
     le groupe (`web`, `db`) ; et les ports **publiés par Docker**
     (5432, 8081, 8082, 9121, 9187, 9200) filtrés dans la chaîne
     `DOCKER-USER` via `/etc/ufw/after.rules` — parce que Docker contourne
-    ufw, teste-le avant de me croire ;
+    ufw, teste-le avant de me croire ; –
   * `chrony` : serveur `10.10.10.1` ou un pool public, `chronyc tracking`
-    en `Normal` ;
+    en `Normal` ; –
   * `unattended_upgrades` : sécurité seulement, pas de reboot automatique,
-    `20auto-upgrades` activé ;
+    `20auto-upgrades` activé ; –
   * `node_exporter` : paquet `prometheus-node-exporter`, actif, port 9100
     ouvert pour 10.10.10.14 seulement, répertoire du *textfile collector*
-    accessible en écriture au groupe `deploy` (PB.9 s'en servira) ;
+    accessible en écriture au groupe `deploy` (PB.9 s'en servira) ; –
   * `promtail` : binaire Grafana Promtail (version épinglée dans
     `defaults`), unité systemd durcie, utilisateur `promtail` dans
     `systemd-journal` et `docker`, config qui lit le journal systemd
     **et** les conteneurs Docker (`docker_sd_configs`) avec les labels
     `host`, `env`, `container`, envoi vers `http://10.10.10.14:3100`,
-    `/ready` sur 9080 ;
+    `/ready` sur 9080 ; –
   * `docker` : `docker.io` + `docker-compose-v2` (paquets Ubuntu),
     `/etc/docker/daemon.json` avec `insecure-registries` pour
     `lab-ops.lab.local:3000`, `log-driver json-file` borné, `live-restore`.
@@ -482,8 +481,8 @@ et `changed=0` au second passage.
   `ssh deploy@10.10.10.21 sudo true` échoue ; `nc -zv 10.10.10.22 5432`
   depuis `lab-adm` échoue même quand PostgreSQL tournera (PB.5).
 
-**Modules mobilisés** : 19 (rôles, handlers, templates, `group_vars`,
-idempotence, `validate`), 12, 13, 14, 15 (ce que les rôles reproduisent).
+**Modules mobilisés** : 23 (rôles, handlers, templates, `group_vars`,
+idempotence, `validate`), 14, 16, 18, 22 (ce que les rôles reproduisent : SSH, journald et `node_exporter`, ufw et mises à jour, Docker).
 
 **Indices**
 
@@ -555,7 +554,7 @@ aucune vulnérabilité HIGH/CRITICAL corrigeable.
   ligne dans le journal** (tu seras interrogé dessus).
 * `docker build --build-arg APP_VERSION=dev -t factura-api:dev app/api`
   puis `docker run --rm -p 8000:8000 -e DATABASE_URL=x factura-api:dev`
-  → `curl :8000/version` renvoie `"version":"dev"`. L'image tourne en
+  → `curl localhost:8000/version` renvoie `"version":"dev"`. L'image tourne en
   `app`, pèse moins de 250 Mo, `docker inspect` montre le healthcheck.
 * `app/compose.yaml` (dev) : services `nginx` (port 8080 publié), `api`,
   `worker`, `postgres` (volume nommé, `init.sql` monté dans
@@ -563,23 +562,22 @@ aucune vulnérabilité HIGH/CRITICAL corrigeable.
   `depends_on` avec `condition: service_healthy` sur postgres ; **aucun**
   port publié pour postgres et redis ; mot de passe via `${DB_PASSWORD}`
   avec une valeur de dev par défaut ; `APP_VERSION` passé en `args`.
-* `docker compose up -d --build` puis `curl :8080/health` → `ok`, `POST
+* `docker compose up -d --build` puis `curl localhost:8080/health` → `ok`, `POST
   /api/factures` → 201, le worker journalise « facture traitée ». `docker
   compose down -v` puis `up` : la base est ré-initialisée par `init.sql`
   (5 factures de démo).
 * `trivy image --severity HIGH,CRITICAL --ignore-unfixed factura-api:dev`
-  : rapport sauvé dans `docs/scan-api.txt` (et `scan-worker.txt`). S'il
+  rapport sauvé dans `docs/scan-api.txt` (et `scan-worker.txt`). S'il
   reste des HIGH corrigeables, corrige (mise à jour de base ou de
   dépendance) et rescanne. Les non corrigeables (`--ignore-unfixed`) sont
   listés dans le journal avec une phrase chacun.
 * `pytest` passe dans un conteneur jetable :
-  `docker run --rm -v $PWD/app/api:/src -w /src python:3.12-slim sh -c
-  "pip install -q -r requirements-dev.txt && pytest -q"`.
-* Journaux : `docker compose logs api` montre du JSON, une ligne par
-  requête (Gunicorn en `--access-logfile -`).
+  `docker run --rm -v $PWD/app/api:/src -w /src python:3.12- slim sh -c "pip install -q -r requirements-dev.txt & pytest -q"`.
+* Journaux : `docker compose logs api` montre les journaux applicatifs en JSON et une ligne d'accès par
+  requête (Gunicorn en `--access-logfile -`, format texte de type Apache).
 
-**Modules mobilisés** : 18 (Dockerfile, multi-stage, Compose, healthchecks,
-volumes, réseaux), 15 (scan, non-root).
+**Modules mobilisés** : 22 (Dockerfile, multi-stage, Compose, healthchecks,
+volumes, réseaux), 18 (scan, non-root).
 
 **Indices**
 
@@ -600,7 +598,7 @@ le journal la justification ligne à ligne du `Dockerfile` de l'API.
 
 ::: check
 Critère de réussite : `check_PB_04.sh` passe sur `lab-adm` avec la stack de
-dev démarrée (`cd ~/factura-v2/app && docker compose up -d`).
+dev démarrée (`cd ~/factura-v2/app & docker compose up -d`).
 
 ```bash
 bash ~/workbook/scripts/projects/P2/check_PB_04.sh
@@ -674,9 +672,9 @@ idempotent ; aucun secret en clair dans Git.
 * Idempotence : second passage `changed=0` ; `--check --diff` sans le tag
   ne propose rien.
 
-**Modules mobilisés** : 19 (rôles, vault, `docker_compose_v2`, `block`,
-templates conditionnels), 18 (Compose en prod : `restart`, `env_file`,
-réseaux, volumes nommés), 15 (secrets).
+**Modules mobilisés** : 23 (rôles, vault, `docker_compose_v2`, `block`,
+templates conditionnels), 22 (Compose en prod : `restart`, `env_file`,
+réseaux, volumes nommés), 18 (secrets).
 
 **Indices**
 
@@ -751,13 +749,12 @@ Git `vX.Y.Z`, avec ce tag aussi ; le scan bloque sur HIGH/CRITICAL.
   `VAULT_PASS`, `DEPLOY_SSH_KEY` (les deux derniers servent en PB.7).
 * Branche `main` protégée : le statut `ci / build` requis pour fusionner.
 * Preuve : un push avec un test cassé (fais-le sur une branche + PR)
-  produit un run rouge et la PR non fusionnable ; `git tag v2.0.0 && git
-  push --tags` produit `factura-api:v2.0.0` **et** `factura-api:sha-xxxxxxx`
+  produit un run rouge et la PR non fusionnable ; `git tag v2.0.0 & git push --tags` produit `factura-api:v2.0.0` **et** `factura-api:sha-xxxxxxx`
   dans le registre. Le journal note la durée du pipeline et les trois
   postes les plus longs.
 
-**Modules mobilisés** : 21 (workflows, runner hôte, secrets, artefacts,
-`needs`/`outputs`, registre), 18 (build, tags, digests), 17 (tags,
+**Modules mobilisés** : 25 (workflows, runner hôte, secrets, artefacts,
+`needs`/`outputs`, registre), 22 (build, tags, digests), 21 (tags,
 branches protégées).
 
 **Indices**
@@ -808,8 +805,7 @@ mauvais déploiement est annulé tout seul, et on le voit dans
 
 **Cahier des charges**
 
-* `ci.yaml` gagne un job `deploy-staging` (`needs: build`, `if:
-  gitea.ref == 'refs/heads/main'`) : récupère `VAULT_PASS` et
+* `ci.yaml` gagne un job `deploy-staging` (`needs: build`, exécuté sur `main` **et** sur les tags `v*` — sinon le garde-fou « le staging tourne ce tag » de `cd-prod` ne peut jamais passer) : récupère `VAULT_PASS` et
   `DEPLOY_SSH_KEY` dans des fichiers temporaires (0600, supprimés en
   `always()`), lance `ansible-playbook -i ansible/inventory/staging.ini
   ansible/playbooks/deploy.yml -e factura_image_tag=<tag> -e
@@ -838,8 +834,7 @@ mauvais déploiement est annulé tout seul, et on le voit dans
 * Zéro coupure : pendant une promotion, une boucle `while curl -sf
   http://10.10.10.31/health` toutes les 0,2 s depuis `lab-adm` ne voit
   **aucune** erreur (nginx recharge sans fermer les connexions).
-* Test de rollback : pousse une image qui ment sur sa version (`docker tag
-  ...:sha-xxxxxxx ...:v9.9.9 && docker push`), promeus `v9.9.9` sur le
+* Test de rollback : pousse une image qui ment sur sa version (`docker tag ...:sha-xxxxxxx ...:v9.9.9 & docker push`), promeus `v9.9.9` sur le
   staging (par le playbook ou un `cd-staging` manuel) : le smoke détecte
   `/version ≠ v9.9.9`, le rôle rebascule, le run est rouge, la prod et le
   staging répondent toujours avec l'ancien tag. `switch.log` contient une
@@ -850,13 +845,13 @@ mauvais déploiement est annulé tout seul, et on le voit dans
   en prod, comment retrouver quelle version tourne (`/version`,
   `state.env`, `docker inspect` du digest).
 
-**Modules mobilisés** : 21 (CD, `workflow_dispatch`, garde-fous, secrets,
-`always()`), 19 (`block`/`rescue`, `wait_for`, `uri`), 18 (profils,
-reload nginx), 11.
+**Modules mobilisés** : 25 (CD, `workflow_dispatch`, garde-fous, secrets,
+`always()`), 23 (`block`/`rescue`, `wait_for`, `uri`), 22 (profils,
+reload nginx), 15 (upstream nginx).
 
 **Indices**
 
-* `docker compose exec nginx nginx -s reload` : nginx relit
+* `docker exec factura-nginx-1 nginx -s reload` (ou `docker compose exec`, en chargeant alors `.env` **et** `state.env`) : nginx relit
   `active.conf` et bascule les nouvelles connexions ; les anciennes
   finissent sur l'ancien upstream. C'est ça, le zéro coupure. Ne fais
   jamais `restart nginx` dans `switch.sh`.
@@ -944,7 +939,7 @@ Factura provisionné ; les journaux des conteneurs sont dans Loki ;
   passe.
 * Loki reçoit les journaux de promtail (PB.3) des quatre VM : `{env="prod",
   container=~"factura-api.*"} | json | level="ERROR"` renvoie quelque chose
-  après avoir provoqué une erreur (un `POST` invalide). Les journaux de
+  après avoir provoqué une erreur applicative (un `POST` invalide ne suffit pas : c'est un 400, non journalisé ; une base injoignable quelques secondes fait répondre 500 à `GET /api/factures`). Les journaux de
   Gunicorn (`access log`) sont là aussi.
 * Grafana : datasources Prometheus et Loki provisionnées, dashboard
   `Factura` provisionné (pas créé à la souris) avec au moins : requêtes/s
@@ -962,11 +957,11 @@ Factura provisionné ; les journaux des conteneurs sont dans Loki ;
   moins de 3 minutes, `Watchdog` y est déjà. Relance : `resolved` arrive.
   Génère 200 requêtes dont 30 % de 5xx (le worker arrêté ne fait pas de
   5xx… trouve comment produire des 5xx sans modifier le code : une base
-  injoignable, par exemple via `switch.sh` vers une couleur arrêtée) :
+  injoignable, par exemple; `switch.sh` refuse, lui, de basculer vers une couleur arrêtée) :
   `FacturaErrorBudgetBurn` se déclenche.
 
-**Modules mobilisés** : 22 (Prometheus, PromQL, règles, Alertmanager,
-Grafana provisioning, Loki/LogQL, SLO), 19 (déploiement par Ansible), 18.
+**Modules mobilisés** : 26 (Prometheus, PromQL, règles, Alertmanager,
+Grafana provisioning, Loki/LogQL, SLO), 23 (déploiement par Ansible), 22.
 
 **Indices**
 
@@ -1057,12 +1052,12 @@ de 60 minutes**, journal de temps à l'appui.
   journal analyse les deux plus longues et propose une réduction pour
   chacune (sans l'implémenter).
 * RPO et RTO mesurés dans `docs/runbook-deploy.md` (section « Sinistre »)
-  : RPO = au pire 24 h (sauvegarde à 02:30) ; RTO = le `TOTAL` mesuré.
+  RPO = au pire 24 h (sauvegarde à 02:30) ; RTO = le `TOTAL` mesuré.
   Une piste chiffrée pour un RPO < 1 h.
 
-**Modules mobilisés** : 14 (timers), 12 (rrsync, clés restreintes), 07
-(script robuste), 19 (multi-play, `delegate_to`, `fetch`), 21 (`schedule`,
-`always()`), 20 (destroy/apply), 22 (textfile collector, alerte).
+**Modules mobilisés** : 17 (timers), 14 (rrsync, clés restreintes), 07
+(script robuste), 23 (multi-play, `delegate_to`, `fetch`), 25 (`schedule`,
+`always()`), 24 (destroy/apply), 26 (textfile collector, alerte).
 
 **Indices**
 
@@ -1163,15 +1158,14 @@ sur `https://factura-k3s.lab.local/health`, HPA fonctionnel, et
   Associés (40 personnes, une application, un admin), et ce qui ferait
   changer d'avis.
 
-**Modules mobilisés** : 22 (k3s, manifestes, probes, HPA, Ingress,
-registre privé, scrape), 20 (workspace supplémentaire), 19 (rôle k3s), 15
+**Modules mobilisés** : 26 (k3s, manifestes, probes, HPA, Ingress,
+registre privé, scrape), 24 (workspace supplémentaire), 23 (rôle k3s), 18
 (TLS).
 
 **Indices**
 
 * `registries.yaml` : `mirrors: {"lab-ops.lab.local:3000": {endpoint:
-  ["http://lab-ops.lab.local:3000"]}}` et `configs: {"lab-ops.lab.local:
-  3000": {auth: {username, password}}}`. Redémarre `k3s` après.
+  ["http://lab-ops.lab.local:3000"]}}` et `configs: {"lab-ops.lab.local: 3000": {auth: {username, password}}}`. Redémarre `k3s` après.
 * Le secret de pull : `kubectl create secret docker-registry regcred
   --docker-server=lab-ops.lab.local:3000 --docker-username=mathieu
   --docker-password=<token> -n factura --dry-run=client -o yaml` te donne
@@ -1181,8 +1175,7 @@ registre privé, scrape), 20 (workspace supplémentaire), 19 (rôle k3s), 15
   l'embarque) ; `kubectl top pods -n factura` doit répondre avant de
   tester.
 * `hey` : `go install github.com/rakyll/hey@latest` ou le binaire ; ou
-  `for i in $(seq 20); do (while :; do curl -sk https://.../api/factures
-  >/dev/null; done) & done` puis `kill %1 ...`.
+  `for i in $(seq 20); do (while :; do curl -sk https://.../api/factures >/dev/null; done) & done` puis `kill %1 ...`.
 * Traefik est déjà là (k3s), avec un `IngressClass` `traefik` par défaut ;
   la redirection HTTP→HTTPS se fait par annotation
   `traefik.ingress.kubernetes.io/router.entrypoints: websecure` plus un
@@ -1410,7 +1403,8 @@ PostgreSQL en réplication vers le staging (RPO < 1 h).
 | `qm create`, installation d'Ubuntu, IP fixe, clé SSH | OpenTofu + cloud-init (`for_each`, snippets) | PB.2 |
 | `/etc/hosts`, comptes, `useradd -r`, arborescence | rôle `common` | PB.3 |
 | `sshd_config.d/`, `sshd -t` puis restart | rôle `ssh_hardening` (template + `validate`) | PB.3 |
-| `ufw allow from ... to any port ...` un par un | rôle `firewall` (liste `firewall_rules`, `DOCKER-USER`) | PB.3 |
+| `ufw allow from ... to any port .` |  |  |
+| `..` un par un | rôle `firewall` (liste `firewall_rules`, `DOCKER-USER`) | PB.3 |
 | `unattended-upgrades`, chrony, node_exporter | rôles dédiés | PB.3 |
 | venv, `pip install`, unité systemd durcie, `ExecStart` | `Dockerfile` multi-stage, `USER app`, `CMD` | PB.4 |
 | `/etc/factura/*.env` en 0640, `SECRETS.md` | `ansible-vault`, template `.env` 0600 | PB.5 |

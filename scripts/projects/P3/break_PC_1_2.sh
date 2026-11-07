@@ -8,7 +8,6 @@ PGD=/etc/postgresql/16/main/conf.d
 [ -d "$PGD" ] || { echo "lance d'abord setup_P3.sh (rôle db)" >&2; exit 1; }
 
 cat /proc/sys/kernel/random/boot_id > "$SAUV/$ID.boot_id"
-date +%s > "$SAUV/$ID.debut"
 
 # 1. Un « tuning » passé vendredi soir, sans ticket.
 if [ ! -f "$PGD/20-tuning.conf" ]; then
@@ -19,6 +18,9 @@ EOF
   touch -d 'last friday 18:40' "$PGD/20-tuning.conf"
   pg_ctlcluster 16 main restart
 fi
+# début du ticket APRÈS le restart ci-dessus (sinon le check croit que
+# l'apprenant a redémarré PostgreSQL)
+date +%s > "$SAUV/$ID.debut"
 
 # 2. Un ETL de la compta qui ouvre des transactions et ne les ferme jamais.
 cat > /usr/local/bin/etl-compta <<'EOF'

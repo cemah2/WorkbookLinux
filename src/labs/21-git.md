@@ -93,7 +93,7 @@ Il crée `~/lab21/` :
 | `collegue/factura-infra` | le clone d'alice, pour simuler un collègue |
 | `rapports/` | tes livrables, jamais effacé |
 
-Le dépôt `factura-infra` a un historique de 20 commits par trois auteurs,
+Le dépôt `factura-infra` a un historique d'une vingtaine de commits par trois auteurs,
 un merge, deux tags (`v0.9.0` léger, `v1.0.0` annoté), deux branches
 (`feature/tls-letsencrypt`, `hotfix/ansible-timeout`), **un secret commité
 puis « retiré »**, et **un commit qui casse `bin/healthcheck.sh`**. Le script
@@ -171,10 +171,17 @@ les commits qui changent le **nombre d'occurrences** d'une chaîne (le
 ### Ignorer et normaliser
 
 ```gitignore
-.terraform/        # un répertoire (partout dans l'arbre)
-/logs/*            # le contenu de logs/ à la racine seulement
-!/logs/.gitkeep    # ... sauf ce fichier : marche car le parent est logs/*
-*.tfstate          # patron glob
+# un répertoire (partout dans l'arbre)
+.terraform/
+# le contenu de logs/ à la racine seulement...
+/logs/*
+# ... sauf ce fichier : marche car le parent est logs/*
+!/logs/.gitkeep
+# patron glob
+*.tfstate
+
+Un commentaire n'est reconnu qu'en début de ligne : *.tfstate  # x serait un patron (avec son # x), pas un
+commentaire.
 ```
 
 Deux pièges : un fichier **déjà suivi** n'est jamais ignoré
@@ -185,9 +192,12 @@ Fichier global : `core.excludesFile` (`~/.gitignore_global`), pour les
 fichiers propres à ton poste (`.idea/`, `*.swp`), pas au projet.
 
 ```gitattributes
-* text=auto eol=lf     # normalise en LF dans le dépôt et à l'extraction
-*.sh text eol=lf       # les scripts ne survivent pas à un CRLF
-*.png binary           # pas de diff texte, pas de conversion
+# normalise en LF dans le dépôt et à l'extraction
+* text=auto eol=lf
+# les scripts ne survivent pas à un CRLF
+*.sh text eol=lf
+# pas de diff texte, pas de conversion
+*.png binary
 ```
 
 ### Branches, fusion, rebase
@@ -244,8 +254,8 @@ versions ; tag léger (simple pointeur) pour un repère perso.
 `reset` réécrit (réservé aux commits **non poussés**) ; `revert` ajoute un
 commit inverse (le seul choix sur un historique partagé). `git reflog`
 liste où `HEAD` est passé : un commit « perdu » par `reset --hard`, un
-`rebase` raté ou un HEAD détaché s'y retrouve pendant 90 jours
-(`git branch sauvetage HEAD@{3}`). `git clean -ndx` **liste** ce qui
+`rebase` raté ou un HEAD détaché s'y retrouve pendant 30 jours
+(90 pour un commit encore joignable) (`git branch sauvetage HEAD@{3}`). `git clean -ndx` **liste** ce qui
 serait supprimé (non suivis **et** ignorés) ; `-fdx` le fait.
 `git bisect start <bad> <good>` puis `git bisect run ./test.sh` trouve le
 commit fautif en log₂(n) essais.
@@ -320,7 +330,7 @@ c) `origin/main` a été supprimée
 d) tu as 2 commits de plus que la branche `main` locale
 
 **Q21.3** — Après `git add -p` où tu as accepté un seul des deux hunks
-de `README.md`, quelles commandes montrent quelque chose ?
+de `README.md`, quelles commandes montrent une partie de ta modification de `README.md` ?
 **Deux réponses correctes.**
 
 a) `git diff`
@@ -362,13 +372,13 @@ d) `merge.ff=false` est réglé
         add_header Strict-Transport-Security "max-age=31536000" always;
 =======
         ssl_certificate     /etc/letsencrypt/live/factura/fullchain.pem;
->>>>>>> dcd8cba (feat(nginx): écoute en 443 avec certificat Let's Encrypt)
+>>>>>>> 994e070 (feat(nginx): écoute en 443 avec certificat Let's Encrypt)
 ```
 
 Quelle affirmation est vraie ?
 
-a) `HEAD` est ta branche, `dcd8cba` vient de `main`
-b) `HEAD` est `main` (la base), `dcd8cba` est ton commit en cours de rejeu
+a) `HEAD` est ta branche, `994e070` vient de `main`
+b) `HEAD` est `main` (la base), `994e070` est ton commit en cours de rejeu
 c) `HEAD` est la version commune aux deux
 d) les deux blocs viennent de ta branche
 
@@ -598,10 +608,9 @@ dans `HEAD` et Contact toujours dans le working directory.
 domaine`. Renomme-le en `docs(readme): précise le domaine dans le titre`
 sans créer de commit supplémentaire. Compare le SHA avant/après et le
 `git status -sb` : que signifie `[ahead 1]` ? Commite ensuite la section
-Contact avec `commit -a` sans passer par `add`. Enfin, déplace
-`ansible/roles/nginx/tasks_certbot.yml` (sur la branche
-`feature/tls-letsencrypt`) vers `ansible/roles/nginx/tasks/main.yml` en
-un commit qui apparaît comme un **renommage** dans `git log --stat`.
+Contact avec `commit -a` sans passer par `add`. Enfin, sur une branche jetable `essai/renommage` créée depuis `feature/tls-letsencrypt` (qui doit rester intacte pour E21.9 et L21.1), déplace
+`ansible/roles/nginx/tasks_certbot.yml` vers `ansible/roles/nginx/tasks/main.yml` en
+un commit qui apparaît comme un **renommage** dans `git log --stat`, puis supprime la branche jetable.
 
 **E21.7** — `git status` liste `ansible/notes-perso.txt` et `logs/`. Fais en
 sorte que : le contenu de `logs/` soit ignoré **mais** que `logs/.gitkeep`
@@ -666,7 +675,7 @@ les trois commits, sans compter à la main.
 **E21.15** — `git branch -D feature/tls-letsencrypt` (oui, `-D`). Elle est
 perdue ? Retrouve le SHA de son dernier commit **de deux manières**
 (reflog de `HEAD`, et `git fsck --lost-found` ou `git log -g`), recrée la
-branche au même endroit et vérifie qu'elle est identique à
+branche au même endroit et compare-la à
 `origin/feature/tls-letsencrypt`.
 
 **E21.16** — `bin/healthcheck.sh` échoue sur `main` et passait à `v1.0.0`.
@@ -857,7 +866,7 @@ bash check_M21_04.sh
 ### **L21.5** — Forge locale : Gitea sur `lab-ops`
 
 ::: contexte
-Les modules 25 (CI) et 22 (GitOps) ont besoin d'une forge avec merge
+Les modules 25 (CI) et 26 (GitOps) ont besoin d'une forge avec merge
 requests, protection de branche et webhooks. Gitea tient en un binaire et
 tourne en 5 minutes sur `lab-ops`. Le dépôt `factura-infra` y sera poussé
 avec `main` protégée.
@@ -892,7 +901,7 @@ Sur **`lab-ops`** :
    « merge commit », puis `git pull` sur `lab-adm`.
 
 ::: astuce
-Variante Docker en une ligne (si Docker est déjà là, sinon module 23) :
+Variante Docker en une ligne (si Docker est déjà là, sinon module 22) :
 `docker run -d --name gitea -p 3000:3000 -p 2222:22 -v gitea:/data
 --restart always gitea/gitea:1` — même écran d'installation.
 :::
@@ -908,7 +917,7 @@ bash check_M21_05.sh      # depuis lab-adm
 ## 21.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf17`. Chaque panne
+Avant chaque Break & Fix : `qm snapshot 9001 avant-bf21`. Chaque panne
 construit son **propre** dépôt dans `~/lab21/bfN/` : le dépôt principal
 n'est pas touché. Les scripts sauvegardent un `git bundle` de l'état
 initial dans `/root/.breakfix-backup/`, mais l'utiliser vaut échec : ici
@@ -1097,7 +1106,7 @@ Pour aller plus loin :
 * Lis `man gitrevisions` (les formes `HEAD~2`, `main@{yesterday}`,
   `v1.0.0^{commit}`, `A...B`) et `man gitworkflows` : deux pages que
   presque personne ne lit et qui répondent à la moitié des questions.
-* Installe `pre-commit` (`pip install pre-commit`) et remplace tes hooks
+* Installe `pre-commit` (`sudo apt install pre-commit`) et remplace tes hooks
   maison par un `.pre-commit-config.yaml` avec `gitleaks`, `shellcheck-py`
   et `yamllint` : compare l'effort d'installation pour un nouveau
   collègue.

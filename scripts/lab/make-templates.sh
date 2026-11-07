@@ -74,9 +74,15 @@ build_template() {
   # Le paquet qemu-guest-agent n'est pas dans les images cloud. Si
   # libguestfs-tools est installé sur le nœud, on l'injecte tout de suite ;
   # sinon bootstrap-lab.sh l'installera au premier démarrage.
+  # On travaille sur une COPIE : l'image téléchargée doit garder son
+  # empreinte, sinon la relance (wget -N ne retélécharge pas) échoue au
+  # contrôle SHA256.
+  local work="$img"
   if command -v virt-customize >/dev/null 2>&1; then
     info "injection de qemu-guest-agent dans l'image (virt-customize)"
-    virt-customize -q -a "$img" --install qemu-guest-agent \
+    work="$LAB_DIR/work-$vmid-$(basename "$img")"
+    cp --sparse=always "$img" "$work"
+    virt-customize -q -a "$work" --install qemu-guest-agent \
       --run-command 'systemctl enable qemu-guest-agent' || true
   fi
 
@@ -93,7 +99,8 @@ build_template() {
 
   info "import du disque dans $LAB_STORAGE"
   # PVE 8 : « qm disk import » ; « qm importdisk » reste accepté (alias).
-  qm disk import "$vmid" "$img" "$LAB_STORAGE" --format raw >/dev/null
+  qm disk import "$vmid" "$work" "$LAB_STORAGE" --format raw >/dev/null
+  [ "$work" = "$img" ] || rm -f "$work"
 
   # Le disque importé apparaît en unused0 ; son nom dépend du stockage
   # (local-lvm:vm-9000-disk-0, local:9000/vm-9000-disk-0.raw, ...).

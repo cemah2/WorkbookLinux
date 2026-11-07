@@ -27,7 +27,7 @@ if [ -f /boot/grub/grub.cfg ]; then
     && ok "GRUB lui-même est sur le port série (commande serial)" \
     || ko "pas de GRUB_TERMINAL/GRUB_SERIAL_COMMAND appliqués \
 (grep '^serial' grub.cfg)"
-  T=$(grep -oE '^set timeout=[0-9-]+' /boot/grub/grub.cfg | tail -1 \
+  T=$(grep -oE '^\s*set timeout=[0-9-]+' /boot/grub/grub.cfg | tail -1 \
       | cut -d= -f2)
   if [ -n "${T:-}" ] && { [ "$T" -ge 5 ] || [ "$T" -lt 0 ]; }; then
     ok "menu GRUB visible ($T s)"

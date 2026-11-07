@@ -272,7 +272,7 @@ avec le code conventionnel `130` / `143` (`128 + n`) au lieu du code par défaut
 ::: piege
 Deux limites réelles. D'abord `SIGKILL` (`kill -9`) ne déclenche **rien** : le
 processus est supprimé par le noyau, aucun trap ne tourne. Ensuite, si tu
-intercepts `INT` toi-même et que tu sors par `exit`, le trap `EXIT` se déclenche
+interceptes `INT` toi-même et que tu sors par `exit`, le trap `EXIT` se déclenche
 **aussi** : d'où le `trap - EXIT` avant d'appeler le nettoyage à la main, si tu
 ne veux pas nettoyer deux fois.
 :::
@@ -513,11 +513,11 @@ l'environnement de son père, jamais l'inverse : ses variables meurent avec lui.
 C'est ce qui explique pourquoi les scripts d'activation d'environnement
 (`. venv/bin/activate`, `. /etc/profile.d/proxy.sh`) se sourcent toujours.
 
-| Invocation | Processus | Shebang | Bit `x` | Effet sur le shell |
+| Invocation | Processus | Shebang | / bit `x` | Effet sur le shell |
 |---|---|---|---|---|
-| `./s.sh` | fils | requis | requis | aucun |
-| `bash s.sh` | fils | ignoré | inutile | aucun |
-| `source s.sh` | courant | ignoré | inutile | total |
+| `./s.sh` | fils | requis / | requis | aucun |
+| `bash s.sh` | fils | ignoré / | inutile | aucun |
+| `source s.sh` | courant | ignoré / | inutile | total |
 :::
 
 ::: piege
@@ -969,8 +969,10 @@ contenait un point.
 **E7.5** — *`DEST` valorisé, et différence `${1-def}` / `${1:-def}`.*
 
 ```bash
-DEST=${1:-/srv/factura}          # vide OU absent -> /srv/factura
-: "${DEST:?destination obligatoire}"   # ceinture : refuse une valeur vide
+DEST=${1-/srv/factura}           # ABSENT seulement -> /srv/factura
+: "${DEST:?destination vide}"    # "" passé explicitement -> arrêt + message
+Avec ${1:-/srv/factura}, le "" explicite serait remplacé par le défaut et le :? suivant ne se déclencherait
+jamais : c'est bien la forme sans deux-points qu'il faut ici.
 ```
 
 ```console
@@ -1312,9 +1314,9 @@ done
 
 | # | Défaut | Code shellcheck |
 |---|---|---|
-| 1 | `for f in \`ls $DIR\`` : casse sur les espaces | SC2045 / SC2006 |
+| 1 | `` for f in `ls $DIR` `` : casse sur les espaces | SC2045 / SC2006 |
 | 2 | `$DIR` et `$f` non quotés | SC2086 |
-| 3 | `` `...` `` au lieu de `$(...)` | SC2006 |
+| 3 | `` `…` `` au lieu de `$(…)` | SC2006 |
 | 4 | `[ $n > 10 ]` : `>` **redirige**, ne compare pas | SC2071 / SC2086 |
 | 5 | `$1` non vérifié : `ls` liste le répertoire courant | SC2154 (esprit) |
 
@@ -1782,10 +1784,7 @@ et la pose du trap, une interruption laisserait un orphelin. Et `nettoyer`
 commence par `local rc=$?` afin de **préserver le code de sortie** : sans cette
 ligne, le `rm -rf` réussi écraserait un code d'erreur par 0.
 
-**Le `mourir` qui désarme `ERR`.** Un `exit 3` volontaire est une commande qui
-renvoie un code non nul : sans `trap - ERR`, le gestionnaire d'erreur se
-déclencherait sur une sortie parfaitement maîtrisée et noierait le vrai message
-de diagnostic.
+**Le `mourir` qui désarme `ERR`.** `exit 3` ne déclenche pas lui-même le trap `ERR` (et `[ -d ... ] ||` non plus : un test suivi de `||` est exempté), et sans `set -E` le trap `ERR` n'est même pas hérité par les fonctions. Le `trap - ERR` est donc une précaution, utile dès qu'on ajoute `set -E` : un échec secondaire dans `mourir` produirait sinon un second message « échec ligne N » qui noierait le vrai diagnostic.
 
 **L'archive écrite à côté puis déplacée.** `mv` dans le même système de fichiers
 est un `rename(2)`, donc atomique : l'archive finale n'existe jamais dans un
@@ -1814,6 +1813,7 @@ explicitement.
 
 ```bash
 #!/usr/bin/env bash
+# shellcheck disable=SC2317  # sur_signal n'est appelée que par trap
 # exec-tracee.sh — enveloppe d'exécution : journalise, propage, gère les
 # signaux. La sortie de la commande n'est ni modifiée ni réordonnée.
 # Codes : celui de la commande, 128+n si signal, 2 en cas d'usage incorrect.
@@ -1848,7 +1848,9 @@ journaliser() {
 sur_signal() {
   local nom=$1 num=$2
   journaliser WARN "signal $nom reçu, arrêt de la commande (pid $ENFANT)"
-  [ "$ENFANT" -ne 0 ] && kill -"$nom" "$ENFANT" 2>/dev/null
+  # toujours TERM : un fils lancé avec & par un shell non interactif
+  # IGNORE SIGINT (hérité à l'exec), un kill -INT ne le toucherait pas
+  [ "$ENFANT" -ne 0 ] && kill -TERM "$ENFANT" 2>/dev/null
   wait "$ENFANT" 2>/dev/null
   journaliser ERROR "fin sur signal $nom, code $((128 + num))"
   exit $((128 + num))
@@ -1909,7 +1911,7 @@ gestionnaire, qui peut alors tuer proprement le fils, tracer et sortir avec le
 bon code. C'est le patron standard de tout script d'enveloppe (`entrypoint.sh`
 de conteneur, wrapper d'ordonnanceur).
 
-**Pourquoi `set -e` est absent.** Ici, l'échec de la commande encapsulée est un
+**Pourquoi le gestionnaire envoie `TERM` même sur `INT`.** Dans un shell non interactif, une commande lancée avec `&` démarre avec `SIGINT` **ignoré** (règle POSIX), et cette disposition survit à l'`exec` : `kill -INT "$ENFANT"` ne ferait rien, le `wait` bloquerait jusqu'à la fin naturelle de la commande et le Ctrl-C paraîtrait « sans effet ». `TERM`, lui, n'est jamais ignoré d'office. **Pourquoi `set`** `-e` **est absent.** Ici, l'échec de la commande encapsulée est un
 **résultat**, pas une erreur du script : il faut le journaliser et le propager,
 pas interrompre l'enveloppe. On garde `set -u` et `pipefail`, qui protègent le
 code de l'enveloppe elle-même. Choisir ses options selon le rôle du script fait
@@ -1965,10 +1967,12 @@ bash ~/lab07/bin/purge-archives.sh | head -1
 # purge de /home/mathieu/lab07/bf1/archives/ (> 7 jours)
 #                                          ^ le sous-répertoire manque
 
-# 3. confirmer que la variable est vide, sans exécuter la suppression
+# 3. confirmer que la variable est vide. ATTENTION : bash -x EXÉCUTE le
+#    script (le jeu est déjà vide après l'étape 2, c'est sans risque ici ;
+#    sur un vrai incident, on copie le script et on remplace rm par echo)
 bash -x ~/lab07/bin/purge-archives.sh 2>&1 | grep -E 'SOUS=|rm '
 # + SOUS=
-# + rm -rf /home/mathieu/lab07/bf1/archives//*
+# + rm -rf '/home/mathieu/lab07/bf1/archives//*'   (jeu déjà vide)
 
 # 4. remonter à la source : la clé n'existe plus sous ce nom
 grep -n 'sous' ~/lab07/bf1/purge.conf
@@ -2105,7 +2109,8 @@ cat ~/lab07/bf2/derniere-execution.log
 # SAUVEGARDE OK (...)          <- le verdict contredit les deux lignes du dessus
 
 # 2. comparer le contenu de l'archive à la source
-tar -tzf ~/lab07/bf2/coffre/factura-$(date +%F).tar.gz | sort > /tmp/dans
+tar -tzf ~/lab07/bf2/coffre/factura-$(date +%F).tar.gz \
+  | grep -v '/$' | sort > /tmp/dans      # sans les répertoires
 ( cd ~/lab07/bf2/source && find . -type f | sort ) > /tmp/attendu
 diff /tmp/attendu /tmp/dans
 # < ./etc/deploy.key
@@ -2323,6 +2328,7 @@ $ ~/lab07/bin/deploy-conf.sh --env recette \
     --fichier ~/lab07/bf3/modeles/'conf de secours.ini' --verbeux
 [19:10:34] modèle en version 2 (2.1), rendu standard
 [19:10:34] rendu installé dans .../cible/recette/app.ini
+[19:10:34] déploiement de .../modeles/conf de secours.ini vers recette
 hook appelé avec 2 argument(s) :
   $1 = [/home/mathieu/lab07/bf3/modeles/conf de secours.ini]
   $2 = [recette]
@@ -2345,10 +2351,8 @@ existe avec les droits hérités du `umask`.
 :::
 
 ::: piege
-Prévention : `shellcheck` détecte trois des quatre défauts en une seconde
-(SC2086 sur `$FICHIER` et `$TMP`, SC2071/SC2086 sur la comparaison, et il
-signale le `$*` du hook). Le quatrième, le `shift` manquant, ne se voit pas
-statiquement — mais un test de non-régression d'une ligne
+Prévention : `shellcheck` ne détecte en une seconde que le défaut de quoting
+(SC2086 sur `$FICHIER`, `$TMP` et `$HOOK`), qui couvre le quatrième symptôme. Les trois autres lui échappent : `-eq` sur une variable quotée dont il ne connaît pas la valeur, le nom temporaire fixe, et le `shift` manquant — ce dernier ne se voit qu'à l'exécution, mais un test de non-régression d'une ligne
 (`timeout 5 ./deploy-conf.sh --verbeux ... || echo "boucle ?"`) le détecte. La
 règle d'équipe qui en découle : aucun script ne part en production sans passer
 shellcheck **et** sans un essai avec chaque option documentée.
@@ -2362,6 +2366,7 @@ shellcheck **et** sans un essai avec chaque option documentée.
 
 ```bash
 #!/usr/bin/env bash
+# shellcheck disable=SC2317  # fonctions appelées par trap (faux positif)
 # sauvegarde.sh — sauvegarde datée + purge de rétention.
 # Qualité production : verrou, espace jetable, vérification, rapport.
 #

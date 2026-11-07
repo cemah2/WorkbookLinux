@@ -659,7 +659,7 @@ l'hyperviseur, et note deux différences entre les deux approches.
 `pyproject.example.toml` : `src/monoutil/cli.py` avec un `main()` qui
 affiche `bonjour`, `tests/test_cli.py` avec un test, `pip install -e .`
 dans le venv, puis `monoutil` depuis n'importe quel répertoire. Termine par
-`ruff check`, `ruff format --check` et `pytest` verts.
+`ruff check`, `ruff format - -check` et `pytest` verts.
 
 ---
 
@@ -921,7 +921,7 @@ bash check_M27_05.sh
 ## 27.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf23`. Le snapshot de
+Avant chaque Break & Fix : `qm snapshot 9001 avant-bf27`. Le snapshot de
 secours reste `snap-clean`, mais on répare du **code** : le script fautif est
 livré dans `~/lab27/bfN/`, c'est lui qu'il faut lire, comprendre et corriger,
 ligne à ligne, avec une justification qu'on peut mettre dans une revue.
@@ -1125,5 +1125,5 @@ Pour aller plus loin :
 * Installe `pytest-cov` et regarde quelles lignes de `sante.py` ne sont pas
   couvertes : ce sont presque toujours les branches d'erreur.
 * Regarde `asyncio` et `concurrent.futures.ThreadPoolExecutor` pour
-  vérifier 200 hôtes en parallèle dans `sante.py` : le module suivant en
-  aura besoin.
+  vérifier 200 hôtes en parallèle dans `sante.py` : les projets du fil rouge en
+  auront besoin.

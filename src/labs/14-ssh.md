@@ -72,7 +72,7 @@ sudo bash ~/workbook/scripts/setup/setup_M14.sh
 Il crée `~/lab14/{bin,conf,rapports}`, une vieille clé RSA 2048 à faire tourner,
 un faux service de base de données sur `lab-db:5432`, une fausse application
 locale sur `lab-adm:3000`, le compte de service `sauvegarde` sur `lab-web`, et
-sauvegarde `/etc/ssh` dans `/root/.m12-backup/`.
+sauvegarde `/etc/ssh` dans `/root/.m14-backup/`.
 
 ::: attention
 Ce module modifie la configuration du serveur SSH. **Règle d'or absolue** :
@@ -119,7 +119,7 @@ arrive en clair sur le serveur.
 | `ssh-keygen -y -f ~/.ssh/id_ed25519` | régénère la publique depuis la privée |
 | `ssh-copy-id -i ~/.ssh/id_ed25519.pub h` | dépose la clé, crée les bons droits |
 
-`ed25519` : 68 octets de clé publique, signature plus rapide, sécurité
+`ed25519` : clé publique de 32 octets (68 caractères en base64), signature plus rapide, sécurité
 équivalente à RSA 3072, aucun paramètre à choisir (donc aucun moyen de se
 tromper), et pas de dépendance à la qualité du générateur aléatoire au moment de
 la signature. RSA 4096 ne sert que face à un équipement qui ne connaît pas
@@ -223,7 +223,7 @@ fichier principal.
 `-N` : pas de commande distante. `-f` : passe en arrière-plan.
 `-o ExitOnForwardFailure=yes` : indispensable, sinon un port déjà pris donne un
 tunnel silencieusement inexistant. Côté serveur, `AllowTcpForwarding` autorise
-`-L`/`-D`, `GatewayPorts` décide si un `-R` peut écouter ailleurs que sur la
+`-L`/`-D` (`local`) et `-R` (`remote`), `GatewayPorts` décide si un `-R` peut écouter ailleurs que sur la
 boucle locale.
 
 @fig(ssh-bastion-tunnels): Poste → `ProxyJump lab-adm` → lab-db, puis les trois tunnels : `-L` ouvre un port chez moi vers le serveur, `-R` ouvre un port sur le serveur vers moi, `-D` est un `-L` dynamique (SOCKS5).
@@ -713,7 +713,7 @@ distribué à toute l'équipe et adapté sur le PC Windows de chacun.
 
 ::: check
 Critère de succès : `ssh lab-db` fonctionne en une frappe depuis `lab-adm`,
-`ssh -G lab-db` montre le bon utilisateur, la bonne IP, `proxyjump 10.10.10.10`
+`ssh -G lab-db` montre le bon utilisateur, la bonne IP, `proxyjump bastion`
 et `identitiesonly yes`, et une socket de contrôle existe après une connexion.
 
 ```bash
@@ -874,7 +874,7 @@ sudo bash check_M14_05.sh     # à lancer sur lab-web
 ## 14.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf12`. Le snapshot de
+Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf14`. Le snapshot de
 secours reste `snap-clean`, mais l'utiliser vaut échec : l'objectif est de
 réparer. Et pour ce module en particulier : **garde une session ouverte** ou
 prépare la console Proxmox avant de lancer le script. Une partie des pannes
@@ -953,10 +953,10 @@ lignes: 12
 ### **BF14.4** — « Ça marchait ce matin, maintenant je suis éjecté avant d'avoir tapé quoi que ce soit »
 
 ```bash
-sudo bash break_M14_04.sh     # à lancer sur lab-adm
+sudo bash break_M14_04.sh     # à lancer sur lab-adm, L14.3 en place
 ```
 
-**Symptôme utilisateur** : depuis `lab-adm`, `ssh lab-web` affiche après quelques
+**Symptôme utilisateur** : depuis `lab-adm`, `ssh lab-web` (durci en L14.3) affiche après quelques
 secondes `Received disconnect from 10.10.10.11 port 22:2: Too many
 authentication failures`. La même commande avec `-i ~/.ssh/id_ed25519` échoue
 pareillement. `ssh lab-db` fonctionne encore, mais plus lentement qu'avant.
@@ -1004,7 +1004,7 @@ Cahier des charges :
    `ssh-keyscan`, **et** vérifie chaque empreinte obtenue contre une liste de
    référence `~/lab14/conf/empreintes.txt` que tu auras constituée en lisant les
    clés sur chaque machine. Le script refuse d'écrire si une empreinte diverge et
-   sort en 2 dans ce cas.
+   sort en 2 dans ce cas. Les chemins de la référence et du fichier produit et la liste des hôtes doivent pouvoir être surchargés par les variables d'environnement `REF`, `OUT` et `HOTES` (le script de vérification s'en sert).
 4. **Outil de parc** : `~/lab14/bin/parc.sh`, en bash, `set -euo pipefail`, qui
    prend une commande en argument et l'exécute sur les quatre serveurs. Exigences :
    * n'utilise que les alias du fichier de configuration, aucune IP en dur ;

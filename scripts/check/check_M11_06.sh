@@ -62,9 +62,10 @@ if command -v vgs >/dev/null 2>&1; then
       && ok "le PV du groupe est un tableau md ($PVL)" \
       || ko "le PV du groupe est $PVL : le PV doit être posé sur /dev/md0"
 
-    TOT=$(vgs --noheadings --units m --nosuffix -o vg_size "$VG" 2>/dev/null \
-      | tr -d ' ' | cut -d. -f1)
-    LVC=$(lvs --noheadings --units m --nosuffix -o lv_size "$VG/lv_coffre" \
+    TOT=$(LC_ALL=C vgs --noheadings --units m --nosuffix -o vg_size "$VG" \
+      2>/dev/null | tr -d ' ' | cut -d. -f1)
+    LVC=$(LC_ALL=C lvs --noheadings --units m --nosuffix -o lv_size \
+      "$VG/lv_coffre" \
       2>/dev/null | tr -d ' ' | cut -d. -f1)
     if [ -n "${LVC:-}" ] && [ "${TOT:-0}" -gt 0 ]; then
       PCT=$(( LVC * 100 / TOT ))
@@ -161,11 +162,11 @@ fi
 # --- 7. rapport ---------------------------------------------------------
 LAB_USER="${SUDO_USER:-$(id -un)}"
 HOMEDIR=$(getent passwd "$LAB_USER" | cut -d: -f6)
-RAP="$HOMEDIR/lab11/rapports/d10.md"
+RAP="$HOMEDIR/lab11/rapports/d11.md"
 if [ -s "$RAP" ]; then
   L=$(grep -c . "$RAP")
-  [ "$L" -ge 20 ] && ok "rapport d10.md rédigé ($L lignes)" \
-    || ko "rapport d10.md trop court ($L lignes, 20 minimum)"
+  [ "$L" -ge 20 ] && ok "rapport d11.md rédigé ($L lignes)" \
+    || ko "rapport d11.md trop court ($L lignes, 20 minimum)"
   for mot in raid luks lvm; do
     grep -qi "$mot" "$RAP" || note "le rapport ne parle pas de « $mot »"
   done

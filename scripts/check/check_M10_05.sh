@@ -67,7 +67,7 @@ else
 dnf history undo"
 fi
 
-# --- 5. dnf-automatic : sécurité seulement, sans application -------------
+# --- 5. dnf-automatic : sécurité seulement, appliquée, sans reboot -------
 CONF=/etc/dnf/automatic.conf
 if [ -f "$CONF" ]; then
   ok "$CONF présent"

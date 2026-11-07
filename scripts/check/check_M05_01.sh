@@ -66,7 +66,8 @@ grep -qE '(^|[^0-9])3[.,]9' "$RAP" \
 # heure de pointe : 18
 att_h=$(awk '{ print substr($4, 14, 2) }' "$SRC" | sort | uniq -c \
         | sort -rn | head -1 | awk '{ print $2 }')
-grep -qE "(^|[^0-9:])${att_h}([^0-9]|$)" "$RAP" \
+# ni « [18/Sep » ni « 18/Sep/2026 » (la période) ne doivent suffire
+grep -qE "(^|[^0-9:/[])${att_h}([^0-9/]|$)" "$RAP" \
   && ok "l'heure de pointe (${att_h} h) est mentionnée" \
   || ko "l'heure de pointe n'est pas identifiée (étape 3)"
 

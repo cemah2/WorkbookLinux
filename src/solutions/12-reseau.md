@@ -101,8 +101,8 @@ commutateur, relais DHCP absent sur le segment, pool DHCP épuisé, serveur DHCP
 arrêté.
 
 La commande qui confirme : `journalctl -u systemd-networkd -n 50` (ou
-`-u NetworkManager` sur Rocky), qui montre les `DHCPv4 ... no response`.
-Et `sudo dhclient -v ens18` en avant-plan pour voir les `DHCPDISCOVER` partir.
+`-u NetworkManager` sur Rocky), qui montre les tentatives DHCPv4 sans réponse.
+Et `sudo tcpdump -ni ens18 'port 67 or port 68'` pour voir les `DHCPDISCOVER` partir sans `DHCPOFFER` en retour (`dhclient` n'est plus installé par défaut sur Ubuntu 24.04).
 :::
 
 ::: piege
@@ -132,7 +132,7 @@ que se trouve le bug : le paquet part par la bonne interface mais avec la
 mauvaise source, et la réponse ne revient jamais (ou se fait jeter par un
 filtrage en amont, ou par `rp_filter`).
 
-La ligne `cache` indique que le résultat vient du cache de routage de la socket,
+La mention `cache` signale seulement une route calculée pour cette destination ( le cache de routage IPv4 a disparu en 3.6),
 pas que la destination est joignable. `ip route get` **n'envoie aucun paquet** :
 c'est une question posée à la table de routage, pas un test d'accessibilité.
 D'où la fausseté de c).
@@ -162,7 +162,7 @@ lrwxrwxrwx 1 root root 39 ... /etc/resolv.conf ->
 ```
 
 `systemd-resolved` écoute sur `127.0.0.53:53` (et sur `127.0.0.54` pour le mode
-« bypass »). Toutes les requêtes des applications qui lisent `resolv.conf`
+«proxy », qui relaie sans traitement local). Toutes les requêtes des applications qui lisent `resolv.conf`
 arrivent donc au stub local, qui décide ensuite : cache, serveur amont par lien
 réseau, domaine de recherche, DNSSEC, DNS-over-TLS.
 
@@ -211,7 +211,7 @@ correspondance, la recherche s'arrête là. Le DNS n'est jamais interrogé.
 
 `dig`, lui, ne passe **pas** par NSS. C'est un client DNS pur : il lit
 `/etc/resolv.conf` pour savoir à qui parler et envoie une requête DNS. Il ne
-regarde jamais `/etc/hosts`.
+lit jamais `/etc/hosts` lui-même. Attention sur Ubuntu : sans `@serveur`, il parle au stub `127.0.0.53`, et `systemd-resolved` sert **aussi** les entrées de `/etc/hosts` (`ReadEtcHosts=yes`). Pour voir le DNS seul, on interroge le serveur explicitement : `dig @10.10.10.10`.
 
 D'où la règle de diagnostic : quand `dig` et le reste du système ne sont pas
 d'accord, le problème n'est **pas** dans le DNS. Il est dans NSS, donc dans
@@ -368,8 +368,7 @@ quadruplet, et garantir que le dernier `ACK` puisse être retransmis si le `FIN`
 du pair est réémis.
 
 Le vrai risque est l'épuisement de ports éphémères : avec
-`ip_local_port_range = 32768 60999`, on dispose d'environ 28 000 ports **par
-quadruplet** (source, port source, destination, port destination). Vers une
+`ip_local_port_range = 32768 60999`, on dispose d'environ 28 000 ports source par couple (IP source, IP : port de destination) — le quadruplet doit rester unique. Vers une
 seule IP:port de destination, 20 000 `TIME-WAIT` mettent donc réellement en
 danger la capacité à ouvrir de nouvelles connexions. Le symptôme est
 `connect: Cannot assign requested address` (EADDRNOTAVAIL).
@@ -410,7 +409,7 @@ ils désignent l'étage avant même qu'on lise le message.
 | 7 | `Failed to connect` | transport : RST, ou route absente |
 | 28 | `Operation timed out` | transport : paquets jetés en silence |
 | 35 | erreur de connexion TLS | TLS : version, ciphers, handshake |
-| 51 / 60 | certificat non vérifiable | TLS : chaîne, nom, date |
+| 60 | certificat non vérifiable | TLS : chaîne, nom, date |
 | 52 | réponse vide du serveur | applicatif : le serveur ferme sans répondre |
 
 Vérification :
@@ -527,7 +526,7 @@ Les trois éléments à vérifier dans une commande `tcpdump` :
   panne — ce qui est souvent le cas quand on capture — chaque paquet déclenche
   une requête de résolution inverse qui expire. La capture devient inutilisable
   et, pire, `tcpdump` génère lui-même le trafic qu'on cherche à observer.
-* `-c 100` : arrêt après 100 paquets. `--count` (b, d) n'existe pas dans ce sens.
+* `-c 100` : arrêt après 100 paquets. `--count` (d) n'existe pas dans ce sens (il compte les paquets d'un fichier relu); b) résout les noms et ne capture qu'un seul sens (`dst`).
 * Le filtre BPF `host X and port Y` : la syntaxe correcte. On peut le mettre
   entre apostrophes, c'est même conseillé dès qu'il contient des parenthèses ou
   des caractères interprétés par le shell.
@@ -592,8 +591,8 @@ ip -br a && ip r               # vérifie côté noyau
 Si ta modification est syntaxiquement valide et applicable mais fonctionnellement
 fausse (mauvaise passerelle, par exemple), la connexion tombe, le rollback a bien
 lieu — mais toute session applicative en cours a été coupée pendant deux minutes.
-Et `try` refuse de fonctionner si des fichiers Netplan sont en mode trop
-permissif, avec un avertissement qu'il faut traiter, pas ignorer.
+Et `try` (comme `apply`) avertit si des fichiers Netplan sont en mode trop
+permissif : l' avertissement n'est pas bloquant, mais il faut le traiter, pas l' ignorer.
 :::
 
 ---
@@ -603,9 +602,8 @@ permissif, avec un avertissement qu'il faut traiter, pas ignorer.
 **Réponses : a) et c)**
 
 ::: pourquoi
-Rocky 9 n'utilise ni Netplan (spécifique à Ubuntu) ni les anciens
-`ifcfg-*` (supprimés depuis RHEL 9 ; NetworkManager peut encore les lire via un
-greffon, mais plus rien ne les écrit). La configuration vit dans des fichiers
+Rocky 9 n'utilise ni Netplan (spécifique à Ubuntu) ni, pour les nouvelles connexions, les anciens
+`ifcfg-*` (dépréciés depuis RHEL 9 : NetworkManager les lit encore, mais crée désormais tout au format keyfile). La configuration vit dans des fichiers
 **keyfile** :
 
 ```text
@@ -754,14 +752,14 @@ qui préserve les deux, est le bon outil.
 
 | Cause | Commande qui confirme |
 |---|---|
-| Entrée `/etc/hosts` erronée ou obsolète | `getent hosts X` vs `dig +short X` |
+| Entrée `/etc/hosts` erronée ou obsolète | `getent hosts X` vs `dig +short @<serveur> X` |
 | Serveur DNS injoignable ou en `SERVFAIL` | `dig @<serveur> X` |
 | Nom inexistant / faute de frappe | `dig X` → `status: NXDOMAIN` |
 | Domaine de recherche absent (nom court) | `resolvectl status`, `dig X.lab.local` |
 | AAAA résolu mais IPv6 cassé | `curl -4 X` réussit, `curl -6 X` échoue |
 
 Formulation d'entretien : « Je commence par séparer ce que voit le système de ce
-que dit le DNS : `getent hosts` d'un côté, `dig` de l'autre. S'ils divergent, le
+que dit le DNS : `getent hosts` d'un côté, `dig` `@<serveur>` de l'autre. S'ils divergent, le
 problème est local — `hosts` ou `nsswitch`. S'ils convergent et que ça ne marche
 toujours pas, je regarde la famille d'adresses : un `AAAA` qui répond sur un
 réseau sans IPv6 fonctionnelle donne exactement ce symptôme. »
@@ -1009,21 +1007,24 @@ PPPoE (le fameux MTU ADSL).
 | Outil | Ce qu'il consulte | Ce qu'il ignore |
 |---|---|---|
 | `getent hosts` | toute la chaîne NSS | rien : c'est la vérité système |
-| `dig` | le DNS seul, via `resolv.conf` | `/etc/hosts`, `nsswitch`, NSS |
-| `resolvectl query` | `systemd-resolved` : cache + amont + `hosts` | — |
+| `dig @serveur` | le DNS seul, ce serveur-là | `/etc/hosts`, `nsswitch`, NSS |
+| `resolvectl query` | `systemd-resolved` : `hosts` + cache + amont | — |
+
+Sans `@`, `dig` parle au stub `127.0.0.53`, qui sert aussi `/etc/hosts` : il
+voit alors ce que voit `resolvectl query`, pas le DNS seul.
 
 Pour prouver que le problème vient du DNS : `dig @<serveur-autoritaire> <nom>`.
 Si le serveur faisant autorité répond correctement et que `getent` répond autre
 chose, le DNS est hors de cause : le problème est local.
 
-Cas où les trois divergent : un nom `www.lab.local` présent dans `/etc/hosts`
-avec `10.10.10.99`, dont l'enregistrement DNS vaut `10.10.10.11`, et dont le
-cache de `systemd-resolved` contient encore une valeur précédente `10.10.10.12`
-avec un TTL non expiré.
+Cas où les trois commandes donnent trois réponses : un nom `www.lab.local` présent dans `/etc/hosts`
+avec `10.10.10.99`, dont l'enregistrement DNS vient de passer de `10.10.10.12` à `10.10.10.11` sur le serveur, un
+cache de `systemd-resolved` qui contient encore `10.10.10.12`
+( TTL non expiré), et `ReadEtcHosts=no` dans `resolved.conf` (sinon `resolved` sert lui aussi `/etc/hosts`, en priorité, y compris à `dig` via le stub).
 
 * `getent hosts` → `10.10.10.99` (fichier, gagne)
-* `dig +short` → `10.10.10.11` (DNS pur, contourne le cache local)
-* `resolvectl query` → `10.10.10.12` (cache, avec la mention `(cache)`)
+*; `resolvectl query` → `10.10.10.12` (`Data from:` cache)
+*; un `dig +short` sans `@`, via le stub, donnerait la même chose ; `dig @10.10.10.10 +short` → `10.10.10.11` (le serveur, sans aucun cache).
 
 ::: pourquoi
 La hiérarchie à retenir : `getent` est la **référence**, parce qu'il emprunte
@@ -1042,8 +1043,8 @@ La ligne `Data from: cache` ou `network` est l'information la plus utile de
 toute la sortie : elle répond en un mot à « est-ce que je lis du cache ? ».
 
 Un dernier écart, subtil mais fréquent : `dig lab-db` **n'ajoute pas** le domaine
-de recherche de la même façon que la résolution système dans tous les cas, et
-avec un nom court la requête peut partir telle quelle et renvoyer `NXDOMAIN`,
+de recherche (il faut `+search`, désactivé par défaut) :
+avec un nom court la requête part telle quelle et échoue ( `NXDOMAIN` ou pas de réponse),
 alors que `getent hosts lab-db` réussit grâce à `search lab.local`. Le réflexe :
 tester les noms courts avec `getent`, les FQDN avec `dig`.
 :::
@@ -1294,8 +1295,7 @@ Ce que l'ancienne commande ne savait pas faire :
    **filtre côté noyau**, d'où le filtre `sport = :8080` qui évite le `grep`.
 
 ::: pourquoi
-Au-delà de la table, la raison de fond : `net-tools` n'est plus maintenu depuis
-2011 et reflète un modèle réseau qui n'est plus celui du noyau. `iproute2` est
+Au-delà de la table, la raison de fond : `net-tools` n'évolue quasiment plus (dernière version en 2021) et reflète un modèle réseau qui n'est plus celui du noyau. `iproute2` est
 l'interface de référence de l'équipe réseau du noyau ; toute fonctionnalité
 nouvelle y apparaît, et nulle part ailleurs.
 
@@ -1438,8 +1438,8 @@ Sinon le noyau supprime la première correspondance, qui n'est pas forcément la
 bonne.
 
 Enfin `ip r flush cache` n'existe plus utilement depuis le noyau 3.6 : le cache
-de routage global a été supprimé. La ligne `cache` de `ip route get` désigne un
-cache par socket, pas une table à vider. Les commandes de « vidage du cache de
+de routage global a été supprimé. La mention `cache` de `ip route get` n'est qu' un
+marqueur de route calculée, pas une table à vider. Les commandes de « vidage du cache de
 routage » qui circulent encore sur les forums ne font rien.
 :::
 
@@ -1455,7 +1455,7 @@ sudo ss -4 -tlpn
 $ sudo ss -4 -tlpn
 State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
 LISTEN 0      511      0.0.0.0:80      0.0.0.0:*  users:(("nginx",pid=744))
-LISTEN 0      4096   127.0.0.1:8099    0.0.0.0:*  users:(("python3",pid=912))
+LISTEN 0      5      127.0.0.1:8099    0.0.0.0:*  users:(("python3",pid=912))
 LISTEN 0      128      0.0.0.0:22      0.0.0.0:*  users:(("sshd",pid=701))
 ```
 
@@ -1479,8 +1479,8 @@ Ce qu'il faut savoir lire dans cette sortie au-delà du port :
 * **`Send-Q`** sur une ligne `LISTEN` ne contient pas des octets en attente :
   c'est la **taille de la file d'accept**, c'est-à-dire le `backlog` effectif
   (`min(backlog demandé par listen(), net.core.somaxconn)`). nginx demande 511,
-  il l'obtient ; le serveur Python demande davantage et est plafonné à
-  `somaxconn` = 4096.
+  il l'obtient ; le serveur Python (`http.server`) ne demande que 5, valeur par défaut de `socketserver` : une file minuscule, à
+  surveiller sous charge.
 * **`Recv-Q`** sur `LISTEN` : le nombre de connexions **en attente d'accept**.
   Une valeur durablement non nulle signale une application qui n'accepte pas
   assez vite, et annonce des `SYN` jetés.
@@ -1552,7 +1552,7 @@ sudo lsof -i :8099 -P -n
 ```console
 $ sudo ss -tlpn 'sport = :8099'
 State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
-LISTEN 0      4096   127.0.0.1:8099    0.0.0.0:*  users:(("python3",pid=912))
+LISTEN 0      5      127.0.0.1:8099    0.0.0.0:*  users:(("python3",pid=912))
 
 $ sudo lsof -i :8099 -P -n
 COMMAND PID     USER FD TYPE DEVICE SIZE/OFF NODE NAME
@@ -1744,7 +1744,7 @@ n'affichant que les en-têtes.
 for p in 22 80 443 8099; do
   nc -z -w2 10.10.10.11 "$p" && echo "$p ouvert" || echo "$p KO"
 done
-# ou en une commande, nc accepte une plage :
+# ou en une commande : nc (openbsd) accepte une liste ou une plage (22-80)
 nc -zv -w2 10.10.10.11 22 80 443 8099
 ```
 
@@ -1821,7 +1821,7 @@ $ sudo tcpdump -nn -r /srv/captures/e15.pcap | head -5
 10:14:02.118 IP 10.10.10.10.51234 > 10.10.10.11.80: Flags [S],
     seq 1829461201, win 64240, length 0
 10:14:02.119 IP 10.10.10.11.80 > 10.10.10.10.51234: Flags [S.],
-    seq 4471028311, ack 1829461202, win 65160, length 0
+ seq 3471028311, ack 1829461202, win 65160, length 0
 10:14:02.119 IP 10.10.10.10.51234 > 10.10.10.11.80: Flags [.],
     ack 1, win 502, length 0
 10:14:02.119 IP 10.10.10.10.51234 > 10.10.10.11.80: Flags [P.],
@@ -1949,6 +1949,8 @@ Masque commun : `255.255.255.192`. 62 hôtes par segment, 248 au total (contre
 | `lab-db` | 10.10.10.12 | 3 bases | **à renuméroter** (→ .129) |
 | `lab-rhel` | 10.10.10.13 | 1 administration | conforme |
 | `lab-ops` | 10.10.10.14 | 2 applicatif | **à renuméroter** (→ .66) |
+| `lab-git` | 10.10.10.15 | 2 applicatif | **à renuméroter** (→.67) |
+| `lab-virt` | 10.10.10.16 | 1 administration | conforme |
 
 **Étape 3 — DMZ de 62 hôtes**
 
@@ -2002,13 +2004,13 @@ d'aucune adresse.
 :::
 
 ::: piege
-Renuméroter `lab-web` de `.11` vers `.65` n'est pas une opération anodine : tout
+Renuméroter `lab-web` de `.11` vers `.65` (et de même `lab-db`, `lab-ops`, `lab-git`) n'est pas une opération anodine : tout
 ce qui référence l'ancienne IP casse — `/etc/hosts` des autres machines, zone
 DNS, configurations de reverse proxy, règles de pare-feu, chaînes de connexion
 applicatives. C'est pourquoi un plan d'adressage se décide **avant** le
 déploiement. Sur un parc existant, on renumérote par lots avec une fenêtre, en
 s'appuyant sur les noms DNS et jamais sur les IP en dur. La bonne réponse au
-point 2 n'est pas seulement « ces trois VM changent d'IP », c'est « et voici
+point 2 n'est pas seulement « ces quatre VM changent d'IP », c'est « et voici
 l'impact et l'ordre des opérations ».
 :::
 
@@ -2194,12 +2196,15 @@ lab-web.lab.local.   300 IN A     10.10.10.11
 
 ```bash
 getent hosts www.lab.local        # -> 10.10.10.99   (!)
-dig +short www.lab.local          # -> 10.10.10.11
-resolvectl query www.lab.local    # -> 10.10.10.11, Data from: cache
+dig +short @10.10.10.10 www.lab.local   # -> 10.10.10.11
+resolvectl query www.lab.local          # -> 10.10.10.99, Data from: synthetic
+dig +short www.lab.local                # -> 10.10.10.99 (stub 127.0.0.53)
 ```
 
-Écart : `getent` passe par NSS donc par `/etc/hosts` ; `dig` interroge le DNS
+Écart : `getent` passe par NSS donc par `/etc/hosts` ; `dig` `@10.10.10.10` interroge le serveur du lab
 directement.
+
+`systemd-resolved` lit lui aussi `/etc/hosts` (`ReadEtcHosts=yes`) et le sert en priorité, à `resolvectl` comme à `dig` sans `@` : seul le serveur interrogé explicitement dit la vérité du DNS.
 
 **Étape 3 — l'entrée fautive**
 
@@ -2218,13 +2223,13 @@ hosts:          files dns
 Démonstration en deux commandes qui divergent :
 
 ```bash
-getent hosts www.lab.local ; dig +short www.lab.local
+getent hosts www.lab.local ; dig +short @10.10.10.10 www.lab.local
 ```
 
 **Étape 4 — correction**
 
 ```bash
-sudo cp /etc/hosts /root/.m11-backup/hosts.$(date +%F)
+sudo cp /etc/hosts /root/.m12-backup/hosts.$(date +%F)
 sudo sed -i '/www\.lab\.local/d' /etc/hosts
 getent hosts www.lab.local        # -> 10.10.10.11
 ```
@@ -2266,7 +2271,7 @@ est longue et que le nom n'existe pas.
 **Étape 7 — inventaire de la zone**
 
 ```bash
-for h in lab-adm lab-web lab-db lab-rhel lab-ops; do
+for h in lab-adm lab-web lab-db lab-rhel lab-ops lab-git lab-virt; do
   printf '%-10s %s\n' "$h" "$(dig +short "$h.lab.local")"
 done
 dig +short CNAME www.lab.local
@@ -2283,9 +2288,10 @@ sudo ss -ulpn 'sport = :53'
 ```
 
 ```console
-State  Recv-Q Send-Q Local Address:Port Process
-UNCONN 0      0      127.0.0.53%lo:53 users:(("systemd-resolve",pid=620))
-UNCONN 0      0        10.10.10.10:53 users:(("dnsmasq",pid=1104))
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+UNCONN 0      0  127.0.0.53%lo:53 0.0.0.0:* users:(("systemd-resolve",pid=620))
+UNCONN 0      0     127.0.0.54:53 0.0.0.0:* users:(("systemd-resolve",pid=620))
+UNCONN 0      0    10.10.10.10:53 0.0.0.0:* users:(("dnsmasq",pid=1104))
 ```
 
 Aucun conflit : les deux démons écoutent sur le port 53 mais sur des **adresses
@@ -2381,25 +2387,21 @@ Attendu : 22 et 80 → `rc=0` ; 8099 → `rc=1` (`Connection refused`, socket su
 
 **Étape 4 — exposer l'API par reverse proxy**
 
-```nginx
-# /etc/nginx/sites-available/factura-api
-server {
-    listen 80;
-    server_name _;
+Le bloc `location` va **dans le vhost existant** `lab-web` (celui qui porte `default_server` sur le port 80) : un second `server { listen 80; server_name _; }` ne recevrait jamais les requêtes adressées à `10.10.10.11`, qui tombent sur le `default_server` (404 sur `/api/`).
 
-    location /api/ {
-        proxy_pass http://127.0.0.1:8099/;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+```nginx
+# /etc/nginx/sites-available/lab-web, dans le bloc server existant
+location /api/ {
+    proxy_pass http://127.0.0.1:8099/;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
 
 ```bash
-sudo ln -sf /etc/nginx/sites-available/factura-api \
-            /etc/nginx/sites-enabled/factura-api
+sudoedit /etc/nginx/sites-available/lab-web
 sudo nginx -t && sudo systemctl reload nginx
 curl -s http://10.10.10.11/api/health        # depuis lab-adm
 ```
@@ -2843,7 +2845,7 @@ ssh lab-web 'sudo systemctl is-active nftables ufw firewalld 2>/dev/null'
 
 # 3. LA commande décisive, sur lab-web
 sudo ss -tlpn 'sport = :8099'
-#    LISTEN 0 4096 127.0.0.1:8099 ... users:(("python3",pid=912,fd=3))
+#    LISTEN 0 5 127.0.0.1:8099 ... users:(("python3",pid=912,fd=3))
 #                  ^^^^^^^^^ voilà la cause
 
 # 4. d'où vient cette adresse d'écoute ?
@@ -2943,13 +2945,13 @@ cette panne.
 
 ```bash
 # 1. l'écart est entre le DNS et le système : on le prouve en une ligne
-getent hosts www.lab.local ; dig +short www.lab.local
-#    10.10.10.203   www.lab.local
+getent hosts www.lab.local ; dig +short @10.10.10.10 www.lab.local
+#    10.10.10.12    www.lab.local
 #    10.10.10.11
 
 # 2. d'où vient la valeur du système ?
 grep -n 'www\.lab\.local' /etc/hosts
-#    23:10.10.10.203  www.lab.local www
+#    23:10.10.10.12  www.lab.local www
 
 # 3. et l'ordre des sources
 grep '^hosts:' /etc/nsswitch.conf
@@ -2957,21 +2959,21 @@ grep '^hosts:' /etc/nsswitch.conf
 
 # 4. confirmation applicative
 curl -sS -v http://www.lab.local/ 2>&1 | grep -i 'trying\|connect'
-#    * Trying 10.10.10.203:80...
-#    * connect to 10.10.10.203 port 80 failed: Connection refused
+#    * Trying 10.10.10.12:80...
+#    * connect to 10.10.10.12 port 80 failed: Connection refused
 ```
 
 **Cause racine** : une entrée dans `/etc/hosts` associe `www.lab.local` à
-`10.10.10.203`, adresse où rien n'écoute. Comme `files` précède `dns` dans
+`10.10.10.12` (`lab-db`, qui existe mais n'a aucun serveur web : d'où le `RST` immédiat). Comme `files` précède `dns` dans
 `nsswitch.conf`, toutes les applications utilisent cette valeur et le DNS n'est
-jamais interrogé. `dig`, qui ne passe pas par NSS, continue d'afficher la bonne
-réponse — d'où la confusion.
+jamais interrogé. `dig` `@10.10.10.10`, qui ne passe pas par NSS et interroge le serveur directement, continue d'afficher la bonne
+réponse — d'où la confusion. (Sans `@`, `dig` passe par le stub `127.0.0.53`, et `systemd-resolved` lui servirait la même entrée de `/etc/hosts`.)
 
 **Correctif**
 
 ```bash
 sudo cp /etc/hosts /root/.breakfix-backup/hosts.avant-fix
-sudo sed -i '/^10\.10\.10\.203[[:space:]]/d' /etc/hosts
+sudo sed -i '/^10\.10\.10\.12[[:space:]].*www\.lab\.local/d' /etc/hosts
 getent hosts www.lab.local        # -> 10.10.10.11
 curl -sI http://www.lab.local/ | head -1
 ```
@@ -2983,7 +2985,7 @@ répond gagne** : la recherche s'arrête là. `files` (donc `/etc/hosts`) est
 consulté avant `dns` sur toutes les distributions par défaut. Donc :
 
 * une entrée dans `/etc/hosts` **prime toujours** sur le DNS, sans exception ;
-* `dig` et `nslookup` ne voient pas `/etc/hosts` : ce sont des clients DNS purs ;
+* `dig` et `nslookup` ne lisent pas `/etc/hosts` : ce sont des clients DNS purs — mais s'ils interrogent le stub `127.0.0.53`, `systemd-resolved` leur sert `/etc/hosts` : pour voir le DNS seul, `dig @serveur` ;
 * la seule commande qui dit la vérité du point de vue des applications est
   `getent hosts`.
 
@@ -2995,7 +2997,7 @@ d'accord, le problème n'est pas dans le DNS**.
 Le chemin exact : `curl` appelle `getaddrinfo()`, qui consulte
 `/etc/nsswitch.conf`. La ligne `hosts: files dns` déclenche les modules dans
 l'ordre. Le module `files` lit `/etc/hosts`, trouve `www.lab.local`, retourne
-`10.10.10.203` avec le statut `SUCCESS`. L'action par défaut associée à
+`10.10.10.12` avec le statut `SUCCESS`. L'action par défaut associée à
 `SUCCESS` est `return` : la chaîne s'arrête, le module `dns` n'est jamais appelé.
 
 C'est aussi pourquoi `resolvectl flush-caches` ne change rien ici — et pourquoi
@@ -3013,7 +3015,7 @@ commentaire daté au-dessus, avec le numéro de ticket et la date de péremption
 
 ```text
 # INC-3307 - test bascule www - à retirer avant le 2026-10-01 - mathieu
-10.10.10.203  www.lab.local
+10.10.10.12  www.lab.local
 ```
 :::
 
@@ -3029,7 +3031,7 @@ ligne `hosts:` **en entier**, pas seulement chercher `files` et `dns`.
 
 ::: attention
 **Prévention.** Mettre `/etc/hosts` et `/etc/nsswitch.conf` sous gestion de
-configuration (Ansible, module 22), avec un contenu déclaré. Toute dérive est
+configuration (Ansible, module 23), avec un contenu déclaré. Toute dérive est
 alors détectée au prochain passage, et le fichier est remis en conformité
 automatiquement.
 :::
@@ -3114,9 +3116,13 @@ if printf '%s' "$CIBLE" | grep -qE '^[0-9.]+$'; then
   IP="$CIBLE"
   row DNS resolution SKIP "cible deja numerique"
 else
-  IP_HOSTS=$(getent hosts "$CIBLE" 2>/dev/null | awk '{print $1; exit}')
-  IP_DNS=$(dig +short +time=2 +tries=1 A "$CIBLE" 2>/dev/null |
-           grep -E '^[0-9.]+$' | head -1)
+  IP_HOSTS=$(getent hosts "$CIBLE" 2>/dev/null | awk '{print $1; exit}') || true
+  NS=$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf 2>/dev/null) \
+    || true
+  # le stub 127.0.0.53 sert aussi /etc/hosts ; 127.0.0.54 (proxy) non
+  [ "${NS:-}" = 127.0.0.53 ] && NS=127.0.0.54
+  IP_DNS=$(dig +short +time=2 +tries=1 ${NS:+@$NS} A "$CIBLE" 2>/dev/null |
+           grep -E '^[0-9.]+$' | head -1) || true
   IP="${IP_HOSTS:-$IP_DNS}"
   if [ -z "$IP" ]; then
     row DNS resolution KO "aucune adresse (ni NSS ni DNS)"; bad
@@ -3215,7 +3221,8 @@ fi
 
 | Panne | Premier `KO` attendu | Diagnostic |
 |---|---|---|
-| BF12.1 | `L3 / route par defaut` | route par défaut absente |
+| BF12.1 | `L2 / interface` puis `L3 / route par` |  |
+|  | `defaut` | route par défaut absente |
 | BF12.2 | `DNS / resolution` | aucune adresse obtenue |
 | BF12.3 | `L4 / tcp/8099` | refus immédiat, rien n'écoute |
 | BF12.4 | `DNS / resolution` | divergence `hosts` ≠ `dns` |

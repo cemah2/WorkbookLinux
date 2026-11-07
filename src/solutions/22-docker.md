@@ -92,7 +92,7 @@ relances. Ce sont les deux premières commandes à taper.
 b) est faux : un healthcheck en échec passe le conteneur en `unhealthy` mais
 Docker Engine **ne redémarre jamais** sur ce critère (Compose non plus, sauf
 outil externe comme `autoheal` ; Kubernetes, lui, le fait avec les probes).
-d) est faux : un OOM donne `Restarting (137)`, pas `(0)`.
+c) est faux : un OOM donne `Restarting (137)`, pas `(0)`.
 :::
 
 ---
@@ -353,12 +353,12 @@ techniques d'inspection sans modifier l'image :
 
 * lancer un conteneur outillé qui **partage les namespaces** de la cible :
   `--pid container:app` (voir ses processus, lire `/proc/1/root/…`) et
-  `--network container:app` (ses ports, `ss`, `curl localhost`). Depuis
-  Docker 23, `docker debug` fait la même chose côté Docker Desktop ;
-* `nsenter` depuis l'hôte, avec le PID vu par l'hôte : `-n -m -p` entre dans
-  le réseau, les montages et le namespace PID. Avec `-m` on voit le système de
-  fichiers du conteneur, mais les binaires utilisés sont ceux… du conteneur,
-  donc `sh` manquera aussi : on combine `-n -p` sans `-m`, ou on lit
+  `--network container:app` (ses ports, `ss`, `curl localhost`). 
+  Docker Desktop (4.27+) propose `docker debug`, qui fait la même chose ;
+* `nsenter` depuis l'hôte, avec le PID vu par l'hôte : `-n` seul entre dans
+  le réseau du conteneur en gardant les binaires de l'hôte (`ss`, `curl`, `tcpdump`). Ajouter `-m` ferait voir le système de
+  fichiers du conteneur, mais les binaires utilisés seraient alors ceux… du conteneur,
+  donc `sh` manquerait aussi (`nsenter` : `failed to execute /bin/bash`) : pour les fichiers, on lit
   `/proc/PID/root/` depuis l'hôte.
 :::
 
@@ -717,7 +717,9 @@ démon à chaque build.
 | Étape | Commande | Ce qu'on cherche |
 |---|---|---|
 | 1. État et code | `docker ps -a --filter name=app` ; `docker inspect app --format '{{.State.Status}} {{.State.ExitCode}} {{.State.Error}} {{.State.OOMKilled}}'` | `Exited (N)`, `Created` (jamais démarré : erreur de `start`), `Restarting`, message d'erreur du démon |
-| 2. Journaux | `docker logs --tail 100 app` (ou `--since 5m`) | trace applicative, `Traceback`, `Address already in use`, `Permission denied` |
+| 2. Journaux | `docker logs --tail 100 app` (ou `-` |  |
+|  | `-since 5m`) | trace applicative, `Traceback`, `Address already in use`, |
+|  |  | `Permission denied` |
 | 3. Configuration effective | `docker inspect app --format '{{.Config.Entrypoint}} {{.Config.Cmd}} {{.Config.User}}'`, `{{.Config.Env}}`, `{{json .Mounts}}`, `{{json .HostConfig.PortBindings}}` | commande réellement lancée, variable manquante, chemin de montage faux |
 | 4. Image sans shell | `docker run --rm -it --pid container:app --network container:app busybox sh` ; `docker run --rm --entrypoint sh image` | tester à la main dans le même environnement |
 | 5. Port pris | `ss -tlnp 'sport = :8080'` ; `docker ps --filter publish=8080` | `Bind for 0.0.0.0:8080 failed: port is already allocated` ; erreur 125 |
@@ -819,8 +821,7 @@ socket lui demande ; le groupe `docker` a le droit d'écrire sur le socket.
 (`ps -o user,pid,args -C dockerd`), lancé par `systemctl --user`, socket
 `/run/user/1001/docker.sock`, données dans `~/.local/share/docker`. Il crée
 un **user namespace** : l'UID 0 des conteneurs est projeté sur l'UID de
-l'utilisateur, les autres UID sur la plage de `/etc/subuid` (`kevin:100000:
-65536`). Le réseau passe par `slirp4netns` ou `pasta` (pas de `docker0`, pas
+l'utilisateur, les autres UID sur la plage de `/etc/subuid` (par exemple `kevin:165536:65536`, la plage suivant celle de `mathieu`). Le réseau passe par `slirp4netns` ou `pasta` (pas de `docker0`, pas
 de règles `iptables` dans l'hôte). Ce qui ne marche plus : ports < 1024
 (sauf `sysctl net.ipv4.ip_unprivileged_port_start=0`), `--network host`
 limité, pas de cgroup sans délégation systemd (`Delegate=`), stockage
@@ -1039,7 +1040,8 @@ pas à `containerd` sans configuration, jamais au noyau.
 |---|---|---|
 | namespaces | voir ou toucher les processus, interfaces, montages, hostname de l'hôte | `lsns -p PID` ; `--pid host`, `--network host`, `--ipc host` |
 | capabilities (14 sur 41) | `mount`, modules noyau, `ptrace` d'autres UID, changement d'heure, `reboot`, raw sockets sauf `NET_RAW` | `capsh --print`, `grep CapEff /proc/1/status` ; `--cap-add`, `--privileged` |
-| seccomp (`default.json`, ~45 syscalls refusés) | `unshare`, `mount`, `reboot`, `kexec_load`, `ptrace` (sauf cap), `bpf`, `clone(CLONE_NEWUSER)` | `Seccomp: 2` dans `/proc/1/status` ; `--security-opt seccomp=unconfined` |
+| seccomp (`default.json`, ~45 syscalls refusés) | `unshare`, `mount`, `reboot`, `kexec_load`, `ptrace` (sauf cap), `bpf`, `clone(` |  |
+|  | `CLONE_NEWUSER) -` | `Seccomp: 2` dans `/proc/1/status` ; `-security-opt seccomp= unconfined` |
 | AppArmor `docker-default` | `mount` même avec `SYS_ADMIN`, écriture dans `/proc/sys/kernel`, `/proc/sysrq-trigger`, `/sys/firmware` | `cat /proc/1/attr/current`, `aa-status` ; `--security-opt apparmor=unconfined` |
 | `no-new-privileges` | qu'un binaire `setuid`/`setcap` de l'image redonne des privilèges (bit `NoNewPrivs: 1`) | `grep NoNewPrivs /proc/1/status` ; absent par défaut, `--security-opt no-new-privileges` l'active |
 | `--read-only` + tmpfs | écrire dans l'image en cours d'exécution (implant, modification de binaire) | `touch /bin/x` → `Read-only file system` ; absent par défaut |
@@ -1327,7 +1329,7 @@ cat /sys/fs/cgroup/system.slice/docker-$ID.scope/{memory.max,cpu.max,pids.max}
 ::: pourquoi
 Le conteneur voit **son** cgroup à la racine de `/sys/fs/cgroup` : Docker
 monte le sous-arbre correspondant (namespace cgroup). `cpu.max` = `quota
-période` : 50 000 µs par période de 100 000 µs, soit un demi-cœur, réparti
+période` : 50 000 μs par période de 100 000 μs, soit un demi-cœur, réparti
 comme le noyau veut sur les deux vCPU. `--cpus` est une limite de bande
 (CFS quota) ; `--cpu-shares` serait une pondération relative, qui ne limite
 rien quand la machine est inoccupée. `--memory-swap` égal à `--memory`
@@ -1396,7 +1398,7 @@ docker inspect web --format '{{.HostConfig.RestartPolicy.Name}}'
 docker inspect web --format \
   '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
 docker inspect web --format '{{.Path}} {{join .Args " "}}'
-# nginx -g daemon off;
+# /docker-entrypoint.sh nginx -g daemon off;
 docker logs -t --since 5m --tail 20 web
 docker cp web:/etc/nginx/conf.d/default.conf ~/lab22/rapports/
 ```
@@ -1490,7 +1492,7 @@ cache de distinguer deux builds avec des `--build-arg` différents. Donc tout
 `ARG` utilisé par un `RUN` est lisible par quiconque a l'image, même sans
 `ENV`. On ne passe jamais de jeton, mot de passe ou clé privée en
 `--build-arg` : `RUN --mount=type=secret,id=pip,dst=/etc/pip.conf …` avec
-`docker build --secret id=pip,src=$HOME/.config/pip/pip.conf` monte le
+`docker build - -secret id=pip,src=$HOME/.config/pip/pip.conf` monte le
 fichier le temps de l'instruction, sans trace dans les couches ni l'historique.
 :::
 
@@ -2026,7 +2028,8 @@ sudo journalctl -k --since -5m | grep -A2 'Memory cgroup out of memory'
 # Memory cgroup out of memory: Killed process 6120 (python3) total-vm:…
 #   anon-rss:130012kB … oom_score_adj:0
 docker inspect elastique --format '{{.State.Status}} {{.State.OOMKilled}}'
-# running false        ← le conteneur n'est pas mort, donc pas "OOMKilled"
+# running true   ← conteneur vivant, mais OOMKilled passe à true dès
+#                  qu'un processus de son cgroup est tué (événement oom)
 ```
 
 Si l'API avait été PID 1, sa mort aurait terminé le conteneur (`Exited
@@ -2302,8 +2305,8 @@ docker run -d -p 80:80 nginx:1.28-alpine
 
 Le démon de `kevin` n'est pas root : il ne peut pas ouvrir un port
 privilégié (sauf `sudo sysctl net.ipv4.ip_unprivileged_port_start=0`). Ses
-données sont dans `~/.local/share/docker`, et `/etc/subuid` contient
-`kevin:100000:65536` : la plage d'UID que ses conteneurs utilisent.
+données sont dans `~/.local/share/docker`, et `/etc/subuid` contient une ligne
+`kevin:<début>:65536` (typiquement `165536`, `100000` étant déjà attribué à `mathieu`) : la plage d'UID que ses conteneurs utilisent.
 
 ::: rhel
 Sur `lab-rhel`, `podman run -d -p 8080:80 docker.io/library/nginx:1.28-alpine`
@@ -2596,7 +2599,8 @@ sudo iptables -I DOCKER-USER -i ens18 -p tcp --dport 8000 \
   ! -s 10.10.10.10 -j DROP
 sudo iptables -S DOCKER-USER
 # -N DOCKER-USER
-# -A DOCKER-USER -i ens18 ! -s 10.10.10.10/32 -p tcp -m tcp --dport 8000 -j DROP
+# -A DOCKER-USER -i ens18 ! -s 10.10.10.10/32 -p tcp -m tcp --dport 8000 \
+#   -j DROP
 # -A DOCKER-USER -j RETURN
 # depuis lab-web : curl -m 5 http://10.10.10.14:8000/sante
 # curl: (28) Connection timed out after 5001 milliseconds
@@ -2605,7 +2609,7 @@ sudo iptables -S DOCKER-USER
 `DOCKER-USER` est la seule chaîne que Docker crée puis **laisse
 intacte** : elle est appelée en premier depuis `FORWARD`, avant les chaînes
 `DOCKER*` qui acceptent le trafic vers les conteneurs, et Docker ne la
-réécrit pas au redémarrage. `--dport 8000` est le port **du conteneur**
+réécrit pas au redémarrage. `- -dport 8000` est le port **du conteneur**
 (après DNAT) — ici identique au port publié.
 
 Persistance : `sudo apt install iptables-persistent` puis
@@ -3102,8 +3106,8 @@ ls merged/etc/alpine-release          # No such file : masqué dans la vue
 runc spec                             # génère config.json
 jq '.root.path, .root.readonly, .hostname, .process.args,
     .process.capabilities.effective, .linux.namespaces[].type' config.json
-# "rootfs" true "runc" ["sh"] [AUDIT_WRITE, KILL, NET_BIND_SERVICE]
-# pid network ipc uts mount
+# "rootfs" true "runc" ["sh"] [CAP_AUDIT_WRITE, CAP_KILL, CAP_NET_BIND_SERVICE]
+# pid network ipc uts mount cgroup
 jq '.root.path = "merged" | .root.readonly = false | .hostname = "manuel"
   | .process.args = ["sh"] | .linux.cgroupsPath = "/factura-manuel"
   | .linux.resources.memory = {"limit": 67108864}
@@ -3113,7 +3117,7 @@ jq -e '.linux.cgroupsPath == "/factura-manuel"' config.json
 ```
 
 Le `config.json` généré par `runc spec` est la spéc runtime OCI sous forme
-minimale : cinq namespaces (pas de `user`), trois capabilities, pas de
+minimale : six namespaces (`cgroup` compris sur un hôte cgroup v2, pas de `user`), trois capabilities, pas de
 seccomp, racine en lecture seule, `/proc`, `/dev`, `/sys` montés. Docker
 produit le même fichier avec quarante lignes de plus.
 
@@ -3210,7 +3214,7 @@ docker images | grep -c factura                # les images sont revenues
 `docker images` est vide parce que Docker utilise une racine de données
 séparée par plage d'UID : les couches d'images doivent appartenir aux UID
 remappés, il ne peut pas réutiliser celles de `/var/lib/docker/overlay2`.
-Rien n'est perdu : retirer le réglage rend l'ancienne racine.
+Rien n'est perdu : retirer le réglage rend l'ancienne racine. Les valeurs `100000` ci-dessus supposent que `dockremap` a reçu la première plage libre; si `mathieu` et `kevin` ont déjà les leurs, Docker prend la suivante (`231072`…) et la racine devient `/var/lib/docker/231072.231072` : lis la ligne `dockremap` de `/etc/subuid`, c'est elle qui fait foi.
 
 **8. Réponse au candidat** (extrait attendu du rapport) : `chroot` ne
 change que la racine du système de fichiers ; il partage le PID 1, le
@@ -3673,7 +3677,7 @@ for i in $(seq 1 30); do cat $C/pids.current; sleep 1; done | sort -n | tail -1
 `--cpus`) vient d'une mesure sur la charge réelle (`docker stats`,
 `pids.events`, `memory.events`) et d'une marge écrite ; une alerte sur
 `pids.current / pids.max > 0.8` (cAdvisor expose
-`container_processes` et `container_spec_...`, module 21) ; et jamais
+`container_processes` et `container_spec_...`, module 26) ; et jamais
 `--pids-limit 0` (illimité) : la limite protège l'hôte d'une fork bomb.
 
 ::: pourquoi
@@ -3685,7 +3689,7 @@ consomme un PID du même cgroup. Les seuls outils qui restent sont ceux de
 l'hôte : `docker top`, `docker stats`, `/sys/fs/cgroup`, `nsenter` (qui,
 lui, n'entre pas dans le cgroup : `nsenter -t PID -p -m` fonctionne quand
 `exec` échoue). Docker ne pose aucune limite de PID par défaut (`pids.max` =
-`max`) ; Kubernetes en pose une par nœud (`podPidsLimit`).
+`max`) ; Kubernetes permet d' en poser une par pod (`podPidsLimit` du kubelet, illimitée par défaut elle aussi).
 :::
 
 ::: piege
@@ -3829,7 +3833,7 @@ sed -i 's/^APP_VERSION=.*/APP_VERSION=2.0/' .env
 (l'image 2.0 est toujours dans le registre : pas de rebuild)
 
 ## Sauvegarder / restaurer pg-data
-docker compose exec db pg_dump -U factura factura > factura-$(date +%F).sql
+docker compose exec -T db pg_dump -U factura factura > factura-$(date +%F).sql
 docker compose exec -T db psql -U factura factura < factura-2026-09-19.sql
 (à froid : docker run --rm -v factura_pg-data:/from:ro -v $PWD:/to \
  alpine:3.20 tar czf /to/pg-data.tgz -C /from .)

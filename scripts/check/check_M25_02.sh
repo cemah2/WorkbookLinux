@@ -68,10 +68,10 @@ fi
 
 # --- 4. le workflow ------------------------------------------------------
 WF=$(api "$REPO/raw/.gitea/workflows/ci.yaml")
-printf '%s' "$WF" | python3 - <<'EOF' && ok "ci.yaml : build (needs) → deploy (main, concurrency) avec rollback if: failure()" \
+DOC="$WF" python3 - <<'EOF' && ok "ci.yaml : build (needs) → deploy (main, concurrency) avec rollback if: failure()" \
   || ko "ci.yaml : attendu build needs [lint,test], deploy needs build + concurrency, step if: failure()"
-import sys, yaml
-w = yaml.safe_load(sys.stdin); j = w["jobs"]
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"]); j = w["jobs"]
 assert set(j["build"]["needs"]) >= {"lint", "test"}
 d = j["deploy"]
 assert "build" in str(d["needs"]) and "concurrency" in d

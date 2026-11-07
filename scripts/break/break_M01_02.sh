@@ -7,10 +7,14 @@ FIC=/etc/profile.d/zz-metrics.sh
 SAUV=/root/.breakfix-backup
 mkdir -p "$SAUV"
 
-if [ -f "$FIC" ] && [ ! -f "$SAUV/zz-metrics.sh.M01_02" ]; then
-  cp -- "$FIC" "$SAUV/zz-metrics.sh.M01_02"
-else
-  : > "$SAUV/zz-metrics.absent.M01_02"
+# sauvegarde une seule fois : au premier passage, jamais du fichier cassé
+if [ ! -e "$SAUV/zz-metrics.sh.M01_02" ] && \
+   [ ! -e "$SAUV/zz-metrics.absent.M01_02" ]; then
+  if [ -f "$FIC" ]; then
+    cp -- "$FIC" "$SAUV/zz-metrics.sh.M01_02"
+  else
+    : > "$SAUV/zz-metrics.absent.M01_02"
+  fi
 fi
 
 cat > "$FIC" <<'EOF'

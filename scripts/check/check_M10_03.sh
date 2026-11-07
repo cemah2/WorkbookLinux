@@ -32,7 +32,8 @@ PREF=$(grep -rls 'outil-lab' /etc/apt/preferences.d/ /etc/apt/preferences \
        2>/dev/null | head -1)
 if [ -n "$PREF" ]; then
   ok "fichier d'épinglage trouvé : $PREF"
-  grep -qiE '^Pin-Priority:[[:space:]]*(100[0-9]|[2-9][0-9]{3})' "$PREF" \
+  SUP1000='(100[1-9]|10[1-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3})'
+  grep -qiE "^Pin-Priority:[[:space:]]*$SUP1000" "$PREF" \
     && ok "priorité supérieure à 1000 (autorise la rétrogradation)" \
     || ko "la priorité de $PREF ne dépasse pas 1000 : apt refusera de \
 redescendre une version déjà installée"

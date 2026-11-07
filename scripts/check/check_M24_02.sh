@@ -12,7 +12,7 @@ BASE="$HOME/lab24"
 DIR="$BASE/02-lab2"
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new"
 TOFU=$(command -v tofu || command -v terraform || true)
-[ -n "$TOFU" ] || { ko "ni tofu ni terraform dans le PATH (20.1)"; exit 1; }
+[ -n "$TOFU" ] || { ko "ni tofu ni terraform dans le PATH (24.1)"; exit 1; }
 cd "$DIR" 2>/dev/null || { ko "$DIR absent (setup_M24.sh)"; exit 1; }
 if [ -r "$BASE/.env" ]; then set -a; . "$BASE/.env"; set +a; ok ".env chargé"
 else ko "$BASE/.env absent (E24.8)"; fi

@@ -27,7 +27,8 @@ ansible-playbook -i "ansible/inventory/$ENV.ini" \
   ansible/playbooks/baseline.yml >>"$LOG" 2>&1
 step "4/5 déploiement de l'application ($TAG)"
 ansible-playbook -i "ansible/inventory/$ENV.ini" \
-  ansible/playbooks/deploy.yml -e "factura_image_tag=$TAG" >>"$LOG" 2>&1
+  ansible/playbooks/deploy.yml -e "factura_image_tag=$TAG" \
+  -e ansible_user=deploy >>"$LOG" 2>&1
 step "5/5 restauration de la dernière sauvegarde"
 ansible-playbook -i "ansible/inventory/$ENV.ini" \
   ansible/playbooks/restore.yml >>"$LOG" 2>&1

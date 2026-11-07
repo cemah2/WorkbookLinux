@@ -110,7 +110,7 @@ if [ -n "$PID" ] && [ "$PID" != 0 ]; then
   [ "$(ps -o user= -p "$PID" | tr -d ' ')" = factura ] \
     && ok "le processus principal ($PID) appartient à factura" \
     || ko "le processus principal n'appartient pas à factura"
-  N="$(pgrep -c -P "$PID" 2>/dev/null || echo 0)"
+  N="$(pgrep -c -P "$PID" 2>/dev/null)"; N="${N:-0}"
   [ "$N" -ge 2 ] && ok "$N workers gunicorn" \
     || ko "moins de 2 workers gunicorn (--workers 2 attendu au minimum)"
 fi

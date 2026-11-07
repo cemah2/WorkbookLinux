@@ -28,15 +28,15 @@ if [ -x "$CHK" ]; then
     && ok "utilise openssl x509 -checkend" \
     || ko "l'énoncé demande openssl x509 -checkend, pas un calcul de date \
 maison"
-  "$CHK" "$CRT" 1 >/tmp/.m14_04.a 2>&1; R1=$?
-  "$CHK" "$CRT" 3650 >/tmp/.m14_04.b 2>&1; R2=$?
+  "$CHK" "$CRT" 1 >/tmp/.m17_04.a 2>&1; R1=$?
+  "$CHK" "$CRT" 3650 >/tmp/.m17_04.b 2>&1; R2=$?
   [ "$R1" -eq 0 ] \
     && ok "seuil 1 jour : code 0 (certificat encore valide)" \
-    || ko "seuil 1 jour : code $R1, on attend 0 (voir /tmp/.m14_04.a)"
+    || ko "seuil 1 jour : code $R1, on attend 0 (voir /tmp/.m17_04.a)"
   [ "$R2" -eq 1 ] \
     && ok "seuil 3650 jours : code 1 (expiration détectée)" \
-    || ko "seuil 3650 jours : code $R2, on attend 1 (voir /tmp/.m14_04.b)"
-  [ -s /tmp/.m14_04.b ] \
+    || ko "seuil 3650 jours : code $R2, on attend 1 (voir /tmp/.m17_04.b)"
+  [ -s /tmp/.m17_04.b ] \
     && ok "un message est produit dans le cas d'échec" \
     || ko "aucun message en cas d'échec : l'énoncé demande un message clair \
 dans les deux cas"
@@ -110,20 +110,20 @@ fi
 # --- 5. test dynamique : on provoque un échec et on regarde -----------
 echo "  -- test dynamique du chemin d'échec --"
 AV=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
-cat > /run/.m14_04_test.conf <<'EOF'
+cat > /run/.m17_04_test.conf <<'EOF'
 [Service]
 ExecStart=
 ExecStart=/opt/factura/bin/factura-cert-check.sh \
   /etc/factura/tls/portail.crt 3650
 EOF
 mkdir -p /run/systemd/system/factura-cert.service.d
-cp /run/.m14_04_test.conf \
+cp /run/.m17_04_test.conf \
    /run/systemd/system/factura-cert.service.d/zz-test.conf
 systemctl daemon-reload
 systemctl start factura-cert.service >/dev/null 2>&1
 sleep 3
 AP=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
-rm -rf /run/systemd/system/factura-cert.service.d /run/.m14_04_test.conf
+rm -rf /run/systemd/system/factura-cert.service.d /run/.m17_04_test.conf
 systemctl daemon-reload
 systemctl reset-failed factura-cert.service >/dev/null 2>&1
 [ "$AP" -gt "$AV" ] \

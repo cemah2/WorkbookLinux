@@ -208,7 +208,7 @@ EOF
 # ---------------------------------------------------------------------
 VP="$BASE/.vault_pass"
 if [ ! -f "$VP" ]; then
-  printf 'Lab19-Vault-Equipe\n' > "$VP"
+  printf 'Lab23-Vault-Equipe\n' > "$VP"
   chown "$LAB_USER":"$LAB_USER" "$VP"; chmod 600 "$VP"
 fi
 VAULT="$BASE/inventory/group_vars/all/vault.yml"

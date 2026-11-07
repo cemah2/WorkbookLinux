@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# break_M14_04.sh — panne BF14.4 (MaxAuthTries atteint : 6 clés proposées)
-# À lancer SUR lab-adm, avec sudo. Idempotent.
+# break_M14_04.sh — panne BF14.4 (MaxAuthTries atteint : 5 clés parasites)
+# À lancer SUR lab-adm, avec sudo, L14.3 en place (lab-web en MaxAuthTries 3).
+# Idempotent.
 # Sauvegarde dans /root/.breakfix-backup/.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 1; }
@@ -20,9 +21,11 @@ mkdir -p "$SAUV"
 [ -f "$SAUV/M14_04.bashrc" ] || \
   cp -a "$HOMEDIR/.bashrc" "$SAUV/M14_04.bashrc" 2>/dev/null || true
 
-# --- six clés parasites, comme en produirait un historique d'équipe ------
+# --- cinq clés parasites, comme en produirait un historique d'équipe -----
+# cinq et pas six : lab-db (MaxAuthTries 6 par défaut) doit encore accepter
+# la bonne clé en sixième position, lab-web (MaxAuthTries 3, L14.3) non.
 install -d -o "$CIBLE" -g "$CIBLE" -m 700 "$LEG"
-for n in 1 2 3 4 5 6; do
+for n in 1 2 3 4 5; do
   [ -f "$LEG/cle$n" ] && continue
   runuser -u "$CIBLE" -- ssh-keygen -q -t ed25519 -N '' \
     -C "ancienne-cle-$n@lab-adm" -f "$LEG/cle$n"
@@ -36,7 +39,7 @@ if ! grep -q '# lab14-legacy' "$CONF"; then
   {
     echo "# lab14-legacy : identités héritées de l'ancienne équipe"
     echo "Host *"
-    for n in 1 2 3 4 5 6; do
+    for n in 1 2 3 4 5; do
       echo "    IdentityFile ~/.ssh/legacy/cle$n"
     done
     echo "    IdentitiesOnly no"
@@ -52,7 +55,8 @@ if ! grep -q 'lab14-legacy' "$HOMEDIR/.bashrc" 2>/dev/null; then
   cat >> "$HOMEDIR/.bashrc" <<'EOF'
 
 # lab14-legacy : chargement des identités héritées
-ssh-add -l >/dev/null 2>&1 && ssh-add -q ~/.ssh/legacy/cle[1-6] 2>/dev/null
+# (ssh-add -l sort en 1 si l'agent est vide, en 2 s'il est injoignable)
+ssh-add -l >/dev/null 2>&1; [ $? -ne 2 ] && ssh-add -q ~/.ssh/legacy/cle[1-5] 2>/dev/null
 EOF
   chown "$CIBLE":"$CIBLE" "$HOMEDIR/.bashrc"
 fi
@@ -61,7 +65,7 @@ fi
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK:-}" ]; then
   runuser -u "$CIBLE" -- env SSH_AUTH_SOCK="$SSH_AUTH_SOCK" \
     ssh-add -q "$LEG"/cle1 "$LEG"/cle2 "$LEG"/cle3 \
-               "$LEG"/cle4 "$LEG"/cle5 "$LEG"/cle6 2>/dev/null || true
+               "$LEG"/cle4 "$LEG"/cle5 2>/dev/null || true
 fi
 
 cat <<'EOF'

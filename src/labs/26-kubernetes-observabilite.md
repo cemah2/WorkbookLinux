@@ -37,9 +37,9 @@
   la fatigue d'alerte, et raccrocher un incident à un post-mortem.
 
 Temps estimé : 12 h (deux séances de 6 h, partie A puis partie B)
-Prérequis : modules 08 (systemd), 11 (réseau), 12 (SSH), 13 (journaux,
-`node_exporter`), 16 (méthode d'incident, post-mortem), et le module Docker
-(images, registre, Compose). PostgreSQL et nginx sont utilisés tels quels.
+Prérequis : modules 08 (systemd), 12 (réseau), 14 (SSH), 16 (journaux,
+`node_exporter`), 19 (méthode d'incident, post-mortem), et le module 22
+(Docker : images, registre, Compose). PostgreSQL et nginx sont utilisés tels quels.
 :::
 
 ---
@@ -106,8 +106,8 @@ particulière.
 ::: attention
 `lab-ops` a 4 Go de RAM pour Docker (registre + 7 conteneurs d'observabilité)
 **et** k3s. Ça tient, à condition de respecter les `requests`/`limits` des
-manifestes et de ne pas installer `kube-prometheus-stack` complet (voir 22.9).
-Si la VM swappe, `kubectl top node` te le dira avant `free -m`. Le snapshot
+manifestes et de ne pas installer `kube-prometheus-stack` complet (voir 26.9).
+Surveille `kubectl top node` **et** `free -m` : si la VM swappe, tout ralentit sans qu'aucun pod ne soit tué. Le snapshot
 `avant-lab26` est ta porte de sortie ; `k3s-uninstall.sh` en est une autre.
 :::
 
@@ -167,8 +167,8 @@ complete -o default -F __start_kubectl k
 kubectl explain deployment.spec.strategy --recursive
 kubectl api-resources ; kubectl get all -n factura
 kubectl get pods -o wide | -o yaml | -o json
-kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}\
-{.status.podIP}{"\n"}{end}'
+kubectl get pods -o \
+  jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.podIP}{"\n"}{end}'
 kubectl get pods -o custom-columns=NOM:.metadata.name,NOEUD:.spec.nodeName
 kubectl create deployment web --image=nginx:1.27-alpine \
   --dry-run=client -o yaml > web.yaml           # générer, puis éditer
@@ -942,7 +942,7 @@ preuve de réception.
    `~/lab26/bin/installer-node-exporter.sh` (via SSH depuis lab-adm ; sur
    lab-rhel vérifie firewalld). Vérifie `curl -s http://IP:9100/metrics |
    head` depuis lab-ops pour chacune.
-2. Lance la pile : `cd /opt/observabilite && docker compose up -d`. Vérifie
+2. Lance la pile : `cd /opt/observabilite & docker compose up -d`. Vérifie
    `http://10.10.10.14:9090/targets` : 5 cibles `node` UP. Fais échouer
    volontairement `promtool check config` (syntaxe cassée) puis répare et
    recharge **sans redémarrer** le conteneur.
@@ -1029,9 +1029,8 @@ bord minimal est déjà provisionné (`Lab — Nœuds`) : c'est ton point de dé
 
 1. Connecte-toi (`admin` / `labpass`), vérifie que les trois sources
    (Prometheus, Loki, Alertmanager) sont provisionnées et que `Lab — Nœuds`
-   est présent en lecture depuis fichier. Explique pourquoi tu ne peux pas
-   sauvegarder une modification de ce tableau depuis l'interface tel qu'il
-   est configuré, et ce que fait `allowUiUpdates`.
+   est présent en lecture depuis fichier. Explique ce qu'il advient d' une modification de ce tableau sauvegardée depuis l'interface, tel qu'il
+   est configuré, et ce que change `allowUiUpdates`.
 2. Importe *Node Exporter Full* (ID 1860) en pointant la source Prometheus.
    Repère trois panneaux dont tu comprends la requête, et un panneau vide :
    explique pourquoi il est vide (indice : `instance`).
@@ -1073,7 +1072,7 @@ bash check_M26_05.sh
 ## 26.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9005 avant-bf22`. Le snapshot de
+Avant chaque Break & Fix : `qm snapshot 9005 avant-bf26`. Le snapshot de
 secours reste `avant-lab26`, mais l'utiliser vaut échec de l'exercice.
 BF26.1 à BF26.4 supposent L26.2 terminé ; BF26.5 et BF26.6 supposent L26.4.
 Tous les scripts se lancent sur `lab-ops`.

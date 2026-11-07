@@ -437,7 +437,7 @@ EOF
     ufw --force enable >/dev/null 2>&1 || true
   fi
 
-  # --- horloge : NTP actif (scénario PC.4.1) -------------------------------
+  # --- horloge : NTP actif (scénario PC.4.2) -------------------------------
   if a_systemd; then
     timedatectl set-ntp true 2>/dev/null || true
     systemctl daemon-reload

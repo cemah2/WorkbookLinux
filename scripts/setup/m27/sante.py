@@ -266,7 +266,11 @@ def main(argv: list[str] | None = None) -> int:
     rap = rapport(resultats)
     texte = json.dumps(rap, ensure_ascii=False, indent=2) + "\n"
     if args.output:
-        ecrire_atomique(args.output, texte)
+        try:
+            ecrire_atomique(args.output, texte)
+        except OSError as exc:
+            log.error("écriture de %s : %s", args.output, exc)
+            return UNKNOWN
     sys.stdout.write(rendre_texte(rap) if args.text else texte)
     return rap["code"]
 

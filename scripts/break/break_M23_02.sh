@@ -64,7 +64,7 @@ Symptôme attendu : depuis que l'inventaire a été « rangé »,
   cd ~/lab23 && ansible db -m ansible.builtin.ping
 répond « Could not match supplied host pattern, ignoring: db » puis
 « No hosts matched, nothing to do », et ansible all -m ansible.builtin.ping
-ne connaît plus que localhost, avec plusieurs [WARNING] avant.
+ne trouve plus aucun hôte, avec plusieurs [WARNING] avant.
 Objectif : lire tous les avertissements, corriger le fichier sans le
 réécrire, et retrouver db, web, ubuntu et rhel dans
 ansible-inventory --graph avec les bons hôtes.

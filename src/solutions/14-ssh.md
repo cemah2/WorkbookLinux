@@ -163,7 +163,7 @@ user mathieu
 hostname 10.10.10.12
 port 22
 identityfile ~/.ssh/id_ed25519
-proxyjump 10.10.10.10
+proxyjump bastion
 ```
 
 L'équivalent côté serveur est `sshd -T`. Le couple `ssh -G` / `sshd -T` remplace
@@ -239,10 +239,10 @@ maître se détache et survit à la session qui l'a créé. En revanche, tuer le
 maître (`ssh -O exit`, `kill`, reboot du poste) coupe bien **toutes** les
 sessions filles d'un coup.
 
-b) est faux et c'est important : `%C` est un condensat de (hôte local, hôte
+d) est faux et c'est important : `%C` est un condensat de (hôte local, hôte
 distant, port, utilisateur). Il existe précisément parce que la forme lisible
 `%r@%h:%p` produit des chemins qui dépassent la limite de longueur d'une socket
-UNIX (~104 caractères) dès que le nom d'hôte est long ou que le home est profond
+UNIX (108 caractères sur Linux) dès que le nom d'hôte est long ou que le home est profond
 — erreur `ControlPath too long`.
 
 Deux autres pièges de production : le répertoire `~/.ssh/cm` doit exister
@@ -399,16 +399,15 @@ ton client SQL -> 127.0.0.1:15432 (ton poste)
 
 a) est le cas où la cible est le serveur SSH lui-même : `127.0.0.1` y désigne la
 boucle locale **du bastion**, donc un PostgreSQL qui tournerait sur `lab-adm`.
-c) inverse le sens (`-R` ouvre le port sur le serveur). d) ouvre un proxy SOCKS,
+b) inverse le sens (`-R` ouvre le port sur le serveur). d) ouvre un proxy SOCKS,
 ce qui suppose déjà de pouvoir joindre `lab-db` en SSH.
 :::
 
 ::: piege
 Par défaut le port local n'est ouvert que sur `127.0.0.1` : ta collègue sur le
-réseau ne pourra pas s'y connecter. Pour l'ouvrir à la machine entière, il faut
-`-L 0.0.0.0:15432:...` **et** `GatewayPorts yes` n'est pas concerné (c'est une
-directive serveur, pour `-R`) — côté client, c'est l'option `-L` avec adresse de
-bind explicite, à n'utiliser qu'en connaissance de cause : tu viens de créer un
+réseau ne pourra pas s'y connecter. Pour l'ouvrir à la machine entière, c'est côté **client** que ça se décide : adresse de bind explicite (
+`-L 0.0.0.0:15432:...` ) ou `-g` ( `GatewayPorts yes` dans `ssh_config` — même nom que la
+directive serveur qui gouverne `-R`, mais autre fichier). À n'utiliser qu'en connaissance de cause : tu viens de créer un
 accès à ta base sans authentification pour tout le monde sur ton réseau.
 :::
 
@@ -479,8 +478,8 @@ proposées :
 
 ::: piege
 Le piège de a) : `-i` **seul** ne suffit pas. Sans `IdentitiesOnly=yes`, `-i`
-ajoute la clé en tête de liste mais les identités de l'agent restent proposées
-ensuite — ce que découvre l'apprenant en BF14.4. C'est contre-intuitif et c'est
+ajoute la clé à la liste, mais `ssh` propose d'abord les identités de l'agent (dans l'ordre de l'agent) et seulement
+ensuite les fichiers qui n'y sont pas — ce que découvre l'apprenant en BF14.4. C'est contre-intuitif et c'est
 documenté : `IdentityFile` est additif, `IdentitiesOnly` est ce qui le rend
 exclusif.
 
@@ -600,9 +599,8 @@ sudo sshd -t && sudo systemctl reload ssh
 ```
 
 Sans le `&&`, une faute de frappe dans une directive fait échouer le démarrage
-de `sshd`. Avec un `reload` ce n'est pas dramatique (le processus en cours
-continue de tourner avec l'ancienne configuration), mais au prochain
-redémarrage de la machine, plus de SSH — et l'incident se déclare des semaines
+de `sshd`. Sur Ubuntu, `systemctl` `reload` `ssh` lance lui-même `sshd -t` (`ExecReload`) et refuse de recharger; sous Rocky, le `SIGHUP` fait se ré- exécuter `sshd`, qui meurt sur la configuration invalide : plus aucune nouvelle connexion, seules les sessions ouvertes survivent. Et si la faute passe inaperçue, au prochain
+redémarrage de la machine, plus de SSH — l'incident se déclare des semaines
 plus tard, sans lien apparent avec ta modification.
 
 `sshd -T` est le complément : il affiche la configuration effective, mais c'est
@@ -631,9 +629,8 @@ laisser la machine sans SSH. Ne compte pas là-dessus pour autant sous Rocky.
 ::: pourquoi
 Depuis Ubuntu 22.10, le paquet `openssh-server` installe et active
 `ssh.socket` : c'est systemd qui ouvre et détient le port 22, et qui lance
-`ssh.service` (en `sshd -i`, mode inetd) à la première connexion entrante. Dans
-ce mode, la directive `Port` de `sshd_config` n'est jamais consultée pour
-décider où écouter — `sshd` reçoit un socket déjà connecté.
+`ssh.service` à la première connexion entrante, en lui transmettant le socket déjà ouvert (prise en charge de l'activation par socket ajoutée par Ubuntu à `sshd`). Dans
+ce mode, `sshd` n'ouvre plus lui-même ses ports : un `reload` (ou un `restart` de `ssh.service`) ne change pas l'écoute. Sur 24.04, un générateur systemd ( `sshd``-socket-generator`) traduit `Port` et `ListenAddress` de `sshd_config` en un drop-in de `ssh.` socket — mais seulement au prochain `systemctl daemon-reload`.
 
 Diagnostic :
 
@@ -647,27 +644,24 @@ ListenStream=22
 Deux solutions, selon ce qu'on veut :
 
 ```bash
-# 1. rester en activation de socket, changer le port au bon endroit
-sudo systemctl edit ssh.socket
-#   [Socket]
-#   ListenStream=
-#   ListenStream=2222
+# 1. rester en activation de socket (méthode Ubuntu 24.04) :
+#    Port 2222 dans sshd_config, puis régénérer l'unité socket
+sudo sshd -t
 sudo systemctl daemon-reload && sudo systemctl restart ssh.socket
+ss -tlnp | grep 2222
 
 # 2. revenir à un sshd démon classique, qui relit Port
 sudo systemctl disable --now ssh.socket
 sudo systemctl enable --now ssh.service
 ```
 
-La ligne `ListenStream=` vide est obligatoire : sans elle, on **ajoute** un port
-au lieu de remplacer, et le 22 reste ouvert.
+Sur une version sans ce générateur (22.10), on surchargeait l'unité à la main (`systemctl edit ssh.socket` : `ListenStream=` vide puis `ListenStream=2222`) ; la ligne vide est obligatoire, sans elle on **ajoute** un port
+au lieu de le remplacer et le 22 reste ouvert.
 :::
 
 ::: piege
 Ce comportement explique aussi pourquoi `systemctl status ssh` affiche parfois
-`inactive (dead)` sur une machine parfaitement joignable, et pourquoi
-`journalctl -u ssh` montre un service qui démarre et s'arrête à chaque
-connexion. Sous Rocky 9, rien de tout cela : `sshd.service` est un démon
+`inactive (dead)` sur une machine parfaitement joignable : tant que personne ne s'est connecté depuis le démarrage, seul `ssh.socket` est actif; la première connexion démarre `ssh.` service, qui reste ensuite en place. Sous Rocky 9, rien de tout cela : `sshd.service` est un démon
 classique et `Port` fonctionne comme attendu — avec en revanche SELinux à
 prévenir : `semanage port -a -t ssh_port_t -p tcp 2222`.
 :::
@@ -677,14 +671,14 @@ prévenir : `semanage port -a -t ssh_port_t -p tcp 2222`.
 **Q14.18** — *`restrict,from=...,command=...` dans `authorized_keys`.*
 
 **Réponse : b)** la commande forcée est exécutée, la commande demandée est
-disponible dans `$SSH_ORIGINAL_COMMAND`.
+disponible dans `$SSH_ ORIGINAL_COMMAND`.
 
 ::: pourquoi
 `command="..."` est une **commande forcée**, pas un défaut. Quand cette clé est
 utilisée, `sshd` exécute exclusivement la commande indiquée, quoi que le client
 demande — y compris si le client ne demande rien (session interactive). Ce que
 le client avait demandé n'est pas perdu pour autant : il est placé dans la
-variable d'environnement `SSH_ORIGINAL_COMMAND`, ce qui permet d'écrire un
+variable d'environnement `SSH_ ORIGINAL_COMMAND`, ce qui permet d'écrire un
 aiguilleur :
 
 ```bash
@@ -1000,10 +994,12 @@ Les messages à reconnaître, et leur cause :
 | Message journal | Cause |
 |---|---|
 | `Authentication refused: bad ownership or modes for ...` | permissions |
-| `User mathieu not allowed because not listed in AllowUsers` | filtrage de comptes |
+| `User mathieu from ... not allowed because not` |  |
+| `listed in AllowUsers` | filtrage de comptes |
 | `Invalid user mathieu from 10.10.10.10` | le compte n'existe pas |
 | `Connection closed by authenticating user ... [preauth]` | aucune clé n'a convenu |
-| `error: Received disconnect ...: Too many authentication failures` | `MaxAuthTries` |
+| `error: maximum authentication attempts exceeded` |  |
+| `for mathieu ...` | `MaxAuthTries` |
 
 Puis :
 
@@ -1082,16 +1078,15 @@ active le multiplexage par défaut), pipelines de CI.
    d'un coup toutes les sessions filles, y compris le `tail -f` d'un collègue.
    Et `ControlPersist` laisse traîner un processus `ssh` après la fermeture de
    ton terminal : `ssh -O check`, `ssh -O exit` font partie du vocabulaire.
-2. **Longueur du chemin de socket.** Une socket UNIX est limitée à ~104
-   caractères. `ControlPath ~/.ssh/cm/%r@%h:%p` explose avec des noms d'hôtes
+2. **Longueur du chemin de socket.** Une socket UNIX est limitée à 108
+   caractères sur Linux. `ControlPath ~/.ssh/cm/%r@%h:%p` explose avec des noms d'hôtes
    longs : d'où `%C`, un condensat de taille fixe. Le répertoire doit exister
    (OpenSSH ne le crée pas) et être en `700` — quiconque peut écrire dedans peut
    détourner la socket. Et ça ne fonctionne pas sur un home monté en NFS.
 3. **Effets de bord invisibles.** Les options d'une connexion sont celles du
    **maître** : ouvrir un premier `ssh` sans `-A`, puis un second `ssh -A`, ne
    donne pas d'agent transféré — la seconde session réutilise le maître. Même
-   chose pour `-L`, `-D`, `-t`. Il faut alors `-o ControlMaster=no` ou passer les
-   redirections au maître à chaud avec `ssh -O forward -L ...`.
+   chose pour `-X`. Il faut alors `-o ControlMaster=no`. À l'inverse, un `-L` ou `-D` demandé par une session fille est confié au maître et lui survit (`ssh -O forward` / `ssh -O cancel` pour les gérer à chaud).
 
 ::: pourquoi
 Le point conceptuel à retenir : le multiplexage ne rend pas SSH plus rapide, il
@@ -1172,7 +1167,7 @@ un canal d'accès entrant permanent vers ton poste.
 
 **Réponse**
 
-1. **Pas d'idempotence.** `ssh h 'echo "X=1" >> /etc/app.conf'` ajoute la ligne
+1. **Pas d'idempotence.** `ssh h 'echo "X=1" » /etc/app.conf'` ajoute la ligne
    **à chaque exécution**. La boucle décrit une action, pas un état. Relancer
    après un échec partiel double les modifications sur les machines déjà
    traitées. Un outil de gestion de configuration décrit l'état voulu et ne fait
@@ -1400,7 +1395,7 @@ par la suite dans cette commande (le répertoire `.ssh` comme le fichier
 répertoire en `755` et `sshd` refusera de le lire à cause de `StrictModes`,
 avec pour seul symptôme un `Permission denied (publickey)` côté client.
 
-Le `>>` et non `>` : écraser le fichier supprimerait les clés des collègues et
+Le `»` et non `>` : écraser le fichier supprimerait les clés des collègues et
 des outils d'automatisation. C'est une erreur qui coupe l'accès à d'autres
 personnes que soi, donc particulièrement désagréable.
 
@@ -1483,8 +1478,7 @@ Au bout d'une heure, la clé est retirée automatiquement : `ssh-add -l` répond
 ::: pourquoi
 `eval` est indispensable et souvent mal compris : `ssh-agent -s` ne modifie pas
 ton shell, il **imprime** sur sa sortie standard les commandes `export` à
-exécuter. Sans `eval`, tu vois s'afficher `SSH_AUTH_SOCK=...; export
-SSH_AUTH_SOCK;` et rien n'est positionné — l'agent tourne, mais aucun client ne
+exécuter. Sans `eval`, tu vois s'afficher `SSH_AUTH_SOCK=...; export SSH_ AUTH_SOCK;` et rien n'est positionné — l'agent tourne, mais aucun client ne
 sait où le joindre.
 
 Tout le mécanisme tient dans `SSH_AUTH_SOCK` : c'est le chemin de la socket UNIX
@@ -1534,7 +1528,7 @@ ssh-add -l
 
 Le fichier de configuration client est `C:\Users\<toi>\.ssh\config`, mêmes
 directives et même syntaxe que sous Linux. Les chemins s'y écrivent
-`C:\Users\mathieu\.ssh\id_ed25519` ou, plus portable, `~/.ssh/id_ed25519`.
+`C:\Users\mathieu\.ssh\id_ed25519` ou, plus portable, `~/.ssh/id_ ed25519`.
 
 ::: pourquoi
 Sous Windows, `ssh-agent` n'est pas un processus lancé par le shell : c'est un
@@ -1560,7 +1554,7 @@ Deux frottements classiques sur un poste Windows :
   larges, avec un message équivalent au `UNPROTECTED PRIVATE KEY FILE` de Linux.
   Correction : propriétés du fichier → Sécurité → Avancé → désactiver l'héritage,
   ne laisser que ton compte. En ligne :
-  `icacls .\id_ed25519 /inheritance:r /grant:r "$env:USERNAME:R"`.
+  `icacls .\id_ed25519 /inheritance:r /grant:r "${env: USERNAME}:(R)"`.
 * **PuTTY et Pageant** sont un écosystème séparé : format `.ppk`, agent
   `pageant.exe`, conversion par `puttygen`. Ils ne parlent pas au service
   `ssh-agent` de Windows. Si l'équipe utilise WinSCP ou PuTTY, il faut soit
@@ -1586,7 +1580,7 @@ hostname 10.10.10.12
 port 22
 identityfile ~/.ssh/id_ed25519
 identitiesonly yes
-proxyjump 10.10.10.10
+proxyjump bastion
 ```
 
 ::: pourquoi
@@ -1744,12 +1738,10 @@ sftponly` ou `Match Address` : sans `-C`, `sshd -T` affiche la configuration
 
 ::: piege
 `sshd -T` doit être lancé en root : il lit les clés d'hôte pour valider la
-configuration et échoue sinon. Et attention à l'espace final dans le `grep` :
-sans lui, `^passwordauthentication` attrape aussi
-`passwordauthentication` ... rien d'autre en fait, mais `^permitroot` attraperait
-`permitrootlogin` seul — en revanche `grep -i '^port'` attrape `port` et non
-`permitopen`. Prendre l'habitude de l'espace évite les surprises sur des
-directives à préfixe commun (`kexalgorithms` / `kex...`).
+configuration et échoue sinon. Et prends l'habitude de l'espace final dans le `grep` (`'^port '`) :
+sans lui, `^port` attrape aussi
+`ports` ... ou toute directive future à préfixe commun, et `^permit` renvoie
+`permitrootlogin`, `permitemptypasswords`, `permittunnel`… La sortie de `sshd -T` est « directive espace valeur », l'espace est le séparateur fiable.
 :::
 
 ---
@@ -1859,7 +1851,7 @@ printf '' | timeout 3 bash -c \
 
 ```console
 LISTEN 0 128 127.0.0.1:15432 0.0.0.0:*  users:(("ssh",pid=7841,fd=5))
-LAB12-DB-OK lab-db
+LAB14-DB-OK lab-db
 ```
 
 Fermeture :
@@ -1970,19 +1962,19 @@ Chaque élément de la ligne fait un travail précis :
   (locales et distantes), le transfert d'agent, X11, et l'exécution de
   `~/.ssh/rc`. Formulation « tout interdit, puis j'autorise » : une option
   ajoutée dans une future version d'OpenSSH sera interdite par défaut. À
-  l'inverse, énumérer `no-pty,no-port-forwarding,...` laisse passer tout ce qui
+  l'inverse, énumérer `no-pty,no-port-forwarding,. ..` laisse passer tout ce qui
   n'existe pas encore.
 * `from="10.10.10.10"` limite l'origine. `sshd` compare l'adresse source réelle
   du socket TCP, pas une donnée fournie par le client : ce n'est pas
   contournable par le client, seulement par usurpation d'adresse sur le réseau.
   La liste accepte les motifs et la négation : `from="10.10.10.*,!10.10.10.99"`.
 * `command="..."` force l'exécution, quoi que demande le client, et range la
-  demande d'origine dans `SSH_ORIGINAL_COMMAND`.
+  demande d'origine dans `SSH_ ORIGINAL_COMMAND`.
 
 Le `case` est une liste blanche. `rsync --server ...` est la forme qu'`rsync`
 envoie réellement au distant quand on lance `rsync -a src/ h:dst/` — c'est cette
 chaîne-là qu'on autorise, et c'est ce que fait l'outil `rrsync` livré avec
-`rsync` (`/usr/share/doc/rsync/scripts/rrsync`), qui en plus impose un
+`rsync` (`/usr/bin/rrsync` sur Ubuntu 24.04), qui en plus impose un
 répertoire racine.
 :::
 
@@ -2104,19 +2096,10 @@ ssh-add -l >/dev/null 2>&1 || eval "$(ssh-agent -s)"
 ssh-add -t 28800 ~/.ssh/id_ed25519
 ```
 
-**Étape 5 — retrait de la vieille clé RSA**
+**Étape 5 — retrait de la vieille clé RSA**, en travaillant par empreinte :
 
 ```bash
 OLD=$(ssh-keygen -lf ~/.ssh/id_rsa.pub | awk '{print $2}')   # SHA256:...
-for h in 10.10.10.11 10.10.10.12 10.10.10.13 10.10.10.14; do
-  ssh "mathieu@$h" "cp ~/.ssh/authorized_keys ~/.ssh/authorized_keys.bak && \
-    awk '{print > \"/tmp/ak.\" NR}' ~/.ssh/authorized_keys; :"
-done
-```
-
-Plus simple et plus sûr, en travaillant par empreinte :
-
-```bash
 for h in 10.10.10.11 10.10.10.12 10.10.10.13 10.10.10.14; do
   ssh "mathieu@$h" 'cd ~/.ssh && cp authorized_keys authorized_keys.bak &&
     while read -r l; do
@@ -2153,7 +2136,7 @@ sudo sshd -t && sudo systemctl reload ssh
 sudo sshd -T | grep -Ei '^(passwordauthentication|kbdinteractive) '
 ```
 
-Terminal C, **nouvelle** connexion, avant de fermer A :
+Si `sshd -T` renvoie encore `passwordauthentication yes`, un fragment lu avant le tien l'emporte — `50-cloud-init.conf` sur une image cloud ou une installation Subiquity. Déplace-le hors de `sshd_config.d/` (copie dans `/ root/.m14-backup/`) ou renomme ton fragment `10-durcissement.conf`, puis recharge. La règle est détaillée en L14.3, étape 5. Terminal C, **nouvelle** connexion, avant de fermer A :
 
 ```console
 $ ssh mathieu@10.10.10.11 true && echo ACCES-OK
@@ -2263,11 +2246,10 @@ proxyjump bastion
 
 **Étape 4 — l'ordre des blocs**
 
-En remontant `Host lab-*` et `Host *` en tête, `ssh -G lab-db` renvoie
-`proxyjump none` disparu, mais surtout : le bloc `Host lab-*` fixe `User` et
-`IdentityFile` en premier, et surtout `Host *` fixe alors tout ce qu'il contient
-avant que les blocs spécifiques ne soient lus. Si `Host *` contenait `User
-root`, `ssh -G lab-db` afficherait `user root`.
+Avec **ce** fichier, remonter `Host lab-*` et `Host *` en tête ne change rien à `ssh -G lab-db` : aucun mot-clé n'y est défini à la fois dans un bloc générique et
+dans un bloc spécifique, et les valeurs communes sont identiques. La différence apparaît dès qu'il y a conflit : les blocs génériques, lus en premier, fixent leurs valeurs
+avant les blocs spécifiques. Pour la constater, ajoute `User
+root` dans `Host *` : placé en tête, il l'emporte sur le `User mathieu` de `lab-*` et `ssh -G lab-db` affiche `user root` ; placé en dernier, il est ignoré.
 
 Phrase à écrire dans le rapport : *« `ssh_config` retient, pour chaque mot-clé,
 la première valeur rencontrée en descendant le fichier ; les blocs vont donc du
@@ -2305,7 +2287,7 @@ noter :
    Les lignes sont ignorées (ou provoquent un avertissement). Il faut donc
    accepter la perte de performance, ou travailler depuis WSL.
 2. L'agent est le service Windows `ssh-agent` (tube nommé, clés stockées
-   chiffrées dans le registre) : pas de `SSH_AUTH_SOCK`, pas d'`eval`, et les
+   chiffrées dans le registre) : pas de `SSH_ AUTH_SOCK`, pas d'`eval`, et les
    clés survivent au redémarrage. `AddKeysToAgent yes` fonctionne.
 
 ::: pourquoi
@@ -2330,16 +2312,15 @@ et qu'un intermédiaire peut falsifier.
 :::
 
 ::: piege
-`ControlPath ~/.ssh/cm/%C` échoue silencieusement si `~/.ssh/cm` n'existe pas :
-OpenSSH ne crée pas le répertoire, et le multiplexage est simplement désactivé
-sans message visible. Le symptôme est « mon multiplexage ne marche pas » sans
-erreur. `ssh -v` affiche alors `ControlSocket ... could not connect` et
+`ControlPath ~/.ssh/cm/%C` échoue sans bloquer si `~/.ssh/cm` n'existe pas :
+OpenSSH ne crée pas le répertoire, affiche un simple `unix_listener: cannot bind to path ...` et se connecte quand même,
+sans multiplexage. Le symptôme est « mon multiplexage ne marche pas » alors que la connexion réussit; `ssh -v` montre
 l'échec du bind.
 
-Autre piège : `~/.ssh/config` doit être en `600` et appartenir à l'utilisateur,
-sinon `ssh` refuse de le lire (`Bad owner or permissions on
-/home/mathieu/.ssh/config`) et ignore **toute** la configuration — l'alias
-devient un nom d'hôte inconnu.
+Autre piège : `~/.ssh/config` doit appartenir à l'utilisateur et n'être modifiable ni par le groupe ni par les autres (`600` conseillé, `644` toléré),
+sinon `ssh` refuse de démarrer (`Bad owner or permissions on
+/home/mathieu/.ssh/config`) — plus aucune connexion, alias
+ou pas.
 :::
 
 ---
@@ -2407,7 +2388,7 @@ passwordauthentication yes
 
 Les fragments sont lus dans l'ordre **lexicographique** du glob, et la première
 valeur gagne : `50-cloud-init.conf` est lu avant `60-durcissement.conf`, donc
-son `PasswordAuthentication yes` l'emporte. Deux corrections possibles, l'une et
+son `PasswordAuthentication yes` l'emporte (si tu l'as déjà neutralisé en L14.1, `sshd -T` renvoie `no` : le raisonnement reste à écrire). Deux corrections possibles, l'une et
 l'autre défendables :
 
 ```bash
@@ -2415,7 +2396,7 @@ l'autre défendables :
 #    au prochain boot si cloud-init est encore actif : à traiter aussi côté
 #    cloud-init, /etc/cloud/cloud.cfg.d/)
 sudo mv /etc/ssh/sshd_config.d/50-cloud-init.conf \
-        /root/.m12-backup/50-cloud-init.conf.desactive
+        /root/.m14-backup/50-cloud-init.conf.desactive
 # b) ou nommer le fragment de durcissement pour qu'il passe en premier
 sudo mv /etc/ssh/sshd_config.d/60-durcissement.conf \
         /etc/ssh/sshd_config.d/10-durcissement.conf
@@ -2464,7 +2445,7 @@ Les directives, une par une :
 * `ClientAliveInterval 300` / `ClientAliveCountMax 2` : le **serveur** sonde le
   client et ferme après 10 minutes sans réponse. Ça nettoie les sessions
   fantômes d'un poste éteint brutalement — et ça libère les processus associés.
-  Symétrique de `ServerAliveInterval` côté client.
+  Symétrique de `ServerAliveInterval` côté client. Nuance à connaître : un client vivant mais inactif répond aux sondes et n'est **pas** déconnecté; la vraie déconnexion sur inactivité de l'utilisateur relève du shell (`TMOUT`), pas de `sshd`.
 * `LogLevel VERBOSE` est le meilleur rapport valeur/risque de la liste : il
   ajoute l'**empreinte de la clé utilisée** à chaque ligne `Accepted publickey`.
   Sans lui, impossible de répondre à « quelle clé a servi à cette connexion »,
@@ -2496,14 +2477,12 @@ connaissance de cause, avec communication.
 :::
 
 ::: rhel
-Sous Rocky 9, écrire `Ciphers`, `MACs` ou `KexAlgorithms` dans `sshd_config` est
-**sans effet** tant que la politique cryptographique système est active :
-`/etc/sysconfig/sshd` contient `CRYPTO_POLICY=` renseigné, et les options de la
-ligne de commande priment. Deux voies : vider `CRYPTO_POLICY=` dans
-`/etc/sysconfig/sshd` pour reprendre la main, ou — préférable — passer la
+Sous Rocky 9, la politique cryptographique système est incluse par
+`/etc/ssh/sshd_config`.`d/50-redhat.conf` (`Include`
+`/etc/crypto-policies/back-ends/opensshserver.config`). Comme la première valeur gagne, un `Ciphers`, `MACs` ou `KexAlgorithms` écrit dans `sshd_config` ou dans un fragment nommé après `50-` est **sans effet**. Deux voies : un fragment qui passe avant (`40-algos.conf`), ou — préférable — passer la
 machine en politique forte avec `sudo update-crypto-policies --set FUTURE` (ou
-une sous-politique dans `/etc/crypto-policies/policies/`), ce qui durcit
-`sshd`, `openssl` et `gnutls` de façon cohérente. L'unité s'appelle
+une sous-politique dans `/etc/crypto-policies/policies/``modules/` ), ce qui durcit
+`sshd`, `openssl` et `gnutls` de façon cohérente. (Le `CRYPTO_POLICY=` de `/etc/sysconfig/sshd` est le mécanisme de RHEL 8.) L'unité s'appelle
 `sshd.service`, le journal se lit avec `journalctl -u sshd`.
 :::
 
@@ -2519,7 +2498,7 @@ printf '' | timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/15432; head -1 <&3'
 ```
 
 ```console
-LAB12-DB-OK lab-db
+LAB14-DB-OK lab-db
 ```
 
 **Étape 2 — la différence avec `127.0.0.1`**
@@ -2682,13 +2661,12 @@ sudo install -o sauvegarde -g sauvegarde -m 640 /dev/null \
 **Étape 3 — `authorized_keys`**
 
 ```bash
-# sur lab-web, la ligne est UNE seule ligne
+# sur lab-web ; le fichier doit contenir UNE seule ligne
 sudo install -d -o sauvegarde -g sauvegarde -m 700 /home/sauvegarde/.ssh
-# la ligne ci-dessous est UNE seule ligne : la coupure est typographique
-sudo tee /home/sauvegarde/.ssh/authorized_keys >/dev/null <<'EOF'
-restrict,from="10.10.10.14",command="/usr/local/bin/lab14-recevoir"
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN8x... ci-sauvegarde@lab-ops
-EOF
+OPTS='restrict,from="10.10.10.14",command="/usr/local/bin/lab14-recevoir"'
+CLE='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN8x... ci-sauvegarde@lab-ops'
+printf '%s %s\n' "$OPTS" "$CLE" \
+  | sudo tee /home/sauvegarde/.ssh/authorized_keys >/dev/null
 sudo chown sauvegarde:sauvegarde /home/sauvegarde/.ssh/authorized_keys
 sudo chmod 600 /home/sauvegarde/.ssh/authorized_keys
 ```
@@ -2704,8 +2682,10 @@ commande non autorisee
 $ echo $?
 42
 
-$ ssh -i ~/.ssh/id_ci_sauvegarde -N -L 9999:127.0.0.1:22 sauvegarde@10.10.10.11
-Warning: remote port forwarding failed / channel setup failed
+$ ssh -i ~/.ssh/id_ci_sauvegarde -f -N -L 9999:127.0.0.1:22 \
+>     sauvegarde@10.10.10.11
+$ nc -w2 127.0.0.1 9999 </dev/null
+channel 2: open failed: administratively prohibited: open failed
 # et depuis lab-adm, avec la même clé :
 $ ssh -i /tmp/id_ci_sauvegarde sauvegarde@10.10.10.11 liste
 sauvegarde@10.10.10.11: Permission denied (publickey).
@@ -2788,8 +2768,8 @@ La clé est proposée et refusée : le client va bien, on arrête de le triturer
 
 ```console
 # journalctl -u ssh -n 30 --no-pager | grep -i refused
-sshd[9012]: Authentication refused: bad ownership or modes for directory
-            /home/mathieu/.ssh
+sshd[9012]: Authentication refused: bad ownership or modes for file
+            /home/mathieu/.ssh/authorized_keys
 ```
 
 3. Constater :
@@ -2837,7 +2817,7 @@ set -euo pipefail
 u=${1:?utilisateur}
 h=$(getent passwd "$u" | cut -d: -f6)
 [ "$(stat -c '%U %a' "$h"        | awk '{print $1}')" = "$u" ] || exit 1
-[ "$(( $(stat -c %a "$h") & 022 ))" -eq 0 ]                    || exit 1
+[ "$(( 0$(stat -c %a "$h") & 022 ))" -eq 0 ]                   || exit 1
 [ "$(stat -c %a "$h/.ssh")" = 700 ]                            || exit 1
 [ "$(stat -c %a "$h/.ssh/authorized_keys")" = 600 ]             || exit 1
 ```
@@ -3091,13 +3071,14 @@ accès sensibles.
 
 ```console
 $ ssh -v lab-web 2>&1 | grep -c 'Offering public key'
-6
+3
 $ ssh -v lab-web 2>&1 | grep -E 'Offering public key|Received disconnect'
 debug1: Offering public key: /home/mathieu/.ssh/legacy/cle1
         ED25519 SHA256:aB1... agent
 debug1: Offering public key: /home/mathieu/.ssh/legacy/cle2
         ED25519 SHA256:cD2... agent
-...
+debug1: Offering public key: /home/mathieu/.ssh/legacy/cle3
+        ED25519 SHA256:eF3... agent
 Received disconnect from 10.10.10.11 port 22:2: Too many authentication failures
 ```
 
@@ -3105,7 +3086,7 @@ Received disconnect from 10.10.10.11 port 22:2: Too many authentication failures
 
 ```console
 $ ssh-add -l | wc -l
-7
+6
 $ ssh -G lab-web | grep -E '^(identityfile|identitiesonly) '
 identityfile ~/.ssh/legacy/cle1
 identityfile ~/.ssh/legacy/cle2
@@ -3114,27 +3095,29 @@ identityfile ~/.ssh/id_ed25519
 identitiesonly no
 ```
 
-3. Regarder ce que compte le serveur :
+Un bloc `Host *` glissé **en tête** de `~/.ssh/config` : ses `IdentityFile` passent devant, et son `IdentitiesOnly no` gagne sur le `yes` du bloc `lab-*`, lu après (première valeur rencontrée). 3. Regarder ce que compte chaque serveur :
 
 ```console
-# sshd -T | grep -i maxauthtries
+# sur lab-web (durci en L14.3) :  sshd -T | grep -i maxauthtries
+maxauthtries 3
+# sur lab-db (défaut) :           sshd -T | grep -i maxauthtries
 maxauthtries 6
 ```
 
 **Cause racine**
 
 `MaxAuthTries` compte les **tentatives d'authentification**, et chaque clé
-proposée en compte une, même quand elle n'a aucune chance d'aboutir. Avec 6 clés
-parasites en tête de liste et `MaxAuthTries 6`, le serveur coupe la session
-avant que la bonne clé — la septième — ne soit présentée. L'agent aggrave le
+proposée en compte une, même quand elle n'a aucune chance d'aboutir. Avec 5 clés
+parasites en tête de liste et `MaxAuthTries 3` sur `lab-web`, le serveur coupe la session après la troisième, bien
+avant que la bonne clé — la sixième — ne soit présentée. Sur `lab-db`, resté à `MaxAuthTries 6`, les 5 échecs passent et la sixième tentative réussit : d'où « ça marche encore, mais plus lentement ». L'agent aggrave le
 phénomène : ses identités sont proposées en plus de celles du fichier de
 configuration.
 
 **Pourquoi `-i` seul n'a pas suffi**
 
-`IdentityFile` est **additif** : `-i ~/.ssh/id_ed25519` met cette clé en tête
+`IdentityFile` est **additif** : `-i ~/.ssh/id_ed25519` ajoute cette clé 
 mais ne supprime aucune des autres sources (fichier de configuration, agent).
-Les 6 parasites continuent d'être proposées ensuite. Seul `IdentitiesOnly=yes`
+Et l'ordre ne joue pas en ta faveur : `ssh` propose d'abord les clés de l'agent, puis les fichiers — les parasites chargées dans l'agent passent donc devant la clé désignée par `-i`. Seul `IdentitiesOnly=yes`
 rend la liste exclusive.
 
 **Correctif immédiat**
@@ -3174,8 +3157,8 @@ identités et t'identifier d'un site à l'autre. `IdentitiesOnly yes` par hôte
 n'est donc pas seulement une optimisation, c'est une mesure de cloisonnement.
 
 Troisième point, que confirme le symptôme secondaire de l'énoncé (« `lab-db`
-fonctionne encore, mais plus lentement ») : les 6 tentatives coûtent 6 allers-
-retours et 6 signatures avant la bonne. La correction accélère aussi les
+fonctionne encore, mais plus lentement ») : les 5 tentatives coûtent 5 allers-
+retours avant la bonne. La correction accélère aussi les
 machines qui fonctionnaient.
 :::
 

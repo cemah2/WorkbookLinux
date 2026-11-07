@@ -192,12 +192,12 @@ pour les mots de passe contenant `$`.
 **Réponse : b)** `HISTCONTROL=ignorespace` puis préfixer la commande d'une espace.
 
 ::: pourquoi
-`HISTCONTROL` accepte trois valeurs combinables par `:` :
+`HISTCONTROL` accepte des valeurs combinables par `:` :
 
 * `ignorespace` : une ligne commençant par une ou plusieurs espaces n'est pas
   enregistrée ;
 * `ignoredups` : une ligne identique à la précédente n'est pas enregistrée ;
-* `ignoreboth` : les deux (c'est la valeur du `~/.bashrc` par défaut d'Ubuntu).
+* `ignoreboth` : les deux (c'est la valeur du `~/.bashrc` par défaut d'Ubuntu); `erasedups` : efface de l'historique toutes les occurrences antérieures.
 
 C'est le seul mécanisme **sélectif** : tu gardes un historique complet et utile, et
 tu exclus ponctuellement une ligne. `HISTSIZE=0` vide l'historique en mémoire de la
@@ -253,8 +253,7 @@ Dans un contexte arithmétique `$(( ))`, bash applique les conventions de notati
 du langage C : un nombre commençant par `0` est interprété en **octal**. Or en
 octal, les chiffres valides vont de 0 à 7 : `08` et `09` sont des littéraux
 invalides, d'où l'erreur. Le bug ne se manifeste donc que deux mois par an, en août
-et en septembre — et les huitième et neuvième jours du mois pour `date +%d`, et les
-huit premiers jours de l'année pour `date +%j`. C'est un classique des scripts de
+et en septembre — et les huitième et neuvième jours du mois pour `date +%d`, et pour `date +%j` chaque jour de 001 à 099 qui contient un 8 ou un 9 (`008`, `009`, `018`, `019`… puis tout de `080` à `099`). C'est un classique des scripts de
 rotation de logs qui tombent en panne « sans raison » chaque mois d'août.
 
 La correction est le préfixe de base explicite de bash :
@@ -285,7 +284,7 @@ b) `export PATH="$HOME/bin:$PATH"` est la forme canonique : `$HOME` est dévelop
 correctement, l'ancien `PATH` est conservé, et l'ajout se fait en tête, donc tes
 scripts prennent le pas sur ceux du système.
 
-d) `PATH="$HOME/bin:$PATH"` sans `export` fonctionne **aussi**, et c'est la subtilité
+c) `PATH="$HOME/bin:$PATH"` sans `export` fonctionne **aussi**, et c'est la subtilité
 de la question : l'attribut d'export d'une variable est une propriété persistante de
 la variable, pas de l'affectation. `PATH` est déjà exporté par le processus parent
 (sshd, login) ; une réaffectation conserve cet attribut. Vérifie-le avec
@@ -293,11 +292,11 @@ la variable, pas de l'affectation. `PATH` est déjà exporté par le processus p
 d'export. Écrire `export` reste une bonne pratique, parce que ça documente
 l'intention et parce que ça protège le jour où la variable n'était pas déjà exportée.
 
-a) `PATH=~/bin` écrase tout le `PATH` : c'est exactement la panne du Break & Fix BF1.1.
+d) `PATH=~/bin` écrase tout le `PATH` : c'est exactement la panne du Break & Fix BF1.1.
 Le tilde est bien développé ici (l'expansion du tilde a lieu après `=` dans une
 affectation), mais il ne reste plus que `~/bin` dans le chemin de recherche.
 
-c) `export PATH="$PATH:."` ajoute le répertoire courant. C'est une faille : il suffit
+e) `export PATH="$PATH:."` ajoute le répertoire courant. C'est une faille : il suffit
 qu'un utilisateur dépose un fichier exécutable nommé `ls` ou `sudo` dans un
 répertoire où tu passes (`/tmp`, un dépôt Git cloné) pour qu'il s'exécute à ta place,
 avec tes droits.
@@ -342,7 +341,7 @@ lrwxrwxrwx 1 root root 4 Mar 31  2024 /bin/sh -> dash
 ```
 
 ::: pourquoi
-Debian et Ubuntu utilisent `dash` comme `/bin/sh` depuis 2011, pour une raison de
+Ubuntu utilise `dash` comme `/bin/sh` depuis 2006, Debian depuis 2011, pour une raison de
 performance : `dash` démarre environ cinq fois plus vite que bash, ce qui compte sur
 les milliers d'appels des scripts d'init et de `postinst`. `dash` implémente le
 standard POSIX et rien de plus. Sur macOS et sur RHEL/Rocky, `/bin/sh` est bash
@@ -440,7 +439,7 @@ fichier à son ouverture et y a ajouté ses propres commandes en mémoire ; la p
 session fermée écrit son contenu, la seconde écrase avec le sien — qui ne contient
 pas les commandes de la première, puisqu'elle ne les a jamais vues.
 
-Avec `shopt -s histappend`, bash **ajoute** (`>>`) au fichier au lieu de l'écraser :
+Avec `shopt -s histappend`, bash **ajoute** (`»`) au fichier au lieu de l'écraser :
 les deux sessions coexistent, dans l'ordre de fermeture.
 
 Pour aller plus loin, le réglage classique des postes d'admin partagés écrit
@@ -473,7 +472,7 @@ Il existe une troisième écriture valable, qui vient de l'expansion du tilde :
 au milieu d'un chemin : `cp fichier ~-/sauvegarde/`.
 
 b) `cd ..` remonte au parent, ici `/etc`, pas au précédent.
-d) `cd ~` ramène à `$HOME`, comme `cd` sans argument.
+c) `cd ~` ramène à `$HOME`, comme `cd` sans argument.
 
 Pour naviguer entre plus de deux répertoires, `cd -` ne suffit plus : il alterne
 entre deux valeurs. C'est le rôle de la pile `pushd` / `popd` / `dirs -v`.
@@ -699,10 +698,10 @@ env -i /bin/bash --noprofile --norc /chemin/du/script.sh
    `env > /tmp/env-cron.txt`, puis `diff <(env | sort) <(sort /tmp/env-cron.txt)`.
    On voit immédiatement que cron fournit un `PATH` minimal
    (`/usr/bin:/bin` sur Debian/Ubuntu) et pas grand-chose d'autre.
-4. **Corriger les deux causes séparément.**
+4. **Corriger les deux causes séparément.** \*
    * `ll` : c'est un alias de `~/.bashrc`, jamais lu par cron, et de toute façon les
      alias ne sont pas développés en non interactif. On le remplace par la vraie
-     commande `ls -l`, ou par une fonction définie dans le script.
+     commande `ls -l`, ou par une fonction définie dans le script. \*
    * `docker` : il est dans `/usr/bin/docker`, donc en principe trouvable, mais si le
      binaire est ailleurs (`/usr/local/bin`), on déclare le `PATH` **en tête du
      script** — pas dans le `crontab`, pour que le script reste autonome :
@@ -793,7 +792,7 @@ Constructions bash non POSIX (quatre suffisaient, en voici les plus courantes) :
 | `echo -e "a\tb"` | `printf 'a\tb\n'` |
 | `source f` | `. f` |
 | `$((...))` avec `++`, `**` | arithmétique simple uniquement |
-| `<<<"chaîne"` | `printf '%s\n' "chaîne" \|` |
+| `«<"chaîne"` | `printf '%s\n' "chaîne" \|` |
 | `&> f` | `> f 2>&1` |
 | `${PIPESTATUS[0]}` | `set -o pipefail` absent aussi |
 
@@ -926,10 +925,10 @@ des mots transformerait les sauts de ligne en séparateurs d'arguments et
 `printf '%s\n'` produirait… le même résultat par accident. Garde l'habitude de
 quoter, l'accident ne se reproduit pas avec un autre format.
 
-Variante lisible qui marche aussi sous `dash` :
+Variante lisible par tableau (bash uniquement, `dash` n'a ni tableau ni here-string) :
 
 ```bash
-IFS=: read -ra dirs <<< "$PATH"   # bash uniquement (tableau + here-string)
+   IFS=: read -ra dirs <<< "$PATH"
 printf '%s\n' "${dirs[@]}"
 ```
 :::
@@ -969,8 +968,7 @@ rm ./-fichier-bizarre.txt         # 2. le nom ne commence plus par un tiret
 ::: pourquoi
 Le shell ne joue aucun rôle ici : il passe `-fichier-bizarre.txt` tel quel à `rm`.
 C'est `rm`, via `getopt`, qui voit un mot commençant par `-` et le traite comme un
-groupe d'options courtes — d'où `rm: invalid option -- 'f'`… ou pire, `-f` est une
-option valide et `rm` continue d'analyser.
+groupe d'options courtes : `-f` et `-i` sont des options valides, `rm` continue d'analyser et bute sur `c`, d'où `rm: invalid option -- 'c'`. Avec un nom comme `-rf`, il n'y aurait même pas d'erreur : `rm` attendrait simplement des opérandes.
 
 `--` est la convention POSIX universelle : tout ce qui suit est un opérande, jamais
 une option. Elle est respectée par toutes les commandes GNU. La seconde méthode
@@ -1002,7 +1000,7 @@ C'est le point le plus contre-intuitif du module et il mérite d'être vérifié
 **les résultats du globbing ne sont pas soumis au découpage des mots**. Le globbing
 est l'étape 5, le découpage l'étape 4. `./*.log` produit donc une liste d'arguments
 déjà correctement séparés, dont l'un contient une espace, et `wc` reçoit
-`argv = [wc, -l, --, ./access.log, ./app.log, ./rapport final.log, ...]`.
+`argv = [wc, -l, - -, ./access.log, ./app.log, ./rapport final.log, ...]`.
 
 Aucun quoting n'est nécessaire, et il serait même nuisible : `"./*.log"` empêcherait
 le globbing et chercherait un fichier littéralement nommé `*.log`.
@@ -1053,10 +1051,12 @@ absente de BSD/macOS).
 $ type -a ls cd ll '[' command
 ls is aliased to `ls --color=auto'
 ls is /usr/bin/ls
+ls is /bin/ls
 cd is a shell builtin
 ll is aliased to `ls -alF'
 [ is a shell builtin
 [ is /usr/bin/[
+[ is /bin/[
 command is a shell builtin
 ```
 
@@ -1067,6 +1067,8 @@ command is a shell builtin
 | `ll` | alias de `~/.bashrc` |
 | `[` | builtin, doublé par un vrai binaire `/usr/bin/[` |
 | `command` | builtin |
+| (`/bin/ls` et `/usr` | `/bin/ls` sont le même fichier : `/bin` est un lien vers `usr/bin` depuis la fusion de `/usr`, et le |
+| `PATH` d'Ubuntu contient | les deux.) |
 
 ::: pourquoi
 Deux points méritent l'attention.
@@ -1344,7 +1346,7 @@ Réponse : `sudo -E`, ou `Defaults env_keep += "http_proxy https_proxy no_proxy"
 
 ```bash
 cd ~
-pushd /etc/nginx        # ~ /etc/nginx  -> affiche la pile
+pushd /etc/nginx        # /etc/nginx ~  -> affiche la pile
 pushd /var/log          # /var/log /etc/nginx ~
 dirs -v                 # pile numérotée
 #  0  /var/log
@@ -1474,7 +1476,7 @@ Le piège qui coûte une heure : écrire le bloc **avant** la garde
 `echo "Bienvenue"`, une bannière, un `hostinfo`) placé avant la garde casse
 `scp`, `rsync` et `sftp` — ces protocoles attendent un flux binaire propre sur
 stdout et interprètent ta bannière comme un paquet de protocole. Le symptôme est un
-`scp` qui échoue avec `subsystem request failed` ou `Received message too long`,
+`scp` ou un `sftp` qui échoue avec `Received message too long` `1114795883`,
 sans aucun rapport apparent avec le `.bashrc`. Seules les affectations de variables
 d'environnement ont leur place au-dessus de la garde.
 :::
@@ -1534,7 +1536,7 @@ ligne qui suit le tube, avant même un `echo`.
 
 Alternative POSIX si le script devait tourner sous `dash` : `set -o pipefail`
 n'existe pas non plus, il faut passer par un fichier temporaire pour le code retour,
-ou restructurer avec une substitution de processus.
+ou par un tube nommé (`mkfifo`); la substitution de processus `>(tee ...)` est, elle aussi, une extension bash.
 
 **`set -euo pipefail` amputé de `-e`.** Ici on veut explicitement continuer après
 l'échec du script cible, pour écrire la ligne de fin et sortir avec son code. Avec
@@ -1545,7 +1547,7 @@ remette pas « par bonne pratique ».
 **`2>&1 | tee`** et pas `| tee ... 2>&1` : voir Q1.14, le tube ne transporte que le
 fd 1, la fusion doit avoir lieu avant.
 
-**Le mode silencieux utilise `>>` et non `> /dev/null`** : on veut la trace complète
+**Le mode silencieux utilise `»` et non** `> /dev/null` : on veut la trace complète
 dans le fichier, seul l'affichage écran disparaît. D'où deux branches plutôt qu'une
 redirection conditionnelle.
 :::
@@ -1662,8 +1664,8 @@ remplacement, `mv` écrase silencieusement le premier. En production, utilise
 : > ~/lab01/logs/startup.log
 ssh mathieu@localhost        # puis exit          -> login interactif
 bash                         # puis exit          -> interactif non-login
-ssh mathieu@localhost 'true'                      -> non interactif distant
-bash -c true                                      -> non interactif local
+ssh mathieu@localhost 'true' #                    -> non interactif distant
+bash -c true                 #                    -> non interactif local
 cat ~/lab01/logs/startup.log
 ```
 
@@ -1682,7 +1684,8 @@ cat ~/lab01/logs/startup.log
 # solution couvrant les quatre cas, système, nécessite sudo :
 echo 'JAVA_HOME=/opt/jdk21' | sudo tee -a /etc/environment
 
-# solution shell seule (couvre les 3 premiers cas, pas bash -c ni cron) :
+# solution shell seule (couvre les cas shell, y compris bash -c lancé depuis
+# ce shell qui hérite de l'export ; ne couvre pas cron) :
 # tout en HAUT de ~/.bashrc, AVANT la garde case $- :
 export JAVA_HOME=/opt/jdk21
 ```
@@ -1836,6 +1839,7 @@ type -a df
 #     echo "usage: df [-h]"
 # }
 # df is /usr/bin/df
+# df is /bin/df
 ```
 
 Une seule commande a suffi : `type -a` liste toutes les résolutions dans l'ordre, et
@@ -1848,7 +1852,7 @@ donc ni `~/.bashrc`, ni `~/.profile`. Les candidats système sont `/etc/bash.bas
 
 ```bash
 grep -rn 'df *()' /etc/profile /etc/profile.d/ /etc/bash.bashrc 2>/dev/null
-# /etc/profile.d/zz-metrics.sh:4:df() {
+# /etc/profile.d/zz-metrics.sh:3:df() {
 ```
 
 **Exécuter la vraie commande malgré le masquage**
@@ -1911,8 +1915,7 @@ non-login).
 
 ### **BF1.3** — « Mes alias et mon prompt ont disparu en SSH »
 
-*Prompt redevenu `bash-5.2$` en SSH, alias absents, mais `bash` après connexion
-restaure tout. `~/.bashrc` est correct et ne doit pas être modifié.*
+*Prompt redevenu celui par défaut du système en SSH, alias absents, mais `bash` après connexion restaure tout. `~`*`/. bashrc` *est correct et ne doit pas être modifié.* (Sur Ubuntu, le prompt de repli est `mathieu@lab-adm:~$`, posé par `/etc/bash.bashrc` que `/etc/profile` source encore; sur Rocky, `/etc/profile` source de même `/etc/bashrc`, et on retombe sur `[mathieu@lab-rhel ~]$`.)
 
 **Diagnostic pas à pas**
 
@@ -1923,7 +1926,7 @@ Le problème est donc dans la chaîne de login.
 
 ```bash
 ls -la ~/.bash_profile ~/.bash_login ~/.profile
-# -rw-r--r-- 1 mathieu mathieu   81 sep 18 14:07 /home/mathieu/.bash_profile
+# -rw-r--r-- 1 mathieu mathieu   87 sep 18 14:07 /home/mathieu/.bash_profile
 # -rw-r--r-- 1 mathieu mathieu  807 mar 31  2024 /home/mathieu/.profile
 
 cat ~/.bash_profile
@@ -1965,8 +1968,7 @@ formule canonique est celle ci-dessus.
 ::: pourquoi
 Ce n'est pas un défaut de conception, c'est le contrat historique : `.profile` est le
 fichier commun à tous les shells Bourne, `.bash_profile` est la version spécifique à
-bash. Bash préfère la version spécifique quand elle existe, exactement comme `ksh`
-préfère `.kshrc`. Le mécanisme de « premier trouvé » évite qu'un utilisateur ayant
+bash. Bash préfère la version spécifique quand elle existe, comme `zsh` lit `. zprofile` et ignore `.profile`. Le mécanisme de « premier trouvé » évite qu'un utilisateur ayant
 les deux fichiers voie ses réglages appliqués deux fois.
 
 Le piège est aggravé par le fait que la panne est **asymétrique et différée** : un
@@ -2034,7 +2036,8 @@ fi
 
 # --- 3. PATH -----------------------------------------------------------
 printf '## PATH\n\n'
-IFS=':' read -ra PARTS <<< "$PATH"
+# le ':' ajouté fait apparaître une entrée vide finale (PATH=/usr/bin:)
+IFS=':' read -ra PARTS <<< "$PATH:"
 for d in "${PARTS[@]}"; do
   if [ -z "$d" ]; then
     printf -- '- `(vide)` — **entrée vide = répertoire courant**\n'
@@ -2139,9 +2142,9 @@ login est lancé avec un `argv[0]` commençant par un tiret (`-bash`), conventio
 héritée de `login(1)` ; `case "$0" in -*)` la teste. `shopt -q login_shell` est
 l'équivalent bash, plus lisible mais non portable.
 
-**`IFS=':' read -ra PARTS <<< "$PATH"`** découpe proprement, y compris les entrées
+`IFS=':' read -ra PARTS <<< "$PATH:"` découpe proprement, y compris les entrées
 vides (`PATH=/usr/bin::/bin` contient une entrée vide, qui vaut `.` et constitue la
-même faille). Un `for d in ${PATH//:/ }` casserait sur un répertoire contenant une
+même faille). Le `:` ajouté en fin de chaîne est nécessaire : `read` supprime un champ vide final, et `PATH=/usr/bin:` passerait sinon inaperçu. Un `for d in ${PATH//:/ }` casserait sur un répertoire contenant une
 espace.
 
 **`command -v` pour détecter les masquages.** Pour chaque alias et chaque fonction,

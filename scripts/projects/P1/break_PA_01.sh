@@ -17,7 +17,7 @@ if ! grep -q '# hardening 2026-09' "$HBA"; then
   TMP="$(mktemp)"
   {
     echo "# hardening 2026-09 : restreindre l'acces applicatif"
-    echo "host    all             all             10.10.10.11/32          reject"
+    echo "host    all       all       10.10.10.11/32      reject"
     cat "$HBA"
   } > "$TMP"
   cat "$TMP" > "$HBA"; rm -f "$TMP"

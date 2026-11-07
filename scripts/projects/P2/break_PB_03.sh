@@ -36,7 +36,8 @@ cp "$TMP/clair.yml" "$VAULT"; chown "$LAB_USER" "$VAULT"
 rm -rf "$TMP"
 
 u git -c user.name="Collegue" -c user.email="collegue@lab.local" \
-  commit -q -m "chore(vault): rotation" -- "$VAULT" >/dev/null 2>&1 || true
+  commit -q --no-verify -m "chore(vault): rotation" -- "$VAULT" \
+  >/dev/null 2>&1 || true
 
 cat <<EOF
 Symptôme : depuis le commit « chore(vault): rotation » de ce matin, la

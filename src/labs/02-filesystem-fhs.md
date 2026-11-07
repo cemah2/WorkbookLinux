@@ -20,7 +20,7 @@
   `-print0 | xargs -0`, et savoir pourquoi `-delete` se place en dernier ;
 * lire `/proc` et `/sys` comme des sources d'information de diagnostic, et
   modifier un paramètre noyau par `/sys` ;
-* reconnaître les six types de fichiers d'Unix et identifier un contenu avec
+* reconnaître les sept types de fichiers d'Unix et identifier un contenu avec
   `file` sans se fier à l'extension ;
 * lire une table de montage avec `findmnt`, repérer un `tmpfs` ou un bind mount,
   et comprendre ce que ça implique au redémarrage ;
@@ -54,10 +54,9 @@ sudo apt install -y lsof ncdu plocate tree file findutils psmisc
 ```
 
 ::: rhel
-Sous Rocky 9 : `sudo dnf install -y lsof ncdu plocate tree file findutils psmisc`.
+Sous Rocky 9 : `sudo dnf install -y lsof ncdu mlocate tree file findutils psmisc` (`mlocate` fournit `locate`/`updatedb` ; `plocate` n'y est disponible que via EPEL selon la version).
 `ncdu` vient d'EPEL : `sudo dnf install -y epel-release` d'abord.
-Sous Rocky, `/etc/system-release` remplace `/etc/os-release` pour l'affichage,
-mais `/etc/os-release` existe aussi et reste le fichier à parser.
+`/etc/os-release` existe aussi sous Rocky et reste le fichier à parser; `/etc/redhat-release` n'est qu'un texte d'affichage.
 :::
 
 Préparation du terrain (idempotent, à relancer sans crainte) :
@@ -95,7 +94,7 @@ c'est le sujet du module 11.
 | `/var` | données **variables** : logs, bases, files d'attente, caches | oui |
 | `/srv` | données **servies** par cet hôte (web, ftp, exports) | oui |
 | `/run` | état d'exécution : pid, sockets, verrous (`tmpfs`) | **non**, vidé au boot |
-| `/tmp` | temporaire, souvent `tmpfs`, nettoyé régulièrement | **non** |
+| `/tmp` | temporaire, parfois `tmpfs`, nettoyé au démarrage ou par `systemd-tmpfiles` | **non** |
 | `/proc` | interface noyau : processus et paramètres (virtuel) | n/a |
 | `/sys` | interface noyau : périphériques et pilotes (virtuel) | n/a |
 | `/dev` | fichiers de périphériques (`devtmpfs`, peuplé par udev) | n/a |
@@ -216,7 +215,7 @@ cat /sys/block/sda/queue/rotational        # 1 = disque mécanique
 echo 1 | sudo tee /sys/block/sda/device/rescan
 ```
 
-Ces fichiers ont une taille de 0 et ne consomment aucun disque : ils sont générés
+Ces fichiers ne consomment aucun disque (taille affichée 0 dans `/proc`, 4096 dans `/sys`) : ils sont générés
 à la lecture par le noyau.
 
 ### Types de fichiers et montages
@@ -415,7 +414,7 @@ TARGET SOURCE FSTYPE OPTIONS
 
 Quelles conséquences en tires-tu ? **Deux réponses correctes.**
 
-a) écrire 2 Gio dans `/tmp` échouera avec `No space left on device`
+a) au-delà de la RAM disponible, les écritures basculent d'elles-mêmes sur le disque
 b) le contenu de `/tmp` occupe de la RAM, pas le disque
 c) `/tmp` sera vidé au redémarrage
 d) `du -sh /tmp` remontera dans `df -h /` sur la ligne du système de fichiers racine
@@ -505,8 +504,8 @@ partagent le même contenu physique et lesquels sont de simples liens symbolique
 Donne la commande et explique la colonne qui tranche.
 
 **E2.3** — Crée dans `~/lab02/liens/deplace` un lien symbolique **relatif** vers
-`../source/rapport.txt`, puis déplace le lien dans `~/lab02/liens/copie`.
-Montre qu'il est cassé, puis répare-le sans changer de répertoire de destination.
+`../source/rapport.txt`, puis déplace le lien d'un niveau plus haut, dans `~/lab02/liens`.
+Montre qu'il est cassé, puis répare-le sans le déplacer à nouveau.
 
 **E2.4** — Prouve qu'on ne peut pas créer de lien physique entre
 `~/lab02/liens/source/rapport.txt` et `/srv/appdata/incoming/`. Note le message
@@ -635,7 +634,7 @@ Profites-en pour faire le ménage général sur `/`.
    supprime les autres, en une seule commande `find`.
 6. Mesure l'espace occupé par le journal systemd (`journalctl --disk-usage`),
    ramène-le à 50 Mio au maximum, et rends la limite permanente dans
-   `/etc/systemd/journald.conf`.
+   `/etc/systemd/journald.conf` (ou un drop-in `journald.conf.d/*.conf`).
 7. Vide le cache APT et le cache applicatif `/var/cache/factura/thumbs`. Compte
    combien de fichiers ce dernier contenait et combien d'inodes tu viens de libérer
    sur `/`.
@@ -801,7 +800,7 @@ sudo bash break_M02_02.sh
 
 **Symptôme utilisateur** : un script d'import échoue avec
 `touch: cannot touch '/srv/archives/lots/lot-042.tar': No space left on device`.
-Pourtant `df -h /srv/archives` affiche environ `52%`, et il reste plus de 40 Mio
+Pourtant `df -h /srv/archives` affiche environ `50%`, et il reste plus de 40 Mio
 libres. Même `mkdir` échoue.
 
 **Interdit** : reformater le système de fichiers, supprimer aveuglément
@@ -913,7 +912,7 @@ bash check_M02_05.sh
 | Écrire un `find` combiné avec `-prune` et `-exec +` | ☐ | ☐ |
 | Traiter sans risque des noms contenant des espaces | ☐ | ☐ |
 | Lire `/proc` et `/sys` pour un diagnostic | ☐ | ☐ |
-| Identifier les six types de fichiers, utiliser `file` | ☐ | ☐ |
+| Identifier les sept types de fichiers, utiliser `file` | ☐ | ☐ |
 | Lire `findmnt`, repérer un `tmpfs` | ☐ | ☐ |
 | Récupérer de l'espace en production sans coupure | ☐ | ☐ |
 

@@ -8,11 +8,11 @@ commit et celui de son tree ?*
 **Réponse : b)** le SHA du commit change, le tree reste `f1e0365…`.
 
 ```console
-$ git log -1 --format=%H
-ee98c68e3ee6a43e1a837dab44a03ebcb45dbf79
-$ git commit --amend -q -m "docs(readme): précise le domaine dans le titre"
-$ git log -1 --format=%H
-5fa9559c592ed867709455adc2811e7ce15a97bd
+$ git log -1 --format='%h %t'          # commit, puis son tree
+fb97836 f1e0365
+$ git commit --amend -q -m "docs(runbook): procédure de rollback (bis)"
+$ git log -1 --format='%h %t'
+3566b05 f1e0365                        # SHA neuf (dépend de l'heure)
 ```
 
 ::: pourquoi
@@ -50,7 +50,7 @@ serveur : il compare à `origin/main`, la copie locale mise à jour par
 
 ---
 
-**Q21.3** — *Après `git add -p` d'un seul hunk sur deux.*
+**Q21.3** — *Après `git`* `add -p` *d'un seul hunk sur deux, quelles commandes montrent une partie de ta modification?*
 
 **Réponses : a) et b)**
 
@@ -72,7 +72,7 @@ parent est exclu.
 
 ```console
 $ git check-ignore -v logs/.gitkeep
-.git/info/exclude:1:logs/	logs/.gitkeep
+.gitignore:14:logs/ logs/.gitkeep
 ```
 
 ::: pourquoi
@@ -121,7 +121,7 @@ coup et une lecture par `--first-parent`.
 
 **Q21.7** — *Marqueurs pendant un rebase.*
 
-**Réponse : b)** `HEAD` est `main`, `dcd8cba` est ton commit en cours de
+**Réponse : b)** `HEAD` est `main`, `994e070` est ton commit en cours de
 rejeu.
 
 ::: pourquoi
@@ -129,8 +129,7 @@ Un rebase se déroule en HEAD **détaché** sur la branche cible : Git se place
 sur `main`, puis applique tes commits un par un comme des patchs. Au moment
 du conflit, « ours » (`HEAD`) est donc la base — `main` — et « theirs » est
 le patch en cours : ton commit. C'est l'inverse d'un merge, où `HEAD` est ta
-branche. Le libellé après `>>>>>>>` le confirme : `dcd8cba (feat(nginx):
-écoute en 443…)` est bien le commit d'alice. Résoudre « en gardant HEAD »
+branche. Le libellé après `>>>>>>>` le confirme : `994e070 (feat(nginx): écoute en 443…)` est bien le commit d'alice. Résoudre « en gardant HEAD »
 pendant un rebase revient à **jeter son propre travail**.
 :::
 
@@ -204,15 +203,16 @@ les deux anciens commits restent dans le reflog.
 
 ```console
 $ git switch main
-Warning: you are leaving 1 commit behind, not connected to
+Warning: you are leaving 2 commits behind, not connected to
 any of your branches:
 
-  aa6680a docs: note d'urgence
+  37969cb docs: note 2
+  37118e1 docs: note d'urgence
 
-If you want to keep it by creating a new branch, this may be a good time
+If you want to keep them by creating a new branch, this may be a good time
 to do so with:
 
- git branch <new-branch-name> aa6680a
+ git branch <new-branch-name> 37969cb
 ```
 
 ::: pourquoi
@@ -221,7 +221,7 @@ Un commit n'a pas besoin de branche pour exister : il est écrit dans
 **référence** qui le rende joignable ; sans elle, `git log` ne le voit pas
 et `gc` finira par le supprimer (après le délai `gc.reflogExpireUnreachable`,
 30 jours). Le reflog de `HEAD` note chaque déplacement, y compris
-`commit: docs: note d'urgence` : `git branch sauvetage HEAD@{1}` suffit.
+`commit: docs: note 2` : `git branch sauvetage HEAD@{1}` suffit.
 Git prévient d'ailleurs au moment du `switch` — message que l'on ne lit
 jamais.
 :::
@@ -292,8 +292,8 @@ signable.
 
 ::: pourquoi
 Bisect divise l'intervalle par deux à chaque test : ⌈log₂(8)⌉ = 3.
-Git l'annonce lui-même : `Bisecting: 3 revisions left to test after this
-(roughly 2 steps)` après le premier essai. Avec 1 000 commits, dix essais
+Git l'annonce lui-même dès `bisect start` : `Bisecting: 3 revisions left to test after this
+(roughly 2 steps)` (E21.16, 7 commits). Avec 1 000 commits, dix essais
 suffisent, ce qui rend `bisect run` rentable dès que le test dure moins
 de quelques minutes.
 :::
@@ -370,7 +370,7 @@ Conséquences :
 * `rebase` recrée **chaque** commit rejoué (nouveau parent → nouveau SHA),
   même si le patch est identique ; d'où `[ahead N, behind N]` après.
 * `filter-repo` recrée tous les commits **postérieurs** au premier commit
-  touché ; les commits antérieurs gardent leur SHA (dans L21.4, les cinq
+  touché ; les commits antérieurs gardent leur SHA (dans L21.4, les six
   premiers commits ne changent pas).
 
 Le reflog (`.git/logs/HEAD`, `.git/logs/refs/heads/*`) enregistre chaque
@@ -482,7 +482,7 @@ est irréversible ; d'où le réflexe `git stash` avant.
    `--replace-text` si le fichier doit rester mais pas la valeur. Vérifier
    avec `git grep <clé> $(git rev-list --all)`.
 4. `git push --mirror` (forcé par nature) vers le serveur ; sur le serveur,
-   `reflog expire --expire=now --all` et `gc --prune=now` pour supprimer
+   `reflog expire --expire=now - -all` et `gc --prune=now` pour supprimer
    physiquement les anciens objets. Sur une forge, demander en plus la
    purge des caches/PR/forks (GitHub a une procédure dédiée : les commits
    restent accessibles par SHA sinon).
@@ -561,7 +561,7 @@ et le commit de merge contient parfois des résolutions de conflit
 invisibles en revue. Avec `--rebase`, tes commits locaux sont rejoués sur
 `origin/main` : linéaire, et tu résous les conflits commit par commit.
 
-Depuis Git 2.27, si `pull.rebase` n'est pas défini et que les branches ont
+Depuis Git 2.33.1 (simple avertissement depuis 2.27), si `pull.rebase` n'est pas défini et que les branches ont
 divergé, `pull` refuse (`Need to specify how to reconcile divergent
 branches`) : Git ne veut plus choisir à ta place. Avec `pull.ff=only`,
 il refuse aussi dès qu'un fast-forward est impossible (`Not possible to
@@ -630,8 +630,8 @@ changé » et que ça ne marche plus.
 Limites : `/etc` contient des secrets (`/etc/shadow`, clés
 `/etc/ssl/private`, `sudoers`) — le dépôt hérite des droits de `/etc/.git`
 (root, 700) et ne doit **jamais** être poussé vers une forge sans filtrage
-(`/etc/.gitignore` géré par etckeeper exclut déjà `shadow`, `gshadow`,
-`*~`, mais pas tout) ; Git ne stocke pas les propriétaires/droits
+(`/etc/.gitignore` géré par etckeeper n' exclut que des fichiers générés — `ld.so.cache`, `mtab`,
+`*~`… — pas `shadow` ni les clés) ; Git ne stocke pas les propriétaires/droits
 nativement, etckeeper les enregistre dans `.etckeeper` (un script de
 `chmod`/`chown`) ; il ne remplace pas la gestion de configuration : il
 constate, Ansible prescrit.
@@ -701,12 +701,12 @@ git config --list --show-origin
 ```
 
 ```console
-file:/root/.gitconfig   user.name=Mathieu Teule
-file:/root/.gitconfig   user.email=mathieu@lab.local
-file:/root/.gitconfig   init.defaultbranch=main
-file:/root/.gitconfig   pull.rebase=true
-file:/root/.gitconfig   push.default=simple
-file:/root/.gitconfig   alias.lg=log --oneline --graph --all --decorate
+file:/home/mathieu/.gitconfig   user.name=Mathieu Teule
+file:/home/mathieu/.gitconfig   user.email=mathieu@lab.local
+file:/home/mathieu/.gitconfig   init.defaultbranch=main
+file:/home/mathieu/.gitconfig   pull.rebase=true
+file:/home/mathieu/.gitconfig   push.default=simple
+file:/home/mathieu/.gitconfig   alias.lg=log --oneline --graph --all --decorate
 file:.git/config        core.repositoryformatversion=0
 file:.git/config        remote.origin.url=/home/mathieu/lab21/remote/…
 file:.git/config        branch.main.remote=origin
@@ -888,7 +888,7 @@ $ git log -1 --format=%H
 $ git status -sb | head -1
 ## main...origin/main [ahead 1]
 $ git commit -am "docs(readme): section contact"
-$ git switch feature/tls-letsencrypt
+$ git switch -c essai/renommage feature/tls-letsencrypt
 $ mkdir -p ansible/roles/nginx/tasks
 $ git mv ansible/roles/nginx/tasks_certbot.yml \
     ansible/roles/nginx/tasks/main.yml
@@ -897,6 +897,7 @@ R  ansible/roles/nginx/tasks_certbot.yml -> ansible/roles/nginx/tasks/main.yml
 $ git commit -m "refactor(nginx): tasks/main.yml, structure de rôle standard"
 $ git log -1 --stat --format=%s
  ansible/roles/nginx/{tasks_certbot.yml => tasks/main.yml} | 0
+$ git switch main && git branch -D essai/renommage
 ```
 
 ::: pourquoi
@@ -932,8 +933,8 @@ printf 'notes-perso.txt\n*~\n' >> ~/.gitignore_global
 ```
 
 ```console
-$ git check-ignore -v terraform/terraform.tfstate .README.md.swp \
-    ansible/notes-perso.txt logs/deploy.log logs/.gitkeep
+$ git check-ignore -v --no-index terraform/terraform.tfstate \
+    .README.md.swp ansible/notes-perso.txt logs/deploy.log logs/.gitkeep
 .gitignore:3:*.tfstate	terraform/terraform.tfstate
 .gitignore:10:*.swp	.README.md.swp
 /home/mathieu/.gitignore_global:1:notes-perso.txt	ansible/notes-perso.txt
@@ -951,7 +952,7 @@ dans le `.gitignore` versionné imposerait ta convention à l'équipe et
 polluerait l'historique ; `core.excludesFile` (tous tes dépôts) ou
 `.git/info/exclude` (ce clone) sont faits pour ça. `check-ignore -v`
 affiche `fichier:ligne:règle` — la règle `!` s'affiche aussi, ce qui prouve
-qu'elle est bien évaluée.
+qu'elle est bien évaluée; `--no-index` est nécessaire pour `logs/.gitkeep`, déjà suivi (sans lui, un fichier suivi n'est jamais rapporté).
 :::
 
 ---
@@ -968,11 +969,11 @@ $ git log --oneline --graph -4
 *   ead5285 Merge branch 'hotfix/ansible-timeout'
 |\
 | * 9c33a91 fix(ansible): timeout SSH 30 s et 10 forks
-* | fb97836 docs(runbook): procédure de rollback
-* | a6736e7 feat(nginx): en-têtes de sécurité HSTS et nosniff
-$ git reset --hard origin/main
+* | 4920391 chore(gitignore): ignore logs/ sauf .gitkeep
+* | 137c1cc docs(readme): section contact
+$ git reset --hard HEAD~1         # 1er parent du merge : main d'avant
 $ git merge --no-ff hotfix/ansible-timeout      # même résultat
-$ git reset --hard origin/main
+$ git reset --hard HEAD~1   # et non origin/main (perdrait E21.5 à E21.7)
 $ git cherry-pick 9c33a91
 $ git branch -d hotfix/ansible-timeout
 warning: deleting branch 'hotfix/ansible-timeout' that has been merged to
@@ -1020,8 +1021,10 @@ puis, dans le second éditeur, le nouveau message
 $ git log --oneline --stat main..HEAD
 a7f195e feat(nginx): tâche certbot et renouvellement automatique
  ansible/roles/nginx/tasks_certbot.yml | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 994e070 feat(nginx): écoute en 443 avec certificat Let's Encrypt
  ansible/roles/nginx/templates/factura.conf.j2 | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 $ git status -sb | head -1
 ## feature/tls-letsencrypt...origin/feature/tls-letsencrypt [ahead 1, behind 3]
 ```
@@ -1030,7 +1033,7 @@ $ git status -sb | head -1
 Le rebase interactif rejoue les commits listés **depuis la base donnée** :
 `994e070` est repris tel quel (même parent, même tree, même message → même
 SHA, Git ne recrée rien). Les trois suivants sont fondus en un seul commit
-neuf. `ahead 1, behind 3` : ton nouveau commit n'existe pas sur le distant,
+neuf, dont le SHA dépend de la date de committer : le tien n'est pas `a7f195e`. `ahead 1, behind 3` : ton nouveau commit n'existe pas sur le distant,
 et les trois anciens (`wip`, `fix typo`, `renouvellement`) n'existent plus
 chez toi — le **contenu** est identique, mais les commits ne le sont pas.
 Rebaser sur la base commune plutôt que sur `main` sépare deux opérations :
@@ -1051,7 +1054,7 @@ le contenu recrée quand même le commit — SHA neuf.
 ```console
 $ git switch feature/tls-letsencrypt
 error: Your local changes to the following files would be overwritten by
-error: checkout:
+checkout:
 	README.md
 Please commit your changes or stash them before you switch branches.
 Aborting
@@ -1083,7 +1086,7 @@ un `pop` qui a râlé.
 **E21.11** — *`cherry-pick 9c33a91` : SHA et dates.*
 
 ```console
-$ git cherry-pick 9c33a91
+$ git cherry-pick 9c33a91          # déjà fait en E21.8 : sortie d'alors
 [main 8052db1] fix(ansible): timeout SSH 30 s et 10 forks
  Author: bob <bob@lab.local>
  Date: Fri Jun 19 18:22:00 2026 +0200
@@ -1157,7 +1160,7 @@ Fast-forward
 `fetch` a écrit les objets et déplacé `origin/main` ; `main` n'a pas bougé,
 tes fichiers non plus. `main..origin/main` liste ce qui t'attend. Comme tu
 n'avais aucun commit local, `pull --rebase` n'a rien eu à rejouer : simple
-fast-forward, identique à ce qu'aurait fait un merge. La différence
+fast-forward, identique à ce qu'aurait fait un merge (sortie ci-dessus sur un dépôt fraîchement préparé; si tu as gardé tes commits de E21.5 à E21.11, `status` affiche `[ahead N, behind 1]` et `pull --rebase` les rejoue au-dessus de `3113475`). La différence
 n'apparaît qu'avec un commit local : `pull --rebase` le met **après**
 `3113475` (historique linéaire, nouveau SHA), `pull.rebase=false` crée
 `Merge branch 'main' of /home/mathieu/lab21/remote/factura-infra` — un
@@ -1189,7 +1192,7 @@ c1      HEAD@{1}: reset: moving to HEAD~1
 c2      HEAD@{2}: reset: moving to HEAD~1
 c3      HEAD@{3}: commit: tmp c
 c2      HEAD@{4}: commit: tmp b
-$ git reset --hard origin/main   # ou HEAD@{…} juste avant "commit: tmp a"
+$ git reset --hard HEAD@{6}   # l'entrée juste avant « commit: tmp a »
 ```
 
 ::: pourquoi
@@ -1199,7 +1202,7 @@ $ git reset --hard origin/main   # ou HEAD@{…} juste avant "commit: tmp a"
 **survivent** — `--hard` ne touche jamais aux fichiers non suivis (c'est
 `clean` qui le fait). Le reflog liste chaque déplacement avec sa cause
 (`commit:`, `reset:`, `checkout:`) : « avant les trois commits » se lit,
-pas ne se compte ; et `origin/main` est ici le point fixe le plus simple.
+pas ne se compte (`HEAD@{5}` = `commit: tmp a`, donc `HEAD@{6}` = avant) ; `origin/main` ne conviendrait que si `main` n'avait aucun commit local.
 :::
 
 ---
@@ -1228,7 +1231,7 @@ reflog de `HEAD` retrace les `checkout` vers/depuis la branche : la ligne
 avant de partir. `fsck --lost-found` liste tout commit que plus rien ne
 référence — plus brutal, mais il marche même sans reflog (dépôt copié,
 clone `--mirror`). Ici la branche recréée diffère d'`origin/…` si tu as fait
-E21.6 (renommage) ou E21.9 (rebase) dessus : compare avec `diff --stat`.
+E21.9 (rebase) dessus : même contenu, commits différents — `diff --stat` est vide, `git log origin/feature/tls-letsencrypt...` ne l'est pas.
 :::
 
 ---
@@ -1236,9 +1239,9 @@ E21.6 (renommage) ou E21.9 (rebase) dessus : compare avec `diff --stat`.
 **E21.16** — *Bisect piloté par le script, puis `blame`.*
 
 ```console
-$ git bisect start main v1.0.0
-Bisecting: 3 revisions left to test after this (roughly 2 steps)
-[0a6f3ae6859df6bf73b1201848fb30bb70a2f181] docs: changelog 1.0.0
+$ git bisect start main v1.0.0      # main sur fb97836 ; sur 3113475 (après
+Bisecting: 3 revisions left to test after this (roughly 2 steps)   # E21.13),
+[0a6f3ae6859df6bf73b1201848fb30bb70a2f181] docs: changelog 1.0.0   # b344468
 $ git bisect run bin/healthcheck.sh
 running 'bin/healthcheck.sh'
 manquant : ansible/playbooks/web.yaml
@@ -1497,7 +1500,7 @@ git reset --hard HEAD~1 && git push --force origin essai:main
 
 ```console
 remote: error: denying non-fast-forward refs/heads/main (you should pull first)
- ! [remote rejected] main -> main (non-fast-forward)
+ ! [remote rejected] essai -> main (non-fast-forward)
 ```
 
 ::: pourquoi
@@ -1587,7 +1590,7 @@ $ cd ~/lab21/factura-infra && git fetch && git status -sb | head -1
 ## main...origin/main [ahead 19, behind 17]
 ```
 
-Ton `main` et `origin/main` n'ont plus que cinq commits en commun (ceux
+Ton `main` et `origin/main` n'ont plus que six commits en commun (ceux
 d'avant `1557f83`) : tout le reste a été recréé. Un `pull` fusionnerait
 les deux historiques et **repousserait** l'ancien `.env`. La bonne réponse
 est un clone frais :
@@ -1612,7 +1615,7 @@ joignable : le check le détecte.)
 set -uo pipefail
 motifs='(DB_PASSWORD|PASSWORD|SECRET|API_KEY|AWS_SECRET_ACCESS_KEY)'
 motifs="$motifs[[:space:]]*[=:]"
-motifs="$motifs|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY"
+motifs="$motifs|AKIA[0-9A-Z]{16}|BEGIN ([A-Z]+ )?PRIVATE KEY"
 rc=0
 for f in $(git diff --cached --name-only --diff-filter=AM); do
   case "$f" in *.env|.env|*.pem|*.key|*id_rsa*|*id_ed25519*)
@@ -1640,7 +1643,7 @@ refusé : test.env ne doit jamais être commité
 `filter-repo` parcourt tout l'historique, retire `.env` de chaque tree qui
 le contient, supprime les commits devenus vides (`1557f83` et `53340da`
 n'ajoutaient/retiraient que ce fichier), et recrée tous les commits en
-aval — les cinq premiers gardent leur SHA. Il efface aussi le remote
+aval — les six premiers gardent leur SHA. Il efface aussi le remote
 `origin` et les reflogs du clone pour empêcher un `push` accidentel vers
 l'ancien historique : d'où le travail dans un `--mirror` jetable. Sur le
 serveur, les anciens objets restent dans `objects/` tant qu'un reflog ou
@@ -1743,7 +1746,7 @@ viens de cliquer est exactement le `pre-receive` de D21, en plus fiable et
 avec une interface. Le port SSH 2222 évite de mêler l'authentification Git
 à celle du système ; en production on mettrait plutôt Gitea derrière le
 sshd système avec un utilisateur `git` dédié, ou derrière un reverse
-proxy TLS (module 22).
+proxy TLS (module 15).
 :::
 
 ---
@@ -1756,13 +1759,13 @@ proxy TLS (module 22).
 
 ```console
 $ git status
-interactive rebase in progress; onto e46b0d0
+interactive rebase in progress; onto beb6e71
 Last command done (1 command done):
-   pick 38f1b69 feat(nginx): écoute en 443 avec certificat Let's Encrypt
+   pick 3738847 feat(nginx): écoute en 443 avec certificat Let's Encrypt
 Next commands to do (2 remaining commands):
-   pick 1c2f073 feat(nginx): tâche certbot
-   pick 4c88f8a wip
-You are currently rebasing branch 'feature/tls' on 'e46b0d0'.
+   pick 793b5ef feat(nginx): tâche certbot
+   pick c55c1b1 wip
+You are currently rebasing branch 'feature/tls' on 'beb6e71'.
   (all conflicts fixed: run "git rebase --continue")
 
 Changes to be committed:
@@ -1772,13 +1775,13 @@ ansible/roles/nginx/templates/factura.conf.j2:11: leftover conflict marker
 ansible/roles/nginx/templates/factura.conf.j2:14: leftover conflict marker
 ansible/roles/nginx/templates/factura.conf.j2:17: leftover conflict marker
 $ git log --oneline --graph --all
-* e46b0d0 docs(readme): renvoi runbook
-* 0f6e252 feat(nginx): en-têtes de sécurité HSTS et nosniff
-| * 4c88f8a wip
-| * 1c2f073 feat(nginx): tâche certbot
-| * 38f1b69 feat(nginx): écoute en 443 avec certificat Let's Encrypt
+* beb6e71 docs(readme): renvoi runbook
+* 3a6bb4f feat(nginx): en-têtes de sécurité HSTS et nosniff
+| * c55c1b1 wip
+| * 793b5ef feat(nginx): tâche certbot
+| * 3738847 feat(nginx): écoute en 443 avec certificat Let's Encrypt
 |/
-* 6a7849f chore: dépôt de départ
+* 4f40403 chore: dépôt de départ
 ```
 
 **Cause racine :** alice a lancé `git rebase main`, obtenu le conflit sur
@@ -1791,23 +1794,23 @@ configuration au prochain déploiement.
 **Correctif** (le plus sûr : repartir de zéro, la branche n'a pas bougé) :
 
 ```bash
-git rebase --abort                 # la branche revient sur 4c88f8a
+git rebase --abort                 # la branche revient sur c55c1b1
 git rebase -i main                 # pick / pick / fixup (le wip)
 # conflit sur le premier commit : garder HSTS + ssl_*, retirer les marqueurs
 git diff --check                   # silence
 git add ansible/roles/nginx/templates/factura.conf.j2
 git rebase --continue
+git push --force-with-lease   # + c55c1b1...797163d feature/tls (forced update)
 git log --oneline --graph --all
-git push --force-with-lease   # + 4c88f8a...26e2d3c feature/tls (forced update)
 rm notes-alice.txt
 ```
 
 ```console
-* 26e2d3c feat(nginx): tâche certbot
-* e2ce964 feat(nginx): écoute en 443 avec certificat Let's Encrypt
-* e46b0d0 docs(readme): renvoi runbook
-* 0f6e252 feat(nginx): en-têtes de sécurité HSTS et nosniff
-* 6a7849f chore: dépôt de départ
+* 797163d feat(nginx): tâche certbot            (SHA rejoués : propres à toi)
+* bbda1dc feat(nginx): écoute en 443 avec certificat Let's Encrypt
+* beb6e71 docs(readme): renvoi runbook
+* 3a6bb4f feat(nginx): en-têtes de sécurité HSTS et nosniff
+* 4f40403 chore: dépôt de départ
 ```
 
 Variante sans abandonner : corriger le fichier en place, `git add`,
@@ -1838,20 +1841,20 @@ mise à jour : exactement BF21.2.
 
 ```console
 $ git log --oneline --all
-6d1fecd docs: prépare 1.0.1
-b8feeba docs(runbook): vérification
-b4d9351 docs: changelog 1.0.0
-64ded19 docs: runbook
-f463102 chore: dépôt de départ
+b6b4592 docs: prépare 1.0.1
+c72eea0 docs(runbook): vérification
+4d7ff00 docs: changelog 1.0.0
+adc54a2 docs: runbook
+36a09f5 chore: dépôt de départ
 $ git reflog
-6d1fecd HEAD@{0}: commit: docs: prépare 1.0.1
-b8feeba HEAD@{1}: checkout: moving from 64ded19… to main
-64ded19 HEAD@{2}: checkout: moving from main to v1.0.0
-b8feeba HEAD@{3}: checkout: moving from 31d79f6… to main
-31d79f6 HEAD@{4}: commit: fix(deploy): nginx -t avant le reload
-9d2fc35 HEAD@{5}: commit: fix(deploy): quote les chemins rsync (incident …)
-64ded19 HEAD@{6}: checkout: moving from main to v1.0.0
-b8feeba HEAD@{7}: commit: docs(runbook): vérification
+b6b4592 HEAD@{0}: commit: docs: prépare 1.0.1
+c72eea0 HEAD@{1}: checkout: moving from adc54a2… to main
+adc54a2 HEAD@{2}: checkout: moving from main to v1.0.0
+c72eea0 HEAD@{3}: checkout: moving from 0c57ce0… to main
+0c57ce0 HEAD@{4}: commit: fix(deploy): nginx -t avant le reload
+9e4875f HEAD@{5}: commit: fix(deploy): quote les chemins rsync (incident …)
+adc54a2 HEAD@{6}: checkout: moving from main to v1.0.0
+c72eea0 HEAD@{7}: commit: docs(runbook): vérification
 $ git log -g --oneline --grep-reflog=commit        # ou : --grep=incident
 ```
 
@@ -1861,17 +1864,17 @@ production : **HEAD détaché**. `HEAD@{5}` et `HEAD@{4}` : deux commits
 faits dans cet état, sur aucune branche. `HEAD@{3}` : retour sur `main`,
 avec l'avertissement `you are leaving 2 commits behind` (ignoré). Puis un
 nouvel aller-retour et le commit d'alice. Les deux commits existent toujours
-(`git fsck --lost-found` : `dangling commit 31d79f6…`) mais rien ne les
+(`git fsck --lost-found` : `dangling commit 0c57ce0…`) mais rien ne les
 référence.
 
 **Correctif :**
 
 ```bash
-git branch hotfix/deploy-quotes 31d79f6        # 31d79f6 a 9d2fc35 pour parent
+git branch hotfix/deploy-quotes 0c57ce0        # 0c57ce0 a 9e4875f pour parent
 git log --oneline main..hotfix/deploy-quotes   # 2 commits
 git switch main
 git merge --no-ff hotfix/deploy-quotes -m "Merge hotfix/deploy-quotes"
-# ou : git cherry-pick 9d2fc35 31d79f6 (historique linéaire)
+# ou : git cherry-pick 9e4875f 0c57ce0 (historique linéaire)
 grep -n 'rsync' bin/deploy.sh                  # chemins quotés
 git branch -d hotfix/deploy-quotes
 ```
@@ -1879,7 +1882,7 @@ git branch -d hotfix/deploy-quotes
 Délai : `gc.reflogExpireUnreachable` = 30 jours pour les entrées de reflog
 pointant des commits injoignables, puis `git gc` (lancé automatiquement
 par `git gc --auto` après certaines commandes) supprime les objets. Les
-commits datent du 11 juillet : il restait quelques jours.
+entrées du 11 juillet sont expirables dès le 10 août : passé cette date, les commits ne survivent que tant qu'aucun `gc` n'est passé.
 
 **Prévention :** `git branch` **avant** de commiter en détaché, ou
 `git switch -c hotfix/... v1.0.0` dès le départ ; lire les avertissements
@@ -1892,8 +1895,8 @@ branche : `git reflog show main`), écrit à chaque commande qui les
 déplace. Il est local, jamais poussé, et périmé après 90 jours
 (joignable) ou 30 jours (injoignable). `git log -g` le parcourt comme un
 historique ; `fsck --lost-found` retrouve les commits orphelins **sans**
-reflog. Le merge choisit `31d79f6` (le plus récent) : son parent est
-`9d2fc35`, donc les deux commits reviennent d'un coup.
+reflog. Le merge choisit `0c57ce0` (le plus récent) : son parent est
+`9e4875f`, donc les deux commits reviennent d'un coup.
 :::
 
 ---
@@ -1906,7 +1909,7 @@ reflog. Le merge choisit `31d79f6` (le plus récent) : son parent est
 $ git push
  ! [rejected]        main -> main (fetch first)
 $ git pull
-   8ee8c89..d315d42  main       -> origin/main
+   c0c0720..a1e949a  main       -> origin/main
 hint: Diverging branches can't be fast-forwarded, you need to either:
 hint: 	git merge --no-ff    …   or:   git rebase
 fatal: Not possible to fast-forward, aborting.
@@ -1915,12 +1918,12 @@ On branch main
 Your branch and 'origin/main' have diverged,
 and have 2 and 2 different commits each, respectively.
 $ git log --oneline --graph --all
-* c9a94d6 feat(bin): rotate-logs.sh
-* e8000ef feat(ansible): ajoute lab-ops à l'inventaire
-| * d315d42 docs(readme): convention
-| * f468dc9 feat(ansible): ajoute lab-rhel à l'inventaire
+* 0a54cc5 feat(bin): rotate-logs.sh
+* abf4dd0 feat(ansible): ajoute lab-ops à l'inventaire
+| * a1e949a docs(readme): convention
+| * f5aca20 feat(ansible): ajoute lab-rhel à l'inventaire
 |/
-* 8ee8c89 chore: dépôt de départ
+* c0c0720 chore: dépôt de départ
 $ git config --show-origin pull.ff
 file:.git/config	only
 ```
@@ -1951,9 +1954,9 @@ git log --oneline --graph
 ```text
 * … feat(bin): rotate-logs.sh
 * … feat(ansible): ajoute lab-ops à l'inventaire
-* d315d42 docs(readme): convention
-* f468dc9 feat(ansible): ajoute lab-rhel à l'inventaire
-* 8ee8c89 chore: dépôt de départ
+* a1e949a docs(readme): convention
+* f5aca20 feat(ansible): ajoute lab-rhel à l'inventaire
+* c0c0720 chore: dépôt de départ
 ```
 
 **Stratégie 2, merge (chronologie conservée) :** `git merge origin/main`
@@ -1970,8 +1973,8 @@ commits locaux, oui : un refus signale une dérive. Ici :
 ::: pourquoi
 Un push est accepté seulement si la nouvelle valeur de la référence
 **descend** de l'ancienne (fast-forward côté serveur). Alice a avancé
-`origin/main` vers `d315d42`, qui n'est pas dans ton historique : ton
-`c9a94d6` ne descend pas de `d315d42`, refus. Intégrer = fabriquer un
+`origin/main` vers `a1e949a`, qui n'est pas dans ton historique : ton
+`0a54cc5` ne descend pas de `a1e949a`, refus. Intégrer = fabriquer un
 commit qui descend des deux. `pull.ff=only` applique la même règle
 **localement** : n'accepter d'avancer `main` que si `origin/main` en
 descend, ce qui est faux ici. Rebase et merge produisent le même
@@ -1986,17 +1989,17 @@ tes deux commits changent de SHA (rebase) ou non (merge).
 **Diagnostic :**
 
 ```console
-$ git status --porcelain | wc -l
-2024
-$ git status --short | cut -c1-2 | sort | uniq -c
-   2023 ??
+$ git status --porcelain -uall | wc -l
+2025
+$ git status --short -uall | cut -c1-2 | sort | uniq -c
+   2024 ??
       1  M                       # terraform/terraform.tfstate
 $ ls .gitignore
 ls: cannot access '.gitignore': No such file or directory
 $ git log --oneline --diff-filter=D --name-only -- .gitignore
-4bf46f2 chore: nettoyage des fichiers cachés
+76d5965 chore: nettoyage des fichiers cachés
 .gitignore
-$ git log -1 --format='%an %ad' 4bf46f2
+$ git log -1 --format='%an %ad' 76d5965
 bob Thu Jul 9 17:45:00 2026 +0200
 $ git ls-files
 README.md
@@ -2005,20 +2008,20 @@ terraform/.terraform.lock.hcl
 terraform/main.tf
 terraform/terraform.tfstate
 $ git log -1 --format='%h %an %s' -- terraform/terraform.tfstate
-27c44c4 bob chore(terraform): partage l'état courant
+46cd34a bob chore(terraform): partage l'état courant
 ```
 
-**Causes racines :** (1) bob a supprimé `.gitignore` dans `4bf46f2`
+**Causes racines :** (1) bob a supprimé `.gitignore` dans `76d5965`
 (« nettoyage des fichiers cachés » — il a pris le fichier pour un
 déchet) ; `terraform init` a ensuite rempli `.terraform/` (1 900 fichiers)
 et les journaux se sont accumulés. (2) `terraform.tfstate` est **suivi**
-depuis `27c44c4` : aucun `.gitignore` ne peut le faire taire tant qu'il
+depuis `46cd34a` : aucun `.gitignore` ne peut le faire taire tant qu'il
 est dans l'index.
 
 **Correctif :**
 
 ```bash
-git restore --source=4bf46f2~1 .gitignore    # ou : git revert 4bf46f2
+git restore --source=76d5965~1 .gitignore    # ou : git revert 76d5965
 git rm --cached terraform/terraform.tfstate
 git status --short
 ```
@@ -2037,7 +2040,7 @@ git ls-files | grep -c lock.hcl             # 1 : toujours suivi
 ```
 
 **Le mot de passe :** `pve_password` est dans `terraform.tfstate` **et
-dans l'historique** (`git show 27c44c4:terraform/terraform.tfstate`). Le
+dans l'historique** (`git show 46cd34a: terraform/terraform.tfstate`). Le
 retirer de l'index ne change rien à ça : rotation du mot de passe Proxmox,
 puis purge de l'historique (`git filter-repo --path
 terraform/terraform.tfstate --invert-paths`) comme en L21.4. Et pour la
@@ -2197,7 +2200,7 @@ git push gitea main v1.2.0            # si L21.5
 atomique, protection de `main` déléguée à Gitea (interface) doublée du
 `pre-receive` sur le bare de déploiement (défense en profondeur),
 `CODEOWNERS` : `terraform/network* @equipe-reseau`, `ansible/roles/nginx/
-@equipe-web`. Rollback : `git switch --detach v1.1.0` n'est pas un
+@equipe-web`. Rollback : `git switch - -detach v1.1.0` n'est pas un
 déploiement — le hook ne réagit qu'à `main` ; la procédure est
 `git revert -m 1 <merge>` (ou `revert` de la plage) sur `main`, MR
 expresse, push → le hook redéploie ; en urgence absolue, `git push lab-adm

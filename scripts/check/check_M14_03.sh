@@ -17,10 +17,10 @@ SSHD=$(command -v sshd || echo /usr/sbin/sshd)
   echo "Résultat : $PASS réussis, $FAIL échoués"; exit 1; }
 
 # --- 0. la configuration est-elle valide ? --------------------------------
-if "$SSHD" -t 2>/tmp/m12.sshd-t; then
+if "$SSHD" -t 2>/tmp/m14.sshd-t; then
   ok "sshd -t : configuration valide"
 else
-  ko "sshd -t échoue : $(head -1 /tmp/m12.sshd-t)"
+  ko "sshd -t échoue : $(head -1 /tmp/m14.sshd-t)"
 fi
 
 EFF=$("$SSHD" -T 2>/dev/null)

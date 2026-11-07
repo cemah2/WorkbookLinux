@@ -15,7 +15,7 @@ cp -a /etc/ufw/user.rules "$SAUV/PA_03.user.rules" 2>/dev/null || true
 
 # Une règle « temporaire » posée pendant une maintenance réseau, jamais
 # retirée, insérée en tête pour être sûr qu'elle s'applique.
-if ! ufw status | grep -q '^443/tcp *DENY *10.10.10.0/24'; then
+if ! ufw status | grep -Eq '^443/tcp +DENY( IN)? +10\.10\.10\.0/24'; then
   ufw insert 1 deny proto tcp from 10.10.10.0/24 to any port 443 \
     comment 'maintenance reseau' >/dev/null
 fi

@@ -107,7 +107,7 @@ fi
 
 # Copie des outils du projet (utilisés par les checks et la reconstruction)
 mkdir -p "$REPO/tools"
-for t in rebuild.sh smoke.sh; do
+for t in rebuild.sh smoke.sh make-template.sh; do
   [ -f "$REPO/tools/$t" ] || cp "$HERE/tools/$t" "$REPO/tools/$t"
 done
 chmod 0755 "$REPO"/tools/*.sh

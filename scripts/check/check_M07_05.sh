@@ -124,7 +124,7 @@ RAPPORT=$(find "$RAPPORTS" -maxdepth 1 -name "sauvegarde-$STAMP.*" \
             -newermt '-10 minutes' 2>/dev/null | head -1)
 if [ -n "$RAPPORT" ] && [ -s "$RAPPORT" ]; then
   ok "un rapport daté est écrit dans ~/lab07/rapports"
-  grep -qiE 'r[ée]tention' "$RAPPORT" \
+  grep -qiE 'r(é|e)tention' "$RAPPORT" \
     && ok "le rapport mentionne la rétention appliquée" \
     || ko "le rapport doit indiquer la rétention appliquée"
 else

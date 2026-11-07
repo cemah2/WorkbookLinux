@@ -473,10 +473,8 @@ iface $BRIDGE_LAB inet static
     bridge-ports none
     bridge-stp off
     bridge-fd 0
-    post-up   env LAN_NET=$LAN_NET LAB_WAN_BRIDGE=$BRIDGE_EXT \\
-              $LAB_DIR/lab-nat.sh up
-    post-down env LAN_NET=$LAN_NET LAB_WAN_BRIDGE=$BRIDGE_EXT \\
-              $LAB_DIR/lab-nat.sh down
+    post-up   env LAN_NET=$LAN_NET LAB_WAN_BRIDGE=$BRIDGE_EXT $LAB_DIR/lab-nat.sh up
+    post-down env LAN_NET=$LAN_NET LAB_WAN_BRIDGE=$BRIDGE_EXT $LAB_DIR/lab-nat.sh down
 EOF
     fi
   fi
@@ -736,10 +734,12 @@ phase_60_workbook() {
     if [ -d "$SCRIPT_DIR/../check" ] && [ -d "$SCRIPT_DIR/../setup" ]; then
       warn "workbook-scripts.zip introuvable : copie du dossier scripts/" \
            "par scp -r"
-      vm_ssh "$ADM_IP" "mkdir -p $home/workbook"
+      # bootstrap-lab.sh a déjà créé ~/workbook/scripts : on copie son
+      # CONTENU (copier le dossier le rangerait dans un sous-dossier).
+      vm_ssh "$ADM_IP" "mkdir -p $home/workbook/scripts"
       local opts; mapfile -t opts < <(ssh_opts)
-      scp -q -r "${opts[@]}" "$SCRIPT_DIR/.." \
-        "$LAB_USER@$ADM_IP:$home/workbook/scripts"
+      scp -q -r "${opts[@]}" "$(cd "$SCRIPT_DIR/.." && pwd)"/* \
+        "$LAB_USER@$ADM_IP:$home/workbook/scripts/"
     else
       warn "workbook-scripts.zip introuvable (WORKBOOK_ZIP=...) :" \
            "phase 60 sautée"
@@ -786,14 +786,21 @@ phase_60_workbook() {
 # =====================================================================
 # Phase 70 — Gitea sur lab-git
 # =====================================================================
+# Tant que l'installateur web n'a pas été validé (INSTALL_LOCK = false),
+# Gitea ne sert que /, /post-install et /api/healthz : /api/v1/version
+# répond 404. On lit donc la version du binaire et on teste /api/healthz.
 gitea_version() {
-  curl -fs --max-time 5 "http://$GIT_IP:3000/api/v1/version" 2>/dev/null \
-    | sed -n 's/.*"version" *: *"\([^"]*\)".*/\1/p'
+  [ "$DRY_RUN" = 1 ] && return 0
+  vm_ssh "$GIT_IP" "/usr/local/bin/gitea --version 2>/dev/null" 2>/dev/null \
+    | awk '/^Gitea version/ {print $3}'
+}
+gitea_up() {
+  curl -fs --max-time 5 "http://$GIT_IP:3000/api/healthz" >/dev/null 2>&1
 }
 phase_70_gitea() {
   local home="/home/$LAB_USER" cur
   cur="$(gitea_version || true)"
-  if [ -n "$cur" ] && [ "$cur" = "$GITEA_VERSION" ]; then
+  if [ -n "$cur" ] && [ "$cur" = "$GITEA_VERSION" ] && gitea_up; then
     ok "Gitea $cur répond déjà sur http://$GIT_IP:3000/"
   else
     [ -n "$cur" ] && log "Gitea $cur en place, passage à $GITEA_VERSION"
@@ -811,11 +818,11 @@ phase_70_gitea() {
       || die "install-gitea.sh a échoué : ssh $LAB_USER@$GIT_IP puis" \
              "journalctl -u gitea -n 50"
     local t=0
-    while [ "$t" -lt 120 ] && [ -z "$(gitea_version || true)" ]; do
+    while [ "$t" -lt 120 ] && ! gitea_up; do
       sleep 5; t=$((t+5))
     done
+    gitea_up || die "Gitea ne répond pas sur http://$GIT_IP:3000/"
     cur="$(gitea_version || true)"
-    [ -n "$cur" ] || die "Gitea ne répond pas sur http://$GIT_IP:3000/"
     ok "Gitea $cur répond sur http://$GIT_IP:3000/"
   fi
   if [ "$GITEA_BACKUP_TIMER" = 1 ] && [ "$DRY_RUN" = 0 ]; then

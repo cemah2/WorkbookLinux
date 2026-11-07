@@ -5,7 +5,7 @@
 ::: objectif
 Ce module ouvre la partie « Exploitation ». Les trois briques qu'on te confie
 le plus souvent sans formation sont un frontal web, une base relationnelle et
-un cache. Le projet A les fait travailler ensemble ; ici tu apprends à tenir
+un cache. Le projet P1 (Factura) les fait travailler ensemble ; ici tu apprends à tenir
 chacune séparément. À la fin de ce module, je sais :
 
 * lire un échange HTTP en exploitant (`curl -v`), nommer les en-têtes qui
@@ -362,8 +362,7 @@ CREATE INDEX CONCURRENTLY ON invoices (customer_id);
 VACUUM (VERBOSE, ANALYZE) invoices;  -- VACUUM FULL verrouille : pas en journée
 ```
 
-Pannes : `remaining connection slots are reserved` / `too many connections
-for role` → `max_connections` atteint (connexions `idle`, pool absent) ;
+Pannes : `remaining connection slots are reserved` → `max_connections` atteint (connexions `idle`, pool absent) ; `too many connections for role` → `CONNECTION LIMIT` du rôle atteint;
 `no pg_hba.conf entry for host` → ligne manquante (adresse, base, rôle,
 SSL) ; `password authentication failed` → mot de passe, ou secret `md5`
 face à une méthode `scram` ; `Connection refused` → `listen_addresses` ou
@@ -1050,7 +1049,7 @@ sauvegarde logique par nuit, vérifiée par une restauration réelle, puis —
 parce qu'une facture supprimée à 10 h 15 ne se retrouve pas dans le dump de
 2 h 30 — une sauvegarde physique avec archivage des WAL, et la preuve que tu
 sais revenir à 10 h 14. Sur `lab-db`. C'est la mécanique que tu remettras en
-place au projet A.
+place au projet P1 (Factura).
 :::
 
 Partie 1 — logique :
@@ -1058,8 +1057,8 @@ Partie 1 — logique :
 1. Script `/usr/local/sbin/pg-sauvegarde.sh` (`set -euo pipefail`), exécuté
    par `postgres` en `peer` (donc sans mot de passe ni `.pgpass`) :
    `pg_dumpall --globals-only`, puis un `pg_dump -Fc` par base non
-   template, dans `/var/backups/postgresql/<AAAAMMJJ-HHMM>/`, un `.sha256`
-   par fichier, suppression des répertoires de plus de 7 jours, une ligne de
+   template, dans `/var/backups/postgresql/<AAAAMMJJ-HHMM>/`, les sommes SHA-256 ( un `.sha256`
+   par fichier ou un `SHA256SUMS`), suppression des répertoires de plus de 7 jours, une ligne de
    journal par étape, sortie non nulle en cas d'échec.
 2. `pg-sauvegarde.service` (`Type=oneshot`, `User=postgres`) et
    `pg-sauvegarde.timer` à 02:30 avec `Persistent=yes` (module 17). Lance le
@@ -1109,7 +1108,7 @@ fait en production.
 
 ::: check
 Critère de succès : le timer est actif, un répertoire de sauvegarde du jour
-contient `globals.sql`, `factura_demo.dump` et leurs `.sha256` valides,
+contient `globals.sql`, `factura_demo.dump` et leurs sommes SHA-256 valides,
 `factura_restore` a autant de factures que `factura_demo`, `archive_mode` est
 `on` avec au moins un segment archivé et `pg_stat_archiver.failed_count = 0`,
 et `restauration.md` contient un temps mesuré.

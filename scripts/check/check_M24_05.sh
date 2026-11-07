@@ -79,9 +79,9 @@ git -C "$BASE" ls-files 2>/dev/null | grep -qE '(^|/)(\.env|.*\.tfstate)$' \
   || ko "README.md absent ou sans procédure de rotation"
 [ -s plan.txt ] && grep -qE 'Plan: [0-9]+ to add' plan.txt \
   && ok "plan.txt de la reconstruction présent" || ko "plan.txt absent ou sans résumé de plan"
-RAP="$BASE/rapports/d20.md"
+RAP="$BASE/rapports/d24.md"
 if [ -s "$RAP" ]; then
-  ok "rapport d20.md présent"
+  ok "rapport d24.md présent"
   grep -qiE 'dur[ée]e|min|s\b' "$RAP" && ok "rapport : durée du deploy" || ko "rapport : durée absente"
   grep -qi 'idempot' "$RAP" && ok "rapport : idempotence" || ko "rapport : idempotence absente"
   grep -qi 'token' "$RAP" && grep -qiE '[ée]tat|state' "$RAP" && grep -qi 'template' "$RAP" \

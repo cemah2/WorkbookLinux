@@ -282,7 +282,7 @@ dernière écriture gagne**.
 Ubuntu ajoute un détail : `/etc/sysctl.d/99-sysctl.conf` est un lien
 symbolique vers `../sysctl.conf`. Le fichier historique est donc rejoué en
 position 99, après `10-factura.conf`. Rocky n'a pas ce lien mais
-`sysctl --system` lit quand même `/etc/sysctl.conf` en dernier. Conclusion
+`sysctl - -system` lit quand même `/etc/sysctl.conf` en dernier. Conclusion
 pratique : ne jamais rien mettre dans `/etc/sysctl.conf`, et numéroter ses
 fichiers **au-dessus** de ce que livrent les paquets (`60-`, `90-`).
 :::
@@ -476,7 +476,8 @@ arrêt `ptrace`) est si coûteux.
 | GRUB | shim | `/boot/efi/EFI/ubuntu/grubx64.efi` |
 | Configuration GRUB | GRUB | `/boot/efi/EFI/ubuntu/grub.cfg` → `/boot/grub/grub.cfg` |
 | Noyau + initrd | GRUB | `/boot/vmlinuz-6.8.0-52-generic`, `/boot/initrd.img-6.8.0-52-generic` |
-| Racine | `/init` de l'initramfs | `/dev/mapper/ubuntu--vg-ubuntu--lv` |
+| Racine | `/init` de l'initramfs | `/dev/mapper/ubuntu--vg-ubuntu-` |
+|  | `-` | `lv` |
 | PID 1 | noyau après `switch_root` | `/sbin/init` → `/usr/lib/systemd/systemd` |
 | Cible | systemd | `default.target` → `multi-user.target` |
 | Login | systemd | `getty@tty1.service`, `serial-getty@ttyS0.service`, `ssh.service` |
@@ -565,9 +566,7 @@ parce que personne ne le demande — il n'y a pas de login, pas de PAM. C'est
 aussi pourquoi `systemd.unit=rescue.target` ne suffit pas sur Ubuntu : cette
 cible lance `sulogin`, qui exige le mot de passe root ; or root est
 verrouillé (`!` dans `shadow`), et `sulogin` refuse (`Cannot open access to
-console, the root account is locked`). Ubuntu contourne dans son entrée
-*recovery* avec `systemd.unit=rescue.target` **plus** un `sulogin --force`
-configuré par un drop-in ; à la main, `init=/bin/bash` est plus sûr.
+console, the root account is locked`). On peut autoriser ce shell sans mot de passe en posant `Environment=SYSTEMD_SULOGIN_FORCE=1` dans un drop-in de `rescue.service` et `emergency.service` — à faire **avant** l'incident ; à la main, `init=/bin/bash` reste la voie sûre.
 :::
 
 ---
@@ -675,7 +674,7 @@ sans la précédence — c'est un test, pas une preuve de persistance.
    plus que pour les cas exotiques.
 4. `systemd-udevd` reçoit l'uevent, parcourt les règles dans l'ordre des noms
    (`/usr/lib/udev/rules.d/60-persistent-storage.rules` importe le résultat de
-   `scsi_id` → `ID_SERIAL`, puis `blkid` → `ID_FS_UUID`, `ID_FS_LABEL`), et
+   `scsi_id` → `ID_SERIAL`, puis `blkid` → `ID_FS_UUID`, `ID_ FS_LABEL`), et
    crée les liens `/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1`,
    `by-path/pci-0000:05:00.0-scsi-0:0:0:1`, `by-uuid/...` s'il y a un système
    de fichiers. Il émet ensuite son propre événement (`udevadm monitor -u`).
@@ -824,7 +823,7 @@ plus une source : le service ne devine rien, il compare.
   pas — la prochaine mise à jour de noyau complète l'exige toujours.
 * **Temps réel.** `PREEMPT_RT` (intégré dans le noyau 6.12) rend le noyau
   entièrement préemptible et borne la **latence** de réaction à une
-  interruption (dizaines de µs) — pas la vitesse. Utile pour l'industriel,
+  interruption (dizaines de μs) — pas la vitesse. Utile pour l'industriel,
   l'audio, les télécoms (5G). Produits : Ubuntu `linux-realtime` (Ubuntu
   Pro), Rocky/RHEL `kernel-rt`. Ops : `uname -v` contient `PREEMPT_RT`,
   `chrt` fixe les priorités temps réel, et un serveur web n'en a aucun besoin.
@@ -855,7 +854,7 @@ Sortie plausible du top 5 (colonnes `% time seconds usecs/call calls errors
 syscall`) :
 
 ```text
-  0.00    0.000000           0       124           lstat
+  0.00    0.000000           0       124           statx
   0.00    0.000000           0        31           mmap
   0.00    0.000000           0        14           openat
   0.00    0.000000           0        12           close
@@ -864,7 +863,7 @@ syscall`) :
 
 ::: pourquoi
 `-o fichier` sépare la sortie de `strace` de celle de `ls` (par défaut,
-`strace` écrit sur stderr, mêlé aux erreurs de `ls`). `ls -l` fait un `lstat`
+`strace` écrit sur stderr, mêlé aux erreurs de `ls`). `ls -l` fait un `statx` (le successeur de `lstat`, utilisé par coreutils ≥ 8.32)
 par entrée : c'est l'appel dominant, et c'est ce qui rend `ls -l` lent sur un
 NFS ou un répertoire de 100 000 fichiers — un aller-retour noyau par nom.
 
@@ -1083,7 +1082,7 @@ liste les autres et les entrées *recovery*.
 ```bash
 basename "$(readlink /sys/class/net/ens18/device/driver)"       # virtio_net
 basename "$(readlink /sys/block/sda/device/driver)"             # sd
-basename "$(readlink /sys/block/sda/device/../../driver)"       # virtio_scsi
+basename "$(readlink /sys/block/sda/device/../../../driver)"    # virtio_scsi
 cat /sys/class/net/ens18/device/modalias        # virtio:d00000001v00001AF4
 modinfo virtio_net | grep -E '^(description|depends|signer|parm|filename)'
 modinfo -p virtio_scsi
@@ -1105,7 +1104,7 @@ virtio_balloon         28672  0
 `driver` un lien vers le pilote qui l'a réclamé : c'est la **vérité** du
 noyau, contrairement à `lsmod` qui ne dit pas qui pilote quoi. Pour un disque,
 la chaîne est plus longue : `sda` est piloté par `sd` (générique SCSI), dont
-le parent est la cible SCSI, dont le parent est l'hôte `virtio_scsi`.
+le parent est la cible SCSI, puis l'hôte SCSI, puis le périphérique virtio dont le pilote est `virtio_scsi` (trois niveaux au-dessus de `device`).
 
 `modalias` est la clé du chargement automatique : udev le lit, `modprobe`
 le résout via `/lib/modules/$(uname -r)/modules.alias` (généré par `depmod`).
@@ -1185,7 +1184,7 @@ Chaque ligne `KERNEL` est un uevent brut émis par le noyau ; la ligne `UDEV`
 correspondante est émise par `systemd-udevd` **après** avoir traité les règles.
 Le délai entre les deux est le temps de traitement (règles, `blkid`,
 `scsi_id`). Un uevent `KERNEL` sans `UDEV` qui suit = udevd bloqué ou une
-règle `RUN+=` qui ne rend pas la main (`udevadm settle --timeout=5` échoue).
+règle `RUN+=` qui ne rend pas la main (`udevadm settle - -timeout=5` échoue).
 
 Propriétés stables de `sda` sur Proxmox : `ID_SERIAL=0QEMU_QEMU_HARDDISK_drive-scsi0`
 (le nom du disque dans la config de la VM), `ID_PATH=pci-0000:05:00.0-scsi-0:0:0:0`
@@ -1250,8 +1249,8 @@ maximale par requête ; `bfq` répartit équitablement (postes de travail) ;
 VM, le « disque » est un fichier ou un LV sur l'hôte, qui a **déjà** son
 propre ordonnanceur et son propre cache : réordonner deux fois coûte du CPU
 pour rien, d'où `none` sur virtio, comme sur NVMe. C'est aussi ce qui explique
-que `ionice` (classes `idle`, `best-effort`) n'ait d'effet qu'avec `bfq` :
-`mq-deadline` et `none` ignorent les classes.
+que `ionice` (classes `idle`, `best-effort`) n'ait d'effet complet qu'avec `bfq` :
+`mq-deadline` ne gère que la classe (pas le niveau 0–7) depuis le noyau 5.14, et `none` ignore tout.
 
 `/sys` est un système de fichiers en mémoire, recréé à chaque boot : rien de
 ce qu'on y écrit ne survit. La persistance passe par une règle udev
@@ -1368,7 +1367,7 @@ systemctl list-dependencies --before systemd-modules-load.service | \
 Le module enregistre ses clés dans `/proc/sys` au chargement ; avant, le
 fichier n'existe pas et `sysctl` le dit littéralement. Au boot, l'ordre est :
 `systemd-modules-load.service` (lit `modules-load.d`) **puis**
-`systemd-sysctl.service` — la dépendance `Before=` est déclarée dans l'unité
+`systemd-sysctl.service` — `After=systemd-modules-load.service` est déclaré dans cette dernière
 justement pour ce cas. Sans le premier fichier, le second échoue en silence
 au boot (visible seulement dans `journalctl -u systemd-sysctl -b`), et la
 machine tourne avec la valeur par défaut : sur 2 Go, 65 536 entrées, qu'un
@@ -1409,7 +1408,7 @@ fait tout apparaître sur la console série : utile pendant un débogage de boot
 insupportable ensuite.
 
 SysRq : `176` = 128 (reboot/poweroff) + 32 (remonter en lecture seule) + 16
-(sync). `m` (état mémoire) n'est **pas** dans ce masque (il faut 4 =
+(sync). `m` (état mémoire) n'est **pas** dans ce masque (il faut 8 =
 `dump`)… sauf que `/proc/sysrq-trigger` en tant que root ignore le masque —
 il ne s'applique qu'à la combinaison clavier. `t` liste toutes les tâches
 avec leur pile, `w` seulement les tâches bloquées : c'est **la** commande
@@ -1446,8 +1445,8 @@ Ubuntu Server 24.04 livre `systemd-timesyncd` : un client SNTP minimal (une
 seule source à la fois, pas de serveur, pas de `chronyc`) — suffisant pour un
 poste, insuffisant pour un serveur qui veut plusieurs sources, du
 monitoring et servir d'autres machines. Rocky 9 livre `chrony`
-(`chronyd.service`). Installer `chrony` sur Ubuntu masque
-`systemd-timesyncd` automatiquement (conflit de paquets déclaré).
+(`chronyd.service`). Installer `chrony` sur Ubuntu **désinstalle**
+`systemd-timesyncd` : les deux paquets fournissent `time-daemon` et se déclarent en conflit (`apt` l'annonce dans « REMOVED »).
 
 `current_clocksource` vaut `kvm-clock` dans une VM KVM : l'horloge est
 fournie par l'hôte via une page partagée (paravirtualisation), ce qui rend
@@ -1464,7 +1463,7 @@ boot Windows et casse le changement d'heure.
 ```bash
 sysctl -n fs.file-max            # système : 9223372036854775807 ou ~ 200000
 sysctl -n fs.nr_open             # maximum par processus : 1048576
-ulimit -n ; ulimit -Hn           # effectif dans ce shell : 1024 / 1048576
+ulimit -n ; ulimit -Hn           # effectif dans ce shell : 1024 / 524288
 cat /proc/sys/fs/file-nr         # 2848    0       9223372036854775807
 sysctl -n fs.inotify.max_user_watches fs.inotify.max_user_instances
 # watches par processus (root) :
@@ -1476,7 +1475,7 @@ sudo find /proc/[0-9]*/fdinfo -type f 2>/dev/null | \
 
 ::: pourquoi
 Trois plafonds, trois messages différents. `fs.file-max` : total de
-descripteurs ouvrables sur la machine (défaut énorme depuis le noyau 5.x) ;
+descripteurs ouvrables sur la machine (systemd le relève à 2⁶³−1) ;
 dépassé, le noyau écrit `VFS: file-max limit reached` dans `dmesg` et tout
 le monde est affecté. `fs.nr_open` : ce qu'un processus peut demander au
 maximum (`ulimit -n` ne peut pas le dépasser : `ulimit -n 2000000` échoue).
@@ -1757,7 +1756,7 @@ noyau GA sera abandonné avant la fin de la LTS.
 **Pourquoi le nouveau noyau est en tête.** `/etc/grub.d/10_linux` trie les
 `vmlinuz-*` de `/boot` par version décroissante (`linux-version sort`), et
 `GRUB_DEFAULT=0` désigne cette première entrée. Fixer un repli par
-**identifiant** (`gnulinux-...`) et non par numéro évite que le défaut se
+**identifiant** (`gnulinux-.. .`) et non par numéro évite que le défaut se
 décale à la prochaine installation. Le `>` sépare le sous-menu de l'entrée.
 
 **La protection du noyau courant.** Le script
@@ -1789,7 +1788,8 @@ sudo dnf check-update kernel ; sudo dnf install -y kernel
 sudo grubby --set-default /boot/vmlinuz-5.14.0-570.12.1.el9_6.x86_64
 sudo dnf remove --oldinstallonly -y
 sudo dnf remove kernel-core-$(uname -r)
-# -> Error: ... "The operation would result in removing the running kernel"
+# -> Error: Problem: The operation would result in removing the following
+#    protected packages: kernel-core
 ```
 
 `kernel` est un métapaquet qui tire `kernel-core` (`vmlinuz`, l'initramfs
@@ -2058,7 +2058,7 @@ lien `/dev/disk/lab/cache` survit à un changement d'ordre d'énumération, à
 un changement de contrôleur, et à une réinstallation — tant que le disque
 garde son nom de *drive* dans la configuration de la VM.
 
-**Le `.link` contre la règle udev.** Depuis systemd 197, le nommage des
+**Le `.link` contre la règle udev.** Depuis systemd 209, le nommage des
 interfaces est fait par udev via le *builtin* `net_setup_link`
 (`80-net-setup-link.rules`), qui lit les fichiers `.link` et applique la
 politique `NamePolicy=` de `99-default.link` (`ens18` = *slot* PCI 18). Une
@@ -2074,8 +2074,7 @@ génère justement un `.link`).
 serveur, ça ré-exécute toutes les règles `RUN+=`, remet les permissions, et
 peut faire réapparaître des liens supprimés. Toujours cibler
 (`--name-match`, `--subsystem-match`, ou le chemin). Et `udevadm test`
-n'applique rien — sauf les commandes `RUN+=`, qu'il exécute pour de vrai en
-avertissant. Un `RUN+="/sbin/reboot"` testé à blanc redémarre la machine.
+n'applique rien — il liste les `RUN+=` sans les lancer, mais exécute pour de vrai les `PROGRAM=` et `IMPORT{program}=` : un programme à effet de bord appelé ainsi agit même «  à blanc ».
 :::
 
 ---
@@ -2090,8 +2089,8 @@ timedatectl timesync-status | head -4    # Server: ntp.ubuntu.com
 sudo hwclock --show
 sudo apt install -y chrony
 systemctl is-active systemd-timesyncd chrony    # inactive / active
-systemctl status systemd-timesyncd | grep -E 'Loaded|Active'
-# Loaded: masked ... Active: inactive (dead)
+systemctl status systemd-timesyncd 2>&1 | head -1
+# Unit systemd-timesyncd.service could not be found. (paquet retiré)
 ```
 
 **2. Serveur sur `lab-adm`**
@@ -2193,8 +2192,7 @@ secondes UTC (`date +%s` ne change pas), seule la **représentation** suit
 
 ::: pourquoi
 **Ce qu'installer chrony change.** Le paquet `chrony` déclare
-`Conflicts: time-daemon` et `Provides: time-daemon`, et son `postinst`
-masque `systemd-timesyncd` : deux démons NTP se battraient pour la même
+`Conflicts: time-daemon` et `Provides: time-daemon` ; comme `systemd-timesyncd` fournit le même `time-daemon`, `apt` le retire en installant chrony : deux démons NTP se battraient pour la même
 horloge. chrony apporte ce que timesyncd n'a pas : plusieurs sources
 comparées (l'algorithme écarte un *falseticker*), un serveur, un mode
 sans réseau (`local stratum`), la mesure de la dérive de fréquence
@@ -2308,7 +2306,7 @@ grep -c '^menuentry\|^\s*menuentry' /boot/grub/grub.cfg
 **Prévention** : un `apt purge` (pas `remove`) des noyaux, `apt autoremove
 --purge` après chaque mise à jour de noyau (`unattended-upgrades` le fait avec
 `Unattended-Upgrade::Remove-Unused-Kernel-Packages "true"`, activé par
-défaut sur 24.04), et une alerte de supervision sur `/boot` à 70 % (module 21).
+défaut sur 24.04), et une alerte de supervision sur `/boot` à 70 % (module 16).
 Un contrôle mensuel : `ls /boot/vmlinuz-* | wc -l` doit valoir le nombre de
 paquets `linux-image-*` installés.
 
@@ -2456,8 +2454,8 @@ mount -t proc proc /proc 2>/dev/null ; mount -t sysfs sys /sys 2>/dev/null
 ls /sys/class/net                        # lo seulement
 cat /sys/bus/pci/devices/*/modalias | grep -i 1af4   # le périphérique est là
 grep -rn virtio /etc/modprobe.d/
-# /etc/modprobe.d/durcissement-pilotes.conf:4:blacklist virtio_net
-# /etc/modprobe.d/durcissement-pilotes.conf:5:install virtio_net /bin/false
+# /etc/modprobe.d/durcissement-pilotes.conf:5:blacklist virtio_net
+# /etc/modprobe.d/durcissement-pilotes.conf:6:install virtio_net /bin/false
 ```
 
 **Cause racine** : un fichier de durcissement interdit le pilote de la
@@ -2635,7 +2633,7 @@ de maintenance ; on ne renomme jamais à chaud en SSH.
 **Démarche de diagnostic**
 
 ```bash
-date ; date -u                    # 44 jours dans le futur
+date ; date -u                    # 44 jours dans le passé
 timedatectl
 # System clock synchronized: no      NTP service: inactive
 sudo hwclock --show               # le RTC aussi est faux
@@ -2643,22 +2641,20 @@ systemctl status chrony | grep -E 'Loaded|Active'
 # Loaded: ... disabled       Active: inactive (dead)
 grep -nE '^#?makestep' /etc/chrony/chrony.conf     # #makestep 1 3
 curl -sSI https://deb.debian.org 2>&1 | head -1
-# curl: (60) SSL certificate problem: certificate has expired
+# curl: (60) SSL certificate problem: certificate is not yet valid
 sudo apt update 2>&1 | grep -i 'not valid yet'
 ```
 
-**Cause racine** : le collègue a avancé l'heure (`date -s`), l'a écrite dans
+**Cause racine** : le collègue a reculé l'heure (`date -s`), l'a écrite dans
 le RTC (`hwclock --systohc`), et chrony a été arrêté et désactivé pour « que
 le test tienne » ; la directive `makestep` a été commentée. L'horloge est à
-+44 jours, aucun service ne la corrige. TLS voit les certificats des
-serveurs comme expirés (`notAfter` dépassé), `apt` voit un fichier `Release`
-signé « dans le passé » par rapport à sa fenêtre `Valid-Until`.
+−44 jours, aucun service ne la corrige. TLS voit les certificats émis depuis moins de 44 jours comme « pas encore valides » (`notBefore` dans le futur), et `apt` voit un fichier `Release`
+dont le champ `Date` est dans le futur : `not valid yet (invalid for another 44d ...)`.
 
 **Pourquoi chrony ne corrige pas tout seul (deux raisons)** : il est arrêté
 et désactivé ; et même relancé, sans `makestep` il ne ferait que *slew* à
-8,33 % — 44 jours d'écart demanderaient **plus d'un an** de rattrapage, et
-chrony refuserait d'ailleurs de démarrer une correction aussi absurde sans
-ordre explicite.
+8,33 % — 44 jours d'écart demanderaient **plus d'un an** de rattrapage. Une fois `makestep 1 3` rétabli, le redémarrage de
+chrony suffit à faire le saut; `chronyc makestep` le force de toute façon.
 
 **Correctif**
 
@@ -2675,7 +2671,7 @@ date ; curl -sSI https://deb.debian.org | head -1 ; sudo apt update
 
 **Supervision minimale** : `chronyc tracking | awk '/System time/ {print
 $4}'` en seuil (> 0,5 s = alerte), ou `timedatectl show -p NTPSynchronized
---value` = `no` ; avec `node_exporter` (module 21) :
+--value` = `no` ; avec `node_exporter` (module 16) :
 `abs(node_timex_offset_seconds) > 0.5` et `node_timex_sync_status == 0`.
 
 ::: pourquoi
@@ -2697,9 +2693,9 @@ chrony mesure à nouveau et affine par slew.
 
 **Pourquoi le RTC était faux.** Le noyau ne recopie l'heure système dans le
 RTC (toutes les 11 minutes) **que** quand un démon NTP le lui dit (drapeau
-`STA_UNSYNC` levé par chrony avec `rtcsync`). Sans chrony, seul
+`STA_UNSYNC` **abaissé** par chrony grâce à `rtcsync`). Sans chrony, seul
 `hwclock --systohc` écrit — et le collègue l'a fait. Après correction, chrony
-relèvera le drapeau et le noyau recalera le RTC de lui-même, mais un
+abaissera de nouveau le drapeau et le noyau recalera le RTC de lui-même, mais un
 `hwclock --systohc` immédiat évite un reboot dans les 11 minutes qui
 repartirait de l'heure fausse.
 

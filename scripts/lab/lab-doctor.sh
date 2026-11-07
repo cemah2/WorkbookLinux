@@ -142,6 +142,8 @@ for line in "${LAB_VMS[@]}"; do
 
   if ping -c1 -W2 "$ip" >/dev/null 2>&1; then
     ok "ping"
+  elif [ "$name" = lab-virt ]; then
+    wn "pas de ping : lab-virt éteinte (normal hors module 20)"; continue
   else
     ko "pas de ping (VM éteinte ? qm terminal $vmid)"; continue
   fi
@@ -193,8 +195,14 @@ for line in "${LAB_VMS[@]}"; do
     lab-git)
       v="$(curl -fs -m 5 "$GITEA_URL/api/v1/version" 2>/dev/null \
            | sed -n 's/.*"version" *: *"\([^"]*\)".*/\1/p')"
-      [ -n "$v" ] && ok "Gitea $v répond sur $GITEA_URL" \
-        || ko "Gitea muet sur $GITEA_URL (systemctl status gitea)" ;;
+      if [ -n "$v" ]; then
+        ok "Gitea $v répond sur $GITEA_URL"
+      elif curl -fs -m 5 "$GITEA_URL/api/healthz" >/dev/null 2>&1; then
+        # INSTALL_LOCK = false : seul l'installateur web est servi
+        wn "Gitea répond, installation web à terminer (chapitre 0.8)"
+      else
+        ko "Gitea muet sur $GITEA_URL (systemctl status gitea)"
+      fi ;;
     lab-adm)
       if [ "$(echo "${P[wbdirs]:-}" | wc -w)" -eq 4 ]; then
         ok "workbook/scripts : setup check break lab"

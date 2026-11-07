@@ -71,7 +71,7 @@ if mountpoint -q "$DATA" 2>/dev/null; then
     ko "occupation ${USE}%, inodes ${IUSE}% — volume toujours saturé"
   fi
   if [ "$(id -u)" -eq 0 ] && command -v lsof >/dev/null 2>&1; then
-    RET=$(lsof +L1 2>/dev/null | awk -v d="$DATA" '$0 ~ d {s+=$8} END \
+    RET=$(lsof +L1 2>/dev/null | awk -v d="$DATA" '$0 ~ d {s+=$7} END \
       {printf "%d", s/1048576}')
     [ "${RET:-0}" -lt 50 ] \
       && ok "aucun fichier supprimé ne retient d'espace" \
@@ -164,7 +164,8 @@ NR=$(v NRestarts)
 ETAT=$(systemctl is-active vitrine-api 2>/dev/null)
 SINCE=$(systemctl show vitrine-api -p ActiveEnterTimestampMonotonic --value \
   2>/dev/null)
-UPS=$(( ${SINCE:-0} / 1000000 ))
+NOW=$(awk '{printf "%d", $1}' /proc/uptime)   # ≈ horloge monotone
+UPS=$(( NOW - ${SINCE:-0} / 1000000 ))
 if [ "$ETAT" = active ] && [ "$UPS" -ge 60 ]; then
   ok "vitrine-api actif et stable (démarré il y a plus de 60 s)"
 else
@@ -179,8 +180,7 @@ if command -v curl >/dev/null 2>&1; then
     T=$(curl -s -o /tmp/d16.$$ -w '%{time_total} %{http_code}' \
         --max-time 15 "$URL$R" 2>/dev/null || echo "99 000")
     SEC=${T% *}; CODE=${T#* }
-    MS=$(printf '%.0f' "$(echo "$SEC * 1000" | bc -l 2>/dev/null || \
-         echo 99000)")
+    MS=$(awk -v t="$SEC" 'BEGIN {printf "%.0f", t * 1000}')
     if [ "$CODE" = 200 ] && [ "$MS" -lt 200 ]; then
       ok "$R : HTTP $CODE en ${MS} ms"
     else

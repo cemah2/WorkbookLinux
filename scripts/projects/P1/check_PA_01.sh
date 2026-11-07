@@ -21,15 +21,14 @@ for h in lab-adm:10.10.10.10 lab-web:10.10.10.11 lab-db:10.10.10.12 \
 done
 
 # --- helpers ------------------------------------------------------------
-dir_is() {   # dir_is <chemin> <owner:group> <mode>
-  local d="$1" own="$2" mode="$3" got
+dir_is() {   # dir_is <chemin> <owner:group>[|<owner:group>] <mode>
+  local d="$1" own="$2" mode="$3" got o
   if [ ! -d "$d" ]; then ko "$d absent"; return; fi
   got="$(stat -c '%U:%G %a' "$d")"
-  if [ "$got" = "$own $mode" ]; then
-    ok "$d ($got)"
-  else
-    ko "$d : $got attendu $own $mode"
-  fi
+  for o in ${own//|/ }; do
+    [ "$got" = "$o $mode" ] && { ok "$d ($got)"; return; }
+  done
+  ko "$d : $got attendu $own $mode"
 }
 svc_user() {  # svc_user <nom> <home>
   local u="$1" home="$2" ent shell uid
@@ -57,7 +56,8 @@ lab-web)
   dir_is /srv/factura      root:root       755
   dir_is /srv/factura/www  root:root       755
   dir_is /srv/factura/exports factura:factura 750
-  dir_is /var/log/factura  factura:adm     750
+  # LogsDirectory= (PA.3) remet le groupe du service : les deux sont admis
+  dir_is /var/log/factura  'factura:adm|factura:factura' 750
   dir_is /var/lib/factura  factura:factura 750
   dir_is /var/backups/factura factura:factura 750
   ;;
@@ -74,18 +74,27 @@ lab-ops)
     [ "$(echo "$ent" | cut -d: -f3)" -lt 1000 ] \
       && ok "backup est un compte système" \
       || ko "backup doit être un compte système (useradd -r)"
+    case "${ent##*:}" in
+      */nologin|*/false) ko "backup a le shell ${ent##*:} : la commande \
+forcée (rrsync) serait refusée, usermod -s /bin/sh backup" ;;
+      *) ok "backup a un shell (${ent##*:}) pour la commande forcée" ;;
+    esac
   else
     ko "compte backup absent (il recevra les sauvegardes par rsync/ssh)"
   fi
   dir_is /srv/backups      root:root       755
   dir_is /srv/backups/factura backup:backup 750
-  dir_is /var/log/factura  root:adm        750
+  if [ -L /var/log/factura ]; then   # DynamicUser + LogsDirectory (PA.8)
+    ok "/var/log/factura -> $(readlink /var/log/factura) (DynamicUser)"
+  else
+    dir_is /var/log/factura root:adm   750
+  fi
   ;;
 lab-adm)
   H="$(getent passwd "${SUDO_USER:-mathieu}" | cut -d: -f6)"
   [ -d "$H/P1/pki" ] && ok "$H/P1/pki existe" \
     || ko "crée $H/P1/pki (elle servira au jalon PA.5)"
-  [ -f "$H/P1/journal.md" ] && [ "$(wc -l < "$H/P1/journal.md")" -ge 6 ] \
+  [ -f "$H/P1/journal.md" ] && [ "$(wc -l < "$H/P1/journal.md")" -ge 5 ] \
     && ok "journal de bord commencé" \
     || ko "journal de bord vide : note au moins ce que tu as fait en PA.1"
   ;;

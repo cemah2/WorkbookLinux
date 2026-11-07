@@ -81,8 +81,11 @@ create_vm() {
     info "  cpu host (virtualisation imbriquée : nested=1 requis sur le nœud)"
     qm set "$vmid" --cpu host >/dev/null
     local nested
-    nested=$(cat /sys/module/kvm_intel/parameters/nested \
-             /sys/module/kvm_amd/parameters/nested 2>/dev/null | head -1)
+    # Un seul des deux fichiers existe (Intel OU AMD) : cat rend 1, et
+    # sans le « || true » set -e + pipefail arrêterait le script ici.
+    nested=$( { cat /sys/module/kvm_intel/parameters/nested \
+                /sys/module/kvm_amd/parameters/nested 2>/dev/null || true; } \
+              | head -1)
     case "$nested" in
       Y|1) ;;
       *) ko "nested=${nested:-?} sur le nœud : pas de /dev/kvm dans $name" ;;

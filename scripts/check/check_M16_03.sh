@@ -44,7 +44,7 @@ if [ -f "$CONF" ]; then
   besoin 'missingok'
   besoin 'create 0640 factura adm'
   besoin 'su '
-  besoin 'size'
+  besoin '(max)?size'
   besoin 'postrotate'
   besoin 'sharedscripts'
   grep -qE '^\s*dateext' "$CONF" \
@@ -100,7 +100,7 @@ if priv test -f "$LOGD/app.log"; then
 fi
 
 # --- 5. état et rapport ---------------------------------------------------
-for E in /var/lib/logrotate/status /var/lib/logrotate.status; do
+for E in /var/lib/logrotate/status /var/lib/logrotate/logrotate.status; do
   priv test -f "$E" || continue
   priv grep -q '/var/log/factura/app.log' "$E" \
     && ok "l'état de rotation connaît app.log ($E)" \

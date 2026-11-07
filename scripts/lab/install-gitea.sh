@@ -120,7 +120,12 @@ info "arborescence $GITEA_WORK et $GITEA_ETC"
 install -d -m 750 -o "$GITEA_USER" -g "$GITEA_USER" \
   "$GITEA_WORK" "$GITEA_WORK/custom" "$GITEA_WORK/data" "$GITEA_WORK/log"
 chown -R "$GITEA_USER:$GITEA_USER" "$GITEA_WORK"
-install -d -m 770 -o root -g "$GITEA_USER" "$GITEA_ETC"
+# 770 tant que l'installateur web doit écrire app.ini ; 750 ensuite (lock).
+if [ -f "$GITEA_ETC/app.ini" ]; then
+  install -d -m 750 -o root -g "$GITEA_USER" "$GITEA_ETC"
+else
+  install -d -m 770 -o root -g "$GITEA_USER" "$GITEA_ETC"
+fi
 
 # ---------------------------------------------------------------------
 # 5. app.ini minimal (jamais écrasé s'il existe déjà)

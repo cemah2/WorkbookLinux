@@ -29,10 +29,15 @@ tourne pas en continu"
     && ok "collecte : RemainAfterExit=yes" \
     || ko "collecte : sans RemainAfterExit=yes, l'unité retombe en inactive \
 dès la fin du traitement"
-  [ -n "$(v "$U" ExecStartPre)" ] \
-    && ok "collecte : ExecStartPre présent (contrôle avant traitement)" \
-    || ko "collecte : le contrôle de /srv/factura/data doit passer par \
-ExecStartPre=, pas par le script"
+  # ExecStartPre= ou une directive Condition*/Assert* : les deux répondent
+  # à « une directive dédiée, pas un test dans le script ».
+  if [ -n "$(v "$U" ExecStartPre)" ] || \
+     systemctl cat "$U" 2>/dev/null | grep -Eq '^(Condition|Assert)Path'; then
+    ok "collecte : contrôle de /srv/factura/data par une directive dédiée"
+  else
+    ko "collecte : le contrôle de /srv/factura/data doit passer par \
+ExecStartPre= (ou ConditionPathIsDirectory=), pas par le script"
+  fi
   ETAT="$(systemctl is-active "$U" 2>/dev/null)"
   SUB="$(v "$U" SubState)"
   if [ "$ETAT" = active ] && [ "$SUB" = exited ]; then

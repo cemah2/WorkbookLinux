@@ -53,7 +53,7 @@ VM concernée : **`lab-db` (10.10.10.12)**, VMID **9003**. Elle possède deux di
 supplémentaires **vierges** de 5 Go : `/dev/sdb` et `/dev/sdc`. C'est le terrain de
 jeu du module. Le disque système reste `/dev/sda`, on n'y touche qu'au lab L11.4.
 
-Le lab L11.5 et le défi utilisent aussi `lab-adm` (10.10.10.10) comme serveur NFS.
+Le lab L11.5 utilise aussi `lab-adm` (10.10.10.10) comme serveur NFS.
 Les labs L11.7 et L11.8 font de **`lab-ops` (10.10.10.14)** un serveur NFS puis
 une cible iSCSI ; `lab-db` et `lab-web` (10.10.10.11) sont les clients.
 
@@ -118,6 +118,7 @@ echo "$DISQUE1 $DISQUE2"
 Sur `lab-adm`, pour le lab L11.5 (NFS) :
 
 ```bash
+sudo apt install -y nfs-kernel-server
 sudo bash ~/workbook/scripts/setup/setup_M11.sh --nfs
 ```
 
@@ -188,7 +189,7 @@ sudo mkfs.xfs -L pgdata /dev/sdc1
 sudo xfs_info /srv/factura/journaux          # XFS : sur le POINT DE MONTAGE
 sudo xfs_growfs /srv/factura/journaux        # après lvextend, FS monté
 sudo xfs_repair -n /dev/sdc1                 # -n : diagnostic seul, démonté
-sudo xfs_repair /dev/sdc1        # -L : vide le journal, dernier recours
+sudo xfs_repair -L /dev/sdc1     # -L : vide le journal, dernier recours
 ```
 
 Quotas de projet XFS (montage avec `prjquota`) : `/etc/projects` (`10:/chemin`),
@@ -196,7 +197,7 @@ Quotas de projet XFS (montage avec `prjquota`) : `/etc/projects` (`10:/chemin`),
 `xfs_quota -x -c 'project -s app1' -c 'limit -p bhard=200m app1' /point` et
 `xfs_quota -x -c 'report -p' /point`. XFS ne se réduit pas parce que les numéros
 d'inodes encodent leur position physique (groupe d'allocation + bloc) : couper la
-fin du volume renumérote tout. Un XFS monté avec `-o nouuid` pour un snapshot LVM.
+fin du volume renumérote tout. Un snapshot LVM d'un XFS se monte avec `-o nouuid` (même UUID que l'origine).
 
 ### Monter
 
@@ -245,7 +246,8 @@ sudo pvremove /dev/sdb1
 pvs ; vgs ; lvs -o +devices
 sudo lvcreate -s -L 1G -n snap_pg /dev/vg_data/lv_pgdata
 sudo mount -o ro /dev/vg_data/snap_pg /mnt/snap       # XFS : -o ro,nouuid
-sudo lvconvert --merge /dev/vg_data/snap_pg ; sudo lvremove /dev/vg_data/snap_pg
+sudo lvconvert --merge /dev/vg_data/snap_pg   # restaure, consomme le snapshot
+sudo lvremove /dev/vg_data/snap_pg            # OU : abandonne le snapshot
 lvs -o lv_name,attr,size,origin,data_percent   # swi-I-s--- : snapshot invalide
 ```
 
@@ -278,7 +280,7 @@ perdu. Membres en type `fd00` par convention, `--metadata=1.2` par défaut.
 
 ### NFS
 
-@fig(nfs-iscsi): NFS partage des fichiers (le serveur tient le système de fichiers) ; iSCSI exporte un bloc (l'initiateur voit un disque et y met LVM).
+@fig(nfs-iscsi): NFS — partage de fichiers serveur lab-ops (`nfs-server`) ext4 sur LV → `/srv/nfs/partage /etc/exports` : `rw,sync,root_squash` client lab-web `/mnt/p` — arborescence, pas de disque `lsblk` ne montre rien; les UID doivent correspondre `mount -t nfs4 lab-ops:/srv/nfs/partage /mnt/p` TCP 2049 · `open/read/write` voyagent sur le réseau, le serveur tient le FS le serveur gère le FS : plusieurs clients à la fois `fstab` : `_netdev,nofail,hard,x-systemd.automount` iSCSI — export d'un bloc NFS partage des fichiers (le serveur tient le système de fichiers) ; iSCSI exporte un bloc (l'initiateur voit un disque et y met LVM).
 
 Serveur (`nfs-kernel-server`, `nfs-server.service`) :
 
@@ -323,7 +325,8 @@ luns create /backstores/fileio/disque0
 acls create iqn.2026-09.local.lab:db
 acls/iqn.2026-09.local.lab:db set auth userid=lab-db password=Secr3tISCSI
 set attribute authentication=1
-saveconfig ; exit                  # /etc/rtslib-fb-target/saveconfig.json
+saveconfig                         # /etc/rtslib-fb-target/saveconfig.json
+exit
 ```
 
 Initiateur (`open-iscsi`, `iscsid.service`, nom dans
@@ -515,7 +518,7 @@ b) aucune clé n'est fournie : la phrase de passe sera demandée interactivement
 c) le volume est déverrouillé sans authentification
 d) c'est le nom du fichier de configuration LUKS
 
-**Q11.17** — Tu montes un partage NFS dans `fstab` sans l'option `_netdev`.
+**Q11.17** — Tu montes dans `fstab`, sans l'option `_netdev` (et sans `nofail`), un volume ext4 posé sur un disque iSCSI.
 Quel symptôme t'attends-tu à voir ?
 
 a) le partage est monté en lecture seule
@@ -753,7 +756,7 @@ occupe **tout l'espace libre restant** du groupe. Attention à la différence en
 
 **E11.14** — Affiche pour chaque LV du groupe `vg_data` les périphériques physiques
 qui l'hébergent réellement, puis déplace tous les extents de `/dev/sdb1` vers
-`/dev/sdc1` sans démonter quoi que ce soit.
+`/dev/sdc1` sans démonter quoi que ce soit (si `lv_sauv` de E11.13 a pris tout l'espace de `sdc1`, libère d'abord de la place : `pvmove` a besoin d'extents libres sur la destination).
 
 **E11.15** — Prends un snapshot de 512 Mio de `lv_pgdata`, monte-le en lecture seule
 sur `/mnt/snap`, et vérifie qu'un fichier créé sur l'origine **après** le snapshot
@@ -852,7 +855,7 @@ Critère de succès : après redémarrage, `/srv/factura/archives` et
 options demandées, et `noexec` est effectif sur le premier.
 
 ```bash
-bash check_M11_01.sh
+   sudo bash check_M11_01.sh
 ```
 :::
 
@@ -886,15 +889,15 @@ en commentaire le temps du lab.
    sudo /opt/factura/bin/factura-ecritures.sh /srv/factura/db &
    ```
 
-5. **Sans rien arrêter**, étends `lv_pgdata` à 3,5 Go, système de fichiers compris,
+5. **Sans rien arrêter**, étends `lv_pgdata` à 2,5 Go, système de fichiers compris,
    en une seule commande. Vérifie avec `df -h` que l'espace est disponible et que le
    générateur n'a pas bronché (aucune ligne d'erreur dans sa sortie).
-6. Le VG est maintenant trop petit. Ajoute `/dev/sdc1` au groupe, puis étends
-   `lv_pgdata` pour qu'il utilise **la moitié de l'espace libre restant**.
+6. Le VG va devenir trop petit. Ajoute `/dev/sdc1` au groupe, puis étends
+   `lv_pgdata` de 512 Mio en prenant ces extents **sur `/`**`dev/sdc1` **uniquement** (`lv_pgdata` fera alors 3 Go, à cheval sur les deux PV).
 7. Le disque `sdb` doit partir en maintenance. Déplace **à chaud** tous ses extents
    vers `sdc`, retire-le du groupe, et supprime le PV. Vérifie à chaque étape que
    `/srv/factura/db` reste monté et accessible.
-8. Réduction : crée un LV `lv_test` de 2 Go en ext4, monte-le sur `/mnt/test`,
+8. Réduction : crée un LV `lv_test` de 1,5 Go en ext4, monte-le sur `/mnt/test`,
    écris-y 200 Mio de données, puis réduis-le à 1 Go **sans perdre les données**.
    Note chaque commande dans l'ordre et explique ce qui casserait si on inversait
    deux étapes.
@@ -908,7 +911,7 @@ le VG ne contient plus que `/dev/sdc1`, `lv_test` fait 1 Go et ses données sont
 intactes, et le rapport existe.
 
 ```bash
-bash check_M11_02.sh
+   sudo bash check_M11_02.sh
 ```
 :::
 
@@ -953,7 +956,7 @@ ne traîne dans `vg_data`, `comptes.dat` est revenu, et
 `sauvegarde-snapshot.sh` s'exécute deux fois de suite sans laisser de résidu.
 
 ```bash
-bash check_M11_03.sh
+   sudo bash check_M11_03.sh
 ```
 :::
 
@@ -1014,7 +1017,7 @@ Critère de succès : `/` fait au moins 45 Go, le service n'a jamais été arrê
 un swap de 2 Gio est actif et permanent, `vm.swappiness` vaut 10 après reboot.
 
 ```bash
-bash check_M11_04.sh
+   sudo bash check_M11_04.sh
 ```
 :::
 
@@ -1031,7 +1034,7 @@ archives depuis `lab-adm` via un partage réseau, en lecture seule.
 
 **Partie A — LUKS**
 
-1. Libère une partition (ou crée un LV `lv_coffre` de 1 Go dans `vg_data`) et
+1. Libère une partition (ou crée un LV `lv_coffre` de 512 Mio dans `vg_data`) et
    chiffre-la avec LUKS2. Note la commande exacte et la confirmation demandée.
 2. Ouvre le conteneur sous le nom `coffre`. Observe ce qui apparaît dans
    `/dev/mapper/` et dans `lsblk`.
@@ -1069,7 +1072,7 @@ référence l'UUID LUKS, deux emplacements de clé sont occupés, et
 `/mnt/archives-adm` est monté en lecture seule avec `_netdev`.
 
 ```bash
-bash check_M11_05.sh
+sudo bash check_M11_05.sh
 ```
 :::
 
@@ -1121,7 +1124,7 @@ Critère de succès : `/dev/md0` est `clean` avec deux membres actifs, sa ligne
 `vg_raid/lv_partage`, `mdmonitor.service` est actif et le rapport existe.
 
 ```bash
-bash check_M11_07.sh
+sudo bash check_M11_07.sh
 ```
 :::
 
@@ -1140,7 +1143,7 @@ ne doit jamais être root sur le partage.
 **Sur `lab-ops`**
 
 1. Installe `nfs-kernel-server` (déjà fait si le setup a tourné ici). Crée
-   `/srv/nfs/partage` (groupe `factura`, GID 2000 créé au besoin, `2775`) et
+   `/srv/nfs/partage` (groupe `factura`, GID 2000 créé au besoin, mode `2777` : setgid, et root « squashé » doit pouvoir y écrire) et
    `/srv/nfs/depots` (root, `755`) avec un fichier témoin dans chacun.
 2. Écris `/etc/exports` : `partage` en `rw,sync,no_subtree_check,root_squash`
    pour `10.10.10.0/24` ; `depots` en `ro,sync,no_subtree_check` pour
@@ -1175,7 +1178,7 @@ avec `_netdev` et `nofail` dans `fstab` ; sur `lab-web`, `/mnt/depots-ops` est e
 lecture seule. Le script se lance sur chaque machine.
 
 ```bash
-bash check_M11_08.sh
+sudo bash check_M11_08.sh
 ```
 :::
 
@@ -1232,7 +1235,7 @@ Critère de succès : la cible expose une LUN fileio avec ACL et CHAP ; sur
 lance sur chaque machine.
 
 ```bash
-bash check_M11_09.sh
+   sudo bash check_M11_09.sh
 ```
 :::
 
@@ -1241,10 +1244,10 @@ bash check_M11_09.sh
 ## 11.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9003 avant-bf10-<n>`. Le snapshot de secours
+Avant chaque Break & Fix : `qm snapshot 9003 avant-bf11-<n>`. Le snapshot de secours
 reste `snap-clean`, mais l'utiliser vaut échec : l'objectif est de réparer, pas de
 rembobiner. BF11.1 provoque un **échec de démarrage réel** : tu auras besoin de la
-console Proxmox (`Console` → `noVNC`), le SSH ne répondra pas. BF11.5 suppose le
+console Proxmox (`Console` → `noVNC`), le SSH ne répondra pas. BF11.3 et BF11.4 supposent la pile `vg_data/lv_pgdata` de L11.2 montée sur `/srv/factura/db`, BF11.4 suppose aussi un volume monté sur `/srv/factura/archives` (celui de BF11.2 convient), BF11.5 le
 miroir de L11.6 en place, BF11.6 le montage `/mnt/partage-ops` de L11.7 sur
 `lab-db`.
 :::
@@ -1335,8 +1338,8 @@ sudo bash break_M11_04.sh
 
 **Symptôme utilisateur** : la maintenance prévue à 22 h est bloquée.
 `sudo umount /srv/factura/archives` répond `target is busy` alors que le service
-`factura` est arrêté. Et `sudo lvextend -L +1G -r /dev/vg_data/lv_pgdata` répond
-`Insufficient free space: 256 extents needed, but only 0 available`, bien que le
+`factura` est arrêté. Et `sudo lvextend -L +512M -r /dev/vg_data/lv_pgdata` répond
+`Insufficient free space: 128 extents needed, but only 0 available`, bien que le
 groupe ait été dimensionné large.
 
 **Interdit** : redémarrer la machine, `fuser -km` en aveugle sur le point de
@@ -1418,8 +1421,8 @@ libère toi-même `sdb` et `sdc`.
    (partitions de type `fd00`). La configuration doit survivre à un redémarrage —
    `mdadm.conf` **et** initramfs.
 2. **LVM par-dessus** : `/dev/md0` comme unique PV, un VG `vg_sauv`, un LV
-   `lv_coffre` occupant 60 % du groupe. Les 40 % restants sont laissés libres
-   **volontairement** : explique dans le rapport à quoi ils servent.
+   `lv_coffre` occupant 60 % du groupe. Dans les 40 % restants, recrée `lv_pgdata` (1 Go, ext4, monté sur `/srv/factura/db`, le jeu de données du setup recopié dedans) : c'est la base à sauvegarder. Le reste est laissé libre
+   **volontairement** : explique dans le rapport à quoi il sert.
 3. **LUKS** : `lv_coffre` chiffré en LUKS2, ouvert sous le nom `coffre`, formaté en
    ext4, monté sur `/srv/sauvegardes`. Ouverture au démarrage via `/etc/crypttab`,
    montage via `/etc/fstab`, avec les options de durcissement qui conviennent à un
@@ -1451,7 +1454,7 @@ libère toi-même `sdb` et `sdc`.
    (`mdadm --fail` puis `--remove`), prouve que `/srv/sauvegardes` reste accessible,
    vérifie que le script de supervision le signale, puis réintègre le disque et
    observe la reconstruction dans `/proc/mdstat`.
-8. **Rapport** `~/lab11/rapports/d10.md` : schéma texte de la pile complète (disque →
+8. **Rapport** `~/lab11/rapports/d11.md` : schéma texte de la pile complète (disque →
    partition → md → PV → VG → LV → LUKS → FS → point de montage), la sortie des
    commandes de vérification, le temps de reconstruction mesuré à l'étape 7, et la
    réponse argumentée à cette question : « pourquoi LUKS **au-dessus** de LVM et pas
@@ -1461,7 +1464,7 @@ Temps visé : 90 minutes.
 
 ::: check
 ```bash
-bash check_M11_06.sh
+sudo bash check_M11_06.sh
 ```
 :::
 

@@ -56,7 +56,7 @@ utilisé une fois dans le défi.
 ::: rhel
 Sous Rocky 9 : `sudo dnf install -y gawk jq util-linux dos2unix`. Le paquet `yq`
 n'existe pas dans les dépôts de base : `sudo dnf install -y python3-pip && pip3 install yq`.
-`sponge` vient d'EPEL (`sudo dnf install -y epel-release moreutils`).
+`sponge` vient d'EPEL, à activer d'abord : `sudo dnf install -y epel-release` puis `sudo dnf install -y moreutils`.
 :::
 
 ::: attention
@@ -153,7 +153,7 @@ tee >(gzip > copie.gz) > sortie.txt
 
 @fig(text-pipeline): Un pipeline classique d'analyse de journal, avec la forme des lignes qui circulent entre chaque maillon.
 
-`xargs` : `-n N` (N arguments par appel), `-I{}` (placeholder, implique `-n 1`),
+`xargs` : `-n N` (N arguments par appel), `-I{}` (placeholder, une ligne d'entrée par appel),
 `-P N` (N processus parallèles), `-0` avec `find -print0` (noms à espaces),
 `-r` (ne rien lancer si l'entrée est vide), `-t` (trace la commande).
 
@@ -431,7 +431,7 @@ fichiers temporaires. Quelle écriture ?
 a) `diff $(ssh lab-web dpkg -l) $(ssh lab-db dpkg -l)`
 b) `diff <(ssh lab-web dpkg -l) <(ssh lab-db dpkg -l)`
 c) `diff <<<"$(ssh lab-web dpkg -l)" <<<"$(ssh lab-db dpkg -l)"`
-d) `ssh lab-web dpkg -l | diff - <(ssh lab-db dpkg -l)`, mais seulement avec `-`
+d) `ssh lab-web dpkg -l | diff <(ssh lab-db dpkg -l)`, le tube fournissant le second fichier
 
 ---
 
@@ -604,7 +604,7 @@ inexistant, puis affiche les codes retour de chaque maillon.
 ::: contexte
 Mardi 15 septembre, le support remonte des lenteurs sur `shop.lab.local`. Le chef de
 projet veut « des chiffres, pas des impressions », pour arbitrer entre une montée en
-charge et un correctif applicatif. Tu n'as que `~/lab05/access.log` (format combined
+charge et un correctif applicatif. Tu n'as que `~/lab05/access.log` (format combined +
 + `$request_time`). Livrable attendu : un fichier texte lisible, chiffré,
 `~/lab05/rapports/rapport-acces.txt`.
 :::
@@ -851,8 +851,7 @@ bash break_M05_03.sh
 ```
 
 **Symptôme utilisateur** : le script `~/lab05/bin/top-ip.sh` sort un classement où
-`198.51.100.12` apparaît trois fois avec trois compteurs différents, et où le total
-des compteurs ne correspond plus au nombre de lignes du journal. Le fichier source
+`10.10.10.14` apparaît deux fois avec deux compteurs différents, où la première place revient à une ligne sans adresse, et où les compteurs des vraies IP ne correspondent plus à ceux du journal d'origine. Le fichier source
 n'a pas changé de format, juste de provenance (il vient maintenant d'un agrégateur).
 
 **Interdit** : filtrer manuellement les doublons dans le résultat final.

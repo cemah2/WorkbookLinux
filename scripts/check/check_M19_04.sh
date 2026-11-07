@@ -21,7 +21,7 @@ if command -v curl >/dev/null 2>&1; then
   for _ in 1 2 3 4 5; do
     T=$(curl -s -o /dev/null -w '%{time_total}' --max-time 20 \
         "$URL/produits" 2>/dev/null || echo 99)
-    MS=$(printf '%.0f' "$(echo "$T * 1000" | bc -l 2>/dev/null || echo 99000)")
+    MS=$(awk -v t="$T" 'BEGIN {printf "%.0f", t * 1000}')
     [ "$MS" -gt "$MAX" ] && MAX=$MS
   done
   if [ "$MAX" -lt 200 ]; then

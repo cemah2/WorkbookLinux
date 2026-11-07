@@ -136,7 +136,7 @@ cat > "$BASE/forge/compose.yaml" <<EOF
 # d'enregistrement généré une fois Gitea démarré (voir .env).
 services:
   gitea:
-    image: docker.gitea.com/gitea:1.24
+    image: docker.gitea.com/gitea:1.26
     container_name: gitea
     restart: unless-stopped
     environment:
@@ -302,7 +302,7 @@ for k in deploy bg ansible; do
   [ -f "$BASE/keys/$k" ] || sudo -u "$LAB_USER" ssh-keygen -q -t ed25519 \
     -N '' -C "$k@lab-ops" -f "$BASE/keys/$k"
 done
-printf 'http://%s:%s@%s\n' "$LAB_USER" "$TOKEN" "$OPS_IP" \
+printf 'http://%s:%s@%s:3000\n' "$LAB_USER" "$TOKEN" "$OPS_IP" \
   > "$BASE/.git-credentials"
 chown "$LAB_USER:$LAB_USER" "$BASE/.git-credentials"
 chmod 600 "$BASE/.git-credentials"
@@ -506,7 +506,7 @@ EOF
 # smoke.sh <url> <version attendue> — vérifie que /version répond avec le tag
 set -euo pipefail
 URL=${1:?url}; ATTENDU=${2:?version}
-for i in $(seq 1 10); do
+for _ in $(seq 1 10); do
   v=$(curl -fsS $URL/version || true)
   if [ "$v" = "$ATTENDU" ]; then echo "OK $v"; exit 0; fi
   sleep 3
@@ -783,6 +783,7 @@ fi
 chown -R "$LAB_USER:$LAB_USER" "$BASE"
 # les données Gitea/PostgreSQL/registre appartiennent aux conteneurs
 chown -R 1000:1000 "$BASE/forge/gitea" 2>/dev/null || true
+chown -R 999:999 "$BASE/forge/postgres" 2>/dev/null || true   # uid postgres
 
 cat <<EOF
 

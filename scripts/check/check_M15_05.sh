@@ -40,7 +40,7 @@ MM="$(cfg maxmemory)"; POL="$(cfg maxmemory-policy)"
 [ "$(cfg appendfsync)" = everysec ] && ok "appendfsync everysec" || ko "appendfsync n'est pas everysec"
 sudo -n ls /var/lib/redis/appendonlydir/ >/dev/null 2>&1 && ok "appendonlydir/ présent" \
   || ko "/var/lib/redis/appendonlydir absent (l'AOF n'est pas actif à chaud)"
-sudo -n ls /var/backups/redis/dump-*.rdb >/dev/null 2>&1 && ok "copie de dump.rdb présente" \
+sudo -n sh -c 'ls /var/backups/redis/dump-*.rdb' >/dev/null 2>&1 && ok "copie de dump.rdb présente" \
   || ko "aucune copie dump-*.rdb dans /var/backups/redis"
 [ -f "$HOME/lab15/conf/lab-db/redis.conf.diff" ] && ok "redis.conf.diff présent" \
   || ko "~/lab15/conf/lab-db/redis.conf.diff absent"

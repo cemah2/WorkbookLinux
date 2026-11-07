@@ -34,16 +34,16 @@ fi
 # le rebond, et AllowTcpForwarding sur le bastion.
 if ssh -f -N -o BatchMode=yes -o ConnectTimeout=5 \
        -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none \
-       -L 15499:10.10.10.12:5432 bastion 2>/tmp/m12.tun; then
+       -L 15499:10.10.10.12:5432 bastion 2>/tmp/m14.tun; then
   ok "tunnel local monté via le bastion (ExitOnForwardFailure actif)"
   sleep 1
   case "$(banniere 15499)" in
-    LAB12-DB-OK*) ok "le service de lab-db répond à travers le tunnel" ;;
-    *) ko "aucune bannière LAB12-DB-OK : lab14-db.service tourne-t-il ?" ;;
+    LAB14-DB-OK*) ok "le service de lab-db répond à travers le tunnel" ;;
+    *) ko "aucune bannière LAB14-DB-OK : lab14-db.service tourne-t-il ?" ;;
   esac
   pkill -f 'ssh -f -N .*15499' 2>/dev/null
 else
-  ko "impossible de monter le tunnel : $(head -1 /tmp/m12.tun)"
+  ko "impossible de monter le tunnel : $(head -1 /tmp/m14.tun)"
 fi
 
 # proxy SOCKS

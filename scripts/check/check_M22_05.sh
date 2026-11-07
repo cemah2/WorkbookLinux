@@ -44,7 +44,7 @@ case "$CODE" in
   200) ko "le registre répond 200 sans identifiants : pas d'authentification" ;;
   *)   ko "https://$REG/v2/ ne répond pas en TLS (code ${CODE:-vide})" ;;
 esac
-curl -s -o /dev/null --max-time 4 "http://$REG/v2/" 2>/dev/null \
+curl -sf -o /dev/null --max-time 4 "http://$REG/v2/" 2>/dev/null \
   && ko "le registre répond encore en HTTP clair" \
   || ok "pas de réponse en HTTP clair"
 

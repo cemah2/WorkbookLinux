@@ -51,12 +51,13 @@ else
 fi
 
 # --- 3. les chiffres sont-ils plausibles ? ------------------------------
-REEL=$(dpkg-query -f '${binary:Package}\n' -W 2>/dev/null | wc -l)
+# nombre de paquets réellement installés (état ii ou hi), sans les rc
+REEL=$(dpkg-query -f '${db:Status-Abbrev}\n' -W 2>/dev/null | grep -c '^.i ')
 if grep -qE "\b$REEL\b" "$RAP" 2>/dev/null; then
   ok "le nombre de paquets du rapport ($REEL) correspond au système"
 else
-  ko "le rapport ne contient pas le nombre réel de paquets ($REEL) — \
-compte avec dpkg-query -W, pas avec dpkg -l dont l'en-tête fait 5 lignes"
+  ko "le rapport ne contient pas le nombre réel de paquets installés \
+($REEL) — compte avec dpkg-query -W et l'état, pas avec dpkg -l | wc -l"
 fi
 
 # --- 4. états anormaux --------------------------------------------------

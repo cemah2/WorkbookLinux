@@ -58,12 +58,12 @@ if [ -n "$ST" ]; then
   ( for i in $(seq 1 40); do
       curl -s -o /dev/null -m 2 -w '%{http_code} ' http://10.10.10.11/
       sleep 0.1
-    done ) > /tmp/check_m21_03_codes &
+    done ) > /tmp/check_m25_03_codes &
   sleep 1
   $SSH switch >/dev/null 2>&1; sleep 1
   $SSH back >/dev/null 2>&1
   wait
-  codes=$(cat /tmp/check_m21_03_codes); rm -f /tmp/check_m21_03_codes
+  codes=$(cat /tmp/check_m25_03_codes); rm -f /tmp/check_m25_03_codes
   if printf '%s' "$codes" | tr ' ' '\n' | grep -v '^$' | grep -qv '^200$'; then
     ko "codes autres que 200 pendant switch/back : $codes"
   else
@@ -73,10 +73,10 @@ fi
 
 # --- 4. le workflow ------------------------------------------------------
 WF=$(api "$REPO/raw/.gitea/workflows/ci.yaml")
-printf '%s' "$WF" | python3 - <<'EOF' && ok "deploy : stage → smoke → switch → smoke, back conditionné à l'issue de switch" \
+DOC="$WF" python3 - <<'EOF' && ok "deploy : stage → smoke → switch → smoke, back conditionné à l'issue de switch" \
   || ko "deploy : attendu steps stage/smoke/switch/smoke et back avec steps.<switch>.outcome"
-import sys, yaml
-w = yaml.safe_load(sys.stdin)
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"])
 steps = w["jobs"]["deploy"]["steps"]
 txt = [str(s.get("run", "")) for s in steps]
 i_stage = next(i for i, t in enumerate(txt) if "stage" in t)

@@ -48,8 +48,8 @@
   et le remappage d'UID (`userns-remap`).
 
 Temps estimé : 11 h
-Prérequis : modules 08 (processus, signaux, systemd, cgroups), 11 (réseau,
-iptables), 03 (permissions et UID). Kubernetes est au module 26 et
+Prérequis : modules 08 (processus, signaux, systemd, cgroups), 12 et 13 (réseau,
+iptables/nftables), 03 (permissions et UID). Kubernetes est au module 26 et
 l'intégration continue au module 25 : ici on ne construit et n'exploite que
 des conteneurs sur une machine.
 :::
@@ -199,7 +199,7 @@ ce qui permet à `dockerd` de redémarrer sans tuer les conteneurs
 
 ```bash
 ps -o pid,ppid,args -p $(docker inspect web --format '{{.State.Pid}}')
-pstree -p $(pidof containerd) | head           # shims, pas de runc résident
+pstree -p 1 | grep -m3 containerd-shim     # shims fils de PID 1, pas de runc
 sudo ctr -n moby containers ls ; sudo ctr -n moby tasks ls  # vu de containerd
 sudo ctr images pull docker.io/library/alpine:3.20     # namespace "default"
 sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps
@@ -249,7 +249,7 @@ docker run --rm alpine:3.20 cat /proc/1/attr/current  # docker-default (enforce)
 docker run --security-opt seccomp=unconfined \
   --security-opt apparmor=unconfined …
 docker run --cap-drop ALL --cap-add NET_BIND_SERVICE … capsh --print
-# /etc/docker/daemon.json : "userns-remap": "default"  -> root = UID 100000
+# daemon.json "userns-remap": "default" : root = 1er subuid de dockremap
 ```
 
 @fig(overlayfs-couches): overlayfs : les couches d'image en lecture seule empilées, une couche d'écriture par conteneur, la vue fusionnée montée sur `/` ; modifier un fichier le copie dans l'upper, le supprimer pose un whiteout.
@@ -595,8 +595,8 @@ d'inspecter le conteneur ? **Deux réponses correctes.**
 a) `docker run --rm -it --pid container:app --network container:app
    busybox sh`, qui partage ses namespaces sans toucher à son image
 b) reconstruire l'image avec `FROM alpine` en production
-c) `nsenter -t $(docker inspect app --format '{{.State.Pid}}') -n -m -p`
-   depuis l'hôte
+c) `sudo` `nsenter -t $(docker inspect app --format '{{.State.Pid}}') -n ss -tlnp`
+   depuis l'hôte, avec les binaires de l'hôte
 d) `docker exec -it --shell app`
 
 **Q22.15** — `/var/lib/docker/containers/` pèse 9 Go sur `lab-ops`, à cause
@@ -1335,7 +1335,7 @@ système de fichiers de l'image à l'étape 1 (variante sans Docker :
    namespace `user` de l'hôte : root dedans = root dehors. Active
    `"userns-remap": "default"` dans `daemon.json`, redémarre Docker, et
    prouve avec `ps -o user` sur l'hôte que le `root` d'un nouveau conteneur
-   est l'UID 100000. Montre ce que devient `docker images`, explique
+   est la première UID de la plage de `dockremap` dans `/ etc/subuid` ( 100000 si c'est la première plage attribuée sur la machine). Montre ce que devient `docker images`, explique
    pourquoi, puis **retire le réglage** et redémarre Docker (les labs
    suivants en dépendent). Note dans le rapport la ligne de `/etc/subuid`
    utilisée.
@@ -1375,7 +1375,7 @@ sudo bash check_M22_07.sh
 ## 22.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9005 avant-bf18`. Le snapshot de
+Avant chaque Break & Fix : `qm snapshot 9005 avant-bf22`. Le snapshot de
 secours reste `snap-clean` (`qm rollback 9005 snap-clean`), mais l'utiliser
 vaut échec de l'exercice. Les scripts supposent Docker installé (L22.1) et
 construisent une image `factura-bf:base` au premier lancement.
@@ -1486,7 +1486,7 @@ sudo bash break_M22_05.sh
 sur `/compteur` avec `Name or service not known` pour `factura-cache`.
 Pourtant `docker ps` montre `factura-cache` `Up`, et `docker exec
 factura-cache redis-cli ping` répond `PONG`. Les deux conteneurs ont une IP en
-`172.17.0.x` et se `ping`ent par IP.
+`172.17.0.x` et se `pingent` par IP.
 
 **Interdit** : `--link`, écrire dans `/etc/hosts` du conteneur, mettre l'IP
 en dur dans `REDIS_URL`, recréer les conteneurs.

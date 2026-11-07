@@ -7,9 +7,12 @@ SAUV=/root/.breakfix-backup
 mkdir -p "$SAUV"
 
 # --- sauvegarde de l'état avant de casser -------------------------------
-stat -c '%a %U %G %n' /etc/sudoers /etc/sudoers.d/* \
-  > "$SAUV/M04_01.modes" 2>/dev/null || true
-cp -a /etc/sudoers "$SAUV/M04_01.sudoers" 2>/dev/null || true
+# (une seule fois : relancé, le script n'écrase pas les modes sains)
+if [ ! -s "$SAUV/M04_01.modes" ]; then
+  stat -c '%a %U %G %n' /etc/sudoers /etc/sudoers.d/* \
+    > "$SAUV/M04_01.modes" 2>/dev/null || true
+  cp -a /etc/sudoers "$SAUV/M04_01.sudoers" 2>/dev/null || true
+fi
 
 # --- la panne : le CONTENU reste parfaitement valide, c'est le MODE qui  -
 # --- rend le fichier inutilisable. sudo refuse de lire une politique     -

@@ -25,8 +25,10 @@ touch -d '6 days ago' "$PGD/30-debug.conf"
 pg_ctlcluster 16 main reload
 
 # 2. Un slot de réplication d'un réplica décommissionné, qui retient le WAL
+# (true = immediately_reserve : sans lui, restart_lsn reste NULL et le slot
+#  ne retient AUCUN WAL tant qu'aucun réplica ne s'est connecté)
 sudo -u postgres psql -tAqc "select pg_create_physical_replication_slot(\
-'replica_reporting') where not exists (select 1 from pg_replication_slots \
+'replica_reporting', true) where not exists (select 1 from pg_replication_slots \
 where slot_name = 'replica_reporting')" >/dev/null
 for i in 1 2 3; do
   sudo -u postgres psql -tAqc "select pg_switch_wal()" >/dev/null
@@ -34,7 +36,11 @@ for i in 1 2 3; do
 select 1, 1 from generate_series(1,2000)" >/dev/null
 done
 
-# 3. Des journaux « tournés » qui remplissent le disque à 95 %
+# 3. Des journaux « tournés » qui remplissent le disque à 95 %, et la règle
+#    logrotate livrée par postgresql-common a disparu (« ménage » de /etc)
+if [ -f /etc/logrotate.d/postgresql-common ]; then
+  mv /etc/logrotate.d/postgresql-common "$SAUV/$ID.logrotate-postgresql-common"
+fi
 mkdir -p "$LOGD"
 FS_TOTAL=$(df -kP "$LOGD" | awk 'NR==2 {print $2}')
 FS_USED=$(df -kP "$LOGD" | awk 'NR==2 {print $3}')

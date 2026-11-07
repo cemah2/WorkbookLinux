@@ -108,6 +108,9 @@ fi
 # 4. Conf, secrets et exports du service (L3.1, L3.2, D3)
 # ---------------------------------------------------------------------
 mkdir -p "$ETC/secrets" "$SRV"/{exports,incoming}
+# racine applicative fermée à other (L3.2 : other doit RESTER à ---)
+chgrp facturation "$SRV"
+chmod 750 "$SRV"
 
 cat > "$ETC/factura.conf" <<'EOF'
 # configuration factura
@@ -135,7 +138,8 @@ chmod 640 "$SRV/exports/rapport.csv"
 cat > /usr/local/bin/factura-backup <<'EOF'
 #!/usr/bin/env bash
 # factura-backup — simulacre de sauvegarde. Appelle tar SANS chemin absolu :
-# c'est précisément ce qui rend un SUID root exploitable (PATH hijacking).
+# dans un binaire ELF SUID root, c'est ce qui permet le PATH hijacking
+# (Linux ignore le SUID d'un script à shebang : ici, anomalie d'audit).
 tar -czf /tmp/factura-backup.tgz /srv/factura 2>/dev/null
 echo "sauvegarde effectuée"
 EOF

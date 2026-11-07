@@ -80,7 +80,7 @@ publie un vhost `www.lab.local` sur `lab-web`, déploie un faux service applicat
 Le module modifie la configuration réseau et la résolution de noms. Une erreur
 de Netplan peut te couper ta session SSH : utilise `sudo netplan try` (rollback
 automatique au bout de 120 s) et garde une console Proxmox ouverte
-(`qm terminal 9001`) pendant les labs 11.2 et suivants.
+(`qm terminal 9001`) pendant les labs L12.2 et suivants.
 :::
 
 ---
@@ -134,7 +134,7 @@ diagnostic et aux tests, jamais à la configuration définitive.
 | `netstat -rn` | `ip r` |
 | `netstat -i` | `ip -s link` |
 
-`net-tools` n'est plus maintenu depuis 2011, ne connaît ni les multiples
+`net-tools` n'évolue quasiment plus (déprécié depuis des années, dernière version en 2021), ne connaît ni les multiples
 adresses par interface, ni les tables de routage multiples, ni correctement
 IPv6, et lit `/proc/net/*` en texte quand `iproute2` parle à `netlink`.
 Sur une machine chargée, `netstat -anp` peut prendre plusieurs secondes là où
@@ -189,7 +189,8 @@ getaddrinfo()
 | Commande | Ce qu'elle interroge |
 |---|---|
 | `getent hosts www.lab.local` | **toute** la chaîne NSS (donc `/etc/hosts`) |
-| `dig www.lab.local` | le DNS uniquement, ignore `/etc/hosts` |
+| `dig @10.10.10.10 www.lab.local` | le serveur DNS seul (sans `@`, le stub `127.0.0.53` sert aussi `/` |
+|  | `etc/hosts`) |
 | `resolvectl query www.lab.local` | le résolveur systemd, avec le cache |
 | `resolvectl status` | serveurs par lien, domaines de recherche, DNSSEC |
 | `resolvectl flush-caches` | vide le cache de `systemd-resolved` |
@@ -284,7 +285,7 @@ vérifiable. Ils disent *à quel étage* ça casse, avant même de lire le messa
 | `-s0` | capture le paquet entier (défaut moderne) |
 
 Filtres BPF : `host 10.10.10.11`, `net 10.10.10.0/24`, `port 443`,
-`src host X and dst port 80`, `tcp[tcpflags] & tcp-syn != 0`, `icmp`.
+`src host X and dst port 80`, `tcp[ tcpflags] & tcp-syn != 0`, `icmp`.
 Dans la sortie, `Flags [S]` = SYN, `[S.]` = SYN-ACK, `[.]` = ACK, `[P.]` =
 PSH-ACK (données), `[F.]` = FIN, `[R]` = RESET.
 
@@ -315,7 +316,7 @@ sysctl net.ipv4.ip_forward           # 0 = la machine ne route pas
 Une route `default via 10.10.10.1 dev ens18 proto static metric 100` : plus la
 `metric` est basse, plus la route est préférée. Deux routes par défaut avec la
 même métrique = comportement aléatoire, c'est un incident, pas une redondance.
-Le NAT côté Linux (`MASQUERADE`) et le filtrage sont au module 18 : ici, retiens
+Le NAT côté Linux (`masquerade`) est au module 13, le pare-feu au module 18 : ici, retiens
 qu'une machine ne relaie **rien** tant que `net.ipv4.ip_forward=1` n'est pas posé.
 
 @fig(routage-decision): Décision de routage d'un paquet : réseau connecté → ARP de la destination et livraison directe ; sinon plus long préfixe → ARP de la passerelle, l'IP de destination restant inchangée.
@@ -336,7 +337,7 @@ un fichier dans `/etc/sysctl.d/` puis `sysctl --system`.
 
 ### Checklist « le site ne répond pas »
 
-1. Le nom résout-il, et vers quoi ? `getent hosts X` puis `dig X`. Écart entre
+1. Le nom résout-il, et vers quoi ? `getent hosts X` puis `dig @serveur X`. Écart entre
    les deux = `/etc/hosts` ou `nsswitch`.
 2. L'IP est-elle joignable ? `ping`, et si ICMP est filtré, `ip route get X`
    pour au moins vérifier qu'une route existe.
@@ -412,7 +413,7 @@ c) que la machine n'a pas de DNS et résout tout par `/etc/hosts`
 d) qu'un `dnsmasq` local écoute sur cette adresse
 
 **Q12.7** — `ping www.lab.local` répond `10.10.10.99`, mais
-`dig +short www.lab.local` répond `10.10.10.11`. Quelle est la cause ?
+`dig +short @10.10.10.10 www.lab.local` répond `10.10.10.11`. Quelle est la cause ?
 
 a) le cache de `systemd-resolved` est périmé
 b) une entrée dans `/etc/hosts` : `files` passe avant `dns` dans `nsswitch.conf`
@@ -431,9 +432,9 @@ d) la requête n'est jamais arrivée, c'est un timeout
 **Q12.9** — `ss -tulpn` sur `lab-web` :
 
 ```text
-Netid State  Local Address:Port Peer Address:Port Process
-tcp   LISTEN 127.0.0.1:8099     0.0.0.0:*  users:(("python3",pid=912))
-tcp   LISTEN 0.0.0.0:80         0.0.0.0:*  users:(("nginx",pid=744))
+Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+tcp   LISTEN 0      5     127.0.0.1:8099  0.0.0.0:*  users:(("python3",pid=912))
+tcp   LISTEN 0      511     0.0.0.0:80    0.0.0.0:*  users:(("nginx",pid=744))
 ```
 
 Depuis `lab-adm`, `curl http://10.10.10.11:8099/` échoue avec le code de retour 7.
@@ -713,7 +714,7 @@ Travaille sur `lab-adm`, livrable dans `~/lab12/rapports/plan-adressage.md`.
    préfixe CIDR, masque décimal, adresse de réseau, première et dernière adresse
    utilisable, adresse de diffusion, nombre d'hôtes.
 2. Attribue : segment 1 = administration, 2 = applicatif, 3 = bases, 4 = réserve.
-   Place les cinq VM du lab dans le bon segment en respectant leurs IP actuelles,
+   Place les sept VM du lab dans le bon segment en respectant leurs IP actuelles,
    et signale explicitement celles qui devraient changer d'adresse.
 3. On te demande ensuite un segment de **62 hôtes maximum** pour une DMZ, pris
    dans `10.10.0.0/16` sans chevaucher `10.10.10.0/24`. Propose-le et prouve
@@ -829,7 +830,7 @@ Travaille depuis `lab-adm`, puis vérifie depuis `lab-web`.
 6. Configure le domaine de recherche pour que `ping lab-db` fonctionne sans
    suffixe. Montre la différence entre `search` et `domain`, et prouve le
    fonctionnement.
-7. Inventorie les enregistrements de la zone : `A` des cinq VM, `CNAME` de `www`,
+7. Inventorie les enregistrements de la zone : `A` des sept VM, `CNAME` de `www`,
    `MX`, `TXT`, `SRV` de `_http._tcp`, et le `PTR` de `10.10.10.11`. Mets-les
    dans `~/lab12/rapports/zone-lab-local.md` avec, pour chacun, la commande qui
    l'obtient.
@@ -838,7 +839,7 @@ Travaille depuis `lab-adm`, puis vérifie depuis `lab-web`.
    cohabitent sans conflit, preuve `ss` à l'appui.
 
 ::: check
-Critère de succès : `getent hosts www.lab.local` et `dig +short www.lab.local`
+Critère de succès : `getent hosts www.lab.local` et `dig +short @10.10.10.10 www.lab.local`
 donnent la même adresse, `ping -c1 lab-db` fonctionne sans suffixe, et le rapport
 de zone contient les six types d'enregistrements.
 
@@ -954,7 +955,7 @@ bash check_M12_05.sh
 ## 12.7 Break & Fix ★★★
 
 ::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf11` (et `9002` pour BF12.3).
+Avant chaque Break & Fix : `qm snapshot 9001 avant-bf12` (et `9002` pour BF12.3).
 Le snapshot de secours reste `snap-clean` (`qm rollback 9001 snap-clean`), mais
 l'utiliser vaut échec de l'exercice : l'objectif est de réparer, pas de rembobiner.
 Les Break & Fix de ce module cassent le réseau : garde une console Proxmox ouverte.
@@ -1035,7 +1036,7 @@ sudo bash break_M12_04.sh
 
 **Symptôme utilisateur** : depuis `lab-adm`, `curl http://www.lab.local/` renvoie
 `Connection refused`. Depuis `lab-web` et `lab-db`, le même site répond
-normalement. `dig +short www.lab.local` depuis `lab-adm` renvoie pourtant la
+normalement. `dig +short @10.10.10.10 www.lab.local` depuis `lab-adm` renvoie pourtant la
 bonne adresse, `10.10.10.11`, et `curl http://10.10.10.11/` fonctionne.
 
 **Interdit** : vider le cache DNS en espérant que ça passe, modifier le serveur
@@ -1072,8 +1073,8 @@ Cahier des charges :
 2. Usage : `netdiag.sh [-p port] [-4|-6] <cible>` où `<cible>` est un nom ou une
    URL. Par défaut : port 443 si l'URL est en `https`, 80 sinon.
 3. Le script déroule **dans cet ordre** et s'arrête au premier étage
-   définitivement bloquant, en le disant :
-   * **L2/L3 local** : interfaces `UP`, adresses, MTU, route par défaut présente,
+   définitivement bloquant, en le disant : **local (**
+   ***L2/L3)** : interfaces `UP`, adresses, MTU, route par défaut présente,
      passerelle joignable en ARP (`ip neigh`) ;
    * **résolution** : ce que dit `/etc/hosts`, ce que dit le DNS, et si les deux
      divergent — c'est une anomalie à signaler, pas une erreur fatale ;

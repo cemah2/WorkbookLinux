@@ -72,7 +72,7 @@ sleep 2
 
 cat <<'EOF'
 
-Symptôme attendu : « df -h /var » affiche moins de 1 Go libre, et
+Symptôme attendu : « df -h /var » a perdu plusieurs gigaoctets, et
 « du -sh /var/log/* » désigne /var/log/journal comme premier consommateur.
 Aucun fichier .log n'est anormalement gros.
 EOF

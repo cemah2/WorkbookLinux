@@ -73,12 +73,17 @@ case "$ID" in
       guestfs-tools genisoimage virt-top libosinfo python3-libvirt \
       python3-pyyaml jq cloud-init util-linux
     LV_GROUP=libvirt ; LV_UNIT=virtqemud
+    # démons modulaires activés par socket (RHEL 9)
+    for d in qemu interface network nodedev nwfilter secret storage; do
+      systemctl enable --now "virt${d}d.socket" "virt${d}d-ro.socket" \
+        "virt${d}d-admin.socket" >/dev/null 2>&1 || true
+    done
     ;;
   *) echo "distribution non gérée : $ID" >&2; exit 1 ;;
 esac
-systemctl enable --now "$LV_UNIT" >/dev/null 2>&1 || true
+[ "$LV_UNIT" = libvirtd ] && { systemctl enable --now libvirtd >/dev/null 2>&1 || true; }
 systemctl is-active --quiet libvirtd 2>/dev/null \
-  || systemctl is-active --quiet virtqemud 2>/dev/null \
+  || systemctl is-active --quiet virtqemud.socket 2>/dev/null \
   || { echo "libvirt ne tourne pas : systemctl status $LV_UNIT" >&2; exit 1; }
 
 # ---------------------------------------------------------------------

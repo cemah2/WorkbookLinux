@@ -35,20 +35,25 @@ fi
 
 # --- 3. bind réel du port 80 en tant qu'utilisateur non root ------------
 TESTU="facturation"; getent passwd "$TESTU" >/dev/null || TESTU="webdev"
-if command -v ss >/dev/null 2>&1; then
-  sudo -u "$TESTU" "$API" --port 80 >/dev/null 2>&1 &
-  pid=$!
-  sleep 1
-  if ss -tlnp 2>/dev/null | grep -q ':80 '; then
-    ok "le port 80 est en écoute, lancé par $TESTU (non root)"
-  else
-    ko "le port 80 n'est pas en écoute : la capability ne s'applique pas"
-  fi
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-else
-  note "ss indisponible : contrôle du bind port 80 ignoré"
+# nginx occupe souvent le port 80 sur lab-web : on prend un autre port
+# privilégié libre, le test porte sur le privilège, pas sur le numéro.
+PORT=80
+if command -v ss >/dev/null 2>&1 && ss -tln 2>/dev/null | grep -q ':80 '; then
+  PORT=81
+  note "le port 80 est déjà pris (nginx ?) : test du bind sur le port 81"
 fi
+OUT=$(mktemp)
+sudo -u "$TESTU" "$API" --port "$PORT" > "$OUT" 2>&1 &
+pid=$!
+sleep 1
+if grep -q 'en écoute' "$OUT"; then
+  ok "$TESTU (non root) a pu binder le port $PORT grâce à la capability"
+else
+  ko "bind du port $PORT refusé pour $TESTU : $(head -1 "$OUT")"
+fi
+kill "$pid" 2>/dev/null || true
+wait "$pid" 2>/dev/null || true
+rm -f "$OUT"
 
 # --- 4. rapport ---------------------------------------------------------
 RAP="$HOMEDIR/lab03/rapports/capability.md"

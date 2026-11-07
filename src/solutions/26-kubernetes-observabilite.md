@@ -165,7 +165,7 @@ Par défaut, rien n'est chiffré.
 ::: piege
 Le vrai piège de production : `kubectl get secret -o yaml` dans un ticket, un
 `describe pod` qui montre les `env` en clair, ou un dépôt Git avec le Secret
-en base64 « parce que ça ressemble à du chiffré ». Solutions : `stringData`
+en base64 « parce que ça ressemble à du chiffré ». Solutions : `stringData` +
 + SOPS/sealed-secrets/external-secrets en GitOps.
 :::
 
@@ -443,7 +443,7 @@ noyée (QO26.10).
 **Modèle déclaratif** : tu décris l'état voulu, jamais les actions. Chaque
 contrôleur compare en boucle l'état observé à l'état désiré et agit sur
 l'écart — c'est la réconciliation. Exemple sans humain : un nœud tombe, le
-contrôleur de nœud le marque `NotReady`, après `pod-eviction-timeout` (5 min)
+contrôleur de nœud le marque `NotReady` et lui pose la taint `node.kubernetes.io/not-ready`, après les 300 s de `tolerationSeconds` posées par défaut sur chaque pod,
 ses pods sont marqués pour suppression, le ReplicaSet en manque N, il les
 recrée, le scheduler les place ailleurs. Personne n'a tapé de commande.
 
@@ -639,7 +639,7 @@ son coût cognitif. Le mesh est le cas d'école de l'outil adopté trop tôt.
   216 min` d'indisponibilité totale.
 
 **Pourquoi le burn rate** : un seuil fixe (« taux d'erreur > 1 % ») ne dit
-ni depuis quand, ni si c'est grave. 1 % pendant 5 min consomme 0,01 % du
+ni depuis quand, ni si c'est grave. 1 % pendant 5 min consomme 0,02 % du
 budget mensuel — on ne réveille personne pour ça ; 1 % pendant 3 jours en
 consomme 20 %. Le burn rate = taux d'erreur observé / taux d'erreur autorisé
 `(1 − SLO)` rapporte tout au budget : burn rate 1 = on épuise exactement le
@@ -978,7 +978,8 @@ kill %1
 ```
 
 ```bash
-POD=$(kubectl get pod -n demo -l app=demo -o jsonpath='{.items[0].metadata.name}')
+POD=$(kubectl get pod -n demo -l app=demo \
+  -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -n demo "$POD" -- cat /etc/resolv.conf
 ```
 
@@ -1019,7 +1020,8 @@ avec `--prefix` couvre tous les pods et préfixe chaque ligne du nom du pod.
 **E26.5** — *Labels : poser, filtrer, et changer `app` d'un pod du Deployment.*
 
 ```bash
-POD=$(kubectl get pod -n demo -l app=demo -o jsonpath='{.items[0].metadata.name}')
+POD=$(kubectl get pod -n demo -l app=demo \
+  -o jsonpath='{.items[0].metadata.name}')
 kubectl label pod -n demo "$POD" env=test
 kubectl get pods -n demo -L env                  # colonne ENV
 kubectl get pods -n demo -l env=test
@@ -1098,11 +1100,13 @@ spec:
 
 ```bash
 kubectl apply -f conf-pod.yaml
-kubectl exec -n demo conf-pod -- sh -c 'echo $COULEUR; cat /etc/demo/message.txt'
+kubectl exec -n demo conf-pod -- \
+  sh -c 'echo $COULEUR; cat /etc/demo/message.txt'
 kubectl patch cm demo-conf -n demo --type merge \
   -p '{"data":{"COULEUR":"rouge","message.txt":"texte modifie\n"}}'
 sleep 90
-kubectl exec -n demo conf-pod -- sh -c 'echo $COULEUR; cat /etc/demo/message.txt'
+kubectl exec -n demo conf-pod -- \
+  sh -c 'echo $COULEUR; cat /etc/demo/message.txt'
 ```
 
 Observation : `message.txt` **change** (après jusqu'à ~60-90 s), `$COULEUR`
@@ -1550,8 +1554,7 @@ juste pour un SLI fondé sur les requêtes, parce qu'une panne à 3 h du matin
 coûte moins de requêtes qu'à 11 h. C'est pourquoi les SLO modernes sont
 définis en **requêtes**, et la conversion en minutes n'est là que pour
 parler aux humains. Le burn rate 4 signifie : « on consomme le budget 4 fois
-trop vite » ; c'est en dessous du seuil de page (14,4) mais au-dessus du
-seuil de ticket (6) sur une fenêtre longue → à traiter dans la journée.
+trop vite » ; c'est en dessous des deux seuils du SRE Workbook (14,4 pour une page, 6 pour un ticket), donc pas d'alerte — mais le budget serait vide en 7,5 jours, donc à traiter dans la journée si le taux se maintient.
 :::
 
 ---
@@ -1587,7 +1590,7 @@ Found:
 ::: pourquoi
 `amtool` dans le conteneur parle à `localhost:9093` par défaut ; depuis
 lab-ops directement il faudrait `--alertmanager.url=http://10.10.10.14:9093`.
-Un silence est un jeu de **matchers** (`=`, `!=`, `=~`) avec début, fin,
+Un silence est un jeu de **matchers** (`=`, `^=`, `=~`) avec début, fin,
 auteur et commentaire obligatoires — c'est volontaire : un silence sans
 motif est une alerte perdue. Un silence expiré reste consultable (audit).
 `check-config` valide la syntaxe et la cohérence (receivers référencés,
@@ -1913,9 +1916,9 @@ kubectl get deploy -n monitoring          # READY 1/1 après rollback
 
 ```text
 REVISION  UPDATED               STATUS      CHART                DESCRIPTION
-1         Tue Sep 15 10:12 2026 superseded  kube-state-metrics.. Install complete
-2         Tue Sep 15 10:15 2026 superseded  kube-state-metrics.. Upgrade complete
-3         Tue Sep 15 10:16 2026 deployed    kube-state-metrics.. Rollback to 1
+1         Sep 15 10:12 2026  superseded  kube-state-metrics  Install complete
+2         Sep 15 10:15 2026  superseded  kube-state-metrics  Upgrade complete
+3         Sep 15 10:16 2026  deployed    kube-state-metrics  Rollback to 1
 ```
 
 ::: pourquoi
@@ -2330,7 +2333,7 @@ kubectl get pods -n factura -l app=factura-api        # toujours 1/1
 ```text
 nc: postgres (10.42.0.18:5432): Connection timed out
 pod "test" deleted
-pod default/test terminated (Error)
+pod factura/test terminated (Error)
 ```
 
 **8. Tout depuis zéro.**
@@ -2749,14 +2752,14 @@ docker compose exec prometheus promtool check config \
 
 ```text
 Checking /etc/prometheus/prometheus.yml
-  FAILED: parsing YAML file /etc/prometheus/prometheus.yml: yaml: line 12:
+  FAILED: parsing YAML file /etc/prometheus/prometheus.yml: yaml: line 17:
   could not find expected ':'
 ```
 
 ```bash
 sed -i 's/^scrape_configs$/scrape_configs:/' prometheus/prometheus.yml
 docker compose exec prometheus promtool check config \
-  /etc/prometheus/prometheus.yml           # SUCCESS: 2 scrape configs
+  /etc/prometheus/prometheus.yml    # SUCCESS: ... is valid ... config file
 curl -X POST http://localhost:9090/-/reload
 docker compose logs --tail=3 prometheus   # Completed loading of config...
 ```
@@ -2782,7 +2785,7 @@ sudo nginx -t && sudo systemctl reload nginx
 curl -s http://127.0.0.1:8080/stub_status
 sudo apt install -y prometheus-nginx-exporter
 sudo tee /etc/default/prometheus-nginx-exporter >/dev/null <<'EOF'
-ARGS="-nginx.scrape-uri=http://127.0.0.1:8080/stub_status"
+ARGS="--nginx.scrape-uri=http://127.0.0.1:8080/stub_status"
 EOF
 sudo systemctl restart prometheus-nginx-exporter
 curl -s http://127.0.0.1:9113/metrics | grep nginx_connections_active
@@ -2925,7 +2928,10 @@ kubectl get secret prometheus-token -n monitoring \
 kubectl get secret prometheus-token -n monitoring \
   -o jsonpath='{.data.ca\.crt}' | base64 -d \
   > /opt/observabilite/prometheus/k8s-ca.crt
-chmod 0600 /opt/observabilite/prometheus/k8s-token
+# le conteneur prometheus tourne en « nobody » (65534) : sans ce chown,
+# un 0600 appartenant à mathieu rend le token illisible côté conteneur
+sudo chown 65534:65534 /opt/observabilite/prometheus/k8s-token
+sudo chmod 0400 /opt/observabilite/prometheus/k8s-token
 kubectl auth can-i list pods -A \
   --as=system:serviceaccount:monitoring:prometheus       # yes
 ```
@@ -3301,10 +3307,7 @@ notifications par instance : pratique pour l'inhibition `equal:
 
 ### **L26.5** — *Grafana et Loki : voir, corréler, provisionner*
 
-*Ticket CHG-4411 : vérifier le provisioning, importer 1860, créer par
-fichier `Lab — API factura` (variable `pod`, cinq panneaux), ajouter le flux
-Loki des pods k3s dans Alloy, corréler ratio 5xx et logs `code=500`, ajouter
-un panneau Logs et une *state timeline* de l'alerte.*
+*Ticket CHG-4411 : vérifier le provisioning, importer 1860, créer par fichier `Lab`* `— API factura` *(variable `pod`, cinq panneaux), ajouter le flux Loki des pods k3s dans Alloy, corréler ratio 5xx et logs `code`*`=500`*, ajouter un panneau Logs et une state timeline\* de l'alerte.\**
 
 **1. Provisioning.**
 
@@ -3396,8 +3399,8 @@ les deux panneaux de l'étape 6 :
   {"id": 4, "type": "stat", "title": "Pods Ready",
    "gridPos": {"x": 12, "y": 8, "w": 6, "h": 4},
    "datasource": {"type": "prometheus", "uid": "prometheus"},
-   "targets": [{"refId": "A",
-    "expr": "sum(kube_pod_status_ready{namespace=\"factura\",condition=\"true\",pod=~\"factura-api.*\"})"}],
+   "targets": [{"refId": "A", "expr":
+    "sum(kube_pod_status_ready{condition=\"true\",pod=~\"factura-api.*\"})"}],
    "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [
      {"color": "red", "value": null},
      {"color": "orange", "value": 1},
@@ -3405,8 +3408,9 @@ les deux panneaux de l'étape 6 :
   {"id": 5, "type": "stat", "title": "Redémarrages (1 h)",
    "gridPos": {"x": 18, "y": 8, "w": 6, "h": 4},
    "datasource": {"type": "prometheus", "uid": "prometheus"},
-   "targets": [{"refId": "A",
-    "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"factura\",pod=~\"factura-api.*\"}[1h]))"}],
+   "targets": [{"refId": "A", "expr":
+"sum(increase(kube_pod_container_status_restarts_total{container=\"api\"}[1h]))"
+   }],
    "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [
      {"color": "green", "value": null},
      {"color": "red", "value": 1}]}}, "overrides": []}},
@@ -4250,8 +4254,8 @@ kubectl get pdb,hpa -n factura
 ```text
 NAME                                      MIN AVAILABLE   ALLOWED DISRUPTIONS
 poddisruptionbudget.policy/factura-api    1               1
-NAME                             TARGETS       MINPODS   MAXPODS   REPLICAS
-horizontalpodautoscaler/factura-api   cpu: 4%/60%   2      4         2
+NAME                                        TARGETS      MINPODS  MAXPODS
+horizontalpodautoscaler.autoscaling/factura-api   cpu: 4%/60%   2        4
 ```
 
 Justification du `secretGenerator` : les manifestes versionnés ne
@@ -4319,6 +4323,13 @@ groups:
         expr: >
           sum(rate(factura_http_requests_total{code=~"5.."}[6h]))
             / sum(rate(factura_http_requests_total[6h]))
+
+      # en plus du cahier des charges : le SLI sur la fenêtre du SLO,
+      # pour le tableau de bord (budget restant, disponibilité 30 j)
+      - record: slo:factura_errors:ratio_rate30d
+        expr: >
+          sum(increase(factura_http_requests_total{code=~"5.."}[30d]))
+            / sum(increase(factura_http_requests_total[30d]))
 
       # budget = 1 - 0.995 = 0.005 ; seuil = burn rate x budget
       - alert: FacturaBudgetErreurRapide
@@ -4412,7 +4423,7 @@ curl -X POST localhost:9090/-/reload
 
 ```text
 Checking /etc/prometheus/rules/slo.yml
-  SUCCESS: 6 rules found
+  SUCCESS: 7 rules found
 Unit Testing:  /etc/prometheus/tests/slo_test.yml
   SUCCESS
 ```
@@ -4463,7 +4474,7 @@ dans webhook ; noter l'incident pour le post-mortem si > 30 min.
 `~/lab26/runbooks/instance-down.md`, même plan : symptôme (`up == 0`
 2 min), impact (aveugle sur la VM, pas forcément de panne), commandes
 (`curl` la cible **depuis lab-ops**, `ssh`, `systemctl status
-prometheus-node-exporter`, `ss -ltn | grep 9100`, `firewall-cmd
+prometheus-node-exporter` — `node_exporter` sur Rocky —, `ss -ltn | grep 9100`, `firewall-cmd
 --list-ports` sur Rocky), causes (exporter arrêté, firewall, VM éteinte,
 mauvaise config Prometheus — BF26.5), escalade (VM injoignable en SSH →
 console Proxmox), résolution (`up == 1` et alerte resolved).
@@ -4483,7 +4494,7 @@ dashboards/slo.json`, mêmes conventions que `api.json`, cinq panneaux :
    "gridPos": {"x": 0, "y": 0, "w": 8, "h": 6},
    "datasource": {"type": "prometheus", "uid": "prometheus"},
    "targets": [{"refId": "A",
-    "expr": "1 - (sum(increase(factura_http_requests_total{code=~\"5..\"}[30d])) / sum(increase(factura_http_requests_total[30d]))) / 0.005"}],
+    "expr": "1 - slo:factura_errors:ratio_rate30d / 0.005"}],
    "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1,
     "thresholds": {"mode": "absolute", "steps": [
      {"color": "red", "value": null},
@@ -4493,7 +4504,7 @@ dashboards/slo.json`, mêmes conventions que `api.json`, cinq panneaux :
    "gridPos": {"x": 8, "y": 0, "w": 8, "h": 6},
    "datasource": {"type": "prometheus", "uid": "prometheus"},
    "targets": [{"refId": "A",
-    "expr": "1 - sum(increase(factura_http_requests_total{code=~\"5..\"}[30d])) / sum(increase(factura_http_requests_total[30d]))"}],
+    "expr": "1 - slo:factura_errors:ratio_rate30d"}],
    "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3,
     "thresholds": {"mode": "absolute", "steps": [
      {"color": "red", "value": null},
@@ -4516,7 +4527,7 @@ dashboards/slo.json`, mêmes conventions que `api.json`, cinq panneaux :
    "gridPos": {"x": 0, "y": 14, "w": 16, "h": 8},
    "datasource": {"type": "loki", "uid": "loki"},
    "targets": [{"refId": "A",
-    "expr": "{namespace=\"factura\", container=\"api\"} | logfmt | code=\"500\""}],
+    "expr": "{namespace=\"factura\"} | logfmt | code=\"500\""}],
    "options": {"showTime": true, "sortOrder": "Descending"}}
  ]
 }
@@ -4533,7 +4544,9 @@ ok() { printf '  [ OK ] %s\n' "$1"; PASS=$((PASS+1)); }
 ko() { printf '  [FAIL] %s\n' "$1"; FAIL=$((FAIL+1)); }
 NS=factura; PROM=http://10.10.10.14:9090; GRAF=http://10.10.10.14:3000
 OBS=/opt/observabilite
-q() { curl -s "$PROM/api/v1/query" --data-urlencode "query=$1" \
+# le « || true » évite qu'un curl en échec ne fasse sortir tout le script
+# (set -e) : on veut un [FAIL] lisible, pas un arrêt silencieux
+q() { { curl -s "$PROM/api/v1/query" --data-urlencode "query=$1" || true; } \
        | jq -r '.data.result[0].value[1] // "0"'; }
 
 echo "== Conformité factura =="
@@ -4556,7 +4569,7 @@ kubectl get hpa factura-api -n $NS >/dev/null 2>&1 \
 # Ingress TLS
 C=$(curl -sk -o /dev/null -w '%{http_code}' \
       --resolve factura.lab.local:443:10.10.10.14 \
-      https://factura.lab.local/api/factures)
+      https://factura.lab.local/api/factures || true)
 [ "$C" = 200 ] && ok "Ingress TLS répond 200" || ko "Ingress : HTTP $C"
 # cibles node
 DOWN=$(q 'count(up{job="node"} == 0)')
@@ -4610,12 +4623,8 @@ path=/factures code=500` sans message d'erreur base (4), `pg_isready`
 répond (5) → ce n'est pas la base, c'est l'application ; `kubectl get
 deploy factura-api -o yaml | grep -A1 TAUX` révèle la variable ; correctif
 `kubectl set env deploy/factura-api -n factura FACTURA_TAUX_ERREUR-`.
-Résolution : `ratio_rate5m` redescend sous 1 % en ~6 min ; l'alerte reste
-firing tant que `ratio_rate1h > 0,072` — soit encore ~45 min après la
-correction. C'est le prix de la fenêtre longue, et une bonne raison de
-mettre `ratio_rate5m` dans la condition : elle **est** dans le `and`, donc
-l'alerte se résout dès que la fenêtre courte repasse sous le seuil
-(l'évaluation du `and` exige les deux). `resolved` dans webhook au
+Résolution : `ratio_rate5m` redescend sous 1 % en ~6 min, et l'alerte se résout à ce moment-là, alors que `ratio_rate1h` reste au-dessus de 0,072 encore ~45 min. C'est précisément le rôle de la fenêtre courte dans le `and` : sans elle, la page resterait active près d'une heure après la correction
+(l'évaluation du `and` exige les deux conditions). `resolved` dans webhook au
 `group_interval` suivant.
 
 `~/lab26/rapports/postmortem.md` (modèle du module 19) : titre, date,
@@ -4627,7 +4636,7 @@ une variable de simulation d'erreur **existe** dans l'image de production),
 ce qui a bien marché (page en 11 min, runbook suivi en 6 min), ce qui a
 manqué (aucun garde-fou sur les variables `FACTURA_*` en prod ; la page
 aurait pu partir plus tôt avec une fenêtre 5 min seule), actions : retirer
-`FACTURA_TAUX_ERREUR` de l'image de prod (ou la refuser hors namespace
+`FACTURA_ TAUX_ERREUR` de l'image de prod (ou la refuser hors namespace
 `casse` via une policy d'admission), ajouter `verif-prod.sh` au pipeline,
 revoir les seuils avec l'équipe.
 

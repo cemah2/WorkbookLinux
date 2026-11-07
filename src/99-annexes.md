@@ -60,38 +60,40 @@ Le niveau E vient avec les années de production, pas avec un workbook.
 |---|---|---|
 | Lire une commande inconnue et prédire ce qu'elle fait | ☐ ☐ ☐ ☐ | 01, 05, 07 |
 | Trouver une réponse dans `man`/`--help`/`/usr/share/doc` | ☐ ☐ ☐ ☐ | 00, 01 |
-| Diagnostiquer un « permission denied » de bout en bout | ☐ ☐ ☐ ☐ | 03, 04, 15 |
+| Diagnostiquer un « permission denied » de bout en bout | ☐ ☐ ☐ ☐ | 03, 04, 18 |
 | Écrire une règle `sudoers` minimale et la valider | ☐ ☐ ☐ ☐ | 04 |
-| Produire un rapport chiffré depuis un log brut | ☐ ☐ ☐ ☐ | 05, 13 |
-| Écrire un script bash qui passe shellcheck et survit à cron | ☐ ☐ ☐ ☐ | 07, 14 |
-| Savoir quand quitter bash pour Python ou Ansible | ☐ ☐ ☐ ☐ | 07, 19 |
-| Lire `systemctl status` et `journalctl` sans approximation | ☐ ☐ ☐ ☐ | 08, 13 |
+| Produire un rapport chiffré depuis un log brut | ☐ ☐ ☐ ☐ | 05, 16 |
+| Écrire un script bash qui passe shellcheck et survit à cron | ☐ ☐ ☐ ☐ | 07, 17 |
+| Savoir quand quitter bash pour Python ou Ansible | ☐ ☐ ☐ ☐ | 07, 23, 27 |
+| Lire `systemctl status` et `journalctl` sans approximation | ☐ ☐ ☐ ☐ | 08, 16 |
 | Écrire et durcir une unité systemd | ☐ ☐ ☐ ☐ | 08 |
-| Réparer une base de paquets cassée sans réinstaller | ☐ ☐ ☐ ☐ | 09 |
-| Ajouter un dépôt tiers proprement (signature, épinglage) | ☐ ☐ ☐ ☐ | 09 |
-| Agrandir un disque à chaud sans interruption | ☐ ☐ ☐ ☐ | 10 |
-| Écrire une ligne `fstab` et la tester avant reboot | ☐ ☐ ☐ ☐ | 10 |
-| Dérouler la checklist réseau couche par couche | ☐ ☐ ☐ ☐ | 11 |
-| Lire une capture `tcpdump` (handshake, RST, retransmission) | ☐ ☐ ☐ ☐ | 11 |
-| Configurer un accès SSH par bastion sans transfert d'agent | ☐ ☐ ☐ ☐ | 12 |
-| Durcir `sshd` sans se verrouiller dehors | ☐ ☐ ☐ ☐ | 12 |
-| Centraliser des logs et écrire une rotation | ☐ ☐ ☐ ☐ | 13 |
-| Interpréter charge, `%wa`, `%st`, mémoire `available` | ☐ ☐ ☐ ☐ | 13, 16 |
-| Détecter qu'une tâche planifiée n'a **pas** tourné | ☐ ☐ ☐ ☐ | 14 |
-| Écrire une politique de pare-feu multi-machines | ☐ ☐ ☐ ☐ | 15 |
-| Résoudre un refus SELinux sans passer en `disabled` | ☐ ☐ ☐ ☐ | 15 |
-| Produire et vérifier un certificat TLS, configurer HTTPS | ☐ ☐ ☐ ☐ | 15 |
-| Gérer des secrets (droits, vault, rotation, jamais en Git) | ☐ ☐ ☐ ☐ | 15, 19, 21 |
-| Appliquer la méthode USE et les 60 premières secondes | ☐ ☐ ☐ ☐ | 16 |
-| Remonter une machine qui ne boote plus | ☐ ☐ ☐ ☐ | 16 |
-| Écrire un post-mortem blameless avec actions datées | ☐ ☐ ☐ ☐ | 16, P3 |
-| Tenir un historique Git propre (commits atomiques, rebase) | ☐ ☐ ☐ ☐ | 17 |
-| Construire une image Docker minimale et reproductible | ☐ ☐ ☐ ☐ | 18 |
-| Écrire un rôle Ansible idempotent et testé | ☐ ☐ ☐ ☐ | 19 |
-| Déclarer une infra en OpenTofu et gérer son état | ☐ ☐ ☐ ☐ | 20 |
-| Concevoir un pipeline CI/CD avec étapes, secrets, rollback | ☐ ☐ ☐ ☐ | 21 |
-| Déployer et exposer une application sur Kubernetes | ☐ ☐ ☐ ☐ | 22 |
-| Définir des SLI/alertes utiles et lire un tableau de bord | ☐ ☐ ☐ ☐ | 13, 22 |
+| Réparer une base de paquets cassée sans réinstaller | ☐ ☐ ☐ ☐ | 10 |
+| Ajouter un dépôt tiers proprement (signature, épinglage) | ☐ ☐ ☐ ☐ | 10 |
+| Agrandir un disque à chaud sans interruption | ☐ ☐ ☐ ☐ | 11 |
+| Écrire une ligne `fstab` et la tester avant reboot | ☐ ☐ ☐ ☐ | 11 |
+| Dérouler la checklist réseau couche par couche | ☐ ☐ ☐ ☐ | 12 |
+| Lire une capture `tcpdump` (handshake, RST, retransmission) | ☐ ☐ ☐ ☐ | 12 |
+| Configurer un accès SSH par bastion sans transfert d'agent | ☐ ☐ ☐ ☐ | 14 |
+| Durcir `sshd` sans se verrouiller dehors | ☐ ☐ ☐ ☐ | 14 |
+| Centraliser des logs et écrire une rotation | ☐ ☐ ☐ ☐ | 16 |
+| Interpréter charge, `%wa`, `%st`, mémoire | ☐ ☐ ☐ ☐ |  |
+| `available` | ☐ ☐ ☐ ☐ | 16, 19 |
+| Détecter qu'une tâche planifiée n'a **pas** tourné | ☐ ☐ ☐ ☐ | 17 |
+| Écrire une politique de pare-feu multi-machines | ☐ ☐ ☐ ☐ | 13, 18 |
+| Résoudre un refus SELinux sans passer en `disabled` | ☐ ☐ ☐ ☐ | 18 |
+| Produire et vérifier un certificat TLS, configurer HTTPS | ☐ ☐ ☐ ☐ | 15, 18 |
+| Gérer des secrets (droits, vault, rotation, jamais en Git) | ☐ ☐ ☐ ☐ | 18, 23, 25 |
+| **Compétence** | **Niveau D A C E** | **Modules** |
+| Appliquer la méthode USE et les 60 premières secondes | ☐ ☐ ☐ ☐ | 19 |
+| Remonter une machine qui ne boote plus | ☐ ☐ ☐ ☐ | 09, 19 |
+| Écrire un post-mortem blameless avec actions datées | ☐ ☐ ☐ ☐ | 19, P3 |
+| Tenir un historique Git propre (commits atomiques, rebase) | ☐ ☐ ☐ ☐ | 21 |
+| Construire une image Docker minimale et reproductible | ☐ ☐ ☐ ☐ | 22 |
+| Écrire un rôle Ansible idempotent et testé | ☐ ☐ ☐ ☐ | 23 |
+| Déclarer une infra en OpenTofu et gérer son état | ☐ ☐ ☐ ☐ | 24 |
+| Concevoir un pipeline CI/CD avec étapes, secrets, rollback | ☐ ☐ ☐ ☐ | 25 |
+| Déployer et exposer une application sur Kubernetes | ☐ ☐ ☐ ☐ | 26 |
+| Définir des SLI/alertes utiles et lire un tableau de bord | ☐ ☐ ☐ ☐ | 16, 26 |
 | Documenter pour quelqu'un d'autre (README, runbook) | ☐ ☐ ☐ ☐ | P1, P2, P3 |
 
 ---
@@ -106,12 +108,12 @@ remplacer le programme.
 
 ### LFCS (Linux Foundation Certified System Administrator)
 
-Examen pratique, 2 h, distribution au choix (Ubuntu ou CentOS Stream). Les
+Examen pratique, 2 h, sur la distribution imposée par la Linux Foundation (Ubuntu dans les sessions récentes; vérifie au moment de l'inscription). Les
 cinq domaines et leur pondération (programme 2024-2025) :
 
 | Domaine LFCS | Poids | Modules du workbook |
 |---|---|---|
-| Operations Deployment | 25 % | 07, 08, 09, 10, 16, 17, 19, 20, 22 |
+| Operations Deployment | 25 % | 07, 08, 09, 10, 16, 17, 19, 20, 22, 24 |
 | Networking | 25 % | 12, 13, 14, 15, 18 |
 | Storage | 20 % | 02, 11 |
 | Essential Commands | 20 % | 01, 02, 03, 05, 06, 21 |
@@ -130,7 +132,7 @@ Détail par domaine, avec ce qui n'est pas ou peu couvert :
   couvert au-delà de ce qu'il demande.
 * **Storage** : partitions, systèmes de fichiers, `fstab`, LVM, RAID `mdadm`,
   LUKS, NFS serveur et client, iSCSI (11), inodes, `du`/`df` (02). Les
-  **quotas disque utilisateur** (`quota`, `edquota`) ne sont pas traités :
+  **quotas disque utilisateur** (`quota`, `edquota`) ne sont qu'en « pour aller plus loin » (seuls les quotas de projet XFS sont pratiqués) :
   `man quota` et le chapitre stockage de l'*Ubuntu Server Guide* suffisent
   en une heure.
 * **Essential Commands** : tout 01 à 06, plus `git` de base (21). Le
@@ -151,6 +153,7 @@ pas de pondération ; les objectifs officiels, face aux modules :
 | Objectif EX200 | Modules | Trous à combler |
 |---|---|---|
 | Understand and use essential tools | 01, 02, 05, 06 | — |
+| Manage software | 10 | dépôts Flatpak, `flatpak install` |
 | Create simple shell scripts | 07 | — |
 | Operate running systems | 08, 09, 16, 17, 19 | `tuned` |
 | Configure local storage | 11 | — |
@@ -174,9 +177,9 @@ Où trouver ce qui manque :
   10 minutes avec la doc Red Hat « Monitoring and managing system status ».
 * **`podman`** : Docker (22) se transpose presque mot pour mot ; ce qui est
   spécifique à l'examen — conteneur rootless lancé comme service utilisateur
-  (`podman generate systemd`, ou Quadlet en RHEL 9.4+), `loginctl
+  (`podman generate systemd`, ou Quadlet en RHEL 9.2+), `loginctl
   enable-linger` — se travaille en deux heures sur `lab-rhel` avec la doc
-  « Building, running, and managing containers ».
+  « Building, running, and managing containers ». **Flatpak** (objectif *Manage software*) : `flatpak remote-add --if-not-exists flathub https://dl. flathub.org/repo/flathub.flatpakrepo`, `flatpak install`, `flatpak list`, `flatpak uninstall` : trente minutes sur `lab-rhel`.
 * **Arguments noyau** persistants : `grubby --update-kernel=ALL --args=...`
   sur RHEL, à la place de `/etc/default/grub` + `update-grub` d'Ubuntu
   (les deux sont en 09).
@@ -188,8 +191,8 @@ modules 24 et 26 en couvrent l'entrée, pas le programme.
 
 | Certification | Ce que le workbook couvre | Ce qu'il ne couvre pas |
 |---|---|---|
-| **CKA** (Kubernetes) | 22 : déployer, exposer, stocker, observer sur k3s ; 16 : méthode de dépannage | architecture du plan de contrôle, `etcd`, RBAC, NetworkPolicy, mises à niveau, ~70 % du programme |
-| **Terraform Associate (003)** | 20 : HCL, providers, état, variables, modules, `plan`/`apply` en OpenTofu | Terraform Cloud/HCP, *workspaces* distants, `import`, fonctions avancées ; syntaxe OpenTofu ≈ Terraform 1.6 |
+| **CKA** (Kubernetes) | 26 : déployer, exposer, stocker, observer sur k3s; 19 : méthode de dépannage | architecture du plan de contrôle, `etcd`, RBAC, NetworkPolicy, mises à niveau, ~70 % du programme |
+| **Terraform Associate (003)** | 24 : HCL, providers, état, variables, modules, `plan`/`apply` en OpenTofu | Terraform Cloud/HCP, *workspaces* distants, `import`, fonctions avancées ; syntaxe OpenTofu ≈ Terraform 1.6 |
 
 Pour la CKA, le programme officiel (Cluster Architecture 25 %, Workloads
 15 %, Services & Networking 20 %, Storage 10 %, Troubleshooting 30 %) et
@@ -204,9 +207,9 @@ met en confiance avec `kubectl`, il ne te prépare pas à l'examen.
 
 | Profil | Ce qu'on te demande | Modules qui pèsent le plus |
 |---|---|---|
-| **SRE** | fiabilité mesurée (SLI/SLO), astreinte, post-mortem, capacité, automatisation des toils | 08, 11, 13, 14, 16, 22, P3 |
-| **DevOps / Platform** | chaîne de livraison, conteneurs, IaC, plateforme interne pour les devs | 07, 17, 18, 19, 20, 21, 22, P2 |
-| **Ops cloud / système** | parc de VM, patching, stockage, réseau, sécurité, coût | 04, 09, 10, 11, 12, 15, 19, 20, P1 |
+| **SRE** | fiabilité mesurée (SLI/SLO), astreinte, post-mortem, capacité, automatisation des toils | 08, 12, 16, 17, 19, 26, P3 |
+| **DevOps / Platform** | chaîne de livraison, conteneurs, IaC, plateforme interne pour les devs | 07, 21, 22, 23, 24, 25, 26, P2 |
+| **Ops cloud / système** | parc de VM, patching, stockage, réseau, sécurité, coût | 04, 10, 11, 12, 14, 18, 20, 23, 24, P1 |
 
 Les frontières sont floues et dépendent de la taille de l'entreprise : dans
 une PME, un seul poste fait les trois. Le socle **système** (01 à 19) est
@@ -225,7 +228,7 @@ demande de savoir chercher et de ne pas casser la production en cachette.
 **Confirmé (3 à 6 ans)** : niveau *Confirmé* sur la moitié de la grille.
 On attend que tu conçoives (une architecture de déploiement, une politique
 de sauvegarde, une stratégie de supervision), que tu mènes un incident et
-son post-mortem, que tu formes un junior, que tu arbitres entre deux
+son postmortem, que tu formes un junior, que tu arbitres entre deux
 solutions en tenant compte du coût et de la dette, et que tu saches dire non
 à une demande dangereuse en proposant une alternative.
 
@@ -236,40 +239,40 @@ que tu as **fait** dans ce module. Entraîne-toi à y répondre à voix haute
 en deux minutes, avec un exemple concret tiré de ton carnet.
 
 1. Que se passe-t-il, étape par étape, entre l'appui sur *Entrée* et
-   l'affichage d'une page web ? (11, 12, 15)
+   l'affichage d'une page web ? (12, 13, 15, 18)
 2. Un serveur affiche une charge de 40 sur 4 cœurs. Que fais-tu dans les
-   soixante premières secondes ? (13, 16)
-3. `df` dit que le disque est plein, `du` ne trouve rien. Explique. (02, 16)
+   soixante premières secondes ? (16, 19)
+3. `df` dit que le disque est plein, `du` ne trouve rien. Explique. (02, 19)
 4. Quelle est la différence entre `kill -15` et `kill -9`, et pourquoi la
    seconde est-elle un aveu d'échec ? (08)
 5. Un script marche dans ton shell mais pas dans cron. Cinq causes
-   probables, dans l'ordre où tu les vérifies. (07, 14)
+   probables, dans l'ordre où tu les vérifies. (07, 17)
 6. Comment agrandis-tu le disque d'une VM en production sans redémarrer ?
-   (10)
+   (11)
 7. Un utilisateur ne peut plus se connecter en SSH. Déroule ton
-   diagnostic. (04, 12)
-8. Explique `ProxyJump` et pourquoi tu refuses le transfert d'agent. (12)
+   diagnostic. (04, 14)
+8. Explique `ProxyJump` et pourquoi tu refuses le transfert d'agent. (14)
 9. Qu'est-ce qu'un zombie, faut-il s'en inquiéter, et que fais-tu d'un
-   processus en état `D` ? (08, 16)
+   processus en état `D` ? (08, 19)
 10. Comment structures-tu une politique de pare-feu sur trois machines, et
-    pourquoi l'ordre des règles compte-t-il ? (15)
+    pourquoi l'ordre des règles compte-t-il ? (13, 18)
 11. SELinux bloque ton application. Qu'est-ce qui est interdit, et que fais-tu
-    à la place ? (15)
+    à la place ? (18)
 12. Un secret a été commité dans Git. Quelles sont les étapes, dans l'ordre ?
-    (15, 17)
+    (18, 21)
 13. Quelle est la différence entre une image et un conteneur, et pourquoi ton
-    Dockerfile a-t-il deux étapes ? (18)
+    Dockerfile a-t-il deux étapes ? (22)
 14. Qu'est-ce que l'idempotence, et comment vérifies-tu qu'un rôle Ansible
-    l'est ? (19)
+    l'est ? (23)
 15. Que contient le fichier d'état OpenTofu/Terraform, pourquoi est-il
-    sensible, et comment le partages-tu en équipe ? (20)
+    sensible, et comment le partages-tu en équipe ? (24)
 16. Décris un pipeline de déploiement de bout en bout et où se trouve le
-    rollback. (21)
+    rollback. (25)
 17. Ton pod est en `CrashLoopBackOff`. Quelles commandes, dans quel ordre ?
-    (16, 22)
+    (19, 26)
 18. Qu'est-ce qu'un post-mortem blameless, et que contient-il
-    obligatoirement ? (16, P3)
-19. Comment sais-tu qu'une sauvegarde fonctionne ? (06, 14, P1)
+    obligatoirement ? (19, P3)
+19. Comment sais-tu qu'une sauvegarde fonctionne ? (06, 15, 17, P1)
 20. Raconte un incident que tu as géré : détection, diagnostic, correction,
     ce que tu as changé après. (P3, ton carnet)
 
@@ -279,7 +282,7 @@ Un recruteur technique regarde ton dépôt avant de te parler. Le workbook
 t'en donne un, à condition de le rendre public et lisible :
 
 * **Un dépôt public** (GitHub, GitLab ou Codeberg) nommé clairement, par
-  exemple `devops-workbook`, avec les livrables des défis (`D07`, `D11`,
+  exemple `devops-workbook`, avec les livrables des défis (`D7`, `D11`,
   `D18`…), les rôles Ansible et le code OpenTofu de P2, les post-mortem et
   le runbook de P3. Pas les corrigés du workbook, pas les énoncés : ton
   travail. Aucun secret, aucune IP publique réelle, aucun nom de client.
@@ -349,8 +352,8 @@ inconnu, pas de site qui vend une certification.
 ## Annexe D — Modèles
 
 Les quatre modèles sont reproduits ici pour être copiés dans `~/carnet/`
-(carnet), `~/lab19/rapports/` (post-mortem, runbook) ou le dépôt de P2
-(demande de changement). Ils sont aussi installés par `setup_M19.sh` dans
+(carnet), `~/lab19/rapports/` (postmortem, runbook) ou le dépôt de P2
+(demande de changement). Le post-mortem et le runbook sont aussi installés par `setup_M19.sh` dans
 `~/lab19/modeles/`.
 
 ### D.1 Carnet de bord de lab

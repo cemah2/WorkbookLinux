@@ -106,7 +106,7 @@ fois dans ce module.
 `#!/usr/bin/env bash` cherche bash dans le `PATH` (portable, indispensable dès
 qu'un bash récent est installé ailleurs que `/bin/bash`) ; `#!/bin/bash` fige
 le chemin. Un shebang sans bit `x` donne `Permission denied` ; un fichier avec
-des fins de ligne Windows donne `bad interpreter: No such file or directory`.
+des fins de ligne Windows donne `bad interpreter: No such file or directory` (avec `#!/bin/bash`) ou `/usr/bin/env: 'bash\r': No such file or directory`.
 
 @fig(bash-anatomie): Squelette d'un script robuste, bloc par bloc, et ce que chaque bloc protège.
 
@@ -826,7 +826,7 @@ revue de code), modifier `purge.conf` pour contourner le problème.
 l'effacement total, expliquer pourquoi ni le shell ni le script n'ont protesté,
 corriger, puis prouver que le script ne supprime plus que les fichiers de plus
 de 7 jours du seul sous-répertoire visé. Le script corrigé doit aussi traiter
-correctement `dump du soir.tar.gz` — vérifie ce qu'il en fait avant ta
+correctement `export final.tar.gz` (dans `prod`) — vérifie ce qu'il en fait avant ta
 correction. Enfin, liste les trois gardes que tu ajoutes pour qu'un `$SOUS`
 vide ne puisse plus jamais produire cet effet.
 

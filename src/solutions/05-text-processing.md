@@ -230,8 +230,7 @@ c'est `<<-`, et ça ne marche qu'avec de vraies tabulations, pas des espaces.
 sortie, que `diff` interprète alors comme des noms de fichiers : réponse a) exclue.
 `<<<` alimente stdin, dont `diff` n'a qu'un exemplaire : réponse c) exclue. La
 substitution de processus `<(cmd)` crée un descripteur `/dev/fd/63` que `diff`
-ouvre comme un fichier ordinaire. La réponse d) fonctionne aussi, mais elle mélange
-deux styles et n'accepte qu'un seul flux via `-`.
+ouvre comme un fichier ordinaire. La réponse d) ne donne qu'un seul opérande à `diff`, qui refuse (`missing operand`) : un tube n'est pas un argument, il faudrait écrire explicitement `diff` `-` `<(…)`, où `-` désigne stdin.
 :::
 
 ---
@@ -278,7 +277,7 @@ set -o pipefail
 pg_dump base | gzip > dump.sql.gz
 ```
 
-Correction 2, sans `pipefail` (utile en `sh` POSIX) :
+Correction 2, sans `pipefail`, en lisant `PIPESTATUS` (bash uniquement, comme `pipefail` ; utile pour savoir **quel** maillon a échoué) :
 
 ```bash
 pg_dump base | gzip > dump.sql.gz
@@ -355,9 +354,8 @@ gigaoctets recopie inutilement toutes les données en espace utilisateur.
 2. **La borne de clé.** `-k2` va du champ 2 à la fin de ligne ; si les données de
    production ont une colonne de plus, la clé n'est plus la même. Commande :
    `awk '{ print NF }' fichier | sort -u`.
-3. **Le séparateur.** Sans `-t`, `sort` découpe sur des suites de blancs et ignore
-   les blancs de tête ; un fichier aligné à la tabulation et un fichier aligné à
-   l'espace ne donnent pas les mêmes champs. Commande : `cat -A fichier | head`.
+3. **Le séparateur.** Sans `-t`, un champ commence à la transition non-blanc → blanc et **inclut** ses blancs de tête (sauf avec `-b`) ; avec `-t$'\t'`, un fichier dont les colonnes ont été alignées à
+   l'espace n'a plus qu'un champ. Commande : `cat -A fichier | head`.
 
 ::: pourquoi
 Un quatrième suspect classique : des valeurs non numériques dans la colonne (`N/A`,
@@ -391,8 +389,7 @@ Trois cas concrets qui cassent :
 1. Le JSON est reformaté : `"version": "2.7.1"` avec une espace après les deux
    points, ou réparti sur deux lignes — `grep` travaille ligne à ligne, plus rien
    ne correspond.
-2. Le mot `version` apparaît ailleurs : `"agent_version"`, `"version_min"`, ou dans
-   une chaîne de description. Le motif matche tout.
+2. La clé `version` existe à plusieurs niveaux (`"os"` : `{``"version": …}`, `"agent": {"version": …}`) : le motif les attrape toutes, sans dire laquelle est laquelle.
 3. La valeur n'est pas une chaîne (`"version": 3`) ou contient un guillemet
    échappé (`"nom": "jeu \"pro\""`) : `[^"]*` s'arrête au mauvais endroit.
 
@@ -415,10 +412,10 @@ cd ~/lab05
 # 1. le volume a-t-il augmenté ? (pic de trafic ?)
 awk '{ print substr($4, 14, 2) }' access.log | sort | uniq -c | sort -k2,2
 # 2. quels endpoints, sur la tranche concernée ?
-awk '$4 ~ /:1[45]:/ { u = $7; sub(/\?.*/, "", u); print u }' access.log \
-  | sort | uniq -c | sort -rn | head
+awk 'substr($4, 14, 2) ~ /^1[45]$/ { u = $7; sub(/\?.*/, "", u); print u }' \
+  access.log | sort | uniq -c | sort -rn | head
 # 3. lesquels sont lents ? (moyenne et max par endpoint)
-awk '$4 ~ /:1[45]:/ { u = $7; sub(/\?.*/, "", u)
+awk 'substr($4, 14, 2) ~ /^1[45]$/ { u = $7; sub(/\?.*/, "", u)
        n[u]++; s[u] += $NF; if ($NF > m[u]) m[u] = $NF }
      END { for (k in n) if (n[k] > 20)
              printf "%7.3f %7.3f %5d %s\n",
@@ -427,7 +424,7 @@ awk '$4 ~ /:1[45]:/ { u = $7; sub(/\?.*/, "", u)
 # 4. est-ce corrélé à des erreurs ? (5xx par heure)
 awk '$9 ~ /^5/ { print substr($4, 14, 2) }' access.log | sort | uniq -c
 # 5. un client unique est-il responsable ? (top IP sur la tranche)
-awk '$4 ~ /:1[45]:/ { print $1 }' access.log \
+awk 'substr($4, 14, 2) ~ /^1[45]$/ { print $1 }' access.log \
   | sort | uniq -c | sort -rn | head -5
 # 6. le volume de données a-t-il explosé ? (octets par heure)
 awk '{ o[substr($4, 14, 2)] += $10 }
@@ -462,11 +459,8 @@ dans le second bloc (qui n'a pas de motif, donc s'applique à toutes les lignes)
 produiraient des sorties parasites. `next` passe immédiatement à l'enregistrement
 suivant, comme un `continue` de boucle.
 
-Si le premier fichier est **vide**, `NR == FNR` n'est jamais vraie et la condition
-se comporte correctement… mais la table reste vide, et chaque consultation renvoie
-la chaîne vide, silencieusement. Prémunition : vérifier en `END` que la table a été
-chargée (`if (!(cle in dc)) print "correspondance manquante: " $9 > "/dev/stderr"`),
-ou tester la taille du fichier avant. Autre piège : si les deux fichiers sont le
+Si le premier fichier est **vide**, `NR == FNR` reste vraie pendant **toute** la lecture du second (aucune ligne n'a été lue avant) : c'est lui qui est chargé comme table, `next` saute chacune de ses lignes, et le programme ne produit rien, silencieusement. Parade : tester `FILENAME == ARGV[1]` au lieu de `NR == FNR`,
+ou vérifier la taille du fichier avant (`[ -s sites.csv ] || exit 1`). Autre piège : si les deux fichiers sont le
 **même** fichier, `NR == FNR` reste vraie tout du long.
 :::
 
@@ -568,7 +562,7 @@ en une passe :
 ::: piege
 Filtrer les sondes de monitoring **avant** de calculer des moyennes est
 indispensable : ici `/health` représente 991 requêtes à 2 ms. Les laisser dans le
-calcul divise le temps de réponse moyen global par deux et te fait conclure que
+calcul tire le temps de réponse moyen global vers le bas (0,25 s au lieu de 0,29 s ; 0,40 s si l'on écarte aussi les assets statiques) et te fait conclure que
 « tout va bien » pendant que les vrais clients attendent.
 :::
 
@@ -590,7 +584,7 @@ awk '$9 == 404 { print $7 }' access.log | sort | uniq -c | sort -rn | head -5
 ::: pourquoi
 `sort -u` dédoublonne sans compter, `sort | uniq -c` compte. Les 91 URL distinctes
 se répartissent entre six chemins d'attaque très demandés et une longue traîne de
-`/produit/<id>` inexistants. Un top 5 de 404 dominé par `/wp-login.php` et `/.env`
+`/produit/<id>` inexistants. Un top 5 de 404 dominé par `/phpmyadmin/index.php` et `/.git/config`
 sur un site qui n'est ni WordPress ni PHP, c'est la signature d'un scanner
 automatique : ce n'est pas un problème applicatif, c'est du bruit de fond d'internet.
 :::
@@ -632,7 +626,7 @@ utile n'est pas « qui est humain » mais « qui peut ouvrir un shell » :
 
 ```bash
 sort -t, -k10,10nr serveurs.csv | head -5 | cut -d, -f1,10
-tail -n +2 serveurs.csv | sort -t, -k2,2 -k10,10nr | cut -d, -f1,2,10 | head -8
+tail -n +2 serveurs.csv | sort -t, -k2,2 -k10,10nr | cut -d, -f1,2,10 | head -5
 ```
 
 ```text
@@ -728,7 +722,8 @@ grep -m1 -B1 -A10 'OutOfMemoryError' app.log
 ```text
 (première ligne repliée ici pour la mise en page)
 2026-09-18 07:35:06.671 ERROR [kafka-consumer-0]
-   fr.lab.factura.service.PaiementService - echec de la requete 45320
+   fr.lab.factura.service.PaiementService
+   - echec du traitement de la requete 45320
 java.lang.OutOfMemoryError: Java heap space
 	at fr.lab.factura.web.CommandeController.traiter(CommandeController.java:375)
 	at fr.lab.factura.service.PaiementService.executer(PaiementService.java:358)
@@ -1076,7 +1071,7 @@ worker pendant quatre secondes.
 Deux fautes classiques dans ce lab. Ne pas normaliser les URL : les moyennes de
 temps de réponse sont alors calculées sur des échantillons de 1 et le classement
 n'a aucun sens. Et calculer un temps de réponse moyen **global** en incluant
-`/health` (991 requêtes à 2 ms) et les assets statiques : la moyenne tombe à 0,2 s
+`/health` (991 requêtes à 2 ms) et les assets statiques : la moyenne tombe à 0,25 s (contre 0,40 s sans eux)
 et tu conclus que tout va bien.
 :::
 
@@ -1253,7 +1248,7 @@ awk '$3 == "ERROR" { print $4 }' app.log | sort | uniq -c | sort -rn
      20 [kafka-consumer-0]
 ```
 
-Aucun thread n'est réellement sur-représenté : 37 contre 27 sur cinq threads, c'est
+Aucun thread n'est réellement sur-représenté : de 20 à 37 sur cinq threads, soit 29 en moyenne, c'est
 du bruit. La bonne réponse à la question posée est « non », et il faut le dire.
 
 **Étape 6 — extraire les `OutOfMemoryError` avec leur pile**
@@ -1327,7 +1322,7 @@ export-tableur.csv: CSV Unicode text, UTF-8 (with BOM) text
 
 ```bash
 bash encodages/deploiement.sh
-# -> ./deploiement.sh: line 2: set: pipefail: invalid option name
+# -> encodages/deploiement.sh: line 2: set: pipefail: invalid option name
 cat -A encodages/deploiement.sh | head -2
 # -> #!/usr/bin/env bash^M$
 sed -i 's/\r$//' encodages/deploiement.sh       # ou dos2unix
@@ -1516,12 +1511,16 @@ passerait à travers. Toujours ancrer l'extraction sur le mot-clé qui donne le 
 ```bash
 bash ~/lab05/bin/rapport-quotidien.sh ; echo "code : $?"
 cat ~/lab05/rapports/quotidien.txt        # -> une seule ligne de titre
-bash -x ~/lab05/bin/rapport-quotidien.sh 2>&1 | head -5
+bash -x ~/lab05/bin/rapport-quotidien.sh 2>&1 | head -6
++ set -eu
 ```
 
 ```text
 + JOUR=2026-09-18
-+ grep -F 2026-09-18 /root/lab05/access.log
++ SRC=/home/mathieu/lab05/access.log
++ OUT=/home/mathieu/lab05/rapports/quotidien.txt
++ echo '== Rapport du 2026-09-18 =='
++ grep -F 2026-09-18 /home/mathieu/lab05/access.log
 ```
 
 ```bash
@@ -1633,7 +1632,7 @@ Prévention : un contrôle en CI (`file conf/*.env | grep -q CRLF && exit 1`), u
 configuration après normalisation.
 :::
 
-### BF5.3 — La même IP à trois rangs différents
+### BF5.3 — La même IP à deux rangs différents
 
 **Diagnostic**
 
@@ -1775,7 +1774,7 @@ awk -F, 'NR > 1 { n++; t += $10 }
          END { printf "%d hotes  %.2f EUR\n", n, t }' serveurs.csv
 
 # coût des hôtes non supervisés                             -> 1872.00 EUR
-grep -Ff <(comm -23 hosts-cmdb.txt hosts-supervision.txt) serveurs.csv \
+grep -wFf <(comm -23 hosts-cmdb.txt hosts-supervision.txt) serveurs.csv \
   | awk -F, '{ t += $10 } END { printf "%.2f EUR\n", t }'
 
 # hôtes dont le disque dépasse 85 %                                  -> 7
@@ -1817,7 +1816,7 @@ personne ; « 3,908 s de moyenne sur 122 appels, 22 fois les pages HTML » donne
 ordre de grandeur, un volume et un point de comparaison, donc une décision possible.
 
 **Aucun fichier temporaire.** `<(comm -23 …)` fournit la liste des hôtes non
-supervisés directement à `grep -F`, sans passer par `/tmp`. Un fichier temporaire
+supervisés directement à `grep -wF` (`-w` : pas de sous-chaîne), sans passer par `/tmp`. Un fichier temporaire
 oublié, c'est une exécution concurrente qui se marche dessus et un rapport faux une
 fois sur dix — le pire des cas, parce qu'il est crédible.
 :::

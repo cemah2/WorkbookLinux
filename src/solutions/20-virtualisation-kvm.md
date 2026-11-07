@@ -138,7 +138,7 @@ différence est le **protocole** transporté dans les virtqueues.
 `virtio-blk` transporte des requêtes bloc brutes : simple, court chemin,
 excellent en latence, mais chaque disque est un périphérique PCI (limite
 pratique de quelques dizaines), et longtemps sans TRIM (supporté depuis
-QEMU 5.0). Les disques apparaissent en `/dev/vdX`.
+QEMU 4.0). Les disques apparaissent en `/dev/vdX`.
 
 `virtio-scsi` transporte des **commandes SCSI** vers un contrôleur unique
 qui peut porter des milliers de LUN : `/dev/sdX`, `UNMAP` (TRIM) natif,
@@ -205,8 +205,8 @@ utilise, c'est un `SIGILL` dans l'invité au premier usage, sans avertissement.
 possible, mais migration uniquement vers un hôte **strictement identique**.
 `host-model` demande à libvirt de trouver le modèle nommé le plus proche
 (`Skylake-Client-IBRS`, `EPYC-Rome`…) plus les drapeaux supplémentaires :
-migrable vers tout hôte qui supporte ce modèle. `custom` avec un modèle
-commun (`x86-64-v2-AES`, le défaut Proxmox depuis la version 8) est le
+migrable vers tout hôte qui supporte ce modèle. `custom` avec un modèle nommé
+commun (`Westmere`, `Skylake-Client`…; côté Proxmox, `x86-64-v2-AES`, son défaut depuis la version 8) est le
 dénominateur le plus sûr dans un cluster hétérogène, au prix de quelques
 instructions. `migratable='on'` sur `host-passthrough` ne fait que retirer
 les drapeaux connus comme non migrables ; il ne rend pas deux CPU
@@ -251,9 +251,8 @@ boucle sur `virsh domstate`. Proxmox fait exactement la même chose avec
 **Réponse : b)**
 
 ::: pourquoi
-Un snapshot **externe** ne copie rien. libvirt demande à QEMU (commande
-QMP `blockdev-snapshot-sync`, ou `transaction` avec `--atomic` pour
-plusieurs disques) de créer un **nouveau fichier qcow2** dont le backing
+Un snapshot **externe** ne copie rien. libvirt demande à QEMU (commandes
+QMP `blockdev-add` + `blockdev-snapshot`, groupées dans une `transaction`) de créer un **nouveau fichier qcow2** dont le backing
 file est le disque actuel, puis de basculer les écritures de l'invité dans
 ce nouveau fichier. L'ancien fichier `vm-01.qcow2` n'est plus jamais écrit :
 il est figé à l'instant du snapshot, ce qui est précisément ce qui le rend
@@ -291,7 +290,7 @@ redémarre.
 
 ::: piege
 Sans `--active`, `blockcommit` refuse de fusionner la couche active
-(`top image is the active layer`) ; on l'utilise alors avec `--top`/`--base`
+(`commit of 'vda' active layer requires active flag`) ; on l'utilise alors avec `--top`/`--base`
 pour fusionner des couches **intermédiaires** d'une longue chaîne. Et si tu
 lances `blockcommit` sans `--pivot` ni `--wait`, le job reste en état
 `ready` indéfiniment : `virsh blockjob vm-01 vda --info` le montre, et un
@@ -384,7 +383,7 @@ profil généré autoriserait ce chemin, c'est le DAC qui bloque.
 
 ::: pourquoi
 `virsh domifaddr` a trois sources. `--source lease` (défaut) lit les baux du
-`dnsmasq` de libvirt (`/var/lib/libvirt/dnsmasq/<réseau>.status`) : il ne
+`dnsmasq` de libvirt (`/var/lib/libvirt/dnsmasq/<bridge>.status`, ici `virbr0.status`) : il ne
 connaît que les réseaux que libvirt sert en DHCP, donc rien pour un bridge
 externe ou une adresse statique. `--source agent` interroge
 `qemu-guest-agent` (`guest-network-get-interfaces`) : exact, toutes les
@@ -484,7 +483,7 @@ fond, les écritures de l'invité sont dupliquées, puis la RAM suit.
 
 Condition : le fichier de destination doit **exister** sur la cible, au
 chemin indiqué dans le XML, à la bonne taille (`qemu-img create -f qcow2
-... 20G`), sinon `Cannot access storage file`. `--offline` n'est pas une
+... 20G`) — libvirt ne le pré-crée lui-même que si ce chemin appartient à un pool actif de la cible. `--offline` n'est pas une
 migration à chaud, et copier un qcow2 en cours d'écriture donne une image
 incohérente.
 :::
@@ -654,8 +653,7 @@ coupure réseau pendant le post-copy tue la VM).
 Prérequis : CPU compatible (`host-model` ou modèle commun), même chipset
 QEMU (`pc-q35-8.2`), stockage partagé ou `--copy-storage-all`, même bridge
 disponible côté cible, `libvirtd` joignable (`qemu+ssh://` ou TLS), pas de
-périphérique non migrable (passthrough PCI, `cache='writeback'` sur
-stockage non partagé est refusé). Ports 49152-49215 ouverts pour le flux.
+périphérique non migrable (passthrough PCI); un disque **partagé** en `cache='writeback'` fait refuser la migration (`--unsafe` pour forcer). Ports 49152-49215 ouverts pour le flux.
 
 Proxmox : `qm migrate 9002 pve2 --online [--with-local-disks]` fait tout ça
 (tunnel SSH ou réseau de migration dédié, copie des disques locaux par
@@ -992,9 +990,10 @@ qemu-img info --backing-chain test.qcow2
 # image: /var/lib/libvirt/images/ubuntu-24.04-base.qcow2
 # virtual size: 3.5 GiB        disk size: 584 MiB
 qemu-img rebase -u -F qcow2 -b /tmp/base.qcow2 test.qcow2
-qemu-img info test.qcow2
-# qemu-img: Could not open 'test.qcow2': Could not open backing file:
-# Could not open '/tmp/base.qcow2': No such file or directory
+qemu-img info test.qcow2 | grep '^backing file:'   # /tmp/base.qcow2
+qemu-img info --backing-chain test.qcow2
+# qemu-img: Could not open '/tmp/base.qcow2': Could not open
+# '/tmp/base.qcow2': No such file or directory
 qemu-img rebase -u -F qcow2 \
   -b /var/lib/libvirt/images/ubuntu-24.04-base.qcow2 test.qcow2
 ```
@@ -1073,7 +1072,7 @@ ou vFAT. `cloud-localds` n'est qu'un enrobage de `genisoimage -volid cidata
 -joliet -rock` (ou `xorriso`), ce que la seconde commande refait à la main :
 c'est ce qu'on utilise sur Rocky, où `cloud-localds` n'existe pas.
 
-Rock Ridge (`-rock`) est nécessaire : sans lui, ISO 9660 majuscule et
+Une extension de noms (`-rock` et/ou `-joliet`) est nécessaire : sans elle, ISO 9660 majuscule et
 tronque les noms (`USER_DAT.;1`) et cloud-init ne trouve rien. `isoinfo -R`
 affiche les noms Rock Ridge.
 
@@ -1220,8 +1219,8 @@ la sortie (`--force` pour reprendre).
 ```bash
 virsh qemu-agent-command vm-01 '{"execute":"guest-ping"}'     # {"return":{}}
 virsh qemu-agent-command vm-01 '{"execute":"guest-info"}' \
-  | jq '.return.version, [.return.supported_commands[]
-          | select(.enabled) | .name] | length'
+  | jq '.return.version, ([.return.supported_commands[]
+          | select(.enabled) | .name] | length)'
 virsh domfsinfo vm-01                # Mountpoint  Name  Type  Target
 virsh domhostname vm-01              # vm-01
 virsh domifaddr vm-01 --source agent # lo + enp1s0 avec IPv4 et IPv6
@@ -1253,7 +1252,7 @@ via `--block-rpcs`), lire ou écrire un fichier.
 `guestinfo`, `domfsfreeze`, `domtime`) et `qemu-agent-command` donne accès à
 tout le reste. Proxmox fait exactement la même chose avec `qm agent
 <vmid> <commande>` et `qm guest exec` — c'est le même `qemu-ga` dans
-`lab-virt`, branché sur le même type de canal (`--agent enabled=1` ajoute le
+`lab-virt`, branché sur le même type de canal (`- -agent enabled=1` ajoute le
 `virtio-serial` à la VM Proxmox). Et c'est ce même agent qui permet à
 `vzdump --mode snapshot` de geler le FS et à Proxmox d'afficher l'IP dans
 l'interface. Sans agent : `--source arp`, `virsh console`, et des snapshots
@@ -1358,8 +1357,8 @@ ssh mathieu@IP 'yes >/dev/null & yes >/dev/null & sleep 1'
 virsh cpu-stats vm-01 --total   # Total: cpu_time 84.2s user_time system_time
 sleep 10 ; virsh cpu-stats vm-01 --total       # ~ +10 s en 10 s
 virsh domstats vm-01 --cpu-total   # cpu.time=94213456789 (ns) cpu.user ...
-virt-top -b -n 1 | tail -3   # ID S RDRQ WRRQ RXBY TXBY %CPU %MEM TIME NAME
-                             #  1 R    0    0    0    0 99.8  16.4 ... vm-01
+virt-top -b -n 2 | tail -3   # ID S RDRQ WRRQ RXBY TXBY %CPU %MEM TIME NAME
+                             #  1 R    0    0    0    0 25.0  16.4 ... vm-01
 ssh mathieu@IP 'top -bn1 | grep Cpu' # ... 0.0 wa, 0.0 hi, 0.0 si, 0.3 st
 for i in 1 2 3 4; do yes >/dev/null & done     # sur lab-virt
 ssh mathieu@IP 'top -bn1 | grep Cpu' # ... 35.2 st   (varie)
@@ -1372,7 +1371,7 @@ unique vCPU est saturé par deux `yes`). `cpu-stats` et `domstats` lisent
 les compteurs du cgroup (`cpu.stat`) : `cpu_time` cumule le temps CPU
 donné à la VM, tous threads confondus ; la dérivée sur 10 s donne l'usage.
 `virt-top` fait cette dérivée et affiche un `%CPU` normalisé par le nombre
-de CPU hôte (`99.8` = un cœur entier).
+de CPU hôte (`25.0` = un cœur entier sur les 4 de `lab-virt`); la première trame n'a pas de mesure précédente et affiche 0, d'où `-n 2`.
 
 Puis on sature l'hôte : 4 `yes` sur 4 vCPU de `lab-virt`, plus le thread
 vCPU de `vm-01`, plus les threads QEMU : 5 demandeurs pour 4 CPU. Le CFS de
@@ -1742,12 +1741,11 @@ network:
       nameservers:
         addresses: [10.10.10.1]
         search: [lab.local]
-      parameters:
-        stp: false
-        forward-delay: 0
 EOF
 sudo chmod 600 /etc/netplan/*.yaml
 sudo netplan try          # Entrée pour confirmer dans les 120 s
+# pas de bloc parameters: (stp, forward-delay) : netplan try refuse un
+# bridge qui en a (« reverting custom parameters ... is not supported »)
 ip -br addr show br0      # br0  UP  10.10.10.16/24
 bridge link               # 2: eth0: ... master br0 state forwarding
 ping -c2 10.10.10.10
@@ -1924,7 +1922,7 @@ l'hôte répond (`10.20.0.1` est à lui), rien ne sort. Retire les règles
 **Étapes 1-2 — pool et base**
 
 ```bash
-virsh pool-define-as lab20 dir --target /srv/vm      # ou net-define du gabarit
+virsh pool-define-as lab20 dir --target /srv/vm      # ou pool-define du gabarit
 virsh pool-build lab20 ; virsh pool-start lab20 ; virsh pool-autostart lab20
 ls -ld /srv/vm                    # drwx--x--x 2 root root ... /srv/vm
 sudo cp /var/lib/libvirt/images/ubuntu-24.04-base.qcow2 /srv/vm/
@@ -2013,7 +2011,8 @@ sudo virt-sysprep -d clone-4 --hostname clone-4 \
   --operations defaults,-ssh-userdir
 # seed neuf
 d=~/lab20/cloud-init/clone-4; mkdir -p $d
-sed 's/clone-1/clone-4/g' ../clone-1/user-data > $d/user-data
+sed 's/clone-1/clone-4/g' ~/lab20/cloud-init/clone-1/user-data \
+  > $d/user-data
 printf 'instance-id: %s\nlocal-hostname: clone-4\n' "$(uuidgen)" > $d/meta-data
 cloud-localds $d/seed.iso $d/user-data $d/meta-data
 virsh vol-create-as lab20 clone-4-seed.iso "$(stat -c %s $d/seed.iso)" \
@@ -2485,11 +2484,9 @@ virsh destroy vm-01
 virsh edit vm-01
 #   <domain type='kvm'>
 #   <cpu mode='host-passthrough' check='none' migratable='on'/>
-# (ou en une ligne :)
-virsh dumpxml --inactive vm-01 \
-  | sed -e "s/<domain type='qemu'>/<domain type='kvm'>/" \
-        -e "s#<cpu mode='custom'.*</cpu>#<cpu mode='host-passthrough'/>#" \
-  | virsh define /dev/stdin
+# (ou sans éditeur, en deux commandes virt-xml :)
+virt-xml vm-01 --edit --xml ./@type=kvm
+virt-xml vm-01 --edit --cpu host-passthrough
 time (virsh start vm-01; until virsh qemu-agent-command vm-01 \
   '{"execute":"guest-ping"}' >/dev/null 2>&1; do sleep 1; done)   # ~25 s
 ps -o args -C qemu-system-x86_64 | grep -o -- '-accel [a-z]*'    # kvm
@@ -2510,8 +2507,8 @@ dû le remplacer pour que ça démarre — c'est un indice.
 **Prévention** : le XML est la seule vérité ; toute modification passe par
 `virsh edit` (validation) et un dépôt Git des XML (`virsh dumpxml
 --inactive` versionné, D20). Un contrôle de conformité peut tourner en
-cron : `for d in $(virsh list --name --all); do virsh dumpxml $d | head -1
-| grep -q "type='kvm'" || echo "$d en TCG"; done`. `virt-top` rend le
+cron : `for d in $(virsh list --name --all); do virsh dumpxml $d | head -1 |
+grep -q "type='kvm'" || echo "$d en TCG"; done`. `virt-top` rend le
 symptôme visible en un coup d'œil : une VM à 100 % qui ne fait rien.
 :::
 
@@ -2561,7 +2558,6 @@ network:
       addresses: [10.10.10.16/24]
       routes: [{to: default, via: 10.10.10.1}]
       nameservers: {addresses: [10.10.10.1], search: [lab.local]}
-      parameters: {stp: false, forward-delay: 0}
 EOF
 sudo chmod 600 /etc/netplan/*.yaml
 sudo netplan try                  # confirmer ; qm terminal 9007 en secours
@@ -2654,8 +2650,8 @@ La leçon d'exploitation : une chaîne qcow2 est une **dépendance
 invisible**. `virsh` ne la montre que sur une VM allumée ; `qemu-img info
 --backing-chain` est la seule commande qui la liste à froid, et elle doit
 faire partie de toute procédure de déplacement, renommage ou archivage
-(`find /srv/vm -name '*.qcow2' -exec qemu-img info --backing-chain {} \;
-| grep 'backing file'`). Deux protections : des chemins **relatifs** dans
+(`find /srv/vm -name '*.qcow2' -exec qemu-img info --backing-chain {} \; |
+grep 'backing file'`). Deux protections : des chemins **relatifs** dans
 les overlays (`qemu-img create -b ubuntu-24.04-base.qcow2` depuis le
 répertoire du pool : la chaîne survit à un déplacement du répertoire
 entier), et un nom de base explicite avec `chmod 0444` pour que personne ne
@@ -2673,10 +2669,8 @@ qui gèrent la relation : qcow2 `base-<id>-disk-0`, ZFS, LVM-thin).
 ```bash
 virsh start import-1
 # error: Failed to start domain 'import-1'
-# error: internal error: process exited while connecting to monitor: ...
-# qemu-system-x86_64: -blockdev {"driver":"file",
-#   "filename":"/root/import/import-1.qcow2", ...}:
-#   Could not open '/root/import/import-1.qcow2': Permission denied
+# error: Cannot access storage file '/root/import/import-1.qcow2'
+#   (as uid:64055, gid:108): Permission denied
 grep -E '^(user|group|dynamic_ownership)' /etc/libvirt/qemu.conf
 ps -o user -C qemu-system-x86_64 | sort -u          # libvirt+
 sudo namei -l /root/import/import-1.qcow2
@@ -2691,7 +2685,7 @@ sudo -u libvirt-qemu cat /root/import/import-1.qcow2 >/dev/null
 `libvirt-qemu:kvm` ; `/root` est `0700` et ne se traverse pas. libvirt
 (root) a bien fait son travail (il change même le propriétaire du fichier
 au démarrage grâce à `dynamic_ownership = 1`), mais l'`open()` est fait par
-QEMU, et le noyau refuse à la traversée de `/root`. AppArmor n'a rien
+QEMU : libvirt le vérifie d'avance **sous l'identité de QEMU** (`as uid:64055`), et le noyau refuse à la traversée de `/root`. AppArmor n'a rien
 refusé (`journalctl -k | grep DENIED` est vide) : le DAC a tranché avant.
 
 **Correctif**
@@ -2787,8 +2781,8 @@ La commande qui aurait évité l'orphelin, si le but était une sauvegarde :
 I=/var/lib/libvirt/images
 virsh snapshot-create-as vm-01 sauv --disk-only --atomic --quiesce \
   --no-metadata --diskspec vda,snapshot=external,file=$I/vm-01.sauv \
-&& qemu-img convert -U -O qcow2 $I/vm-01.qcow2 /backup/vm-01.qcow2 \
-;  virsh blockcommit vm-01 vda --active --pivot && rm $I/vm-01.sauv
+&& sudo qemu-img convert -U -O qcow2 $I/vm-01.qcow2 /backup/vm-01.qcow2 \
+;  virsh blockcommit vm-01 vda --active --pivot && sudo rm $I/vm-01.sauv
 ```
 
 (en une seule séquence, avec le `blockcommit` **toujours** exécuté, même si
@@ -2934,8 +2928,10 @@ fi
 OVER="$DISK.sauv"
 refermer() {
   if virsh domblklist "$VM" | grep -q "$OVER"; then
-    virsh blockcommit "$VM" vda --active --pivot >/dev/null \
-      && log "blockcommit ok"
+    if ! virsh blockcommit "$VM" vda --active --pivot >/dev/null; then
+      log "ÉCHEC blockcommit : $OVER est le disque actif, conservé"; return 1
+    fi
+    log "blockcommit ok"
   fi
   sudo rm -f "$OVER"
 }

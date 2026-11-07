@@ -47,9 +47,12 @@ if printf '%s' "$BP" | json 'assert d.get("branch_name")=="main"'; then
   printf '%s' "$BP" | json 'assert d["required_approvals"]>=1' \
     && ok "au moins une approbation requise" \
     || ko "required_approvals doit valoir 1 ou plus"
-  printf '%s' "$BP" | json 'assert "ci / lint" in d["status_check_contexts"]' \
+  printf '%s' "$BP" | json '
+import fnmatch
+assert any(fnmatch.fnmatch("ci / lint (push)", c)
+           for c in d["status_check_contexts"])' \
     && ok "status check « ci / lint » requis" \
-    || ko "le status check « ci / lint » n'est pas requis (nom exact : ci / lint)"
+    || ko "status check attendu : le motif « ci / lint (*) » (Gitea nomme le statut ci / lint (push))"
 else
   ko "aucune protection sur main (Paramètres → Branches)"
 fi
@@ -58,10 +61,10 @@ fi
 WF=$(api "$REPO/raw/.gitea/workflows/ci.yaml")
 if [ -n "$WF" ] && ! printf '%s' "$WF" | grep -q '"message"'; then
   ok ".gitea/workflows/ci.yaml présent sur main"
-  printf '%s' "$WF" | python3 - <<'EOF' && ok "ci.yaml : jobs lint et test, artefact publié même en échec, timeout" \
+  DOC="$WF" python3 - <<'EOF' && ok "ci.yaml : jobs lint et test, artefact publié même en échec, timeout" \
     || ko "ci.yaml : attendu jobs lint + test, upload-artifact avec if: always(), timeout-minutes"
-import sys, yaml
-w = yaml.safe_load(sys.stdin)
+import os, sys, yaml
+w = yaml.safe_load(os.environ["DOC"])
 j = w["jobs"]
 assert "lint" in j and "test" in j
 assert all("timeout-minutes" in j[k] for k in ("lint", "test"))

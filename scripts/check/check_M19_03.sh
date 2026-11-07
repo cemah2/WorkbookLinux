@@ -67,7 +67,7 @@ if mountpoint -q "$DATA" 2>/dev/null; then
     && ok "inodes de $DATA : ${IUSE}%" \
     || ko "inodes de $DATA saturés : ${IUSE}%"
   if [ "$(id -u)" -eq 0 ] && command -v lsof >/dev/null 2>&1; then
-    RET=$(lsof +L1 2>/dev/null | awk -v d="$DATA" '$0 ~ d {s+=$8} END \
+    RET=$(lsof +L1 2>/dev/null | awk -v d="$DATA" '$0 ~ d {s+=$7} END \
       {printf "%d", s/1048576}')
     if [ "${RET:-0}" -lt 50 ]; then
       ok "aucun fichier supprimé ne retient plus de 50 Mo sur $DATA"

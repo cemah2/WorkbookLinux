@@ -55,7 +55,7 @@ echo "$SORTIE" | grep -qi 'ignoring' \
 echo "$SORTIE" | grep -q "$CSV" \
   && ok "metriques.csv est géré par logrotate" \
   || ko "$CSV n'est pas pris en charge par logrotate"
-grep -rqsE '^\s*size\s' /etc/logrotate.d/ \
+grep -rqsE '^\s*(max|min)?size\s' /etc/logrotate.d/ \
   && ok "au moins une règle est déclenchée par la taille" \
   || ko "aucune règle basée sur size"
 
