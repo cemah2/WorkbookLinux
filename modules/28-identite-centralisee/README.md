@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 28**  
-[← Projet B](../../projets/P2-factura-devops/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md)
+[← Projet B](../../projets/P2-factura-devops/README.md) · [Corrigé](corrige.md) · [Module 29 →](../29-haute-disponibilite/README.md)
 
 <details><summary>Scripts du module (8)</summary>
 
@@ -9,13 +9,13 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M28.sh`](../../scripts/setup/setup_M28.sh) | prépare le module |
-| [`check_M28_01.sh`](../../scripts/check/check_M28_01.sh) | vérifie L28.1 |
-| [`check_M28_02.sh`](../../scripts/check/check_M28_02.sh) | vérifie L28.2 |
-| [`check_M28_03.sh`](../../scripts/check/check_M28_03.sh) | vérifie L28.3 |
-| [`check_M28_04.sh`](../../scripts/check/check_M28_04.sh) | vérifie L28.4 |
-| [`break_M28_01.sh`](../../scripts/break/break_M28_01.sh) | installe la panne BF28.1 |
-| [`break_M28_02.sh`](../../scripts/break/break_M28_02.sh) | installe la panne BF28.2 |
-| [`break_M28_03.sh`](../../scripts/break/break_M28_03.sh) | installe la panne BF28.3 |
+| [`check_M28_01.sh`](../../scripts/check/check_M28_01.sh) | vérification |
+| [`check_M28_02.sh`](../../scripts/check/check_M28_02.sh) | vérification |
+| [`check_M28_03.sh`](../../scripts/check/check_M28_03.sh) | vérification |
+| [`check_M28_04.sh`](../../scripts/check/check_M28_04.sh) | vérification |
+| [`break_M28_01.sh`](../../scripts/break/break_M28_01.sh) | installe une panne |
+| [`break_M28_02.sh`](../../scripts/break/break_M28_02.sh) | installe une panne |
+| [`break_M28_03.sh`](../../scripts/break/break_M28_03.sh) | installe une panne |
 
 </details>
 <!-- nav:fin -->
@@ -267,8 +267,8 @@ renvoie l'entrée mais sans l'attribut `memberOf`, que tu vois pourtant dans
 l'interface web. L'explication la plus probable ?
 
 a) `memberOf` n'existe pas dans 389-DS
-b) le bind anonyme n'a pas le droit de lire cet attribut (ACI)
-c) il faut ajouter `-s one`
+b) il faut ajouter `-s one`
+c) le bind anonyme n'a pas le droit de lire cet attribut (ACI)
 d) `-x` désactive le retour des attributs multivalués
 
 <a id="q28-3"></a>**[Q28.3](corrige.md#q28-3)** — Que peut faire un client avec son TGT ?
@@ -281,8 +281,8 @@ d) le transformer en mot de passe hors ligne
 <a id="q28-4"></a>**[Q28.4](corrige.md#q28-4)** — `kinit alice` répond `Clock skew too great while getting initial credentials`.
 Quel est l'écart d'horloge toléré par défaut entre le client et le KDC ?
 
-a) 30 secondes
-b) 5 minutes
+a) 5 minutes
+b) 30 secondes
 c) 1 heure
 d) aucun : l'horloge doit être identique à la seconde
 
@@ -290,10 +290,10 @@ d) aucun : l'horloge doit être identique à la seconde
 compte qui l'utilise ?
 
 a) parce que `kinit -k` refuse les fichiers lisibles par le groupe
-b) parce qu'il contient les clés longues du principal : le lire, c'est
+b) parce que le KDC vérifie les droits du fichier à chaque demande
+c) par convention seulement : il est chiffré par le mot de passe de root
+d) parce qu'il contient les clés longues du principal : le lire, c'est
    pouvoir se faire passer pour lui sans connaître de mot de passe
-c) parce que le KDC vérifie les droits du fichier à chaque demande
-d) par convention seulement : il est chiffré par le mot de passe de root
 
 <a id="q28-6"></a>**[Q28.6](corrige.md#q28-6)** — Sur un client du domaine, `getent passwd` liste les comptes locaux
 mais aucun compte FreeIPA, alors que `getent passwd alice` répond. Pourquoi ?
@@ -323,17 +323,17 @@ d) `root` en local sur la console
 <a id="q28-9"></a>**[Q28.9](corrige.md#q28-9)** — Que fait `ipa hbactest --user=alice --host=lab-web.lab.local --service=sshd` ?
 
 a) ouvre une session SSH de test sous l'identité d'alice
-b) évalue les règles HBAC du serveur et dit quelle règle accorderait (ou
+b) force la synchronisation des règles HBAC sur `lab-web`
+c) vérifie que le port 22 de `lab-web` est ouvert
+d) évalue les règles HBAC du serveur et dit quelle règle accorderait (ou
    non) l'accès, sans rien modifier
-c) force la synchronisation des règles HBAC sur `lab-web`
-d) vérifie que le port 22 de `lab-web` est ouvert
 
 <a id="q28-10"></a>**[Q28.10](corrige.md#q28-10)** — Comment `sshd` d'un client FreeIPA trouve-t-il la clé publique
 d'alice, absente de `~alice/.ssh/authorized_keys` ?
 
-a) il interroge LDAP lui-même grâce à `UsePAM yes`
-b) par `AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys`, qui lit la
+a) par `AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys`, qui lit la
    clé dans l'annuaire via SSSD
+b) il interroge LDAP lui-même grâce à `UsePAM yes`
 c) `ipa-client-install` recopie toutes les clés dans `/etc/ssh/authorized_keys`
 d) par Kerberos : une clé SSH est un ticket
 
@@ -350,9 +350,9 @@ d) seulement `admin`
 et échoue, alors que `http://lab-web.lab.local/` fonctionne. Pourquoi ?
 
 a) `--negotiate` ne marche qu'en HTTPS
-b) le ticket demandé est `HTTP/10.10.10.11`, principal qui n'existe pas :
+b) le KDC refuse les clients sans adresse IP déclarée
+c) le ticket demandé est `HTTP/10.10.10.11`, principal qui n'existe pas :
    le nom du service fait partie du principal
-c) le KDC refuse les clients sans adresse IP déclarée
 d) l'adresse IP déclenche un bind anonyme
 
 <a id="q28-13"></a>**[Q28.13](corrige.md#q28-13)** — Tu lances `ipa-getkeytab -p alice@LAB.LOCAL -k /tmp/alice.keytab`.
@@ -368,10 +368,10 @@ d) le keytab est vide tant qu'alice ne s'est pas reconnectée
 ouverte à 9 h, ne voit toujours pas le groupe dans `id`. Pourquoi ?
 
 a) le groupe est mal créé
-b) la liste des groupes d'un processus est calculée à l'ouverture de session ;
+b) `id` ne sait pas lire les groupes LDAP
+c) il faut redémarrer `lab-web`
+d) la liste des groupes d'un processus est calculée à l'ouverture de session ;
    il faut une nouvelle session (et un cache SSSD à jour)
-c) `id` ne sait pas lire les groupes LDAP
-d) il faut redémarrer `lab-web`
 
 <a id="q28-15"></a>**[Q28.15](corrige.md#q28-15)** — Dans `/etc/nsswitch.conf`, que signifie `passwd: files systemd sss` ?
 
@@ -385,8 +385,8 @@ d) seuls les comptes présents dans les trois sources sont valides
 services du domaine ?
 
 a) 389-DS
-b) le KDC MIT
-c) Dogtag (autorité de certification intégrée)
+b) Dogtag (autorité de certification intégrée)
+c) le KDC MIT
 d) certmonger, qui est une autorité de certification
 
 ---
@@ -793,5 +793,5 @@ Pour aller plus loin :
 <!-- nav:début -->
 ---
 
-[← Projet B](../../projets/P2-factura-devops/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Projet B](../../projets/P2-factura-devops/README.md) · [Corrigé](corrige.md) · [Module 29 →](../29-haute-disponibilite/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

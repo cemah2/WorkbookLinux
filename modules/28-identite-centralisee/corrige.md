@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 28** · corrigé  
-[← Projet B](../../projets/P2-factura-devops/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md)
+[← Projet B](../../projets/P2-factura-devops/corrige.md) · [Énoncé](README.md) · [Module 29 →](../29-haute-disponibilite/corrige.md)
 
 > [!TIP]
 > Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
@@ -34,7 +34,7 @@
 
 <a id="q28-2"></a>**[Q28.2](README.md#q28-2)** — *Recherche anonyme : l'entrée revient sans `memberOf`.*
 
-**Réponse : b)** le bind anonyme n'a pas le droit de lire cet attribut.
+**Réponse : c)** le bind anonyme n'a pas le droit de lire cet attribut.
 
 > [!NOTE]
 > **Pourquoi**
@@ -88,7 +88,7 @@
 
 <a id="q28-4"></a>**[Q28.4](README.md#q28-4)** — *Tolérance d'horloge.*
 
-**Réponse : b)** 5 minutes.
+**Réponse : a)** 5 minutes.
 
 > [!NOTE]
 > **Pourquoi**
@@ -109,7 +109,7 @@
 
 <a id="q28-5"></a>**[Q28.5](README.md#q28-5)** — *Droits du keytab.*
 
-**Réponse : b)** il contient les clés longues du principal.
+**Réponse : d)** il contient les clés longues du principal.
 
 > [!NOTE]
 > **Pourquoi**
@@ -206,7 +206,7 @@
 
 <a id="q28-9"></a>**[Q28.9](README.md#q28-9)** — *`ipa hbactest`.*
 
-**Réponse : b)** il évalue les règles et dit laquelle accorderait l'accès.
+**Réponse : d)** il évalue les règles et dit laquelle accorderait l'accès.
 
 > [!NOTE]
 > **Pourquoi**
@@ -234,7 +234,7 @@
 
 <a id="q28-10"></a>**[Q28.10](README.md#q28-10)** — *Clé publique d'alice absente de `authorized_keys`.*
 
-**Réponse : b)** `AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys`.
+**Réponse : a)** `AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys`.
 
 > [!NOTE]
 > **Pourquoi**
@@ -283,7 +283,7 @@
 
 <a id="q28-12"></a>**[Q28.12](README.md#q28-12)** — *`curl --negotiate` vers une adresse IP.*
 
-**Réponse : b)** le principal demandé est `HTTP/10.10.10.11`.
+**Réponse : c)** le principal demandé est `HTTP/10.10.10.11`.
 
 > [!NOTE]
 > **Pourquoi**
@@ -328,7 +328,7 @@
 
 <a id="q28-14"></a>**[Q28.14](README.md#q28-14)** — *Groupe ajouté pendant une session ouverte.*
 
-**Réponse : b)** la liste des groupes est calculée à l'ouverture de session.
+**Réponse : d)** la liste des groupes est calculée à l'ouverture de session.
 
 > [!NOTE]
 > **Pourquoi**
@@ -371,7 +371,7 @@
 
 <a id="q28-16"></a>**[Q28.16](README.md#q28-16)** — *Émission des certificats.*
 
-**Réponse : c)** Dogtag.
+**Réponse : b)** Dogtag.
 
 > [!NOTE]
 > **Pourquoi**
@@ -2021,13 +2021,10 @@ for r in $(ipa hbacrule-find --users="$login" --pkey-only --raw | awk '/cn:/{pri
 done
 
 # 4. sur chaque machine du domaine : couper, purger les caches, chercher les traces
-hotes=$(ipa host-find --sizelimit=0 --pkey-only --raw | awk '/fqdn:/{print $2}')
-for h in $hotes; do
-  if ! sortie=$(ssh -o BatchMode=yes -o ConnectTimeout=5 \
-        -o PreferredAuthentications=gssapi-with-mic "admin@$h" \
-        sudo -n bash -s -- "$login" "$fps" <<'DISTANT' 2>&1); then
+# script exécuté à distance (root via sudo) ; $1 = login, $2 = empreintes séparées par des virgules
+read -r -d '' DISTANT <<'FIN' || true
 set -u
-login=$1; fps=$2
+login=$1; IFS=, read -ra fps <<<"${2:-}"
 loginctl terminate-user "$login" 2>/dev/null || true
 pkill -KILL -u "$login" 2>/dev/null || true
 sss_cache -E 2>/dev/null || true
@@ -2036,15 +2033,22 @@ for f in /var/spool/cron/crontabs/"$login" /var/spool/cron/"$login"; do
   [ -e "$f" ] && echo "TRACE crontab $f"
 done
 grep -rlw -- "$login" /etc/sudoers.d/ 2>/dev/null | sed 's/^/TRACE sudoers /'
-grep -w -- "^$login" /etc/passwd >/dev/null && echo "TRACE compte local $login"
+grep -q -- "^$login:" /etc/passwd && echo "TRACE compte local $login"
 for f in /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys; do
   [ -f "$f" ] || continue
-  for fp in $fps; do
+  for fp in "${fps[@]}"; do
     ssh-keygen -lf "$f" 2>/dev/null | grep -qF "$fp" && echo "TRACE clé $fp dans $f"
   done
 done
 exit 0
-DISTANT
+FIN
+fps_csv=$(paste -sd, <<<"$fps")   # SHA256:… sans espace : passe tel quel par ssh
+
+hotes=$(ipa host-find --sizelimit=0 --pkey-only --raw | awk '/fqdn:/{print $2}')
+for h in $hotes; do
+  if ! sortie=$(ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        -o PreferredAuthentications=gssapi-with-mic "admin@$h" \
+        sudo -n bash -s -- "$login" "$fps_csv" <<<"$DISTANT" 2>&1); then
     log "$h : injoignable ou refus ($sortie)"; echec=1; continue
   fi
   if grep -q '^TRACE' <<<"$sortie"; then
@@ -2118,5 +2122,5 @@ $ ipa user-show eve | grep -i disabled
 <!-- nav:début -->
 ---
 
-[← Projet B](../../projets/P2-factura-devops/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Projet B](../../projets/P2-factura-devops/corrige.md) · [Énoncé](README.md) · [Module 29 →](../29-haute-disponibilite/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->
