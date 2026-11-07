@@ -1,0 +1,11 @@
+# Fins de ligne Unix partout : un script en CRLF casse sous bash
+# (« bad interpreter: No such file or directory », module 07).
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.otf binary
+*.ttf binary
+*.png binary
+*.pdf binary
+# les SVG des schémas sont générés : pas de diff ligne à ligne
+assets/figures/*.svg -diff linguist-generated

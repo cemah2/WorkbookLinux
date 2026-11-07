@@ -1,14 +1,21 @@
-# généré par build.py : PDF, .tex, .aux, .log
+# produits de la chaîne PDF (tools/pdf/build.py) : build/, PDF, fichiers LaTeX
 build/
 *.pdf
 *.aux
 *.log
 *.toc
 *.out
+*.idx
+*.ind
+*.ilg
 
 # Python
 __pycache__/
+*.pyc
 .venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # mots de passe, jetons, clés de lab : JAMAIS dans l'historique
 reponses/**/secrets*
@@ -16,5 +23,6 @@ reponses/**/secrets*
 # éditeurs et systèmes
 .vscode/
 .idea/
+*.swp
 .DS_Store
 Thumbs.db

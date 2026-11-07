@@ -1,6 +1,8 @@
 # CONVENTIONS — Workbook Linux / DevOps
 
 Document de référence **obligatoire** pour tous les rédacteurs de modules.
+Le dépôt est écrit en **Markdown GitHub** : c'est la seule source, lue telle
+quelle sur GitHub et convertie pour les PDF par `tools/pdf/gfm2pandoc.py`.
 Langue : **français** (termes techniques en anglais quand c'est l'usage : *pipeline*, *runner*, *rollback*).
 Public : administrateur/dev **niveau intermédiaire** visant un poste DevOps. Pas de blabla débutant,
 pas de « qu'est-ce qu'un ordinateur ». On suppose acquis : se connecter en SSH, `cd`, `ls`, éditer un fichier.
@@ -21,6 +23,10 @@ Hyperviseur **Proxmox VE 8** de l'apprenant. Réseau de lab dédié sur le bridg
 | `lab-git` | 9006 | Ubuntu Server 24.04 LTS | 1 / 1 Go / 15 Go | 10.10.10.15 | Forge Gitea (binaire + SQLite) : dépôt du workbook, portfolio ; réutilisable par les modules 21 et 25 |
 | `lab-virt` | 9007 | Ubuntu Server 24.04 LTS | 4 (cpu=host, virtualisation imbriquée) / 6 Go / 40 Go | 10.10.10.16 | Virtualisation KVM/QEMU/libvirt (module 20) |
 
+Les modules qui demandent davantage (RAM, disques) le disent dans leur section
+« Mise en place », avec la commande `qm set` correspondante : on ne crée pas
+de VM supplémentaire sans raison forte.
+
 * Réseau : `10.10.10.0/24`, passerelle `10.10.10.1`, DNS `10.10.10.1` (ou 9.9.9.9 en sortie).
 * Domaine de lab : `lab.local`. Noms courts résolus par `/etc/hosts` (module 11 fait mieux).
 * Utilisateur standard sur toutes les VM : **`mathieu`**, membre de `sudo` (Ubuntu) / `wheel` (Rocky), clé SSH publique déployée.
@@ -29,7 +35,7 @@ Hyperviseur **Proxmox VE 8** de l'apprenant. Réseau de lab dédié sur le bridg
   `qm rollback <vmid> snap-clean` pour repartir propre.
 
 **Distribution** : Ubuntu 24.04 est la distribution de référence de tout le workbook.
-Chaque fois qu'une commande diffère sous RHEL/Rocky, ajouter un bloc `::: rhel` (voir §4).
+Chaque fois qu'une commande diffère sous RHEL/Rocky, ajouter un encadré **Variante Rocky / RHEL** (voir §5).
 Justification à ne PAS répéter dans les modules (elle est en intro) : Ubuntu domine le marché cloud/CI,
 Rocky couvre l'entreprise et les certifications RHCSA.
 
@@ -39,12 +45,16 @@ Pour les apprenants sans Proxmox disponible, l'annexe propose Multipass/Vagrant 
 
 ## 2. Arborescence des livrables
 
-Chaque module produit **deux fichiers Markdown** :
+Chaque module est un dossier avec **deux fichiers Markdown** :
 
 ```
-src/labs/MXX-slug.md          <- énoncés (quiz, exercices, labs, break&fix, défi)
-src/solutions/MXX-slug.md     <- corrigés + explications
+modules/XX-slug/README.md     <- énoncé (quiz, exercices, labs, break&fix, défi)
+modules/XX-slug/corrige.md    <- corrigé + explications
 ```
+
+Les projets suivent la même règle dans `projets/PX-slug/`. Un nouveau module
+s'inscrit dans `tools/workbook.py` (partie, ordre), puis `make nav` génère
+sa navigation et met à jour les tables du README et de `docs/parcours.md`.
 
 et, si le module l'exige, des scripts :
 
@@ -58,7 +68,7 @@ scripts/break/break_MXX_YY.sh       <- casse volontairement pour un Break & Fix
 
 ---
 
-## 3. Structure imposée d'un fichier `src/labs/MXX-slug.md`
+## 3. Structure imposée d'un énoncé (`README.md`)
 
 Un seul `#` (titre du module). Les sections suivantes, dans cet ordre, en `##` :
 
@@ -101,7 +111,7 @@ Détail attendu :
 * **7.9 Auto-évaluation** : tableau de 8 à 12 compétences avec cases `☐ Acquis ☐ À revoir`, plus 2 ou 3 « pour aller plus loin ».
 
 ### Identifiants
-Numérotation **stricte**, elle sert de pont entre les deux PDF :
+Numérotation **stricte**, elle sert de pont entre l'énoncé et le corrigé :
 
 | Type | Format | Exemple |
 |---|---|---|
@@ -111,12 +121,23 @@ Numérotation **stricte**, elle sert de pont entre les deux PDF :
 | Lab | `L<mod>.<n>` | `L7.2` |
 | Break & Fix | `BF<mod>.<n>` | `BF7.1` |
 | Défi | `D<mod>` | `D7` |
+| Projets | `PA.<n>`, `PB.<n>`, `PC.<jour>.<n>`, incidents `INC-A<n>` | `PB.3` |
 
-Les identifiants sont mis en **gras** en début de ligne : `**Q7.1** — Que fait ...`
+En début de ligne, chaque identifiant porte une **ancre** et un **lien** vers
+le même identifiant dans l'autre fichier :
+
+```markdown
+<a id="q7-1"></a>**[Q7.1](corrige.md#q7-1)** — Que fait ...          (énoncé)
+### <a id="bf7-2"></a>**[BF7.2](corrige.md#bf7-2)** — « Titre »      (énoncé)
+<a id="q7-1"></a>**[Q7.1](README.md#q7-1)** — *rappel de l'énoncé*  (corrigé)
+```
+
+L'ancre est l'identifiant en minuscules, points remplacés par des tirets.
+`make check` vérifie que chaque ancre d'un énoncé existe dans son corrigé.
 
 ---
 
-## 4. Structure imposée d'un fichier `src/solutions/MXX-slug.md`
+## 4. Structure imposée d'un corrigé (`corrige.md`)
 
 Mêmes identifiants, même ordre. Titre : `# Module 07 — Corrigé`.
 Sections `##` : `7.3 Quiz — QCM`, `7.4 Quiz — questions ouvertes`, `7.5 Exercices guidés`, `7.6 Labs`,
@@ -125,9 +146,9 @@ Sections `##` : `7.3 Quiz — QCM`, `7.4 Quiz — questions ouvertes`, `7.5 Exer
 Pour **chaque** item :
 
 1. La **réponse** (lettre du QCM, commande exacte, script complet, procédure).
-2. Un bloc **`::: pourquoi`** : l'explication du mécanisme sous-jacent. C'est le cœur du PDF de corrigés —
+2. Un encadré **Pourquoi** : l'explication du mécanisme sous-jacent. C'est le cœur du corrigé —
    on doit apprendre quelque chose même quand on avait juste. 5 à 15 lignes.
-3. Quand c'est utile, un bloc **`::: piege`** : l'erreur classique, pourquoi les autres réponses sont fausses,
+3. Quand c'est utile, un encadré **Piège** : l'erreur classique, pourquoi les autres réponses sont fausses,
    ce qui casse en production.
 
 Pour les Break & Fix, le corrigé donne : la démarche de diagnostic pas à pas (quelles commandes, dans quel ordre,
@@ -138,38 +159,67 @@ donc rappeler l'énoncé en une ligne en italique avant la réponse.
 
 ---
 
-## 5. Blocs spéciaux (fenced divs pandoc)
+## 5. Encadrés, schémas, zones de réponse
 
-À utiliser tels quels, la syntaxe est convertie en encadrés colorés dans le PDF :
+### Encadrés : alertes GitHub avec libellé
+
+Un encadré est une alerte GitHub dont la **première ligne est le libellé en
+gras**. Le couple (type d'alerte, libellé) est fixe : c'est lui que la chaîne
+PDF reconnaît pour produire l'encadré coloré.
 
 ```markdown
-::: objectif
-Contenu
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y nginx` et
+> `sudo firewall-cmd --add-service=http --permanent`.
 ```
 
-| Classe | Usage | Rendu |
+| Alerte GitHub | Libellé | Usage |
 |---|---|---|
-| `objectif` | encadré d'objectifs en début de module | bleu |
-| `astuce` | raccourci, bonne pratique | vert |
-| `attention` | danger, action destructrice | rouge |
-| `rhel` | variante Rocky/RHEL d'une commande Ubuntu | violet |
-| `contexte` | mise en situation d'un lab | gris |
-| `pourquoi` | explication (PDF corrigés uniquement) | bleu clair |
-| `piege` | erreur classique (PDF corrigés uniquement) | orange |
-| `repondre` | zone de réponse à remplir (PDF énoncés uniquement) | cadre pointillé |
-| `check` | critère de succès / commande de vérification | vert bordé |
+| `[!NOTE]` | `**Objectifs**` | objectifs, durée, prérequis en tête de module |
+| `[!TIP]` | `**Astuce**` | raccourci, bonne pratique |
+| `[!CAUTION]` | `**Attention**` | danger, action destructrice |
+| `[!IMPORTANT]` | `**Variante Rocky / RHEL**` | variante Rocky/RHEL d'une commande Ubuntu |
+| *(citation simple)* | `**Contexte**` | mise en situation d'un lab |
+| `[!NOTE]` | `**Pourquoi**` | explication du mécanisme (corrigés) |
+| `[!WARNING]` | `**Piège**` | erreur classique, ce qui casse en production (corrigés) |
+| `[!TIP]` | `**Critère de succès**` | critère de succès, commande de vérification |
 
-Exemple complet :
+Chaque ligne du contenu commence par `> ` (ou `>` seul pour une ligne vide),
+blocs de code compris. Pas d'encadré dans un encadré.
+
+### Schémas
+
+Les schémas sont écrits en TikZ dans `tools/pdf/tex/figures/<nom>.tex` (styles
+communs dans `wbfig.tex`), rendus en SVG par `bash tools/render_figures.sh
+<nom>`, et insérés ainsi (chemin relatif depuis le fichier) :
 
 ```markdown
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y nginx` et `sudo firewall-cmd --add-service=http --permanent`.
-:::
+<p align="center"><img src="../../assets/figures/<nom>.svg" alt="Schéma : <nom>"></p>
+
+*Figure — Légende en une phrase qui dit ce que le schéma montre.*
 ```
 
-`::: repondre` s'emploie après les questions ouvertes et les Break & Fix pour laisser de la place à l'écrit.
-Le contenu du bloc est le nombre de lignes souhaité, écrit ainsi : `lignes: 6`.
+Largeur maximale du schéma : 480 pt (`bash tools/pdf/tex/figtest.sh <nom>`
+l'indique).
+
+### Zones de réponse
+
+Après une question ouverte ou un Break & Fix, une zone de réponse pour le PDF
+d'énoncés, invisible sur GitHub :
+
+```markdown
+<!-- repondre: 10 -->
+```
+
+Le nombre est la hauteur en lignes (2 à 14).
+
+### Navigation
+
+Les blocs `<!-- nav:début --> … <!-- nav:fin -->` (en tête et en pied de
+page) et `<!-- parcours:début --> … <!-- parcours:fin -->` sont **générés**
+par `make nav` : ne pas les éditer à la main.
 
 ---
 
@@ -186,7 +236,9 @@ Le contenu du bloc est le nombre de lignes souhaité, écrit ainsi : `lignes: 6`
 * Pas de `sudo` sur les commandes qui n'en ont pas besoin.
 * Les scripts fournis commencent par `#!/usr/bin/env bash` et `set -euo pipefail` (sauf raison pédagogique explicite).
 * Longueur des lignes de code : **80 colonnes max** (sinon ça déborde dans le PDF). Couper avec `\`.
-* Pas de tableau de plus de 4 colonnes (débordement PDF).
+* Un code inline (`` `...` ``) qui passe à la ligne ne doit pas laisser une ligne commencer par `|` :
+  GitHub et pandoc la liraient comme une ligne de tableau.
+* Pas de tableau de plus de 4 colonnes (débordement PDF). Dans une cellule, un `|` s'écrit `\|`, y compris dans du code.
 * Ne pas écrire « comme vu au module X » sans donner l'information minimale : chaque module doit rester utilisable seul.
 
 ## 7. Scripts de vérification

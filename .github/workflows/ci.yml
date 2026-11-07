@@ -1,0 +1,49 @@
+# Contrôles à chaque push et pull request : cohérence du dépôt (identifiants,
+# liens, schémas, scripts cités, navigation à jour) et qualité des scripts.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coherence:
+    name: Cohérence du dépôt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Identifiants, liens, schémas, scripts, structure
+        run: python3 tools/check_repo.py
+      - name: Navigation à jour (make nav ne doit rien changer)
+        run: |
+          python3 tools/gen_nav.py
+          git diff --exit-code -- modules projets docs README.md \
+            || { echo "::error::navigation périmée : lance 'make nav' et commite"; exit 1; }
+      - name: Conversion pour la chaîne PDF (Markdown GitHub -> pandoc)
+        run: |
+          sudo apt-get install -y -q pandoc >/dev/null
+          for f in modules/*/*.md projets/*/*.md docs/00-mise-en-place.md docs/annexes.md docs/memo.md; do
+            python3 tools/pdf/gfm2pandoc.py "$f" \
+              | pandoc -f markdown+fenced_divs+pipe_tables+smart-yaml_metadata_block-tex_math_dollars \
+                       -t native -o /dev/null \
+              || { echo "::error file=$f::pandoc ne lit pas ce fichier"; exit 1; }
+          done
+
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: find scripts tools -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: shellcheck (erreurs bloquantes, avertissements affichés)
+        run: |
+          find scripts tools -name '*.sh' -print0 | xargs -0 shellcheck -S error
+          find scripts tools -name '*.sh' -print0 \
+            | xargs -0 shellcheck -S warning -f gcc || true
+      - name: Python (py_compile)
+        run: find scripts tools -name '*.py' -print0 | xargs -0 python3 -m py_compile

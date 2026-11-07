@@ -1,15 +1,15 @@
 # Mes réponses
 
-Ce dossier est le seul endroit du dépôt où **j'écris**. Les sources du
-workbook (`src/`) ne bougent pas ; ici vivent mes démarches, mes scripts,
-mes rapports, mes post-mortem.
+Ce dossier est le seul endroit du dépôt où **j'écris** (dans mon *fork*).
+Le contenu du workbook (`modules/`, `projets/`, `docs/`) ne bouge pas ; ici
+vivent mes démarches, mes scripts, mes rapports, mes post-mortem.
 
 ## Rangement
 
 ```text
 reponses/
   README.md
-  M01/ … M22/          un dossier par module (deux chiffres)
+  M01/ … M27/          un dossier par module (deux chiffres)
     E1.md              les exercices guidés du module, tous dans un fichier
     L1.2.md            un fichier par lab
     BF1.1.md           un fichier par Break & Fix
@@ -20,8 +20,10 @@ reponses/
 ```
 
 Le nom du fichier est **l'identifiant du workbook**, tel qu'il apparaît
-dans les PDF : `L7.2`, `BF10.1`, `D15`, `E3`. C'est ce qui permet de
-retrouver l'énoncé et le corrigé en une recherche.
+dans les énoncés : `L7.2`, `BF10.1`, `D15`, `E3`. C'est ce qui permet de
+retrouver l'énoncé et le corrigé en une recherche (ou en un clic : l'ancre
+d'un item est son identifiant en minuscules, points remplacés par des
+tirets, par exemple `modules/07-bash-scripting/README.md#l7-2`).
 
 ## Le contenu d'une réponse
 

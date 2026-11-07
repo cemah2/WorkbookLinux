@@ -1,0 +1,44 @@
+name: Erreur dans le workbook
+description: Une commande, une sortie, une clé de QCM, un script check ou break incorrect.
+title: "[M00] identifiant — résumé"
+labels: ["erreur"]
+body:
+  - type: input
+    id: item
+    attributes:
+      label: Identifiant ou fichier
+      description: "L'item concerné : L7.2, BF11.3, Q18.4, check_M07_02.sh, ou le chemin du fichier."
+      placeholder: "L7.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: nature
+    attributes:
+      label: Nature du problème
+      options:
+        - Commande ou sortie inexacte
+        - Clé de QCM ou corrigé discutable
+        - Script check qui refuse une bonne réponse
+        - Script break ou setup qui ne produit pas le symptôme
+        - Incohérence énoncé / corrigé
+        - Coquille, lien cassé, rendu
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environnement
+      description: Distribution, version, VM du lab.
+      placeholder: "Ubuntu 24.04.1, lab-web ; ou Rocky 9.4, lab-rhel"
+  - type: textarea
+    id: observe
+    attributes:
+      label: Ce que dit le workbook, ce que tu observes
+      description: Colle la commande et sa sortie exacte.
+      render: console
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Correction proposée (si tu en as une)

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Points déjà connus, à vérifier sur les VM
+    url: https://github.com/cemah2/WorkbookLinux/blob/main/docs/a-verifier.md
+    about: Regarde d'abord si ton problème y figure.

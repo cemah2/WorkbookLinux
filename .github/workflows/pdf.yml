@@ -1,0 +1,41 @@
+# Construit les trois PDF (énoncés, corrigés, mémo) et le livret A5 du mémo.
+# - sur une étiquette v* : publie une Release avec les PDF ;
+# - à la demande (onglet Actions) : PDF disponibles en artefact 30 jours.
+name: PDF
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pdf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dépendances (pandoc, XeLaTeX, pypdf)
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+            pandoc texlive-xetex texlive-latex-extra texlive-fonts-recommended \
+            texlive-pictures python3-pypdf
+      - name: Contrôles
+        run: python3 tools/check_repo.py
+      - name: Construction des PDF
+        run: python3 tools/pdf/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbook-pdf
+          path: build/Workbook-Linux-DevOps-*.pdf
+          retention-days: 30
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/Workbook-Linux-DevOps-*.pdf \
+            --title "Workbook Linux & DevOps $GITHUB_REF_NAME" \
+            --notes "PDF construits depuis $GITHUB_REF_NAME : énoncés (avec zones de réponse), corrigés, mémo et livret A5 du mémo. Détail des modifications : CHANGELOG.md."

@@ -1,41 +1,54 @@
-# Makefile — workbook Linux & DevOps
-# Cibles : pdf (les 3 volumes), memo, labs, solutions, check-ids, clean,
-#          zip-scripts. Dépendances : pandoc, texlive-xetex,
-#          texlive-latex-extra, texlive-fonts-recommended, fonts-dejavu.
+# Makefile — Workbook Linux & DevOps
+#   make check     cohérence du dépôt (identifiants, liens, schémas, scripts)
+#   make lint      bash -n, shellcheck, py_compile
+#   make nav       régénère la navigation et les tables du parcours
+#   make figures   rend les schémas TikZ en SVG (assets/figures/)
+#   make pdf       les trois volumes + le livret A5 du mémo (build/)
+#   make memo | labs | solutions   un seul volume
+#   make deps      dépendances Ubuntu 24.04 de la chaîne PDF
 PYTHON ?= python3
 BUILD   = build
 
-.PHONY: all pdf memo labs solutions check-ids clean zip-scripts deps
+.PHONY: help all check lint nav figures pdf memo labs solutions clean deps
 
-all: pdf
+help:
+	@sed -n 's/^#   //p' Makefile
 
-pdf: check-ids
-	$(PYTHON) build.py
+all: check lint pdf
+
+check:
+	$(PYTHON) tools/check_repo.py
+
+lint:
+	find scripts tools -name '*.sh' -print0 | xargs -0 -n1 bash -n
+	@if command -v shellcheck >/dev/null; then \
+	  find scripts tools -name '*.sh' -print0 | xargs -0 shellcheck -S error; \
+	else echo "shellcheck absent : apt install shellcheck"; fi
+	find scripts tools -name '*.py' -print0 | xargs -0 $(PYTHON) -m py_compile
+
+nav:
+	$(PYTHON) tools/gen_nav.py
+
+figures:
+	bash tools/render_figures.sh
+
+pdf: check
+	$(PYTHON) tools/pdf/build.py
 
 memo:
-	$(PYTHON) build.py memo
+	$(PYTHON) tools/pdf/build.py memo memo-a5
 
 labs:
-	$(PYTHON) build.py labs
+	$(PYTHON) tools/pdf/build.py labs
 
 solutions:
-	$(PYTHON) build.py solutions
-
-# Chaque identifiant d'énoncé (Q, QO, E, L, BF, D) doit avoir son corrigé.
-check-ids:
-	$(PYTHON) scripts/lib/check_ids.py
+	$(PYTHON) tools/pdf/build.py solutions
 
 clean:
 	rm -rf $(BUILD)
+	find . -name '__pycache__' -type d -prune -exec rm -rf {} +
 
-# Le zip à copier sur les VM (chapitre 0.4) : les scripts seuls.
-zip-scripts:
-	mkdir -p $(BUILD)
-	rm -f $(BUILD)/workbook-scripts.zip
-	zip -qr $(BUILD)/workbook-scripts.zip scripts -x '*/__pycache__/*'
-	@ls -l $(BUILD)/workbook-scripts.zip
-
-# Ubuntu 24.04 : les paquets de la chaîne PDF.
 deps:
 	sudo apt-get install -y pandoc texlive-xetex texlive-latex-extra \
-	  texlive-fonts-recommended fonts-dejavu python3 zip
+	  texlive-fonts-recommended texlive-pictures python3-pypdf poppler-utils \
+	  shellcheck

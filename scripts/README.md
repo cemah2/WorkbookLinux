@@ -1,9 +1,15 @@
 # Scripts du Workbook Linux & DevOps
 
-À copier sur `lab-adm` dans `~/workbook/scripts/` (voir chapitre 0, §0.4) :
+Sur chaque VM, ces scripts doivent se trouver dans `~/workbook/scripts/` :
+c'est le chemin qu'utilisent les énoncés. Le plus simple est de cloner le
+dépôt (voir [chapitre 0, §0.4](../docs/00-mise-en-place.md#récupérer-le-workbook-sur-les-vm)) :
 
-    scp workbook-scripts.zip mathieu@10.10.10.10:
-    ssh mathieu@10.10.10.10 'mkdir -p ~/workbook && cd ~/workbook && unzip -o ~/workbook-scripts.zip'
+```bash
+git clone https://github.com/cemah2/WorkbookLinux.git ~/workbook
+```
+
+`lab/bootstrap-lab.sh` fait ce clone tout seul s'il ne trouve pas d'archive
+`workbook.zip` / `workbook-scripts.zip` dans le répertoire personnel.
 
 | Dossier | Contenu | Où l'exécuter |
 |---|---|---|
@@ -15,10 +21,10 @@
 | `check/check_MXX_YY.sh` | vérifie le lab YY du module XX | même VM, après ton travail |
 | `break/break_MXX_YY.sh` | installe la panne du Break & Fix YY (`sudo`) | même VM, après un snapshot |
 | `projects/P1`, `P2`, `P3` | setup, checks, breaks et sources des projets fil rouge | selon le jalon |
-| `lib/` | outils internes (vérification des identifiants) | — |
 
 Règles : snapshot Proxmox avant tout `break_*`, jamais `sudo` sur un `check_*`
 (sauf indication), et un `check` vérifie le résultat, pas la méthode.
-Tous les scripts sont testés par `bash -n` ; la plupart ont été exécutés
-sur Ubuntu 24.04 pendant la rédaction, sauf ceux qui exigent Proxmox, Docker,
-k3s, Ansible ou OpenTofu réels.
+Tous les scripts sont testés par `bash -n` et `shellcheck` à chaque push
+(CI GitHub) ; la plupart ont été exécutés sur Ubuntu 24.04 pendant la
+rédaction, sauf ceux qui exigent Proxmox, Docker, k3s, Ansible ou OpenTofu
+réels (voir [docs/a-verifier.md](../docs/a-verifier.md)).

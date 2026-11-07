@@ -1,0 +1,39 @@
+Workbook Linux & DevOps — contenu pédagogique
+Copyright (c) 2026 Mathieu (https://github.com/cemah2)
+
+Le contenu pédagogique de ce dépôt — énoncés (modules/*/README.md,
+projets/*/README.md), corrigés (corrige.md), documentation (docs/), mémo,
+schémas (assets/figures/ et leurs sources tools/pdf/tex/figures/) et textes
+de présentation — est mis à disposition selon les termes de la licence
+Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans
+les Mêmes Conditions 4.0 International (CC BY-NC-SA 4.0).
+
+En résumé (le texte juridique fait foi) :
+
+  * Partager : copier, distribuer et communiquer le contenu par tous moyens
+    et sous tous formats.
+  * Adapter : remixer, transformer et créer à partir du contenu.
+
+Selon les conditions suivantes :
+
+  * Attribution : créditer l'auteur, fournir un lien vers la licence et
+    indiquer si des modifications ont été effectuées.
+  * Pas d'utilisation commerciale : ne pas faire un usage commercial du
+    contenu (vendre le workbook ou s'en servir comme support d'une
+    formation payante, par exemple).
+  * Partage dans les mêmes conditions : diffuser les adaptations sous la
+    même licence.
+
+Texte juridique complet :
+  https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.fr
+Résumé officiel :
+  https://creativecommons.org/licenses/by-nc-sa/4.0/deed.fr
+
+Exceptions :
+
+  * Les scripts et outils (scripts/, tools/, Makefile, fichiers de CI)
+    sont sous licence MIT : voir LICENSE-CODE.
+  * Les polices de tools/pdf/fonts/ gardent leur licence d'origine :
+    Source Sans 3 et JetBrains Mono (SIL Open Font License 1.1),
+    Font Awesome Free (SIL Open Font License 1.1).
+  * Le dossier reponses/ d'un fork appartient à la personne qui l'écrit.
