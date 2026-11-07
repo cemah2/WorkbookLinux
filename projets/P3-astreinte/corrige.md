@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet C — Une semaine d'astreinte › **Projet C** · corrigé  
-[← Module 28](../../modules/28-identite-centralisee/corrige.md) · [Énoncé](README.md)
+[← Module 29](../../modules/29-haute-disponibilite/corrige.md) · [Énoncé](README.md)
 
 > [!TIP]
 > Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
@@ -1888,5 +1888,5 @@ restent possibles avec smoke test obligatoire.
 <!-- nav:début -->
 ---
 
-[← Module 28](../../modules/28-identite-centralisee/corrige.md) · [Énoncé](README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 29](../../modules/29-haute-disponibilite/corrige.md) · [Énoncé](README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

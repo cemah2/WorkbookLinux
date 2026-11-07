@@ -158,6 +158,7 @@ Ce qui fait passer d'administrateur à expert : identité centralisée, haute di
 | | Module | Durée | Énoncé | Corrigé |
 |---|---|---|---|---|
 | **28** | Identité centralisée : LDAP, Kerberos, SSSD et FreeIPA | 10 h | [énoncé](../modules/28-identite-centralisee/README.md) | [corrigé](../modules/28-identite-centralisee/corrige.md) |
+| **29** | Haute disponibilité : HAProxy, keepalived, Pacemaker et Corosync | 10 h | [énoncé](../modules/29-haute-disponibilite/README.md) | [corrigé](../modules/29-haute-disponibilite/corrige.md) |
 
 ### Projet C — Une semaine d'astreinte
 

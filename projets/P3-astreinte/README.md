@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet C — Une semaine d'astreinte › **Projet C**  
-[← Module 28](../../modules/28-identite-centralisee/README.md) · [Corrigé](corrige.md)
+[← Module 29](../../modules/29-haute-disponibilite/README.md) · [Corrigé](corrige.md)
 
 <details><summary>Scripts du module (37)</summary>
 
@@ -909,5 +909,5 @@ comme en entretien, en 2 à 3 minutes chacune.
 <!-- nav:début -->
 ---
 
-[← Module 28](../../modules/28-identite-centralisee/README.md) · [Corrigé](corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 29](../../modules/29-haute-disponibilite/README.md) · [Corrigé](corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->
