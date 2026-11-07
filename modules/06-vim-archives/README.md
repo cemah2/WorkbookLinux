@@ -9,14 +9,14 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M06.sh`](../../scripts/setup/setup_M06.sh) | prépare le module |
-| [`check_M06_01.sh`](../../scripts/check/check_M06_01.sh) | vérification |
-| [`check_M06_02.sh`](../../scripts/check/check_M06_02.sh) | vérification |
-| [`check_M06_03.sh`](../../scripts/check/check_M06_03.sh) | vérification |
-| [`check_M06_04.sh`](../../scripts/check/check_M06_04.sh) | vérification |
-| [`check_M06_05.sh`](../../scripts/check/check_M06_05.sh) | vérification |
-| [`break_M06_01.sh`](../../scripts/break/break_M06_01.sh) | installe une panne |
-| [`break_M06_02.sh`](../../scripts/break/break_M06_02.sh) | installe une panne |
-| [`break_M06_03.sh`](../../scripts/break/break_M06_03.sh) | installe une panne |
+| [`check_M06_01.sh`](../../scripts/check/check_M06_01.sh) | vérifie L6.1 |
+| [`check_M06_02.sh`](../../scripts/check/check_M06_02.sh) | vérifie L6.2 |
+| [`check_M06_03.sh`](../../scripts/check/check_M06_03.sh) | vérifie L6.3 |
+| [`check_M06_04.sh`](../../scripts/check/check_M06_04.sh) | vérifie L6.4 |
+| [`check_M06_05.sh`](../../scripts/check/check_M06_05.sh) | vérifie D6 |
+| [`break_M06_01.sh`](../../scripts/break/break_M06_01.sh) | installe la panne BF6.1 |
+| [`break_M06_02.sh`](../../scripts/break/break_M06_02.sh) | installe la panne BF6.2 |
+| [`break_M06_03.sh`](../../scripts/break/break_M06_03.sh) | installe la panne BF6.3 |
 
 </details>
 <!-- nav:fin -->

@@ -9,16 +9,16 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M18.sh`](../../scripts/setup/setup_M18.sh) | prépare le module |
-| [`check_M18_01.sh`](../../scripts/check/check_M18_01.sh) | vérification |
-| [`check_M18_02.sh`](../../scripts/check/check_M18_02.sh) | vérification |
-| [`check_M18_03.sh`](../../scripts/check/check_M18_03.sh) | vérification |
-| [`check_M18_04.sh`](../../scripts/check/check_M18_04.sh) | vérification |
-| [`check_M18_05.sh`](../../scripts/check/check_M18_05.sh) | vérification |
-| [`check_M18_06.sh`](../../scripts/check/check_M18_06.sh) | vérification |
-| [`break_M18_01.sh`](../../scripts/break/break_M18_01.sh) | installe une panne |
-| [`break_M18_02.sh`](../../scripts/break/break_M18_02.sh) | installe une panne |
-| [`break_M18_03.sh`](../../scripts/break/break_M18_03.sh) | installe une panne |
-| [`break_M18_04.sh`](../../scripts/break/break_M18_04.sh) | installe une panne |
+| [`check_M18_01.sh`](../../scripts/check/check_M18_01.sh) | vérifie L18.1 |
+| [`check_M18_02.sh`](../../scripts/check/check_M18_02.sh) | vérifie L18.2 |
+| [`check_M18_03.sh`](../../scripts/check/check_M18_03.sh) | vérifie L18.3 |
+| [`check_M18_04.sh`](../../scripts/check/check_M18_04.sh) | vérifie L18.4 |
+| [`check_M18_05.sh`](../../scripts/check/check_M18_05.sh) | vérifie L18.5 |
+| [`check_M18_06.sh`](../../scripts/check/check_M18_06.sh) | vérifie D18 |
+| [`break_M18_01.sh`](../../scripts/break/break_M18_01.sh) | installe la panne BF18.1 |
+| [`break_M18_02.sh`](../../scripts/break/break_M18_02.sh) | installe la panne BF18.2 |
+| [`break_M18_03.sh`](../../scripts/break/break_M18_03.sh) | installe la panne BF18.3 |
+| [`break_M18_04.sh`](../../scripts/break/break_M18_04.sh) | installe la panne BF18.4 |
 
 </details>
 <!-- nav:fin -->

@@ -94,7 +94,7 @@ def nav_item(idx, seq, which):
         nav.append(f"[{short_label(next_)} →]({link(next_)})")
     top = ["<!-- nav:début -->", crumbs + "  ", " · ".join(nav)]
     if which == "enonce":
-        sc = scripts_for(slug, (d / "README.md").read_text(encoding="utf-8"))
+        sc = scripts_for(slug, strip_nav((d / "README.md").read_text(encoding="utf-8")))
         if sc:
             top += ["", f"<details><summary>Scripts du module ({len(sc)})</summary>", "",
                     "Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`"

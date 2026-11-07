@@ -9,16 +9,16 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M27.sh`](../../scripts/setup/setup_M27.sh) | prépare le module |
-| [`check_M27_01.sh`](../../scripts/check/check_M27_01.sh) | vérification |
-| [`check_M27_02.sh`](../../scripts/check/check_M27_02.sh) | vérification |
-| [`check_M27_03.sh`](../../scripts/check/check_M27_03.sh) | vérification |
-| [`check_M27_04.sh`](../../scripts/check/check_M27_04.sh) | vérification |
-| [`check_M27_05.sh`](../../scripts/check/check_M27_05.sh) | vérification |
-| [`check_M27_06.sh`](../../scripts/check/check_M27_06.sh) | vérification |
-| [`break_M27_01.sh`](../../scripts/break/break_M27_01.sh) | installe une panne |
-| [`break_M27_02.sh`](../../scripts/break/break_M27_02.sh) | installe une panne |
-| [`break_M27_03.sh`](../../scripts/break/break_M27_03.sh) | installe une panne |
-| [`break_M27_04.sh`](../../scripts/break/break_M27_04.sh) | installe une panne |
+| [`check_M27_01.sh`](../../scripts/check/check_M27_01.sh) | vérifie L27.1 |
+| [`check_M27_02.sh`](../../scripts/check/check_M27_02.sh) | vérifie L27.2 |
+| [`check_M27_03.sh`](../../scripts/check/check_M27_03.sh) | vérifie L27.3 |
+| [`check_M27_04.sh`](../../scripts/check/check_M27_04.sh) | vérifie L27.4 |
+| [`check_M27_05.sh`](../../scripts/check/check_M27_05.sh) | vérifie L27.5 |
+| [`check_M27_06.sh`](../../scripts/check/check_M27_06.sh) | vérifie D27 |
+| [`break_M27_01.sh`](../../scripts/break/break_M27_01.sh) | installe la panne BF27.1 |
+| [`break_M27_02.sh`](../../scripts/break/break_M27_02.sh) | installe la panne BF27.2 |
+| [`break_M27_03.sh`](../../scripts/break/break_M27_03.sh) | installe la panne BF27.3 |
+| [`break_M27_04.sh`](../../scripts/break/break_M27_04.sh) | installe la panne BF27.4 |
 
 </details>
 <!-- nav:fin -->

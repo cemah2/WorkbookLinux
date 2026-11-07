@@ -9,42 +9,42 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_P3.sh`](../../scripts/projects/P3/setup_P3.sh) | prépare le module |
-| [`check_PC_1_1.sh`](../../scripts/projects/P3/check_PC_1_1.sh) | vérification |
-| [`check_PC_1_2.sh`](../../scripts/projects/P3/check_PC_1_2.sh) | vérification |
-| [`check_PC_1_3.sh`](../../scripts/projects/P3/check_PC_1_3.sh) | vérification |
-| [`check_PC_1_4.sh`](../../scripts/projects/P3/check_PC_1_4.sh) | vérification |
-| [`check_PC_2_1.sh`](../../scripts/projects/P3/check_PC_2_1.sh) | vérification |
-| [`check_PC_2_2.sh`](../../scripts/projects/P3/check_PC_2_2.sh) | vérification |
-| [`check_PC_2_3.sh`](../../scripts/projects/P3/check_PC_2_3.sh) | vérification |
-| [`check_PC_2_4.sh`](../../scripts/projects/P3/check_PC_2_4.sh) | vérification |
-| [`check_PC_3_1.sh`](../../scripts/projects/P3/check_PC_3_1.sh) | vérification |
-| [`check_PC_3_2.sh`](../../scripts/projects/P3/check_PC_3_2.sh) | vérification |
-| [`check_PC_3_3.sh`](../../scripts/projects/P3/check_PC_3_3.sh) | vérification |
-| [`check_PC_4_1.sh`](../../scripts/projects/P3/check_PC_4_1.sh) | vérification |
-| [`check_PC_4_2.sh`](../../scripts/projects/P3/check_PC_4_2.sh) | vérification |
-| [`check_PC_4_3.sh`](../../scripts/projects/P3/check_PC_4_3.sh) | vérification |
-| [`check_PC_4_4.sh`](../../scripts/projects/P3/check_PC_4_4.sh) | vérification |
-| [`check_PC_5_1.sh`](../../scripts/projects/P3/check_PC_5_1.sh) | vérification |
-| [`check_PC_5_2.sh`](../../scripts/projects/P3/check_PC_5_2.sh) | vérification |
-| [`check_PC_5_3.sh`](../../scripts/projects/P3/check_PC_5_3.sh) | vérification |
-| [`break_PC_1_1.sh`](../../scripts/projects/P3/break_PC_1_1.sh) | installe une panne |
-| [`break_PC_1_2.sh`](../../scripts/projects/P3/break_PC_1_2.sh) | installe une panne |
-| [`break_PC_1_3.sh`](../../scripts/projects/P3/break_PC_1_3.sh) | installe une panne |
-| [`break_PC_1_4.sh`](../../scripts/projects/P3/break_PC_1_4.sh) | installe une panne |
-| [`break_PC_2_1.sh`](../../scripts/projects/P3/break_PC_2_1.sh) | installe une panne |
-| [`break_PC_2_2.sh`](../../scripts/projects/P3/break_PC_2_2.sh) | installe une panne |
-| [`break_PC_2_3.sh`](../../scripts/projects/P3/break_PC_2_3.sh) | installe une panne |
-| [`break_PC_2_4.sh`](../../scripts/projects/P3/break_PC_2_4.sh) | installe une panne |
-| [`break_PC_3_1.sh`](../../scripts/projects/P3/break_PC_3_1.sh) | installe une panne |
-| [`break_PC_3_2.sh`](../../scripts/projects/P3/break_PC_3_2.sh) | installe une panne |
-| [`break_PC_3_3.sh`](../../scripts/projects/P3/break_PC_3_3.sh) | installe une panne |
-| [`break_PC_4_1.sh`](../../scripts/projects/P3/break_PC_4_1.sh) | installe une panne |
-| [`break_PC_4_2.sh`](../../scripts/projects/P3/break_PC_4_2.sh) | installe une panne |
-| [`break_PC_4_3.sh`](../../scripts/projects/P3/break_PC_4_3.sh) | installe une panne |
-| [`break_PC_4_4.sh`](../../scripts/projects/P3/break_PC_4_4.sh) | installe une panne |
-| [`break_PC_5_1.sh`](../../scripts/projects/P3/break_PC_5_1.sh) | installe une panne |
-| [`break_PC_5_2.sh`](../../scripts/projects/P3/break_PC_5_2.sh) | installe une panne |
-| [`break_PC_5_3.sh`](../../scripts/projects/P3/break_PC_5_3.sh) | installe une panne |
+| [`check_PC_1_1.sh`](../../scripts/projects/P3/check_PC_1_1.sh) | vérifie PC.1.1 |
+| [`check_PC_1_2.sh`](../../scripts/projects/P3/check_PC_1_2.sh) | vérifie PC.1.2 |
+| [`check_PC_1_3.sh`](../../scripts/projects/P3/check_PC_1_3.sh) | vérifie PC.1.3 |
+| [`check_PC_1_4.sh`](../../scripts/projects/P3/check_PC_1_4.sh) | vérifie PC.1.4 |
+| [`check_PC_2_1.sh`](../../scripts/projects/P3/check_PC_2_1.sh) | vérifie PC.2.1 |
+| [`check_PC_2_2.sh`](../../scripts/projects/P3/check_PC_2_2.sh) | vérifie PC.2.2 |
+| [`check_PC_2_3.sh`](../../scripts/projects/P3/check_PC_2_3.sh) | vérifie PC.2.3 |
+| [`check_PC_2_4.sh`](../../scripts/projects/P3/check_PC_2_4.sh) | vérifie PC.2.4 |
+| [`check_PC_3_1.sh`](../../scripts/projects/P3/check_PC_3_1.sh) | vérifie PC.3.1 |
+| [`check_PC_3_2.sh`](../../scripts/projects/P3/check_PC_3_2.sh) | vérifie PC.3.2 |
+| [`check_PC_3_3.sh`](../../scripts/projects/P3/check_PC_3_3.sh) | vérifie PC.3.3 |
+| [`check_PC_4_1.sh`](../../scripts/projects/P3/check_PC_4_1.sh) | vérifie PC.4.1 |
+| [`check_PC_4_2.sh`](../../scripts/projects/P3/check_PC_4_2.sh) | vérifie PC.4.2 |
+| [`check_PC_4_3.sh`](../../scripts/projects/P3/check_PC_4_3.sh) | vérifie PC.4.3 |
+| [`check_PC_4_4.sh`](../../scripts/projects/P3/check_PC_4_4.sh) | vérifie PC.4.4 |
+| [`check_PC_5_1.sh`](../../scripts/projects/P3/check_PC_5_1.sh) | vérifie PC.5.1 |
+| [`check_PC_5_2.sh`](../../scripts/projects/P3/check_PC_5_2.sh) | vérifie PC.5.2 |
+| [`check_PC_5_3.sh`](../../scripts/projects/P3/check_PC_5_3.sh) | vérifie PC.5.3 |
+| [`break_PC_1_1.sh`](../../scripts/projects/P3/break_PC_1_1.sh) | installe la panne PC.1.1 |
+| [`break_PC_1_2.sh`](../../scripts/projects/P3/break_PC_1_2.sh) | installe la panne PC.1.2 |
+| [`break_PC_1_3.sh`](../../scripts/projects/P3/break_PC_1_3.sh) | installe la panne PC.1.3 |
+| [`break_PC_1_4.sh`](../../scripts/projects/P3/break_PC_1_4.sh) | installe la panne PC.1.4 |
+| [`break_PC_2_1.sh`](../../scripts/projects/P3/break_PC_2_1.sh) | installe la panne PC.2.1 |
+| [`break_PC_2_2.sh`](../../scripts/projects/P3/break_PC_2_2.sh) | installe la panne PC.2.2 |
+| [`break_PC_2_3.sh`](../../scripts/projects/P3/break_PC_2_3.sh) | installe la panne PC.2.3 |
+| [`break_PC_2_4.sh`](../../scripts/projects/P3/break_PC_2_4.sh) | installe la panne PC.2.4 |
+| [`break_PC_3_1.sh`](../../scripts/projects/P3/break_PC_3_1.sh) | installe la panne PC.3.1 |
+| [`break_PC_3_2.sh`](../../scripts/projects/P3/break_PC_3_2.sh) | installe la panne PC.3.2 |
+| [`break_PC_3_3.sh`](../../scripts/projects/P3/break_PC_3_3.sh) | installe la panne PC.3.3 |
+| [`break_PC_4_1.sh`](../../scripts/projects/P3/break_PC_4_1.sh) | installe la panne PC.4.1 |
+| [`break_PC_4_2.sh`](../../scripts/projects/P3/break_PC_4_2.sh) | installe la panne PC.4.2 |
+| [`break_PC_4_3.sh`](../../scripts/projects/P3/break_PC_4_3.sh) | installe la panne PC.4.3 |
+| [`break_PC_4_4.sh`](../../scripts/projects/P3/break_PC_4_4.sh) | installe la panne PC.4.4 |
+| [`break_PC_5_1.sh`](../../scripts/projects/P3/break_PC_5_1.sh) | installe la panne PC.5.1 |
+| [`break_PC_5_2.sh`](../../scripts/projects/P3/break_PC_5_2.sh) | installe la panne PC.5.2 |
+| [`break_PC_5_3.sh`](../../scripts/projects/P3/break_PC_5_3.sh) | installe la panne PC.5.3 |
 
 </details>
 <!-- nav:fin -->

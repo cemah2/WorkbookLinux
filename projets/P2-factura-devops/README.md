@@ -9,20 +9,20 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_P2.sh`](../../scripts/projects/P2/setup_P2.sh) | prépare le module |
-| [`check_PB_01.sh`](../../scripts/projects/P2/check_PB_01.sh) | vérification |
-| [`check_PB_02.sh`](../../scripts/projects/P2/check_PB_02.sh) | vérification |
-| [`check_PB_03.sh`](../../scripts/projects/P2/check_PB_03.sh) | vérification |
-| [`check_PB_04.sh`](../../scripts/projects/P2/check_PB_04.sh) | vérification |
-| [`check_PB_05.sh`](../../scripts/projects/P2/check_PB_05.sh) | vérification |
-| [`check_PB_06.sh`](../../scripts/projects/P2/check_PB_06.sh) | vérification |
-| [`check_PB_07.sh`](../../scripts/projects/P2/check_PB_07.sh) | vérification |
-| [`check_PB_08.sh`](../../scripts/projects/P2/check_PB_08.sh) | vérification |
-| [`check_PB_09.sh`](../../scripts/projects/P2/check_PB_09.sh) | vérification |
-| [`check_PB_10.sh`](../../scripts/projects/P2/check_PB_10.sh) | vérification |
-| [`break_PB_01.sh`](../../scripts/projects/P2/break_PB_01.sh) | installe une panne |
-| [`break_PB_02.sh`](../../scripts/projects/P2/break_PB_02.sh) | installe une panne |
-| [`break_PB_03.sh`](../../scripts/projects/P2/break_PB_03.sh) | installe une panne |
-| [`break_PB_04.sh`](../../scripts/projects/P2/break_PB_04.sh) | installe une panne |
+| [`check_PB_01.sh`](../../scripts/projects/P2/check_PB_01.sh) | vérifie PB.1 |
+| [`check_PB_02.sh`](../../scripts/projects/P2/check_PB_02.sh) | vérifie PB.2 |
+| [`check_PB_03.sh`](../../scripts/projects/P2/check_PB_03.sh) | vérifie PB.3 |
+| [`check_PB_04.sh`](../../scripts/projects/P2/check_PB_04.sh) | vérifie PB.4 |
+| [`check_PB_05.sh`](../../scripts/projects/P2/check_PB_05.sh) | vérifie PB.5 |
+| [`check_PB_06.sh`](../../scripts/projects/P2/check_PB_06.sh) | vérifie PB.6 |
+| [`check_PB_07.sh`](../../scripts/projects/P2/check_PB_07.sh) | vérifie PB.7 |
+| [`check_PB_08.sh`](../../scripts/projects/P2/check_PB_08.sh) | vérifie PB.8 |
+| [`check_PB_09.sh`](../../scripts/projects/P2/check_PB_09.sh) | vérifie PB.9 |
+| [`check_PB_10.sh`](../../scripts/projects/P2/check_PB_10.sh) | vérifie PB.10 |
+| [`break_PB_01.sh`](../../scripts/projects/P2/break_PB_01.sh) | installe la panne INC-B1 |
+| [`break_PB_02.sh`](../../scripts/projects/P2/break_PB_02.sh) | installe la panne INC-B2 |
+| [`break_PB_03.sh`](../../scripts/projects/P2/break_PB_03.sh) | installe la panne INC-B3 |
+| [`break_PB_04.sh`](../../scripts/projects/P2/break_PB_04.sh) | installe la panne INC-B4 |
 
 </details>
 <!-- nav:fin -->

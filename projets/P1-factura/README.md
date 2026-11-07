@@ -9,19 +9,19 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_P1.sh`](../../scripts/projects/P1/setup_P1.sh) | prépare le module |
-| [`check_PA_01.sh`](../../scripts/projects/P1/check_PA_01.sh) | vérification |
-| [`check_PA_02.sh`](../../scripts/projects/P1/check_PA_02.sh) | vérification |
-| [`check_PA_03.sh`](../../scripts/projects/P1/check_PA_03.sh) | vérification |
-| [`check_PA_04.sh`](../../scripts/projects/P1/check_PA_04.sh) | vérification |
-| [`check_PA_05.sh`](../../scripts/projects/P1/check_PA_05.sh) | vérification |
-| [`check_PA_06.sh`](../../scripts/projects/P1/check_PA_06.sh) | vérification |
-| [`check_PA_07.sh`](../../scripts/projects/P1/check_PA_07.sh) | vérification |
-| [`check_PA_08.sh`](../../scripts/projects/P1/check_PA_08.sh) | vérification |
-| [`check_PA_09.sh`](../../scripts/projects/P1/check_PA_09.sh) | vérification |
-| [`check_PA_10.sh`](../../scripts/projects/P1/check_PA_10.sh) | vérification |
-| [`break_PA_01.sh`](../../scripts/projects/P1/break_PA_01.sh) | installe une panne |
-| [`break_PA_02.sh`](../../scripts/projects/P1/break_PA_02.sh) | installe une panne |
-| [`break_PA_03.sh`](../../scripts/projects/P1/break_PA_03.sh) | installe une panne |
+| [`check_PA_01.sh`](../../scripts/projects/P1/check_PA_01.sh) | vérifie PA.1 |
+| [`check_PA_02.sh`](../../scripts/projects/P1/check_PA_02.sh) | vérifie PA.2 |
+| [`check_PA_03.sh`](../../scripts/projects/P1/check_PA_03.sh) | vérifie PA.3 |
+| [`check_PA_04.sh`](../../scripts/projects/P1/check_PA_04.sh) | vérifie PA.4 |
+| [`check_PA_05.sh`](../../scripts/projects/P1/check_PA_05.sh) | vérifie PA.5 |
+| [`check_PA_06.sh`](../../scripts/projects/P1/check_PA_06.sh) | vérifie PA.6 |
+| [`check_PA_07.sh`](../../scripts/projects/P1/check_PA_07.sh) | vérifie PA.7 |
+| [`check_PA_08.sh`](../../scripts/projects/P1/check_PA_08.sh) | vérifie PA.8 |
+| [`check_PA_09.sh`](../../scripts/projects/P1/check_PA_09.sh) | vérifie PA.9 |
+| [`check_PA_10.sh`](../../scripts/projects/P1/check_PA_10.sh) | vérifie PA.10 |
+| [`break_PA_01.sh`](../../scripts/projects/P1/break_PA_01.sh) | installe la panne INC-A1 |
+| [`break_PA_02.sh`](../../scripts/projects/P1/break_PA_02.sh) | installe la panne INC-A2 |
+| [`break_PA_03.sh`](../../scripts/projects/P1/break_PA_03.sh) | installe la panne INC-A3 |
 
 </details>
 <!-- nav:fin -->

@@ -9,14 +9,14 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M04.sh`](../../scripts/setup/setup_M04.sh) | prépare le module |
-| [`check_M04_01.sh`](../../scripts/check/check_M04_01.sh) | vérification |
-| [`check_M04_02.sh`](../../scripts/check/check_M04_02.sh) | vérification |
-| [`check_M04_03.sh`](../../scripts/check/check_M04_03.sh) | vérification |
-| [`check_M04_04.sh`](../../scripts/check/check_M04_04.sh) | vérification |
-| [`check_M04_05.sh`](../../scripts/check/check_M04_05.sh) | vérification |
-| [`break_M04_01.sh`](../../scripts/break/break_M04_01.sh) | installe une panne |
-| [`break_M04_02.sh`](../../scripts/break/break_M04_02.sh) | installe une panne |
-| [`break_M04_03.sh`](../../scripts/break/break_M04_03.sh) | installe une panne |
+| [`check_M04_01.sh`](../../scripts/check/check_M04_01.sh) | vérifie L4.1 |
+| [`check_M04_02.sh`](../../scripts/check/check_M04_02.sh) | vérifie L4.2 |
+| [`check_M04_03.sh`](../../scripts/check/check_M04_03.sh) | vérifie L4.3 |
+| [`check_M04_04.sh`](../../scripts/check/check_M04_04.sh) | vérifie L4.4 |
+| [`check_M04_05.sh`](../../scripts/check/check_M04_05.sh) | vérifie D4 |
+| [`break_M04_01.sh`](../../scripts/break/break_M04_01.sh) | installe la panne BF4.1 |
+| [`break_M04_02.sh`](../../scripts/break/break_M04_02.sh) | installe la panne BF4.2 |
+| [`break_M04_03.sh`](../../scripts/break/break_M04_03.sh) | installe la panne BF4.3 |
 
 </details>
 <!-- nav:fin -->

@@ -9,17 +9,17 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M08.sh`](../../scripts/setup/setup_M08.sh) | prépare le module |
-| [`check_M08_01.sh`](../../scripts/check/check_M08_01.sh) | vérification |
-| [`check_M08_02.sh`](../../scripts/check/check_M08_02.sh) | vérification |
-| [`check_M08_03.sh`](../../scripts/check/check_M08_03.sh) | vérification |
-| [`check_M08_04.sh`](../../scripts/check/check_M08_04.sh) | vérification |
-| [`check_M08_05.sh`](../../scripts/check/check_M08_05.sh) | vérification |
-| [`check_M08_06.sh`](../../scripts/check/check_M08_06.sh) | vérification |
-| [`check_M08_07.sh`](../../scripts/check/check_M08_07.sh) | vérification |
-| [`break_M08_01.sh`](../../scripts/break/break_M08_01.sh) | installe une panne |
-| [`break_M08_02.sh`](../../scripts/break/break_M08_02.sh) | installe une panne |
-| [`break_M08_03.sh`](../../scripts/break/break_M08_03.sh) | installe une panne |
-| [`break_M08_04.sh`](../../scripts/break/break_M08_04.sh) | installe une panne |
+| [`check_M08_01.sh`](../../scripts/check/check_M08_01.sh) | vérifie L8.1 |
+| [`check_M08_02.sh`](../../scripts/check/check_M08_02.sh) | vérifie L8.2 |
+| [`check_M08_03.sh`](../../scripts/check/check_M08_03.sh) | vérifie L8.3 |
+| [`check_M08_04.sh`](../../scripts/check/check_M08_04.sh) | vérifie L8.4 |
+| [`check_M08_05.sh`](../../scripts/check/check_M08_05.sh) | vérifie L8.5 |
+| [`check_M08_06.sh`](../../scripts/check/check_M08_06.sh) | vérifie D8 |
+| [`check_M08_07.sh`](../../scripts/check/check_M08_07.sh) | vérifie L8.6 |
+| [`break_M08_01.sh`](../../scripts/break/break_M08_01.sh) | installe la panne BF8.1 |
+| [`break_M08_02.sh`](../../scripts/break/break_M08_02.sh) | installe la panne BF8.2 |
+| [`break_M08_03.sh`](../../scripts/break/break_M08_03.sh) | installe la panne BF8.3 |
+| [`break_M08_04.sh`](../../scripts/break/break_M08_04.sh) | installe la panne BF8.4 |
 
 </details>
 <!-- nav:fin -->

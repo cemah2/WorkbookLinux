@@ -9,15 +9,15 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M05.sh`](../../scripts/setup/setup_M05.sh) | prépare le module |
-| [`check_M05_01.sh`](../../scripts/check/check_M05_01.sh) | vérification |
-| [`check_M05_02.sh`](../../scripts/check/check_M05_02.sh) | vérification |
-| [`check_M05_03.sh`](../../scripts/check/check_M05_03.sh) | vérification |
-| [`check_M05_04.sh`](../../scripts/check/check_M05_04.sh) | vérification |
-| [`check_M05_05.sh`](../../scripts/check/check_M05_05.sh) | vérification |
-| [`check_M05_06.sh`](../../scripts/check/check_M05_06.sh) | vérification |
-| [`break_M05_01.sh`](../../scripts/break/break_M05_01.sh) | installe une panne |
-| [`break_M05_02.sh`](../../scripts/break/break_M05_02.sh) | installe une panne |
-| [`break_M05_03.sh`](../../scripts/break/break_M05_03.sh) | installe une panne |
+| [`check_M05_01.sh`](../../scripts/check/check_M05_01.sh) | vérifie L5.1 |
+| [`check_M05_02.sh`](../../scripts/check/check_M05_02.sh) | vérifie L5.2 |
+| [`check_M05_03.sh`](../../scripts/check/check_M05_03.sh) | vérifie L5.3 |
+| [`check_M05_04.sh`](../../scripts/check/check_M05_04.sh) | vérifie L5.4 |
+| [`check_M05_05.sh`](../../scripts/check/check_M05_05.sh) | vérifie L5.5 |
+| [`check_M05_06.sh`](../../scripts/check/check_M05_06.sh) | vérifie D5 |
+| [`break_M05_01.sh`](../../scripts/break/break_M05_01.sh) | installe la panne BF5.1 |
+| [`break_M05_02.sh`](../../scripts/break/break_M05_02.sh) | installe la panne BF5.2 |
+| [`break_M05_03.sh`](../../scripts/break/break_M05_03.sh) | installe la panne BF5.3 |
 
 </details>
 <!-- nav:fin -->

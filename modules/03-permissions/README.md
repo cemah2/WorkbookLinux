@@ -9,14 +9,14 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M03.sh`](../../scripts/setup/setup_M03.sh) | prépare le module |
-| [`check_M03_01.sh`](../../scripts/check/check_M03_01.sh) | vérification |
-| [`check_M03_02.sh`](../../scripts/check/check_M03_02.sh) | vérification |
-| [`check_M03_03.sh`](../../scripts/check/check_M03_03.sh) | vérification |
-| [`check_M03_04.sh`](../../scripts/check/check_M03_04.sh) | vérification |
-| [`check_M03_05.sh`](../../scripts/check/check_M03_05.sh) | vérification |
-| [`break_M03_01.sh`](../../scripts/break/break_M03_01.sh) | installe une panne |
-| [`break_M03_02.sh`](../../scripts/break/break_M03_02.sh) | installe une panne |
-| [`break_M03_03.sh`](../../scripts/break/break_M03_03.sh) | installe une panne |
+| [`check_M03_01.sh`](../../scripts/check/check_M03_01.sh) | vérifie L3.1 |
+| [`check_M03_02.sh`](../../scripts/check/check_M03_02.sh) | vérifie L3.2 |
+| [`check_M03_03.sh`](../../scripts/check/check_M03_03.sh) | vérifie L3.3 |
+| [`check_M03_04.sh`](../../scripts/check/check_M03_04.sh) | vérifie L3.4 |
+| [`check_M03_05.sh`](../../scripts/check/check_M03_05.sh) | vérifie D3 |
+| [`break_M03_01.sh`](../../scripts/break/break_M03_01.sh) | installe la panne BF3.1 |
+| [`break_M03_02.sh`](../../scripts/break/break_M03_02.sh) | installe la panne BF3.2 |
+| [`break_M03_03.sh`](../../scripts/break/break_M03_03.sh) | installe la panne BF3.3 |
 
 </details>
 <!-- nav:fin -->

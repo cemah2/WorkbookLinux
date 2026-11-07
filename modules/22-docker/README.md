@@ -9,19 +9,19 @@ Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/`
 | Script | Rôle |
 |---|---|
 | [`setup_M22.sh`](../../scripts/setup/setup_M22.sh) | prépare le module |
-| [`check_M22_01.sh`](../../scripts/check/check_M22_01.sh) | vérification |
-| [`check_M22_02.sh`](../../scripts/check/check_M22_02.sh) | vérification |
-| [`check_M22_03.sh`](../../scripts/check/check_M22_03.sh) | vérification |
-| [`check_M22_04.sh`](../../scripts/check/check_M22_04.sh) | vérification |
-| [`check_M22_05.sh`](../../scripts/check/check_M22_05.sh) | vérification |
-| [`check_M22_06.sh`](../../scripts/check/check_M22_06.sh) | vérification |
-| [`check_M22_07.sh`](../../scripts/check/check_M22_07.sh) | vérification |
-| [`break_M22_01.sh`](../../scripts/break/break_M22_01.sh) | installe une panne |
-| [`break_M22_02.sh`](../../scripts/break/break_M22_02.sh) | installe une panne |
-| [`break_M22_03.sh`](../../scripts/break/break_M22_03.sh) | installe une panne |
-| [`break_M22_04.sh`](../../scripts/break/break_M22_04.sh) | installe une panne |
-| [`break_M22_05.sh`](../../scripts/break/break_M22_05.sh) | installe une panne |
-| [`break_M22_06.sh`](../../scripts/break/break_M22_06.sh) | installe une panne |
+| [`check_M22_01.sh`](../../scripts/check/check_M22_01.sh) | vérifie L22.1 |
+| [`check_M22_02.sh`](../../scripts/check/check_M22_02.sh) | vérifie L22.2 |
+| [`check_M22_03.sh`](../../scripts/check/check_M22_03.sh) | vérifie L22.3 |
+| [`check_M22_04.sh`](../../scripts/check/check_M22_04.sh) | vérifie L22.4 |
+| [`check_M22_05.sh`](../../scripts/check/check_M22_05.sh) | vérifie L22.5 |
+| [`check_M22_06.sh`](../../scripts/check/check_M22_06.sh) | vérifie D22 |
+| [`check_M22_07.sh`](../../scripts/check/check_M22_07.sh) | vérifie L22.6 |
+| [`break_M22_01.sh`](../../scripts/break/break_M22_01.sh) | installe la panne BF22.1 |
+| [`break_M22_02.sh`](../../scripts/break/break_M22_02.sh) | installe la panne BF22.2 |
+| [`break_M22_03.sh`](../../scripts/break/break_M22_03.sh) | installe la panne BF22.3 |
+| [`break_M22_04.sh`](../../scripts/break/break_M22_04.sh) | installe la panne BF22.4 |
+| [`break_M22_05.sh`](../../scripts/break/break_M22_05.sh) | installe la panne BF22.5 |
+| [`break_M22_06.sh`](../../scripts/break/break_M22_06.sh) | installe la panne BF22.6 |
 
 </details>
 <!-- nav:fin -->
