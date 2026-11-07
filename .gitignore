@@ -2,6 +2,10 @@
 build/
 *.log
 
+# Node (contrôle des diagrammes Mermaid)
+node_modules/
+package-lock.json
+
 # Python
 __pycache__/
 *.pyc
