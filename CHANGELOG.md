@@ -17,6 +17,16 @@ correctif = erreurs corrigées.
   navigateur, export Markdown par fiche, sauvegarde et restauration JSON.
   Publication par GitHub Pages (workflow « Fiches interactives ») et
   archive hors ligne.
+- **Aides progressives** dans les fiches : jusqu'à trois aides par item
+  (5 000 en tout), affichées une à une (*Aide 1*, *Aide 2*, *Aide 3*) de la
+  plus vague à la plus précise, tirées du corrigé (`tools/aides.py`) :
+  élimination de réponses fausses puis piste pour les QCM ; notions, plan et
+  piste pour les questions ouvertes ; outils, première commande et piste pour
+  les exercices ; démarche, outils et commandes clés pour les labs et défis ;
+  outils de diagnostic, premières commandes et cause racine pour les
+  Break & Fix. Les sorties attendues sont retirées des commandes montrées.
+  Aides rédigées possibles par module (`aides.md`, voir CONVENTIONS) ; le
+  nombre d'aides utilisées figure dans l'export.
 
 ### Corrigé
 - Q5.9 : options écrites sur une seule ligne.

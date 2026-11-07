@@ -144,6 +144,7 @@
       t = st.vu ? "répondu · corrigé vu" : "répondu"; cls = "fait";
       if (st.k) t += " · check ✓";
     } else if (st.vu) { t = "corrigé vu"; cls = "vu"; }
+    if (st.a) t += (t ? " · " : "") + st.a + (st.a > 1 ? " aides" : " aide");
     e.textContent = t;
     e.className = "etat " + cls;
   }
@@ -160,8 +161,10 @@
       o.classList.toggle("juste", rep.indexOf(l) >= 0);
       o.classList.toggle("faux", ch.indexOf(l) >= 0 && rep.indexOf(l) < 0);
     });
-    article.querySelector(".verdict").textContent = ok ? "Juste !"
-      : "Pas tout à fait : la bonne réponse est " + rep.join(", ") + ".";
+    var na = etat(article).a || 0;
+    var avec = na ? " (avec " + na + (na > 1 ? " aides)" : " aide)") : "";
+    article.querySelector(".verdict").textContent = ok ? "Juste !" + avec
+      : "Pas tout à fait : la bonne réponse est " + rep.join(", ") + "." + avec;
     article.classList.toggle("reussi", ok);
     article.classList.toggle("rate", !ok);
   }
@@ -230,6 +233,35 @@
         });
       }
     }
+    /* aides progressives */
+    var ba = article.querySelector("button.aide-suivante");
+    if (ba) {
+      var total = parseInt(ba.dataset.total, 10) || 0;
+      var montrerAides = function (n) {
+        article.querySelectorAll(".aide").forEach(function (a) {
+          a.hidden = parseInt(a.dataset.n, 10) > n;
+        });
+        if (n >= total) {
+          ba.disabled = true;
+          ba.textContent = "Plus d'aide";
+          ba.title = "Toutes les aides sont affichées : il reste le corrigé.";
+        } else {
+          ba.disabled = false;
+          ba.innerHTML = "Aide " + (n + 1) + '<span class="sur"> / ' + total + "</span>";
+        }
+      };
+      montrerAides(st.a || 0);
+      ba.addEventListener("click", function () {
+        var s = etat(article);
+        s.a = Math.min((s.a || 0) + 1, total);
+        sauver(article, s);
+        montrerAides(s.a);
+        badge(article);
+        var nv = article.querySelector('.aide[data-n="' + s.a + '"]');
+        if (nv && nv.scrollIntoView) nv.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+    }
+
     article.querySelector("button.voir").addEventListener("click", function () {
       var c = article.querySelector(".corrige");
       if (!c.hidden) { montrerCorrige(article, false); return; }
@@ -289,11 +321,12 @@
                   "_Exporté le " + aujourdhui() + " depuis les fiches interactives du workbook._", ""];
     var qcm = manifeste.items.filter(function (i) { return i.type === "qcm"; });
     if (qcm.length) {
-      lignes.push("## QCM", "", "| Question | Ta réponse | Résultat |", "|---|---|---|");
+      lignes.push("## QCM", "", "| Question | Ta réponse | Résultat | Aides |", "|---|---|---|---|");
       qcm.forEach(function (it) {
         var st = lire(cle(PAGE, it.id)) || {};
         var res = st.v ? (st.ok ? "juste" : "faux (attendu : " + (it.rep || []).join(", ") + ")") : "non vérifié";
-        lignes.push("| " + it.code + " | " + ((st.c || []).join(", ") || "—") + " | " + res + " |");
+        lignes.push("| " + it.code + " | " + ((st.c || []).join(", ") || "—") + " | " + res + " | " +
+                    (st.a || 0) + " / " + (it.na || 0) + " |");
       });
       lignes.push("");
     }
@@ -302,6 +335,7 @@
       var st = lire(cle(PAGE, it.id)) || {};
       lignes.push("## " + it.code, "");
       if (st.k) lignes.push("_Script check : réussi._", "");
+      if (st.a) lignes.push("_Aides utilisées : " + st.a + " / " + (it.na || 0) + "._", "");
       lignes.push(st.t && st.t.trim() ? st.t.trim() : "_(pas de réponse)_", "");
     });
     var num = manifeste.page.slice(0, 2);

@@ -22,7 +22,7 @@ lab se vérifie par un script.
 | **Projets fil rouge** | Factura à la main (A), Factura industrialisée (B), une semaine d'astreinte (C) |
 | **Exercices** | 594 QCM · 295 questions ouvertes · 537 exercices guidés · 157 labs · 135 Break & Fix · 33 défis |
 | **Corrigés** | chaque item a sa réponse, l'explication du mécanisme (« Pourquoi ») et l'erreur classique (« Piège ») |
-| **Fiches interactives** | [répondre en ligne](https://cemah2.github.io/WorkbookLinux/) : QCM à cocher et corrigés au clic, cadres de réponse pour tout le reste, progression enregistrée |
+| **Fiches interactives** | [répondre en ligne](https://cemah2.github.io/WorkbookLinux/) : QCM à cocher et corrigés au clic, cadres de réponse pour tout le reste, aides progressives (Aide 1, 2, 3) pour chaque question, progression enregistrée |
 | **Scripts** | 37 `setup`, 222 `check` qui vérifient le résultat, 160 `break` qui installent une panne |
 | **Laboratoire** | 7 VM sur Proxmox VE (Ubuntu 24.04 + Rocky 9), déployables en une commande, et 2 nœuds de cluster pour la haute disponibilité |
 | **Mémo** | l'aide-mémoire de tous les modules, à garder ouvert ([docs/memo.md](docs/memo.md)) |
@@ -74,6 +74,11 @@ partir des mêmes fichiers :
 * les **questions ouvertes, exercices, labs, Break & Fix, défis et jalons**
   ont chacun leur cadre de réponse ; le corrigé se déplie à la demande (une
   première demande sans réponse rappelle la règle des 20 minutes) ;
+* chaque item a ses **aides progressives** — *Aide 1*, *Aide 2*, *Aide 3* —,
+  de la plus vague à la plus précise : pour un QCM, une réponse fausse à
+  écarter, puis une autre, puis une piste ; pour le reste, les outils ou les
+  notions en jeu, puis la démarche, puis une commande à taper ou la cause à
+  chercher. Le nombre d'aides utilisées est noté à côté de ta réponse ;
 * les labs ont une case « le script `check` passe », la grille
   d'auto-évaluation se coche ;
 * tout est enregistré dans ton navigateur au fil de la frappe, rien n'est

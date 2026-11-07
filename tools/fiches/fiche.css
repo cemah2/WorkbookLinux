@@ -125,6 +125,15 @@ textarea { width: 100%; min-height: 110px; resize: vertical; padding: .6rem .7re
 .item.reussi .verdict { color: var(--ok); font-weight: 600; }
 .item.rate .verdict { color: var(--ko); font-weight: 600; }
 .check-ok { font-size: .9rem; display: flex; gap: .4rem; align-items: center; }
+.aides { margin: .6rem 0 0; }
+.aide { margin: .5rem 0; padding: .3rem .9rem .4rem; border-left: 4px solid var(--warning);
+  background: var(--fond); border-radius: 0 8px 8px 0; }
+.aide-titre { margin: .3rem 0; font-weight: 700; font-size: .88rem; color: var(--warning); }
+.aide > :last-child { margin-bottom: .3rem; }
+button.aide-suivante { border-color: var(--warning); color: var(--warning); font-weight: 600; }
+button.aide-suivante:hover { background: var(--fond); }
+button.aide-suivante:disabled { opacity: .55; cursor: default; font-weight: 400; }
+button.aide-suivante .sur { font-weight: 400; opacity: .8; }
 .corrige { margin-top: .9rem; padding: .3rem 1rem .6rem; border-radius: 8px; background: var(--fond);
   border: 1px dashed var(--ligne); }
 .corrige-titre { font-weight: 700; color: var(--doux); font-size: .88rem; margin: .5rem 0; text-transform: uppercase;

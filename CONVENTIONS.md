@@ -157,6 +157,33 @@ et ce qu'on cherche dans la sortie), la cause racine, le correctif, et la préve
 Le corrigé doit être **autoportant** : on doit pouvoir le lire seul, sans avoir l'énoncé sous les yeux,
 donc rappeler l'énoncé en une ligne en italique avant la réponse.
 
+Le corrigé alimente aussi les **aides progressives** des fiches interactives
+(`tools/aides.py`), d'où quelques habitudes qui les rendent utiles : les
+commandes dans des blocs `bash` (sorties en commentaires `#`), les étapes d'un
+lab en intertitres `**Étape N — titre**`, la démarche d'un Break & Fix avant
+`**Cause racine** :`, des notions en **gras** plutôt que des mots d'insistance,
+et un « Pourquoi » qui commence par le mécanisme plutôt que par la lettre de
+la réponse.
+
+### Aides rédigées (`aides.md`)
+
+Quand les aides tirées du corrigé ne suffisent pas, un fichier `aides.md` à
+côté de l'énoncé les remplace, item par item :
+
+```markdown
+## QO1.4
+
+Première aide, la plus vague (texte, commande, schéma…).
+
+---
+
+Deuxième aide, plus précise.
+```
+
+Une section `##` par identifiant (tel qu'affiché : `QO1.4`, `PC.2.1`), deux à
+quatre aides séparées par `---`, sans jamais donner la réponse elle-même.
+`make fiches` signale un identifiant inconnu.
+
 ---
 
 ## 5. Encadrés, schémas, navigation
@@ -226,7 +253,8 @@ insère ainsi (chemin relatif depuis le fichier) :
 
 Les énoncés ne contiennent pas de zone de réponse : le lecteur écrit dans
 `reponses/` de son *fork*, un fichier par identifiant (voir
-`reponses/README.md`).
+`reponses/README.md`), ou dans les fiches interactives générées par
+`make fiches`, qui exportent en Markdown.
 
 ### Navigation
 

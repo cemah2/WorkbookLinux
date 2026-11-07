@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workbook  # noqa: E402
+import aides as A  # noqa: E402
 
 try:
     from markdown_it import MarkdownIt
@@ -201,9 +202,17 @@ def corriges(path: Path) -> dict[str, dict]:
     for s in segments(path.read_text(encoding="utf-8")):
         if s["kind"] != "item":
             continue
-        corps = "\n".join(s["lignes"]).strip("\n")
+        lignes = list(s["lignes"])
+        tete = s["tete"]
+        # titre en italique sur plusieurs lignes : « — *début … » puis « … fin.* »
+        if re.search(r"— \*[^*]*$", tete):
+            while lignes and lignes[0].strip():
+                tete += " " + lignes.pop(0).strip()
+                if tete.rstrip().endswith("*"):
+                    break
+        corps = "\n".join(lignes).strip("\n")
         rep = None
-        titre = sans_lien_id(s["tete"]).strip()
+        titre = sans_lien_id(tete).strip()
         m = re.search(r"^\*\*R[ée]ponses? ?:\s*(.+?)\*\*", corps, re.M | re.S)
         if not m:   # variante : **[Q5.1](…) — b)** dans la ligne d'en-tête
             m = re.match(r"^\*\*[A-Z]+[0-9.]+\s*—\s*(.+?)\*\*", titre)
@@ -253,7 +262,22 @@ def esc(t: str) -> str:
     return html.escape(t, quote=True)
 
 
-def carte_item(slug: str, s: dict, corr: dict, src: Path) -> tuple[str, dict]:
+def bloc_aides(slug: str, code: str, liste: list[tuple[str, str]], src: Path) -> tuple[str, str]:
+    """(HTML des aides, bouton) ; liste = [(titre, markdown)]."""
+    if not liste:
+        avertissements.append(f"{slug} {code} : aucune aide")
+        return "", ""
+    morceaux = []
+    for n, (titre, md) in enumerate(liste, 1):
+        t = f"Aide {n}" + (f" — {esc(titre)}" if titre else "")
+        morceaux.append(f'<div class="aide" data-n="{n}" hidden><p class="aide-titre">{t}</p>'
+                        f'{liens(rendu(md), src)}</div>')
+    bouton = (f'<button type="button" class="aide-suivante" data-total="{len(liste)}">'
+              f'Aide 1<span class="sur"> / {len(liste)}</span></button>')
+    return f'<div class="aides">{"".join(morceaux)}</div>', bouton
+
+
+def carte_item(slug: str, s: dict, corr: dict, src: Path, redigees: dict) -> tuple[str, dict]:
     ident = s["id"]
     genre = type_item(ident)
     tete = sans_lien_id(s["tete"]).strip()
@@ -285,6 +309,12 @@ def carte_item(slug: str, s: dict, corr: dict, src: Path) -> tuple[str, dict]:
             avertissements.append(f"{slug} {code} : réponse du QCM illisible dans le corrigé")
         info["rep"] = rep
         info["n"] = len(options)
+        if ident in redigees:
+            liste = [("", x) for x in redigees[ident]]
+        else:
+            liste = A.aides_qcm(ident, [o for o, _ in options], rep or [], c["md"] if c else "")
+        aides_html, bouton_aide = bloc_aides(slug, code, liste, src.with_name("corrige.md"))
+        info["na"] = len(liste)
         multi = bool(rep and len(rep) > 1)
         opts = []
         for lettre, texte in options:
@@ -292,8 +322,8 @@ def carte_item(slug: str, s: dict, corr: dict, src: Path) -> tuple[str, dict]:
                 f'<label class="option" data-l="{lettre}"><input type="checkbox" value="{lettre}">'
                 f'<span class="lettre">{lettre})</span> <span class="texte">{liens(MD.renderInline(texte), src)}</span></label>')
         consigne = "plusieurs réponses" if multi else "une réponse"
-        boutons = (f'<div class="actions"><button type="button" class="verifier"'
-                   f'{"" if rep else " hidden"}>Vérifier</button>'
+        boutons = (f'{aides_html}<div class="actions"><button type="button" class="verifier"'
+                   f'{"" if rep else " hidden"}>Vérifier</button>{bouton_aide}'
                    f'<button type="button" class="voir">Voir le corrigé</button>'
                    f'<span class="verdict" aria-live="polite"></span></div>')
         corps = (f'<div class="enonce">{liens(rendu(tronc), src)}</div>'
@@ -313,10 +343,17 @@ def carte_item(slug: str, s: dict, corr: dict, src: Path) -> tuple[str, dict]:
         if genre in ("lab", "jalon", "incident") and re.search(r"check_[A-Z0-9_]+\.sh", enonce_md):
             check = ('<label class="check-ok"><input type="checkbox" class="coche-check">'
                      ' le script <code>check</code> passe</label>')
+        if ident in redigees:
+            liste = [("", x) for x in redigees[ident]]
+        else:
+            liste = A.aides_ecrit(genre, c["md"] if c else "")
+        aides_html, bouton_aide = bloc_aides(slug, code, liste, src.with_name("corrige.md"))
+        info["na"] = len(liste)
         corps = (f'{titre}<div class="enonce">{liens(rendu(enonce_md), src)}</div>'
                  f'<label class="zone"><span>Ta réponse</span>'
                  f'<textarea rows="5" placeholder="{esc(PLACEHOLDER[genre])}"></textarea></label>'
-                 f'<div class="actions">{check}<button type="button" class="voir">Voir le corrigé</button>'
+                 f'{aides_html}<div class="actions">{check}{bouton_aide}'
+                 f'<button type="button" class="voir">Voir le corrigé</button>'
                  f'<span class="verdict" aria-live="polite"></span></div>')
         tete_html = (f'<header><span class="code">{esc(code)}</span>'
                      f'<span class="genre">{LIBELLES[genre]}</span><span class="etat"></span></header>')
@@ -339,6 +376,7 @@ def page(slug: str, prec: str | None, suiv: str | None, partie: tuple) -> tuple[
     d = workbook.item_dir(slug)
     src = d / "README.md"
     corr = corriges(d / "corrige.md")
+    redigees = A.redigees(d / "aides.md")
     court, long_ = workbook.title_of(slug)
     label = workbook.short_label(slug)
     corps: list[str] = []
@@ -373,11 +411,15 @@ def page(slug: str, prec: str | None, suiv: str | None, partie: tuple) -> tuple[
             h = liens(rendu("\n".join(s["lignes"])), src)
             corps.append(cases_autoeval(h, compteur))
             continue
-        carte, info = carte_item(slug, s, corr, src)
+        carte, info = carte_item(slug, s, corr, src, redigees)
         corps.append(carte)
         items.append(info)
     if ouvert:
         corps.append("</div></details>" if ouvert == "details" else "</section>")
+    connus = {i["id"] for i in items}
+    for k in redigees:
+        if k not in connus:
+            avertissements.append(f"{slug} aides.md : « {k} » ne correspond à aucun item")
 
     manifeste = {"page": slug, "label": label, "titre": court, "items": items, "ae": compteur[0]}
     nav = []
@@ -509,8 +551,10 @@ def main() -> int:
     nq = sum(1 for m in manifestes for i in m["items"] if i["type"] == "qcm")
     nauto = sum(1 for m in manifestes for i in m["items"] if i["type"] == "qcm" and i.get("rep"))
     nr = sum(1 for m in manifestes for i in m["items"] if i["type"] != "qcm")
+    na = sum(i.get("na", 0) for m in manifestes for i in m["items"])
+    sans = sum(1 for m in manifestes for i in m["items"] if not i.get("na"))
     print(f"fiches : {len(manifestes)} pages, {nq} QCM ({nauto} corrigés automatiquement), "
-          f"{nr} réponses écrites -> {sortie}")
+          f"{nr} réponses écrites, {na} aides ({sans} items sans aide) -> {sortie}")
     for w in avertissements:
         print("  [avert] " + w)
     return 1 if (a.strict and avertissements) else 0
