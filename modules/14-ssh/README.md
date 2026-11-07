@@ -1,39 +1,66 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 14**  
+[← Module 13](../13-reseau-avance/README.md) · [Corrigé](corrige.md) · [Module 15 →](../15-services-applicatifs/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M14.sh`](../../scripts/setup/setup_M14.sh) | prépare le module |
+| [`check_M14_01.sh`](../../scripts/check/check_M14_01.sh) | vérification |
+| [`check_M14_02.sh`](../../scripts/check/check_M14_02.sh) | vérification |
+| [`check_M14_03.sh`](../../scripts/check/check_M14_03.sh) | vérification |
+| [`check_M14_04.sh`](../../scripts/check/check_M14_04.sh) | vérification |
+| [`check_M14_05.sh`](../../scripts/check/check_M14_05.sh) | vérification |
+| [`check_M14_06.sh`](../../scripts/check/check_M14_06.sh) | vérification |
+| [`break_M14_01.sh`](../../scripts/break/break_M14_01.sh) | installe une panne |
+| [`break_M14_02.sh`](../../scripts/break/break_M14_02.sh) | installe une panne |
+| [`break_M14_03.sh`](../../scripts/break/break_M14_03.sh) | installe une panne |
+| [`break_M14_04.sh`](../../scripts/break/break_M14_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 14 — SSH : accès, automatisation et tunnels
 
 ## 14.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* décrire les trois phases d'une connexion SSH (négociation et échange de clés,
-  vérification de la clé d'hôte, authentification) et dire à quelle phase un
-  incident se produit à la lecture d'un `ssh -v` ;
-* générer, protéger et déployer une paire de clés `ed25519`, justifier ce choix
-  face à RSA 4096, et corriger les permissions exigées sur `~/.ssh` des deux
-  côtés de la connexion ;
-* charger mes clés dans un agent (Linux **et** Windows), énoncer le risque exact
-  du transfert d'agent et le remplacer par `ProxyJump` ;
-* écrire un `~/.ssh/config` complet pour un parc avec bastion : alias,
-  `ProxyJump`, `IdentitiesOnly`, `Match`, `Include`, et multiplexage de
-  connexions (`ControlMaster`) dont je sais mesurer le gain ;
-* diagnostiquer un `REMOTE HOST IDENTIFICATION HAS CHANGED` sans le contourner
-  aveuglément, et provisionner `known_hosts` de façon sûre en CI ;
-* durcir un serveur `sshd` (authentification, comptes autorisés, délais,
-  algorithmes), valider la configuration avec `sshd -t` et `sshd -T` avant
-  rechargement, et ne jamais me verrouiller dehors ;
-* monter un tunnel `-L`, `-R` ou `-D` selon le besoin, expliquer le sens des flux
-  et fermer proprement le tunnel ;
-* exécuter des commandes à distance en récupérant le code de retour, savoir quand
-  forcer un TTY avec `-t`, et exécuter un script local sur une machine distante ;
-* restreindre une clé de service dans `authorized_keys` (`command=`, `from=`,
-  `restrict`) et expliquer ce qu'apporte un certificat SSH à grande échelle ;
-* lire `journalctl -u ssh` et associer chaque message serveur à l'erreur vue côté
-  client.
-
-Temps estimé : 6 h
-Prérequis : modules 01 (shell), 03 (permissions), 04 (utilisateurs et sudo),
-06 (archives, `rsync`), 08 (services systemd).
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * décrire les trois phases d'une connexion SSH (négociation et échange de clés,
+>   vérification de la clé d'hôte, authentification) et dire à quelle phase un
+>   incident se produit à la lecture d'un `ssh -v` ;
+> * générer, protéger et déployer une paire de clés `ed25519`, justifier ce choix
+>   face à RSA 4096, et corriger les permissions exigées sur `~/.ssh` des deux
+>   côtés de la connexion ;
+> * charger mes clés dans un agent (Linux **et** Windows), énoncer le risque exact
+>   du transfert d'agent et le remplacer par `ProxyJump` ;
+> * écrire un `~/.ssh/config` complet pour un parc avec bastion : alias,
+>   `ProxyJump`, `IdentitiesOnly`, `Match`, `Include`, et multiplexage de
+>   connexions (`ControlMaster`) dont je sais mesurer le gain ;
+> * diagnostiquer un `REMOTE HOST IDENTIFICATION HAS CHANGED` sans le contourner
+>   aveuglément, et provisionner `known_hosts` de façon sûre en CI ;
+> * durcir un serveur `sshd` (authentification, comptes autorisés, délais,
+>   algorithmes), valider la configuration avec `sshd -t` et `sshd -T` avant
+>   rechargement, et ne jamais me verrouiller dehors ;
+> * monter un tunnel `-L`, `-R` ou `-D` selon le besoin, expliquer le sens des flux
+>   et fermer proprement le tunnel ;
+> * exécuter des commandes à distance en récupérant le code de retour, savoir quand
+>   forcer un TTY avec `-t`, et exécuter un script local sur une machine distante ;
+> * restreindre une clé de service dans `authorized_keys` (`command=`, `from=`,
+>   `restrict`) et expliquer ce qu'apporte un certificat SSH à grande échelle ;
+> * lire `journalctl -u ssh` et associer chaque message serveur à l'erreur vue côté
+>   client.
+>
+> **Temps estimé** : 6 h
+>
+> **Prérequis** : modules 01 (shell), 03 (permissions), 04 (utilisateurs et sudo),
+> 06 (archives, `rsync`), 08 (services systemd).
 
 ---
 
@@ -55,12 +82,13 @@ sudo apt install -y openssh-server openssh-client ssh-audit netcat-openbsd \
   curl socat
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y openssh-server openssh-clients nmap-ncat
-curl socat`. Le paquet `ssh-audit` n'existe pas dans Rocky 9 ni EPEL 9 :
-`python3 -m pip install --user ssh-audit`, ou lance l'audit depuis `lab-adm`
-contre `lab-rhel`, ce qui est de toute façon le mode normal d'utilisation.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y openssh-server openssh-clients nmap-ncat
+> curl socat`. Le paquet `ssh-audit` n'existe pas dans Rocky 9 ni EPEL 9 :
+> `python3 -m pip install --user ssh-audit`, ou lance l'audit depuis `lab-adm`
+> contre `lab-rhel`, ce qui est de toute façon le mode normal d'utilisation.
 
 Script de préparation, à lancer **sur chaque VM** (il détecte le nom d'hôte et
 n'applique que la partie qui le concerne, il est idempotent) :
@@ -74,15 +102,16 @@ un faux service de base de données sur `lab-db:5432`, une fausse application
 locale sur `lab-adm:3000`, le compte de service `sauvegarde` sur `lab-web`, et
 sauvegarde `/etc/ssh` dans `/root/.m14-backup/`.
 
-::: attention
-Ce module modifie la configuration du serveur SSH. **Règle d'or absolue** :
-avant toute modification de `sshd_config`, garde une session SSH déjà
-authentifiée ouverte dans un autre terminal, et ne la ferme pas tant que tu n'as
-pas ouvert **une nouvelle** session avec la configuration modifiée. Un
-`systemctl reload ssh` ne coupe pas les sessions en cours : c'est exactement ce
-filet-là qui te sauve. Deuxième filet : la console de la VM dans l'interface
-Proxmox, qui ne passe pas par le réseau.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Ce module modifie la configuration du serveur SSH. **Règle d'or absolue** :
+> avant toute modification de `sshd_config`, garde une session SSH déjà
+> authentifiée ouverte dans un autre terminal, et ne la ferme pas tant que tu n'as
+> pas ouvert **une nouvelle** session avec la configuration modifiée. Un
+> `systemctl reload ssh` ne coupe pas les sessions en cours : c'est exactement ce
+> filet-là qui te sauve. Deuxième filet : la console de la VM dans l'interface
+> Proxmox, qui ne passe pas par le réseau.
 
 ---
 
@@ -226,7 +255,9 @@ tunnel silencieusement inexistant. Côté serveur, `AllowTcpForwarding` autorise
 `-L`/`-D` (`local`) et `-R` (`remote`), `GatewayPorts` décide si un `-R` peut écouter ailleurs que sur la
 boucle locale.
 
-@fig(ssh-bastion-tunnels): Poste → `ProxyJump lab-adm` → lab-db, puis les trois tunnels : `-L` ouvre un port chez moi vers le serveur, `-R` ouvre un port sur le serveur vers moi, `-D` est un `-L` dynamique (SOCKS5).
+<p align="center"><img src="../../assets/figures/ssh-bastion-tunnels.svg" alt="Schéma : ssh-bastion-tunnels"></p>
+
+*Figure — Poste → `ProxyJump lab-adm` → lab-db, puis les trois tunnels : `-L` ouvre un port chez moi vers le serveur, `-R` ouvre un port sur le serveur vers moi, `-D` est un `-L` dynamique (SOCKS5).*
 
 ### Exécution distante
 
@@ -244,7 +275,7 @@ commande distante peut aussi sortir en 255.
 
 ## 14.3 Quiz — QCM
 
-**Q14.1** — Tu crées une clé pour un compte de déploiement.
+<a id="q14-1"></a>**[Q14.1](corrige.md#q14-1)** — Tu crées une clé pour un compte de déploiement.
 **Deux réponses correctes.**
 
 a) `ed25519` a une taille de clé fixe : il n'y a pas de paramètre à régler, donc
@@ -254,7 +285,7 @@ c) RSA 4096 reste utile pour dialoguer avec un équipement qui ne connaît pas
    `ed25519`
 d) `ed25519` n'accepte pas de passphrase sur la clé privée
 
-**Q14.2** — Tu te connectes et tu obtiens :
+<a id="q14-2"></a>**[Q14.2](corrige.md#q14-2)** — Tu te connectes et tu obtiens :
 
 ```console
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -270,7 +301,7 @@ b) il ignore cette clé et continue avec les autres méthodes disponibles
 c) il corrige automatiquement les permissions en 600
 d) il utilise la clé quand même, l'avertissement est purement informatif
 
-**Q14.3** — Sur `lab-web`, `journalctl -u ssh` affiche :
+<a id="q14-3"></a>**[Q14.3](corrige.md#q14-3)** — Sur `lab-web`, `journalctl -u ssh` affiche :
 
 ```console
 sshd[2143]: Authentication refused: bad ownership or modes for directory
@@ -284,7 +315,7 @@ b) `Permission denied (publickey)`
 c) `Host key verification failed`
 d) `Connection closed by remote host`
 
-**Q14.4** — Tu obtiens `REMOTE HOST IDENTIFICATION HAS CHANGED!` sur `lab-db`.
+<a id="q14-4"></a>**[Q14.4](corrige.md#q14-4)** — Tu obtiens `REMOTE HOST IDENTIFICATION HAS CHANGED!` sur `lab-db`.
 Quelle est la **première** action correcte ?
 
 a) `ssh-keygen -R lab-db` puis reconnexion
@@ -293,14 +324,14 @@ c) lire l'empreinte de la clé d'hôte depuis la console Proxmox de `lab-db` et 
    comparer à celle affichée par le message
 d) supprimer `~/.ssh/known_hosts` entièrement, il se reconstruira
 
-**Q14.5** — À quoi sert `ssh -G lab-db` ?
+<a id="q14-5"></a>**[Q14.5](corrige.md#q14-5)** — À quoi sert `ssh -G lab-db` ?
 
 a) à se connecter en mode debug
 b) à afficher la configuration effective pour cet alias, sans se connecter
 c) à générer une clé d'hôte
 d) à afficher la configuration du serveur distant
 
-**Q14.6** — Ton `~/.ssh/config` contient, dans cet ordre :
+<a id="q14-6"></a>**[Q14.6](corrige.md#q14-6)** — Ton `~/.ssh/config` contient, dans cet ordre :
 
 ```text
 Host *
@@ -317,7 +348,7 @@ b) `root`, la première valeur rencontrée gagne
 c) une erreur : `User` est défini deux fois
 d) l'utilisateur local courant
 
-**Q14.7** — Tu ajoutes `ControlMaster auto`, `ControlPath ~/.ssh/cm/%C` et
+<a id="q14-7"></a>**[Q14.7](corrige.md#q14-7)** — Tu ajoutes `ControlMaster auto`, `ControlPath ~/.ssh/cm/%C` et
 `ControlPersist 10m`. Qu'est-ce qui est vrai ?
 
 a) chaque nouvelle session réutilise la connexion TCP et l'authentification de la
@@ -326,7 +357,7 @@ b) `%C` est remplacé par le nom d'hôte en clair
 c) fermer la première session ferme immédiatement toutes les autres
 d) le multiplexage chiffre une deuxième fois le trafic
 
-**Q14.8** — À propos de `ForwardAgent yes` sur le bastion `lab-adm`.
+<a id="q14-8"></a>**[Q14.8](corrige.md#q14-8)** — À propos de `ForwardAgent yes` sur le bastion `lab-adm`.
 **Deux réponses correctes.**
 
 a) ta clé privée est copiée sur `lab-adm` pendant la session
@@ -335,7 +366,7 @@ b) root sur `lab-adm` peut utiliser ta socket d'agent pour s'authentifier en ton
 c) `ProxyJump lab-adm` rend le transfert d'agent inutile pour atteindre `lab-db`
 d) le transfert d'agent est sans risque si le bastion est à jour
 
-**Q14.9** — Sur `lab-adm`, tu tapes :
+<a id="q14-9"></a>**[Q14.9](corrige.md#q14-9)** — Sur `lab-adm`, tu tapes :
 
 ```bash
 ssh lab-web "echo $HOSTNAME"
@@ -348,7 +379,7 @@ b) `lab-adm`
 c) une chaîne vide
 d) `$HOSTNAME`
 
-**Q14.10** — Dans un script sur `lab-adm` :
+<a id="q14-10"></a>**[Q14.10](corrige.md#q14-10)** — Dans un script sur `lab-adm` :
 
 ```bash
 ssh lab-web 'sudo systemctl restart nginx'
@@ -362,7 +393,7 @@ b) ajouter `-tt`
 c) configurer une règle `NOPASSWD` ciblée pour cette commande dans `sudoers`
 d) exécuter la commande en tant que root via `PermitRootLogin yes`
 
-**Q14.11** — Depuis ton poste, tu veux interroger la base de `lab-db`
+<a id="q14-11"></a>**[Q14.11](corrige.md#q14-11)** — Depuis ton poste, tu veux interroger la base de `lab-db`
 (10.10.10.12:5432), joignable uniquement depuis le réseau de lab via le bastion
 `lab-adm` (10.10.10.10). Quelle commande ?
 
@@ -371,7 +402,7 @@ b) `ssh -L 15432:10.10.10.12:5432 mathieu@10.10.10.10`
 c) `ssh -R 15432:10.10.10.12:5432 mathieu@10.10.10.10`
 d) `ssh -D 15432 mathieu@10.10.10.12`
 
-**Q14.12** — Tu lances sur ton poste :
+<a id="q14-12"></a>**[Q14.12](corrige.md#q14-12)** — Tu lances sur ton poste :
 
 ```bash
 ssh -R 8080:127.0.0.1:3000 mathieu@lab-ops
@@ -386,7 +417,7 @@ b) le port distant n'écoute que sur la boucle locale de `lab-ops` tant que
 c) il faut utiliser `-L` et non `-R`
 d) le port 8080 est réservé
 
-**Q14.13** — Tu obtiens `Received disconnect from 10.10.10.11 port 22:2: Too many
+<a id="q14-13"></a>**[Q14.13](corrige.md#q14-13)** — Tu obtiens `Received disconnect from 10.10.10.11 port 22:2: Too many
 authentication failures`. Ton agent contient 8 clés.
 **Deux réponses corrigent le problème.**
 
@@ -395,7 +426,7 @@ b) augmenter `MaxAuthTries` à 20 sur le serveur
 c) `ssh-add -D` puis recharger uniquement la clé nécessaire
 d) ajouter `PubkeyAuthentication no` côté client
 
-**Q14.14** — Deux tentatives de connexion :
+<a id="q14-14"></a>**[Q14.14](corrige.md#q14-14)** — Deux tentatives de connexion :
 
 ```console
 $ ssh lab-web
@@ -411,7 +442,7 @@ b) `lab-web` répond mais rien n'écoute sur 22 ; `lab-db` ne répond pas du tou
 c) `lab-web` a un pare-feu en DROP ; `lab-db` a un `sshd` arrêté
 d) les deux messages sont équivalents, seul le délai change
 
-**Q14.15** — Tu as mis `PasswordAuthentication no` dans `/etc/ssh/sshd_config`,
+<a id="q14-15"></a>**[Q14.15](corrige.md#q14-15)** — Tu as mis `PasswordAuthentication no` dans `/etc/ssh/sshd_config`,
 tu as rechargé le service, et le serveur demande toujours un mot de passe.
 Quelle commande te donne la réponse le plus vite ?
 
@@ -420,7 +451,7 @@ b) `sshd -T | grep -i passwordauthentication`
 c) `systemctl status ssh`
 d) `ssh -v localhost`
 
-**Q14.16** — Avant `systemctl reload ssh`, laquelle de ces commandes valide la
+<a id="q14-16"></a>**[Q14.16](corrige.md#q14-16)** — Avant `systemctl reload ssh`, laquelle de ces commandes valide la
 configuration ?
 
 a) `sshd -T`
@@ -428,7 +459,7 @@ b) `sshd -t`
 c) `systemctl reload ssh --dry-run`
 d) `ssh -G localhost`
 
-**Q14.17** — Sur `lab-web` (Ubuntu 24.04), tu changes `Port 2222` dans
+<a id="q14-17"></a>**[Q14.17](corrige.md#q14-17)** — Sur `lab-web` (Ubuntu 24.04), tu changes `Port 2222` dans
 `sshd_config`, `sshd -t` ne dit rien, tu recharges, et `sshd` écoute toujours
 sur 22. Cause la plus probable ?
 
@@ -438,7 +469,7 @@ b) `sshd` est démarré par activation de socket (`ssh.socket`) : c'est l'unité
 c) `Port` est ignoré quand `ListenAddress` est absent
 d) SELinux bloque le port 2222
 
-**Q14.18** — Dans `/home/sauvegarde/.ssh/authorized_keys` :
+<a id="q14-18"></a>**[Q14.18](corrige.md#q14-18)** — Dans `/home/sauvegarde/.ssh/authorized_keys` :
 
 ```text
 restrict,from="10.10.10.14",command="/usr/local/bin/recevoir-sauvegarde"
@@ -458,157 +489,139 @@ d) `rm` est exécuté puis `recevoir-sauvegarde`
 
 ## 14.4 Quiz — questions ouvertes
 
-**QO14.1** — Décris, dans l'ordre, ce qui se passe entre le moment où tu tapes
+<a id="qo14-1"></a>**[QO14.1](corrige.md#qo14-1)** — Décris, dans l'ordre, ce qui se passe entre le moment où tu tapes
 `ssh lab-web` et le moment où le prompt distant s'affiche. Nomme les trois
 phases, dis à quel moment la clé de session est établie, à quel moment la clé
 d'hôte intervient, et à quel moment ta clé privée est sollicitée. Précise ce qui
 circule réellement sur le réseau lors de l'authentification par clé.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO14.2** — *On te demande en entretien* : « L'authentification par clé, c'est
+<a id="qo14-2"></a>**[QO14.2](corrige.md#qo14-2)** — *On te demande en entretien* : « L'authentification par clé, c'est
 plus sûr qu'un mot de passe. Pourquoi, concrètement ? Est-ce que ma clé privée
 part sur le serveur ? Et si quelqu'un vole mon `authorized_keys` ? »
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO14.3** — *On te demande en entretien* : « Sur nos bastions, on active
+<a id="qo14-3"></a>**[QO14.3](corrige.md#qo14-3)** — *On te demande en entretien* : « Sur nos bastions, on active
 `ForwardAgent` pour que les admins puissent rebondir. Tu en penses quoi ? »
 Explique le risque de façon opérationnelle (qui peut faire quoi, pendant combien
 de temps), propose l'alternative et décris ce qu'elle change dans le chemin de la
 connexion.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO14.4** — Cite **trois** causes parfaitement légitimes d'un changement de clé
+<a id="qo14-4"></a>**[QO14.4](corrige.md#qo14-4)** — Cite **trois** causes parfaitement légitimes d'un changement de clé
 d'hôte, et décris la procédure que tu appliques pour trancher entre « incident
 normal » et « attaque » — en précisant par quel canal tu vérifies.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO14.5** — Un développeur n'arrive plus à se connecter à `lab-ops` :
+<a id="qo14-5"></a>**[QO14.5](corrige.md#qo14-5)** — Un développeur n'arrive plus à se connecter à `lab-ops` :
 `Permission denied (publickey)`. Décris ta démarche de diagnostic complète, dans
 l'ordre, en séparant ce que tu regardes côté client et côté serveur, et en
 donnant pour chaque étape la commande et ce que tu cherches dans sa sortie.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO14.6** — Explique le mécanisme du multiplexage de connexions
+<a id="qo14-6"></a>**[QO14.6](corrige.md#qo14-6)** — Explique le mécanisme du multiplexage de connexions
 (`ControlMaster`). Quels gains mesurables apporte-t-il, et quels sont ses trois
 inconvénients ou pièges en exploitation réelle ?
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO14.7** — Compare `-L`, `-R` et `-D`. Pour chacun : le sens du flux (qui
+<a id="qo14-7"></a>**[QO14.7](corrige.md#qo14-7)** — Compare `-L`, `-R` et `-D`. Pour chacun : le sens du flux (qui
 écoute où, qui initie la connexion TCP finale), un cas d'usage réel, et la
 directive serveur qui peut l'empêcher.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO14.8** — Tu as écrit une boucle `for h in lab-web lab-db lab-ops; do ssh
+<a id="qo14-8"></a>**[QO14.8](corrige.md#qo14-8)** — Tu as écrit une boucle `for h in lab-web lab-db lab-ops; do ssh
 "$h" '...'; done` pour appliquer un changement sur le parc. Cite **cinq**
 limites qui font qu'on bascule vers un outil de gestion de configuration dès que
 le parc grandit, en expliquant pour chacune ce qui casse concrètement.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO14.9** — Les certificats SSH : quel problème résolvent-ils que `known_hosts`
+<a id="qo14-9"></a>**[QO14.9](corrige.md#qo14-9)** — Les certificats SSH : quel problème résolvent-ils que `known_hosts`
 et `authorized_keys` ne savent pas résoudre ? Distingue certificat d'hôte et
 certificat d'utilisateur, et dis ce que chacun remplace dans les fichiers
 habituels.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 14.5 Exercices guidés ★
 
-**E14.1** — Sur `lab-adm`, crée une paire de clés moderne pour l'utilisateur
+<a id="e14-1"></a>**[E14.1](corrige.md#e14-1)** — Sur `lab-adm`, crée une paire de clés moderne pour l'utilisateur
 `mathieu`, identifiable par un commentaire explicite (utilisateur + poste
 d'origine), protégée par une passphrase, et avec un nombre de tours de dérivation
 supérieur au défaut. Vérifie ensuite que la clé privée est bien chiffrée.
 
-**E14.2** — Affiche l'empreinte SHA256 de ta clé publique, puis la même empreinte
+<a id="e14-2"></a>**[E14.2](corrige.md#e14-2)** — Affiche l'empreinte SHA256 de ta clé publique, puis la même empreinte
 sous forme de dessin ASCII. Affiche enfin l'empreinte de la clé d'hôte `ed25519`
 de `lab-adm` lui-même.
 
-**E14.3** — Déploie ta clé publique sur `lab-web` **sans utiliser `ssh-copy-id`**,
+<a id="e14-3"></a>**[E14.3](corrige.md#e14-3)** — Déploie ta clé publique sur `lab-web` **sans utiliser `ssh-copy-id`**,
 en une seule commande, en garantissant que `~/.ssh` et `authorized_keys` ont les
 bons droits même s'ils n'existaient pas.
 
-**E14.4** — Écris une commande qui liste, sous `~/.ssh`, tous les fichiers dont
+<a id="e14-4"></a>**[E14.4](corrige.md#e14-4)** — Écris une commande qui liste, sous `~/.ssh`, tous les fichiers dont
 les permissions sont trop larges (accessibles au groupe ou aux autres), puis une
 seconde qui les corrige en une passe.
 
-**E14.5** — Démarre un agent, charge ta clé pour une durée de vie d'une heure,
+<a id="e14-5"></a>**[E14.5](corrige.md#e14-5)** — Démarre un agent, charge ta clé pour une durée de vie d'une heure,
 affiche les empreintes chargées, puis les clés publiques complètes. Vérifie
 ensuite ce que devient la clé au bout de la durée impartie.
 
-**E14.6** — Sur ton PC Windows, active l'agent OpenSSH natif pour qu'il démarre
+<a id="e14-6"></a>**[E14.6](corrige.md#e14-6)** — Sur ton PC Windows, active l'agent OpenSSH natif pour qu'il démarre
 automatiquement, charge ta clé, et vérifie depuis PowerShell que l'agent la
 propose. Indique aussi où se trouve le fichier de configuration client.
 
-**E14.7** — Sans te connecter, affiche quel utilisateur, quel port, quelle clé et
+<a id="e14-7"></a>**[E14.7](corrige.md#e14-7)** — Sans te connecter, affiche quel utilisateur, quel port, quelle clé et
 quel rebond seront effectivement utilisés par `ssh lab-db`. Puis montre la ligne
 qui prouve que `IdentitiesOnly` est actif.
 
-**E14.8** — Mesure le gain du multiplexage : chronomètre cinq connexions
+<a id="e14-8"></a>**[E14.8](corrige.md#e14-8)** — Mesure le gain du multiplexage : chronomètre cinq connexions
 successives à `lab-web` exécutant `true`, d'abord sans multiplexage, puis avec.
 Donne le rapport entre les deux.
 
-**E14.9** — Récupère la clé d'hôte `ed25519` de `lab-rhel` avec `ssh-keyscan`,
+<a id="e14-9"></a>**[E14.9](corrige.md#e14-9)** — Récupère la clé d'hôte `ed25519` de `lab-rhel` avec `ssh-keyscan`,
 calcule son empreinte, et compare-la à celle affichée sur `lab-rhel` lui-même.
 Supprime ensuite proprement l'entrée correspondante de ton `known_hosts`, sachant
 que le fichier est haché.
 
-**E14.10** — Sur `lab-web`, affiche la valeur **effective** de
+<a id="e14-10"></a>**[E14.10](corrige.md#e14-10)** — Sur `lab-web`, affiche la valeur **effective** de
 `PermitRootLogin`, `PasswordAuthentication`, `MaxAuthTries`, `LoginGraceTime` et
 `AllowTcpForwarding`. Puis affiche ce que serait `PasswordAuthentication` pour
 une connexion de l'utilisateur `sauvegarde` venant de `10.10.10.14`.
 
-**E14.11** — Écris une boucle qui affiche, pour `lab-web`, `lab-db`, `lab-rhel`
+<a id="e14-11"></a>**[E14.11](corrige.md#e14-11)** — Écris une boucle qui affiche, pour `lab-web`, `lab-db`, `lab-rhel`
 et `lab-ops`, le nom d'hôte et la charge moyenne, qui ne bloque pas plus de 5
 secondes par machine, et qui sort en 1 si au moins une machine a échoué.
 Attention à ce que la boucle ne consomme pas son propre flux d'entrée.
 
-**E14.12** — Tu as un script local `~/lab14/bin/etat.sh` qui prend un argument
+<a id="e14-12"></a>**[E14.12](corrige.md#e14-12)** — Tu as un script local `~/lab14/bin/etat.sh` qui prend un argument
 `--court` ou `--long`. Exécute-le sur `lab-ops` **sans le copier** sur la machine
 distante, en lui passant `--court`.
 
-**E14.13** — Ouvre un tunnel en arrière-plan qui rend le service de `lab-db`
+<a id="e14-13"></a>**[E14.13](corrige.md#e14-13)** — Ouvre un tunnel en arrière-plan qui rend le service de `lab-db`
 (port 5432) accessible sur le port 15432 de `lab-adm`, en passant par le bastion.
 Le tunnel doit échouer bruyamment si le port local est déjà pris. Vérifie qu'il
 fonctionne, puis ferme-le proprement.
 
-**E14.14** — Ouvre un proxy SOCKS5 sur le port 1080 via `lab-adm`, puis prouve
+<a id="e14-14"></a>**[E14.14](corrige.md#e14-14)** — Ouvre un proxy SOCKS5 sur le port 1080 via `lab-adm`, puis prouve
 avec `curl` que la requête sort bien depuis le réseau de lab (et non depuis ton
 poste), en veillant à ce que la résolution DNS se fasse aussi à distance.
 
-**E14.15** — Sur `lab-web`, restreins la clé du compte `sauvegarde` pour qu'elle
+<a id="e14-15"></a>**[E14.15](corrige.md#e14-15)** — Sur `lab-web`, restreins la clé du compte `sauvegarde` pour qu'elle
 ne puisse être utilisée que depuis `10.10.10.10`, sans allocation de terminal ni
 redirection de ports, et qu'elle exécute toujours `/usr/local/bin/lab14-rsync`
 quoi que demande le client. Montre ensuite comment ce script récupère la commande
 réellement demandée.
 
-**E14.16** — Voici un extrait de `ssh -v` :
+<a id="e14-16"></a>**[E14.16](corrige.md#e14-16)** — Voici un extrait de `ssh -v` :
 
 ```console
 debug1: Server host key: ssh-ed25519 SHA256:2Zr4h... 
@@ -630,15 +643,15 @@ trois hypothèses à vérifier dans l'ordre, côté serveur.
 
 ## 14.6 Labs ★★
 
-### **L14.1** — Poser l'accès par clé sur tout le parc
+### <a id="l14-1"></a>**[L14.1](corrige.md#l14-1)** — Poser l'accès par clé sur tout le parc
 
-::: contexte
-Le lab a été monté à la va-vite : on se connecte au mot de passe sur les cinq
-machines, le même mot de passe partout, et une vieille clé RSA 2048 sans
-passphrase traîne dans `~/.ssh` depuis l'installation. On te demande de passer
-l'ensemble du parc à l'authentification par clé, de faire tourner la vieille clé,
-et de couper l'authentification par mot de passe — sans perdre l'accès.
-:::
+> **Contexte**
+>
+> Le lab a été monté à la va-vite : on se connecte au mot de passe sur les cinq
+> machines, le même mot de passe partout, et une vieille clé RSA 2048 sans
+> passphrase traîne dans `~/.ssh` depuis l'installation. On te demande de passer
+> l'ensemble du parc à l'authentification par clé, de faire tourner la vieille clé,
+> et de couper l'authentification par mot de passe — sans perdre l'accès.
 
 Travaille depuis `lab-adm`.
 
@@ -661,32 +674,34 @@ Travaille depuis `lab-adm`.
 7. Note dans `~/lab14/rapports/cles-apres.md` ce qui a changé et ce qui reste à
    faire sur les trois autres machines.
 
-::: attention
-Étape 6 : si tu fermes ta session de secours avant d'avoir testé, et que la clé
-n'est pas correctement déployée, la seule porte d'entrée restante est la console
-Proxmox. C'est précisément l'accident que ce module t'apprend à ne pas avoir.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Étape 6 : si tu fermes ta session de secours avant d'avoir testé, et que la clé
+> n'est pas correctement déployée, la seule porte d'entrée restante est la console
+> Proxmox. C'est précisément l'accident que ce module t'apprend à ne pas avoir.
 
-::: check
-Critère de succès : `ssh lab-web true` fonctionne sans mot de passe ni
-passphrase, `sshd -T` sur `lab-web` renvoie `passwordauthentication no`, et la
-clé RSA n'est présente dans aucun `authorized_keys`.
-
-```bash
-bash check_M14_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `ssh lab-web true` fonctionne sans mot de passe ni
+> passphrase, `sshd -T` sur `lab-web` renvoie `passwordauthentication no`, et la
+> clé RSA n'est présente dans aucun `authorized_keys`.
+>
+> ```bash
+> bash check_M14_01.sh
+> ```
 
 ---
 
-### **L14.2** — Le fichier de configuration client de référence
+### <a id="l14-2"></a>**[L14.2](corrige.md#l14-2)** — Le fichier de configuration client de référence
 
-::: contexte
-Chaque membre de l'équipe tape des adresses IP à la main, avec des options
-différentes, et personne ne se souvient de la commande pour rebondir vers
-`lab-db`. On te demande un `~/.ssh/config` de référence, documenté, qui sera
-distribué à toute l'équipe et adapté sur le PC Windows de chacun.
-:::
+> **Contexte**
+>
+> Chaque membre de l'équipe tape des adresses IP à la main, avec des options
+> différentes, et personne ne se souvient de la commande pour rebondir vers
+> `lab-db`. On te demande un `~/.ssh/config` de référence, documenté, qui sera
+> distribué à toute l'équipe et adapté sur le PC Windows de chacun.
 
 1. Écris `~/.ssh/config` sur `lab-adm` avec :
    * un alias `bastion` (et `lab-adm`) vers `10.10.10.10`, utilisateur `mathieu`,
@@ -711,27 +726,28 @@ distribué à toute l'équipe et adapté sur le PC Windows de chacun.
 7. Adapte le fichier pour le PC Windows (chemins, emplacement) et note les deux
    différences notables dans le rapport.
 
-::: check
-Critère de succès : `ssh lab-db` fonctionne en une frappe depuis `lab-adm`,
-`ssh -G lab-db` montre le bon utilisateur, la bonne IP, `proxyjump bastion`
-et `identitiesonly yes`, et une socket de contrôle existe après une connexion.
-
-```bash
-bash check_M14_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `ssh lab-db` fonctionne en une frappe depuis `lab-adm`,
+> `ssh -G lab-db` montre le bon utilisateur, la bonne IP, `proxyjump bastion`
+> et `identitiesonly yes`, et une socket de contrôle existe après une connexion.
+>
+> ```bash
+> bash check_M14_02.sh
+> ```
 
 ---
 
-### **L14.3** — Durcir le serveur SSH de `lab-web`
+### <a id="l14-3"></a>**[L14.3](corrige.md#l14-3)** — Durcir le serveur SSH de `lab-web`
 
-::: contexte
-Audit de sécurité dans trois semaines. Le rapport préliminaire reproche à
-`lab-web` : root autorisé, mot de passe accepté, aucune restriction de comptes,
-un délai de grâce d'authentification de deux minutes, des algorithmes obsolètes
-acceptés, et un journal trop pauvre pour savoir quelle clé a servi. On te demande
-de corriger, proprement, sans te verrouiller dehors.
-:::
+> **Contexte**
+>
+> Audit de sécurité dans trois semaines. Le rapport préliminaire reproche à
+> `lab-web` : root autorisé, mot de passe accepté, aucune restriction de comptes,
+> un délai de grâce d'authentification de deux minutes, des algorithmes obsolètes
+> acceptés, et un journal trop pauvre pour savoir quelle clé a servi. On te demande
+> de corriger, proprement, sans te verrouiller dehors.
 
 1. Ouvre **deux** sessions sur `lab-web`. La première ne servira à rien d'autre
    qu'à rester ouverte.
@@ -759,34 +775,36 @@ de corriger, proprement, sans te verrouiller dehors.
 8. Prouve dans le journal qu'on voit désormais l'empreinte de la clé qui a servi
    à ta dernière connexion.
 
-::: astuce
-`sshd -T -C user=mathieu,host=lab-web,addr=10.10.10.10` évalue aussi les blocs
-`Match`. C'est le seul moyen fiable de savoir ce qui s'appliquera réellement à un
-utilisateur donné.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `sshd -T -C user=mathieu,host=lab-web,addr=10.10.10.10` évalue aussi les blocs
+> `Match`. C'est le seul moyen fiable de savoir ce qui s'appliquera réellement à un
+> utilisateur donné.
 
-::: check
-Critère de succès : `sshd -T` sur `lab-web` renvoie `permitrootlogin no`,
-`passwordauthentication no`, `maxauthtries 3`, `logingracetime 20`,
-`allowgroups ssh-users`, `loglevel VERBOSE`, et `ssh-audit` ne signale plus
-d'algorithme faible.
-
-```bash
-sudo bash check_M14_03.sh     # à lancer sur lab-web
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `sshd -T` sur `lab-web` renvoie `permitrootlogin no`,
+> `passwordauthentication no`, `maxauthtries 3`, `logingracetime 20`,
+> `allowgroups ssh-users`, `loglevel VERBOSE`, et `ssh-audit` ne signale plus
+> d'algorithme faible.
+>
+> ```bash
+> sudo bash check_M14_03.sh     # à lancer sur lab-web
+> ```
 
 ---
 
-### **L14.4** — Trois tunnels pour trois demandes
+### <a id="l14-4"></a>**[L14.4](corrige.md#l14-4)** — Trois tunnels pour trois demandes
 
-::: contexte
-Trois tickets dans la journée. (1) Une développeuse veut brancher son client SQL
-sur la base de `lab-db`, qui n'est joignable que depuis le réseau de lab.
-(2) Un prestataire doit voir la maquette qui tourne sur ton poste, port 3000,
-depuis `lab-ops`. (3) Tu dois consulter une interface d'administration interne
-qui ne répond qu'aux requêtes venant du réseau de lab.
-:::
+> **Contexte**
+>
+> Trois tickets dans la journée. (1) Une développeuse veut brancher son client SQL
+> sur la base de `lab-db`, qui n'est joignable que depuis le réseau de lab.
+> (2) Un prestataire doit voir la maquette qui tourne sur ton poste, port 3000,
+> depuis `lab-ops`. (3) Tu dois consulter une interface d'administration interne
+> qui ne répond qu'aux requêtes venant du réseau de lab.
 
 1. **Ticket 1** : depuis `lab-adm`, ouvre un tunnel local qui expose
    `10.10.10.12:5432` sur `127.0.0.1:15432` en passant par le bastion. Le tunnel
@@ -808,27 +826,28 @@ qui ne répond qu'aux requêtes venant du réseau de lab.
    commande, un schéma du flux en texte, la directive serveur qui pourrait
    l'interdire, et le risque de sécurité associé.
 
-::: check
-Critère de succès : les trois tunnels ont fonctionné, `~/lab14/rapports/tunnels.md`
-décrit les trois flux, et après fermeture aucun des ports 15432, 8080, 1080 n'est
-en écoute.
-
-```bash
-bash check_M14_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : les trois tunnels ont fonctionné, `~/lab14/rapports/tunnels.md`
+> décrit les trois flux, et après fermeture aucun des ports 15432, 8080, 1080 n'est
+> en écoute.
+>
+> ```bash
+> bash check_M14_04.sh
+> ```
 
 ---
 
-### **L14.5** — Une clé de service qui ne peut faire qu'une seule chose
+### <a id="l14-5"></a>**[L14.5](corrige.md#l14-5)** — Une clé de service qui ne peut faire qu'une seule chose
 
-::: contexte
-La CI de `lab-ops` doit déposer chaque nuit une archive de sauvegarde sur
-`lab-web`, dans `/srv/sauvegarde`. Le premier jet de l'équipe : un compte
-`sauvegarde` avec une clé sans passphrase et un shell complet. L'audit refuse.
-On te demande une clé qui ne permet **que** le dépôt d'archive, depuis **une
-seule** adresse, et rien d'autre.
-:::
+> **Contexte**
+>
+> La CI de `lab-ops` doit déposer chaque nuit une archive de sauvegarde sur
+> `lab-web`, dans `/srv/sauvegarde`. Le premier jet de l'équipe : un compte
+> `sauvegarde` avec une clé sans passphrase et un shell complet. L'audit refuse.
+> On te demande une clé qui ne permet **que** le dépôt d'archive, depuis **une
+> seule** adresse, et rien d'autre.
 
 1. Sur `lab-ops`, génère une paire dédiée `~/.ssh/id_ci_sauvegarde`, sans
    passphrase (c'est une clé de service : justifie ce choix en une ligne dans le
@@ -852,36 +871,39 @@ seule** adresse, et rien d'autre.
    procédure de rotation de cette clé, et ce qu'un certificat SSH à durée de vie
    courte apporterait de plus.
 
-::: astuce
-`restrict` (OpenSSH ≥ 7.2) coupe tout d'un coup : terminal, redirections, agent,
-X11, `~/.ssh/rc`. On rouvre ensuite ce dont on a besoin (`pty`,
-`port-forwarding`). C'est plus sûr que d'énumérer les `no-*` un par un : une
-option ajoutée dans une future version sera interdite par défaut.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `restrict` (OpenSSH ≥ 7.2) coupe tout d'un coup : terminal, redirections, agent,
+> X11, `~/.ssh/rc`. On rouvre ensuite ce dont on a besoin (`pty`,
+> `port-forwarding`). C'est plus sûr que d'énumérer les `no-*` un par un : une
+> option ajoutée dans une future version sera interdite par défaut.
 
-::: check
-Critère de succès : la clé de CI ne permet que `liste` et `depot`, refuse toute
-autre commande avec un code non nul, ne monte pas de tunnel, et n'est acceptée
-que depuis `10.10.10.14`.
-
-```bash
-sudo bash check_M14_05.sh     # à lancer sur lab-web
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : la clé de CI ne permet que `liste` et `depot`, refuse toute
+> autre commande avec un code non nul, ne monte pas de tunnel, et n'est acceptée
+> que depuis `10.10.10.14`.
+>
+> ```bash
+> sudo bash check_M14_05.sh     # à lancer sur lab-web
+> ```
 
 ---
 
 ## 14.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf14`. Le snapshot de
-secours reste `snap-clean`, mais l'utiliser vaut échec : l'objectif est de
-réparer. Et pour ce module en particulier : **garde une session ouverte** ou
-prépare la console Proxmox avant de lancer le script. Une partie des pannes
-coupe l'accès SSH.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf14`. Le snapshot de
+> secours reste `snap-clean`, mais l'utiliser vaut échec : l'objectif est de
+> réparer. Et pour ce module en particulier : **garde une session ouverte** ou
+> prépare la console Proxmox avant de lancer le script. Une partie des pannes
+> coupe l'accès SSH.
 
-### **BF14.1** — « Ma clé ne marche plus sur `lab-web`, et je n'ai pas de mot de passe »
+### <a id="bf14-1"></a>**[BF14.1](corrige.md#bf14-1)** — « Ma clé ne marche plus sur `lab-web`, et je n'ai pas de mot de passe »
 
 ```bash
 sudo bash break_M14_01.sh     # à lancer sur lab-web
@@ -900,11 +922,9 @@ métier), identifier la cause exacte avec une preuve tirée du journal du serveu
 corriger, et énoncer la règle de permissions en une phrase vérifiable par un
 script.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF14.2** — « Depuis la maintenance de cette nuit, seul root peut entrer »
+### <a id="bf14-2"></a>**[BF14.2](corrige.md#bf14-2)** — « Depuis la maintenance de cette nuit, seul root peut entrer »
 
 ```bash
 sudo bash break_M14_02.sh     # à lancer sur lab-web
@@ -923,11 +943,9 @@ règle de précédence qui l'a rendue prioritaire, rétablir l'accès pour le gr
 d'exploitation sans rouvrir la machine à tout le monde, et donner la commande qui
 aurait permis de voir le problème en 5 secondes.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF14.3** — « SSH crie à l'attaque sur `lab-web` »
+### <a id="bf14-3"></a>**[BF14.3](corrige.md#bf14-3)** — « SSH crie à l'attaque sur `lab-web` »
 
 ```bash
 sudo bash break_M14_03.sh     # à lancer sur lab-web
@@ -946,11 +964,9 @@ d'hôte de `lab-web` aujourd'hui, déterminer si le changement est légitime,
 rétablir l'accès de la bonne façon, et proposer une mesure qui supprime
 définitivement cette classe d'incident sur un parc.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF14.4** — « Ça marchait ce matin, maintenant je suis éjecté avant d'avoir tapé quoi que ce soit »
+### <a id="bf14-4"></a>**[BF14.4](corrige.md#bf14-4)** — « Ça marchait ce matin, maintenant je suis éjecté avant d'avoir tapé quoi que ce soit »
 
 ```bash
 sudo bash break_M14_04.sh     # à lancer sur lab-adm, L14.3 en place
@@ -969,21 +985,19 @@ qui prouve le nombre de tentatives émises, corriger côté client de deux faço
 (une immédiate en ligne de commande, une durable dans la configuration), et dire
 pourquoi `-i` seul n'a pas suffi.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 14.8 Défi du module ★★★
 
-**D14 — Faire de `lab-adm` un vrai bastion**
+<a id="d14"></a>**[D14](corrige.md#d14) — Faire de `lab-adm` un vrai bastion**
 
-::: contexte
-La direction impose : plus aucun accès SSH direct aux serveurs depuis les postes
-de travail. Tout passe par `lab-adm`. On te confie la mise en œuvre complète,
-avec un livrable exploitable par l'équipe : configuration, outillage, procédure.
-:::
+> **Contexte**
+>
+> La direction impose : plus aucun accès SSH direct aux serveurs depuis les postes
+> de travail. Tout passe par `lab-adm`. On te confie la mise en œuvre complète,
+> avec un livrable exploitable par l'équipe : configuration, outillage, procédure.
 
 Cahier des charges :
 
@@ -1025,11 +1039,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M14_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M14_06.sh
+> ```
 
 ---
 
@@ -1062,3 +1077,9 @@ Pour aller plus loin :
 * Compare `ssh -Q kex`, `ssh -Q cipher` et `ssh -Q key` avec la sortie de
   `ssh-audit` sur une machine non durcie : tu verras exactement ce que tu
   acceptes sans le savoir.
+
+<!-- nav:début -->
+---
+
+[← Module 13](../13-reseau-avance/README.md) · [Corrigé](corrige.md) · [Module 15 →](../15-services-applicatifs/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

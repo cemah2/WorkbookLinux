@@ -1,35 +1,62 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 10**  
+[← Module 09](../09-noyau-demarrage/README.md) · [Corrigé](corrige.md) · [Module 11 →](../11-stockage-lvm/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M10.sh`](../../scripts/setup/setup_M10.sh) | prépare le module |
+| [`check_M10_01.sh`](../../scripts/check/check_M10_01.sh) | vérification |
+| [`check_M10_02.sh`](../../scripts/check/check_M10_02.sh) | vérification |
+| [`check_M10_03.sh`](../../scripts/check/check_M10_03.sh) | vérification |
+| [`check_M10_04.sh`](../../scripts/check/check_M10_04.sh) | vérification |
+| [`check_M10_05.sh`](../../scripts/check/check_M10_05.sh) | vérification |
+| [`check_M10_06.sh`](../../scripts/check/check_M10_06.sh) | vérification |
+| [`break_M10_01.sh`](../../scripts/break/break_M10_01.sh) | installe une panne |
+| [`break_M10_02.sh`](../../scripts/break/break_M10_02.sh) | installe une panne |
+| [`break_M10_03.sh`](../../scripts/break/break_M10_03.sh) | installe une panne |
+| [`break_M10_04.sh`](../../scripts/break/break_M10_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 10 — Gestion des paquets et des dépôts
 
 ## 10.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* situer chaque couche de la chaîne Debian (`dpkg`, `apt-get`, `apt`, `aptitude`)
-  et dire laquelle résout les dépendances, laquelle télécharge, laquelle déballe ;
-* distinguer `upgrade`, `full-upgrade` et `dist-upgrade`, et prédire quand une
-  mise à jour va supprimer un paquet ;
-* interroger la base locale (`dpkg -l/-L/-S/-s`, `dpkg -V`) pour répondre à
-  « d'où vient ce fichier ? » et « qui a modifié cette conf ? » sans accès réseau ;
-* réparer une base dpkg laissée en état incohérent (`iU`, `iF`, `rc`,
-  `dpkg --configure -a`) sans réinstaller la machine ;
-* déclarer un dépôt tiers proprement : format deb822, clé dans
-  `/etc/apt/keyrings`, `Signed-By`, et expliquer pourquoi `apt-key` est mort ;
-* écrire un épinglage (`/etc/apt/preferences.d`) qui vise ce qu'il doit viser,
-  lire `apt-cache policy` et diagnostiquer un épinglage qui déborde ;
-* piloter le prompt de conffile de dpkg (`--force-confold`, `--force-confdef`,
-  `.dpkg-dist`, `.dpkg-old`) et régler `unattended-upgrades` pour un serveur ;
-* faire la même chose sous RHEL/Rocky : `dnf`, `rpm -q*`, `dnf history` et son
-  `undo`, modules et flux, `/etc/yum.repos.d`, EPEL, `dnf-automatic` ;
-* compiler depuis les sources sans polluer le système, et savoir dire quand
-  c'est légitime et quand c'est une faute professionnelle ;
-* arbitrer entre paquet distribution, snap/flatpak, `pip`/`npm`, et justifier
-  pourquoi on n'installe pas en global sur un serveur.
-
-Temps estimé : 6 h
-Prérequis : modules 01 à 03 (shell, FHS, permissions). Le module 08 aide pour
-la partie `systemd` du défi, mais n'est pas indispensable.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * situer chaque couche de la chaîne Debian (`dpkg`, `apt-get`, `apt`, `aptitude`)
+>   et dire laquelle résout les dépendances, laquelle télécharge, laquelle déballe ;
+> * distinguer `upgrade`, `full-upgrade` et `dist-upgrade`, et prédire quand une
+>   mise à jour va supprimer un paquet ;
+> * interroger la base locale (`dpkg -l/-L/-S/-s`, `dpkg -V`) pour répondre à
+>   « d'où vient ce fichier ? » et « qui a modifié cette conf ? » sans accès réseau ;
+> * réparer une base dpkg laissée en état incohérent (`iU`, `iF`, `rc`,
+>   `dpkg --configure -a`) sans réinstaller la machine ;
+> * déclarer un dépôt tiers proprement : format deb822, clé dans
+>   `/etc/apt/keyrings`, `Signed-By`, et expliquer pourquoi `apt-key` est mort ;
+> * écrire un épinglage (`/etc/apt/preferences.d`) qui vise ce qu'il doit viser,
+>   lire `apt-cache policy` et diagnostiquer un épinglage qui déborde ;
+> * piloter le prompt de conffile de dpkg (`--force-confold`, `--force-confdef`,
+>   `.dpkg-dist`, `.dpkg-old`) et régler `unattended-upgrades` pour un serveur ;
+> * faire la même chose sous RHEL/Rocky : `dnf`, `rpm -q*`, `dnf history` et son
+>   `undo`, modules et flux, `/etc/yum.repos.d`, EPEL, `dnf-automatic` ;
+> * compiler depuis les sources sans polluer le système, et savoir dire quand
+>   c'est légitime et quand c'est une faute professionnelle ;
+> * arbitrer entre paquet distribution, snap/flatpak, `pip`/`npm`, et justifier
+>   pourquoi on n'installe pas en global sur un serveur.
+>
+> **Temps estimé** : 6 h
+>
+> **Prérequis** : modules 01 à 03 (shell, FHS, permissions). Le module 08 aide pour
+> la partie `systemd` du défi, mais n'est pas indispensable.
 
 ---
 
@@ -53,18 +80,19 @@ sudo apt install -y dpkg-dev gnupg build-essential aptitude apt-file \
 sudo apt-file update
 ```
 
-::: rhel
-Sur `lab-rhel` (Rocky 9) :
-
-```bash
-sudo dnf install -y rpm-build rpm-sign createrepo_c gnupg2 \
-     dnf-automatic dnf-utils gcc make python3
-```
-
-`dnf-utils` fournit `repoquery`, `needs-restarting` et `package-cleanup`.
-EPEL n'est **pas** requis pour le module : on l'installera en L10.5 pour
-comprendre ce qu'un dépôt tiers change.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel` (Rocky 9) :
+>
+> ```bash
+> sudo dnf install -y rpm-build rpm-sign createrepo_c gnupg2 \
+>      dnf-automatic dnf-utils gcc make python3
+> ```
+>
+> `dnf-utils` fournit `repoquery`, `needs-restarting` et `package-cleanup`.
+> EPEL n'est **pas** requis pour le module : on l'installera en L10.5 pour
+> comprendre ce qu'un dépôt tiers change.
 
 Préparation du terrain (idempotent, à lancer sur **chacune** des deux VM) :
 
@@ -80,12 +108,13 @@ HTTP sur le port 8099) et dépose une archive de sources à compiler dans
 Ce qu'il ne fait **pas**, et qui est ton travail : déclarer le dépôt, installer
 la clé, écrire le moindre épinglage.
 
-::: attention
-Ce module écrit dans `/etc/apt`, `/etc/yum.repos.d`, `/usr/local` et la base
-dpkg. Les Break & Fix cassent volontairement l'installation de paquets. Prends
-les snapshots ci-dessus : sur une machine où `apt` ne fonctionne plus, on ne
-répare pas avec `apt`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Ce module écrit dans `/etc/apt`, `/etc/yum.repos.d`, `/usr/local` et la base
+> dpkg. Les Break & Fix cassent volontairement l'installation de paquets. Prends
+> les snapshots ci-dessus : sur une machine où `apt` ne fonctionne plus, on ne
+> répare pas avec `apt`.
 
 ---
 
@@ -106,7 +135,9 @@ dpkg              déballe, configure, tient la base /var/lib/dpkg ;
 .deb              ar(1) : debian-binary + control.tar.* + data.tar.*
 ```
 
-@fig(paquets-couches): `apt` / `apt-get` **dpkg fichiers installés** — `/usr`, `/etc`, `/var` appelle avec les `.deb` triés écritdpkg `-l`, `-L`, `-S` lisent ici dépôts `sources.list.d/*.sources /etc/apt/keyrings/` **Debian / Ubuntu** `apt update` où et signé par qui **RHEL / Rocky : mêmes couches, autres noms dnf rpm** ≈ `apt` + `sources` + `keyrings` ≈ `dpkg apt` résout et télécharge, `dpkg` installe et tient la base ; dépôts et clés en amont, miroir `dnf`/`rpm` côté Rocky.
+<p align="center"><img src="../../assets/figures/paquets-couches.svg" alt="Schéma : paquets-couches"></p>
+
+*Figure — `apt` / `apt-get` **dpkg fichiers installés** — `/usr`, `/etc`, `/var` appelle avec les `.deb` triés écritdpkg `-l`, `-L`, `-S` lisent ici dépôts `sources.list.d/*.sources /etc/apt/keyrings/` **Debian / Ubuntu** `apt update` où et signé par qui **RHEL / Rocky : mêmes couches, autres noms dnf rpm** ≈ `apt` + `sources` + `keyrings` ≈ `dpkg apt` résout et télécharge, `dpkg` installe et tient la base ; dépôts et clés en amont, miroir `dnf`/`rpm` côté Rocky.*
 
 `apt` (2014) est la surface *humaine* : couleurs, barre de progression, sortie
 qui change entre versions. `apt-get`/`apt-cache` ont une interface **stable**,
@@ -335,7 +366,7 @@ application, `pipx` pour un outil en ligne de commande. Idem côté Node :
 
 ## 10.3 Quiz — QCM
 
-**Q10.1** — Sur `lab-web`, `sudo apt-get upgrade` affiche :
+<a id="q10-1"></a>**[Q10.1](corrige.md#q10-1)** — Sur `lab-web`, `sudo apt-get upgrade` affiche :
 
 ```text
 The following packages have been kept back:
@@ -350,7 +381,7 @@ b) leur mise à jour exigerait d'installer ou de supprimer d'autres paquets, ce
 c) le dépôt `noble-updates` est injoignable
 d) leur signature GPG n'a pas pu être vérifiée
 
-**Q10.2** — Quelle est la différence réelle entre `apt-get dist-upgrade` et
+<a id="q10-2"></a>**[Q10.2](corrige.md#q10-2)** — Quelle est la différence réelle entre `apt-get dist-upgrade` et
 `apt full-upgrade` sur Ubuntu 24.04 ?
 
 a) `dist-upgrade` change de version d'Ubuntu, `full-upgrade` non
@@ -358,7 +389,7 @@ b) aucune : ce sont deux noms de la même opération
 c) `full-upgrade` supprime les paquets orphelins, `dist-upgrade` non
 d) `dist-upgrade` ignore l'épinglage
 
-**Q10.3** — `dpkg -l nginx` affiche :
+<a id="q10-3"></a>**[Q10.3](corrige.md#q10-3)** — `dpkg -l nginx` affiche :
 
 ```text
 ||/ Name   Version           Architecture Description
@@ -373,7 +404,7 @@ b) le paquet est supprimé, mais ses fichiers de configuration sont conservés
 c) le paquet est en attente de reconfiguration ; il faut `dpkg-reconfigure`
 d) le paquet est retenu (`hold`) et ne sera plus mis à jour
 
-**Q10.4** — Tu veux savoir quel paquet fournit `/usr/sbin/nginx` sur une machine
+<a id="q10-4"></a>**[Q10.4](corrige.md#q10-4)** — Tu veux savoir quel paquet fournit `/usr/sbin/nginx` sur une machine
 où **nginx n'est pas installé**. Quelle commande ?
 
 a) `dpkg -S /usr/sbin/nginx`
@@ -381,7 +412,7 @@ b) `dpkg -L nginx`
 c) `apt-file search /usr/sbin/nginx`
 d) `apt show nginx`
 
-**Q10.5** — Sur un serveur, `sudo apt update` se termine par :
+<a id="q10-5"></a>**[Q10.5](corrige.md#q10-5)** — Sur un serveur, `sudo apt update` se termine par :
 
 ```text
 W: GPG error: https://apt.exemple.fr noble InRelease: The following
@@ -398,14 +429,14 @@ b) récupérer la clé publique du dépôt auprès de l'éditeur, la placer dans
 c) vérifier l'empreinte de la clé obtenue avant de l'installer
 d) lancer `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7EA0A9C3F273FCD8`
 
-**Q10.6** — Pourquoi la méthode `apt-key add` a-t-elle été abandonnée ?
+<a id="q10-6"></a>**[Q10.6](corrige.md#q10-6)** — Pourquoi la méthode `apt-key add` a-t-elle été abandonnée ?
 
 a) parce que GPG ne sait plus lire les clés RSA
 b) parce qu'une clé ajoutée ainsi vaut pour **tous** les dépôts de la machine
 c) parce que le trousseau global n'est pas sauvegardé
 d) parce qu'`apt-key` ne fonctionne pas derrière un proxy
 
-**Q10.7** — `apt-cache policy outil-lab` répond :
+<a id="q10-7"></a>**[Q10.7](corrige.md#q10-7)** — `apt-cache policy outil-lab` répond :
 
 ```text
 outil-lab:
@@ -425,7 +456,7 @@ b) rétrograder le paquet en 1.0.0
 c) échouer avec `E: Version '1.0.0' for 'outil-lab' was not found`
 d) installer 1.2.0 depuis le dépôt
 
-**Q10.8** — Un `/etc/apt/preferences.d/00-socle.pref` contient :
+<a id="q10-8"></a>**[Q10.8](corrige.md#q10-8)** — Un `/etc/apt/preferences.d/00-socle.pref` contient :
 
 ```ini
 Package: *
@@ -441,7 +472,7 @@ b) apt propose de rétrograder tout ce qui a été installé depuis
 c) apt refuse de démarrer avec `E: Malformed preferences file`
 d) seules les mises à jour de sécurité sont retenues
 
-**Q10.9** — `apt install` d'un paquet applicatif propose de supprimer 40 paquets,
+<a id="q10-9"></a>**[Q10.9](corrige.md#q10-9)** — `apt install` d'un paquet applicatif propose de supprimer 40 paquets,
 dont `ubuntu-server`. Quelle est la cause la plus probable ?
 
 a) le disque est plein
@@ -450,7 +481,7 @@ b) un conflit de dépendances avec un dépôt tiers qui fournit une bibliothèqu
 c) la base dpkg est corrompue
 d) `autoremove` a été lancé dans la même transaction
 
-**Q10.10** — Pendant une mise à jour, dpkg affiche le prompt de conffile pour
+<a id="q10-10"></a>**[Q10.10](corrige.md#q10-10)** — Pendant une mise à jour, dpkg affiche le prompt de conffile pour
 `/etc/ssh/sshd_config`. Tu réponds `N`. Que trouve-t-on ensuite sur le disque ?
 
 a) `/etc/ssh/sshd_config` (ta version) et `/etc/ssh/sshd_config.dpkg-dist`
@@ -459,7 +490,7 @@ b) `/etc/ssh/sshd_config` (celle du paquet) et `/etc/ssh/sshd_config.dpkg-old`
 c) uniquement ta version, la nouvelle est perdue
 d) `/etc/ssh/sshd_config.ucf-dist`
 
-**Q10.11** — Dans un playbook de mise à jour non interactive d'un parc de
+<a id="q10-11"></a>**[Q10.11](corrige.md#q10-11)** — Dans un playbook de mise à jour non interactive d'un parc de
 serveurs, quelle option passes-tu à dpkg ? **Deux réponses correctes.**
 
 a) `--force-confnew`
@@ -467,7 +498,7 @@ b) `--force-confold`
 c) `--force-confdef`
 d) `--force-all`
 
-**Q10.12** — `sudo apt install tree` répond immédiatement :
+<a id="q10-12"></a>**[Q10.12](corrige.md#q10-12)** — `sudo apt install tree` répond immédiatement :
 
 ```text
 E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to
@@ -482,7 +513,7 @@ b) le verrou `/var/lib/dpkg/lock` est tenu par un autre processus
 c) l'index des paquets est trop ancien, il faut `apt update`
 d) le disque est plein
 
-**Q10.13** — Sur Rocky 9, tu as installé un paquet hier et l'application est
+<a id="q10-13"></a>**[Q10.13](corrige.md#q10-13)** — Sur Rocky 9, tu as installé un paquet hier et l'application est
 tombée depuis. Quelle séquence te permet de revenir en arrière ?
 
 a) `dnf downgrade <paquet>` uniquement
@@ -490,7 +521,7 @@ b) `dnf history list`, puis `dnf history undo <id>`
 c) `rpm -e --rollback yesterday`
 d) `dnf clean all && dnf reinstall <paquet>`
 
-**Q10.14** — `rpm -V httpd` affiche :
+<a id="q10-14"></a>**[Q10.14](corrige.md#q10-14)** — `rpm -V httpd` affiche :
 
 ```text
 S.5....T.  c /etc/httpd/conf/httpd.conf
@@ -505,7 +536,7 @@ b) la configuration a été modifiée (taille, MD5, mtime), ce qui est normal ; 
 c) une intrusion a modifié les binaires
 d) `rpm -V` compare au dépôt, il faut donc être connecté
 
-**Q10.15** — Sur Rocky 9, `sudo dnf install nodejs` installe la version 16 alors
+<a id="q10-15"></a>**[Q10.15](corrige.md#q10-15)** — Sur Rocky 9, `sudo dnf install nodejs` installe la version 16 alors
 que le dépôt AppStream contient aussi la 20. Pourquoi ?
 
 a) la 20 est dans EPEL, pas dans AppStream
@@ -513,7 +544,7 @@ b) aucun flux n'est activé : les versions modulaires (`nodejs:20`) sont filtré
 c) `dnf` installe toujours la plus ancienne version disponible
 d) il manque `--allowerasing`
 
-**Q10.16** — Un développeur te demande d'installer un outil en faisant
+<a id="q10-16"></a>**[Q10.16](corrige.md#q10-16)** — Un développeur te demande d'installer un outil en faisant
 `sudo ./configure && sudo make & sudo make install` dans `/usr` sur le serveur
 de production. Quelles objections sont fondées ? **Trois réponses correctes.**
 
@@ -524,7 +555,7 @@ c) `make install` ne fonctionne pas en root
 d) la désinstallation dépend d'une cible `uninstall` que rien n'oblige le
    projet à fournir
 
-**Q10.17** — Sur Ubuntu 24.04, `sudo pip install requests` répond
+<a id="q10-17"></a>**[Q10.17](corrige.md#q10-17)** — Sur Ubuntu 24.04, `sudo pip install requests` répond
 `error: externally-managed-environment`. Quelle est la bonne réponse ?
 
 a) ajouter `--break-system-packages`
@@ -533,7 +564,7 @@ b) installer `python3-requests` avec apt, ou travailler dans un venv, ou passer
 c) supprimer `/usr/lib/python3.12/EXTERNALLY-MANAGED`
 d) lancer la commande sans `sudo`
 
-**Q10.18** — Tu dois garantir qu'un déploiement fait aujourd'hui et le même
+<a id="q10-18"></a>**[Q10.18](corrige.md#q10-18)** — Tu dois garantir qu'un déploiement fait aujourd'hui et le même
 déploiement refait dans six mois installent **exactement** les mêmes versions.
 Quelles mesures y contribuent réellement ? **Trois réponses correctes.**
 
@@ -548,34 +579,28 @@ d) enregistrer la sortie de `dpkg-query -W -f '${Package}=${Version}\n'` comme
 
 ## 10.4 Quiz — questions ouvertes
 
-**QO10.1** — Décris la chaîne complète de ce qui se passe entre le moment où tu
+<a id="qo10-1"></a>**[QO10.1](corrige.md#qo10-1)** — Décris la chaîne complète de ce qui se passe entre le moment où tu
 tapes `sudo apt install nginx` et le moment où le service tourne : qui lit quoi,
 qui télécharge, qui vérifie la signature, qui déballe, qui configure, et où
 chaque étape laisse une trace sur le disque.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO10.2** — *On te demande en entretien* : « Quelle est la différence entre
+<a id="qo10-2"></a>**[QO10.2](corrige.md#qo10-2)** — *On te demande en entretien* : « Quelle est la différence entre
 `apt upgrade` et `apt full-upgrade` ? Laquelle mets-tu dans le cron d'un serveur
 de production, et pourquoi ? » Réponds en cinq phrases maximum, avec un exemple
 concret de ce que `full-upgrade` accepterait et qu'`upgrade` refuse.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO10.3** — *On te demande en entretien* : « Explique-moi pourquoi on ne fait
+<a id="qo10-3"></a>**[QO10.3](corrige.md#qo10-3)** — *On te demande en entretien* : « Explique-moi pourquoi on ne fait
 plus `apt-key add`, et montre-moi comment tu ajoutes le dépôt Docker
 correctement sur Ubuntu 24.04. » Donne les commandes exactes et dis ce que tu
 vérifies avant de faire confiance à la clé.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO10.4** — Un collègue a écrit ceci pour empêcher une montée de version de
+<a id="qo10-4"></a>**[QO10.4](corrige.md#qo10-4)** — Un collègue a écrit ceci pour empêcher une montée de version de
 PostgreSQL :
 
 ```ini
@@ -587,133 +612,122 @@ Pin-Priority: 1001
 Explique, mécanisme à l'appui, ce que ce fichier fait réellement au système,
 comment tu le détectes, et comment tu l'écrirais.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO10.5** — Compare `apt-mark hold` et un épinglage dans
+<a id="qo10-5"></a>**[QO10.5](corrige.md#qo10-5)** — Compare `apt-mark hold` et un épinglage dans
 `/etc/apt/preferences.d` : où chaque information est stockée, ce que chacun
 empêche exactement, ce que chacun laisse passer, et lequel survit à une
 réinstallation du paquet. Conclus par le critère de choix.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO10.6** — Sur un parc de 200 serveurs, décris ta politique de mise à jour :
+<a id="qo10-6"></a>**[QO10.6](corrige.md#qo10-6)** — Sur un parc de 200 serveurs, décris ta politique de mise à jour :
 ce que tu automatises, ce que tu n'automatises jamais, comment tu traites le
 redémarrage, et comment tu sais, le lendemain matin, ce qui a bougé sur quelle
 machine.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO10.7** — Un dev te dit : « ton paquet Debian de `redis` est trop vieux, je
+<a id="qo10-7"></a>**[QO10.7](corrige.md#qo10-7)** — Un dev te dit : « ton paquet Debian de `redis` est trop vieux, je
 compile la version amont et je fais `make install` ». Formule ta réponse
 professionnelle : dans quels cas il a raison, dans quels cas c'est une faute, et
 quelle solution intermédiaire tu proposes.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO10.8** — Décris ta démarche de diagnostic, commande par commande, face à ce
+<a id="qo10-8"></a>**[QO10.8](corrige.md#qo10-8)** — Décris ta démarche de diagnostic, commande par commande, face à ce
 symptôme : « depuis ce matin, `apt install` n'importe quoi propose de supprimer
 `ubuntu-server` et 40 autres paquets ». Dis ce que tu cherches dans chaque
 sortie.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO10.9** — Explique ce qu'apporte `dnf history` par rapport à l'écosystème
+<a id="qo10-9"></a>**[QO10.9](corrige.md#qo10-9)** — Explique ce qu'apporte `dnf history` par rapport à l'écosystème
 Debian, ce que son `undo` sait faire et ce qu'il **ne sait pas** faire, et
 comment tu obtiens une garantie équivalente sur une machine Ubuntu.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 10.5 Exercices guidés ★
 
-**E10.1** — Affiche le nombre exact de paquets installés sur `lab-adm`, sans
+<a id="e10-1"></a>**[E10.1](corrige.md#e10-1)** — Affiche le nombre exact de paquets installés sur `lab-adm`, sans
 compter les lignes d'en-tête ni les paquets en état `rc`.
 
-**E10.2** — Trouve quel paquet fournit le fichier `/usr/bin/ss`, puis liste tous
+<a id="e10-2"></a>**[E10.2](corrige.md#e10-2)** — Trouve quel paquet fournit le fichier `/usr/bin/ss`, puis liste tous
 les fichiers de configuration (sous `/etc`) que ce paquet livre.
 
-**E10.3** — Suppose que le binaire `/usr/sbin/nft` n'existe pas sur la machine (si `nftables` est déjà installé, prends `/usr/sbin/tcpdump` ou `/usr/bin/htop`). Trouve quand
+<a id="e10-3"></a>**[E10.3](corrige.md#e10-3)** — Suppose que le binaire `/usr/sbin/nft` n'existe pas sur la machine (si `nftables` est déjà installé, prends `/usr/sbin/tcpdump` ou `/usr/bin/htop`). Trouve quand
 même le nom du paquet qui le fournirait.
 
-**E10.4** — Affiche la liste des paquets que **tu** as demandés explicitement,
+<a id="e10-4"></a>**[E10.4](corrige.md#e10-4)** — Affiche la liste des paquets que **tu** as demandés explicitement,
 par opposition à ceux tirés comme dépendances. Compte les deux populations.
 
-**E10.5** — Liste les paquets dont l'état n'est pas `ii`, en une seule commande
+<a id="e10-5"></a>**[E10.5](corrige.md#e10-5)** — Liste les paquets dont l'état n'est pas `ii`, en une seule commande
 scriptable (pas de `dpkg -l` suivi de `grep -v` sur l'affichage humain).
 
-**E10.6** — Trouve tous les fichiers de `/etc` que dpkg considère comme modifiés
+<a id="e10-6"></a>**[E10.6](corrige.md#e10-6)** — Trouve tous les fichiers de `/etc` que dpkg considère comme modifiés
 par rapport au paquet qui les a livrés.
 
-**E10.7** — Pour le paquet `openssh-server`, affiche uniquement la liste de ses
+<a id="e10-7"></a>**[E10.7](corrige.md#e10-7)** — Pour le paquet `openssh-server`, affiche uniquement la liste de ses
 conffiles telle que dpkg l'enregistre, avec leur empreinte d'origine.
 
-**E10.8** — Affiche toutes les versions de `curl` disponibles dans les dépôts
+<a id="e10-8"></a>**[E10.8](corrige.md#e10-8)** — Affiche toutes les versions de `curl` disponibles dans les dépôts
 configurés, avec le dépôt d'origine de chacune, puis la priorité effective de
 chaque dépôt de la machine.
 
-**E10.9** — Télécharge le `.deb` du paquet `tree` dans `~/lab10/paquets/` sans
+<a id="e10-9"></a>**[E10.9](corrige.md#e10-9)** — Télécharge le `.deb` du paquet `tree` dans `~/lab10/paquets/` sans
 l'installer, puis affiche sa liste de fichiers et son champ `Depends` **sans**
 l'extraire ailleurs.
 
-**E10.10** — Depuis `~/lab10/paquets/`, installe `agent-lab_2.0.0_all.deb` avec
+<a id="e10-10"></a>**[E10.10](corrige.md#e10-10)** — Depuis `~/lab10/paquets/`, installe `agent-lab_2.0.0_all.deb` avec
 `dpkg -i`. Note le message exact et l'état du paquet, puis remets la machine
 dans un état propre.
 
-**E10.11** — Simule (sans rien exécuter) ce que ferait `apt autoremove`, et
+<a id="e10-11"></a>**[E10.11](corrige.md#e10-11)** — Simule (sans rien exécuter) ce que ferait `apt autoremove`, et
 explique ligne par ligne pourquoi chaque paquet listé est candidat.
 
-**E10.12** — Ajoute le dépôt `noble-backports` à la liste des sources s'il n'y
+<a id="e10-12"></a>**[E10.12](corrige.md#e10-12)** — Ajoute le dépôt `noble-backports` à la liste des sources s'il n'y
 est pas, puis installe un paquet **uniquement** depuis cette suite, sans changer
 la priorité par défaut des autres paquets.
 
-**E10.13** — Retiens `openssh-server` contre toute mise à jour, vérifie la
+<a id="e10-13"></a>**[E10.13](corrige.md#e10-13)** — Retiens `openssh-server` contre toute mise à jour, vérifie la
 retenue de deux façons différentes, puis libère-le.
 
-**E10.14** — Fais en sorte que `editor` pointe sur `vim` pour toute la machine,
+<a id="e10-14"></a>**[E10.14](corrige.md#e10-14)** — Fais en sorte que `editor` pointe sur `vim` pour toute la machine,
 en mode manuel, puis affiche la preuve que le choix est bien manuel et non
 automatique. Reviens ensuite en mode automatique.
 
-**E10.15** — Compile `horodate` depuis `~/lab10/sources/horodate-1.4.tar.gz` avec
+<a id="e10-15"></a>**[E10.15](corrige.md#e10-15)** — Compile `horodate` depuis `~/lab10/sources/horodate-1.4.tar.gz` avec
 un préfixe `/opt/horodate-1.4`, **sans rien installer sur le système** : montre
 le contenu de l'arborescence qui serait installée.
 
-**E10.16** — Crée un environnement virtuel Python dans `~/lab10/venv-outil`,
+<a id="e10-16"></a>**[E10.16](corrige.md#e10-16)** — Crée un environnement virtuel Python dans `~/lab10/venv-outil`,
 installe-y un module, et prouve que l'interpréteur système n'a pas été touché.
 Puis fais la même chose avec `pipx` pour un outil en ligne de commande.
 
-::: rhel
-Sur `lab-rhel`, refais les exercices **E10.1, E10.2, E10.5, E10.6, E10.8 et E10.13**
-avec `rpm` et `dnf`. Note à chaque fois la commande équivalente : c'est cette
-table de correspondance qu'on te demandera en entretien.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel`, refais les exercices **E10.1, E10.2, E10.5, E10.6, E10.8 et E10.13**
+> avec `rpm` et `dnf`. Note à chaque fois la commande équivalente : c'est cette
+> table de correspondance qu'on te demandera en entretien.
 
 ---
 
 ## 10.6 Labs ★★
 
-### **L10.1** — Inventaire logiciel avant migration
+### <a id="l10-1"></a>**[L10.1](corrige.md#l10-1)** — Inventaire logiciel avant migration
 
-::: contexte
-La direction technique veut migrer `lab-adm` vers une nouvelle version d'Ubuntu
-dans trois mois. On te demande un état des lieux : ce qui est installé, ce qui
-a été installé à la main, ce qui ne vient d'aucun dépôt (donc ce que personne
-ne remettra automatiquement après migration), et ce qui a été modifié en local.
-Livrable : un rapport + le script qui le produit, pour pouvoir le rejouer sur
-les autres VM.
-:::
+> **Contexte**
+>
+> La direction technique veut migrer `lab-adm` vers une nouvelle version d'Ubuntu
+> dans trois mois. On te demande un état des lieux : ce qui est installé, ce qui
+> a été installé à la main, ce qui ne vient d'aucun dépôt (donc ce que personne
+> ne remettra automatiquement après migration), et ce qui a été modifié en local.
+> Livrable : un rapport + le script qui le produit, pour pouvoir le rejouer sur
+> les autres VM.
 
 1. Écris `~/lab10/bin/inventaire.sh`. Il n'installe rien, ne modifie rien, et
    écrit son rapport Markdown sur la sortie standard.
@@ -732,35 +746,37 @@ les autres VM.
    être exploitable telle quelle par un collègue, pas un copier-coller de sortie
    brute.
 
-::: astuce
-`dpkg-query -W -f '${db:Status-Abbrev} ${binary:Package} ${Version}\n'` donne
-une ligne par paquet, état compris, sans en-tête. C'est la base de tout le
-script. `dpkg -V` sort en code 1 quand il trouve des écarts : pense à `|| true`
-avec `set -e`.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `dpkg-query -W -f '${db:Status-Abbrev} ${binary:Package} ${Version}\n'` donne
+> une ligne par paquet, état compris, sans en-tête. C'est la base de tout le
+> script. `dpkg -V` sort en code 1 quand il trouve des écarts : pense à `|| true`
+> avec `set -e`.
 
-::: check
-Critère de succès : `~/lab10/rapports/inventaire.md` contient les cinq sections,
-le nombre de paquets correspond au système, et le script est rejouable.
-
-```bash
-bash check_M10_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `~/lab10/rapports/inventaire.md` contient les cinq sections,
+> le nombre de paquets correspond au système, et le script est rejouable.
+>
+> ```bash
+> bash check_M10_01.sh
+> ```
 
 ---
 
-### **L10.2** — Publier le dépôt interne de l'équipe, proprement
+### <a id="l10-2"></a>**[L10.2](corrige.md#l10-2)** — Publier le dépôt interne de l'équipe, proprement
 
-::: contexte
-L'équipe socle distribue ses outils maison par un dépôt APT interne. Jusqu'ici,
-chacun installait les `.deb` à la main avec `scp` + `dpkg -i`, et personne ne
-savait quelle machine avait quelle version. Le dépôt existe désormais
-(`/srv/depot-lab`, servi sur `http://127.0.0.1:8099`), signé par la clé
-« Depot Lab Interne ». On te demande de l'intégrer sur `lab-adm` selon les
-règles de sécurité de la boîte : aucune clé ne doit être ajoutée au trousseau
-global.
-:::
+> **Contexte**
+>
+> L'équipe socle distribue ses outils maison par un dépôt APT interne. Jusqu'ici,
+> chacun installait les `.deb` à la main avec `scp` + `dpkg -i`, et personne ne
+> savait quelle machine avait quelle version. Le dépôt existe désormais
+> (`/srv/depot-lab`, servi sur `http://127.0.0.1:8099`), signé par la clé
+> « Depot Lab Interne ». On te demande de l'intégrer sur `lab-adm` selon les
+> règles de sécurité de la boîte : aucune clé ne doit être ajoutée au trousseau
+> global.
 
 1. Récupère la clé publique du dépôt (`/srv/depot-lab/depot-lab.asc` ou
    `http://127.0.0.1:8099/depot-lab.asc`). Avant toute chose, affiche son
@@ -780,33 +796,35 @@ global.
 7. Explique dans deux lignes de commentaire, en tête de ton fichier `.sources`,
    pourquoi `Signed-By` est indispensable ici.
 
-::: attention
-Tentation à éviter absolument : `[trusted=yes]` ou une clé posée dans
-`/etc/apt/trusted.gpg.d/`. Les deux « font marcher » `apt update` et les deux
-sont des fautes. Le script de vérification les détecte.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Tentation à éviter absolument : `[trusted=yes]` ou une clé posée dans
+> `/etc/apt/trusted.gpg.d/`. Les deux « font marcher » `apt update` et les deux
+> sont des fautes. Le script de vérification les détecte.
 
-::: check
-Critère de succès : `apt update` est silencieux, `outil-lab` est installé depuis
-le dépôt, la clé est dans `/etc/apt/keyrings` et n'est utilisable que pour ce
-dépôt.
-
-```bash
-sudo bash check_M10_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `apt update` est silencieux, `outil-lab` est installé depuis
+> le dépôt, la clé est dans `/etc/apt/keyrings` et n'est utilisable que pour ce
+> dépôt.
+>
+> ```bash
+> sudo bash check_M10_02.sh
+> ```
 
 ---
 
-### **L10.3** — Ticket INC-3390 : « la 1.2.0 casse la facturation »
+### <a id="l10-3"></a>**[L10.3](corrige.md#l10-3)** — Ticket INC-3390 : « la 1.2.0 casse la facturation »
 
-::: contexte
-`outil-lab` 1.2.0 a été déployé ce matin sur `lab-adm` et l'équipe applicative
-constate des erreurs. Décision du responsable d'exploitation : revenir en 1.0.0
-et **y rester** jusqu'à validation de la 1.2.1, sans bloquer les mises à jour
-des autres paquets. On te demande la manœuvre et la procédure écrite qui va
-avec, parce que la prochaine fois, ce sera l'astreinte qui l'appliquera.
-:::
+> **Contexte**
+>
+> `outil-lab` 1.2.0 a été déployé ce matin sur `lab-adm` et l'équipe applicative
+> constate des erreurs. Décision du responsable d'exploitation : revenir en 1.0.0
+> et **y rester** jusqu'à validation de la 1.2.1, sans bloquer les mises à jour
+> des autres paquets. On te demande la manœuvre et la procédure écrite qui va
+> avec, parce que la prochaine fois, ce sera l'astreinte qui l'appliquera.
 
 1. Constate l'état : version installée, version candidate, versions disponibles
    dans le dépôt, et le dépôt d'origine de chacune.
@@ -825,32 +843,34 @@ avec, parce que la prochaine fois, ce sera l'astreinte qui l'appliquera.
    dégel, la commande de contrôle à passer en revue mensuelle pour détecter les
    gels oubliés, et le tableau comparatif `hold` / épinglage.
 
-::: astuce
-Une priorité d'épinglage doit **dépasser 1000** pour autoriser une
-rétrogradation. À 999, apt accepte de garder la 1.0.0 si elle est installée,
-mais refuse de redescendre depuis la 1.2.0 : c'est l'erreur classique, et elle
-ne se voit qu'au moment où on en a besoin.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Une priorité d'épinglage doit **dépasser 1000** pour autoriser une
+> rétrogradation. À 999, apt accepte de garder la 1.0.0 si elle est installée,
+> mais refuse de redescendre depuis la 1.2.0 : c'est l'erreur classique, et elle
+> ne se voit qu'au moment où on en a besoin.
 
-::: check
-Critère de succès : 1.0.0 installée, 1.0.0 candidate, épinglage ciblé, aucun
-`hold`, rapport rédigé.
-
-```bash
-sudo bash check_M10_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : 1.0.0 installée, 1.0.0 candidate, épinglage ciblé, aucun
+> `hold`, rapport rédigé.
+>
+> ```bash
+> sudo bash check_M10_03.sh
+> ```
 
 ---
 
-### **L10.4** — L'outil qui n'existe dans aucun dépôt
+### <a id="l10-4"></a>**[L10.4](corrige.md#l10-4)** — L'outil qui n'existe dans aucun dépôt
 
-::: contexte
-L'équipe a besoin de `horodate`, un utilitaire maison livré en tarball par un
-prestataire. Aucun paquet n'existe. Le réflexe de la moitié de l'équipe serait
-`sudo make install` ; on te demande de faire mieux, et d'écrire pourquoi, parce
-que cette décision se rejouera cinq fois par an.
-:::
+> **Contexte**
+>
+> L'équipe a besoin de `horodate`, un utilitaire maison livré en tarball par un
+> prestataire. Aucun paquet n'existe. Le réflexe de la moitié de l'équipe serait
+> `sudo make install` ; on te demande de faire mieux, et d'écrire pourquoi, parce
+> que cette décision se rejouera cinq fois par an.
 
 Travaille dans `~/lab10/sources/`.
 
@@ -878,31 +898,33 @@ Travaille dans `~/lab10/sources/`.
    désinstallation, et les trois cas où compiler depuis les sources reste
    légitime en production.
 
-::: attention
-Aucun `sudo make install` dans ce lab. Si tu en fais un par réflexe, note la
-liste des fichiers déposés : tu devras les retrouver à la main, et c'est
-précisément la démonstration.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Aucun `sudo make install` dans ce lab. Si tu en fais un par réflexe, note la
+> liste des fichiers déposés : tu devras les retrouver à la main, et c'est
+> précisément la démonstration.
 
-::: check
-Critère de succès : un `.deb` construit par tes soins, installé, avec
-`/usr/local/bin/horodate` attribué à un paquet et aucun fichier orphelin.
-
-```bash
-sudo bash check_M10_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : un `.deb` construit par tes soins, installé, avec
+> `/usr/local/bin/horodate` attribué à un paquet et aucun fichier orphelin.
+>
+> ```bash
+> sudo bash check_M10_04.sh
+> ```
 
 ---
 
-### **L10.5** — Le même travail sous Rocky 9
+### <a id="l10-5"></a>**[L10.5](corrige.md#l10-5)** — Le même travail sous Rocky 9
 
-::: contexte
-La moitié du parc de l'entreprise est sous RHEL. Ton responsable veut être sûr
-que tu ne sais pas faire qu'avec `apt`. Tout ce lab se passe sur **`lab-rhel`
-(10.10.10.13)**, où `setup_M10.sh` a publié le même dépôt interne au format
-RPM.
-:::
+> **Contexte**
+>
+> La moitié du parc de l'entreprise est sous RHEL. Ton responsable veut être sûr
+> que tu ne sais pas faire qu'avec `apt`. Tout ce lab se passe sur **`lab-rhel`
+> (10.10.10.13)**, où `setup_M10.sh` a publié le même dépôt interne au format
+> RPM.
 
 1. Inventaire : nombre de paquets installés, quel paquet fournit
    `/usr/sbin/sshd`, quels fichiers livre `chrony`, et quels fichiers de
@@ -931,35 +953,38 @@ RPM.
    `dpkg`/`rpm` et `apt`/`dnf` que tu as établi, ce que `dnf history` apporte,
    ce que `rpm -qf` t'a appris, et le risque EPEL en une phrase défendable.
 
-::: rhel
-`dnf repoquery` remplace `apt-cache` : `dnf repoquery --available`,
-`--installed`, `--requires`, `--whatrequires`, `--list`. Et `rpm -qf` ne
-fonctionne que sur un fichier **déjà installé** ; l'équivalent d'`apt-file` est
-`dnf provides /usr/sbin/nft`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> `dnf repoquery` remplace `apt-cache` : `dnf repoquery --available`,
+> `--installed`, `--requires`, `--whatrequires`, `--list`. Et `rpm -qf` ne
+> fonctionne que sur un fichier **déjà installé** ; l'équivalent d'`apt-file` est
+> `dnf provides /usr/sbin/nft`.
 
-::: check
-Critère de succès : dépôt déclaré avec `gpgcheck=1`, clé importée, `outil-lab`
-installé par dnf, une transaction annulée dans l'historique, `dnf-automatic`
-en mode sécurité.
-
-```bash
-sudo bash check_M10_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : dépôt déclaré avec `gpgcheck=1`, clé importée, `outil-lab`
+> installé par dnf, une transaction annulée dans l'historique, `dnf-automatic`
+> en mode sécurité.
+>
+> ```bash
+> sudo bash check_M10_05.sh
+> ```
 
 ---
 
 ## 10.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf10`. Le snapshot de secours
-reste `snap-clean` (`qm rollback 9001 snap-clean`), mais l'utiliser vaut échec de
-l'exercice. Sur une machine où `apt` ne fonctionne plus, on ne répare pas avec
-`apt` : c'est tout l'intérêt de ces pannes.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf10`. Le snapshot de secours
+> reste `snap-clean` (`qm rollback 9001 snap-clean`), mais l'utiliser vaut échec de
+> l'exercice. Sur une machine où `apt` ne fonctionne plus, on ne répare pas avec
+> `apt` : c'est tout l'intérêt de ces pannes.
 
-### **BF10.1** — « Plus rien ne s'installe sur cette machine »
+### <a id="bf10-1"></a>**[BF10.1](corrige.md#bf10-1)** — « Plus rien ne s'installe sur cette machine »
 
 ```bash
 sudo bash break_M10_01.sh
@@ -977,11 +1002,9 @@ snapshot.
 en état `ii`, et expliquer les **deux** causes distinctes présentes sur la
 machine — l'une visible dans `dpkg -l`, l'autre dans `/var/lib/dpkg`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF10.2** — « Le dépôt de l'équipe ne marche plus »
+### <a id="bf10-2"></a>**[BF10.2](corrige.md#bf10-2)** — « Le dépôt de l'équipe ne marche plus »
 
 ```bash
 sudo bash break_M10_02.sh
@@ -1000,11 +1023,9 @@ signature réelle, expliquer précisément ce que le message d'erreur signifie
 (ce qui a échoué, à quelle étape), et dire ce qui aurait changé si le collègue
 d'astreinte avait mis `[trusted=yes]`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF10.3** — « La mise à jour de sécurité ne passe pas sur ce serveur »
+### <a id="bf10-3"></a>**[BF10.3](corrige.md#bf10-3)** — « La mise à jour de sécurité ne passe pas sur ce serveur »
 
 ```bash
 sudo bash break_M10_03.sh
@@ -1024,11 +1045,9 @@ pas au même endroit et ne se voient pas avec la même commande), les lever
 proprement, faire passer la mise à jour, et écrire la commande d'audit qui
 aurait détecté ces gels avant l'incident.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF10.4** — « apt veut désinstaller la moitié du serveur »
+### <a id="bf10-4"></a>**[BF10.4](corrige.md#bf10-4)** — « apt veut désinstaller la moitié du serveur »
 
 ```bash
 sudo bash break_M10_04.sh
@@ -1046,23 +1065,21 @@ expliquer avec `apt-cache policy` pourquoi le système en est arrivé là, corri
 en conservant l'intention initiale de son auteur, et vérifier qu'aucune
 rétrogradation n'a eu lieu.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 10.8 Défi du module ★★★
 
-**D10 — Politique de mise à jour du parc**
+<a id="d10"></a>**[D10](corrige.md#d10) — Politique de mise à jour du parc**
 
-::: contexte
-Trois incidents en six mois : un serveur rétrogradé par un épinglage sauvage,
-une faille non corrigée pendant onze semaines sur une machine dont personne ne
-savait qu'un `hold` traînait, et un redémarrage automatique en pleine journée.
-On te demande d'établir la politique de mise à jour, de l'appliquer sur
-`lab-adm`, et de fournir l'outil qui détecte les dérives.
-:::
+> **Contexte**
+>
+> Trois incidents en six mois : un serveur rétrogradé par un épinglage sauvage,
+> une faille non corrigée pendant onze semaines sur une machine dont personne ne
+> savait qu'un `hold` traînait, et un redémarrage automatique en pleine journée.
+> On te demande d'établir la politique de mise à jour, de l'appliquer sur
+> `lab-adm`, et de fournir l'outil qui détecte les dérives.
 
 Cahier des charges :
 
@@ -1101,11 +1118,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-sudo bash check_M10_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> sudo bash check_M10_06.sh
+> ```
 
 ---
 
@@ -1140,3 +1158,9 @@ Pour aller plus loin :
 * Compare `dnf history undo` avec ce que permet un système à générations
   (NixOS, ou `rpm-ostree` sur Fedora CoreOS) : c'est la direction que prend
   l'industrie sur la reproductibilité.
+
+<!-- nav:début -->
+---
+
+[← Module 09](../09-noyau-demarrage/README.md) · [Corrigé](corrige.md) · [Module 11 →](../11-stockage-lvm/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

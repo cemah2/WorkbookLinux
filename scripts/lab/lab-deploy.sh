@@ -730,6 +730,10 @@ phase_60_workbook() {
         "unzip dans $home/workbook/"
     return 0
   fi
+  if [ -z "$zip" ] && vm_ssh "$ADM_IP" "test -d $home/workbook/.git" 2>/dev/null; then
+    ok "lab-adm : $home/workbook est un clone Git (bootstrap-lab.sh), rien à copier"
+    return 0
+  fi
   if [ -z "$zip" ]; then
     if [ -d "$SCRIPT_DIR/../check" ] && [ -d "$SCRIPT_DIR/../setup" ]; then
       warn "workbook-scripts.zip introuvable : copie du dossier scripts/" \

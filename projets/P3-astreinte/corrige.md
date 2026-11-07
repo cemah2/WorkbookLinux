@@ -1,3 +1,11 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet C — Une semaine d'astreinte › **Projet C** · corrigé  
+[← Projet B](../P2-factura-devops/corrige.md) · [Énoncé](README.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Projet C — Corrigé
 
 Ce corrigé est **autoportant** : chaque ticket rappelle l'énoncé en une ligne,
@@ -14,7 +22,7 @@ sur l'infra du §1 ; chez toi elles diffèrent, la démarche non.
 
 ## C.1 Lundi
 
-### PC.1.1 — Certificat TLS expiré
+### <a id="pc-1-1"></a>[PC.1.1](README.md#pc-1-1) — Certificat TLS expiré
 
 *Le site affiche un avertissement de sécurité depuis 03:14 ; alerte
 `SSLCertExpired`. Interdit : reboot. Fenêtre : avant 10:00.*
@@ -100,29 +108,31 @@ renouvellement automatique (script `openssl ca` + `nginx -s reload`) piloté par
 timer, ou le passage à une PKI qui renouvelle (ACME interne). La règle Prometheus
 `SSLCertExpired` doit alerter **à J-21**, pas à J-0.
 
-::: pourquoi
-La validité d'un certificat est une propriété du certificat lui-même
-(`notBefore`/`notAfter`), vérifiée par le client à chaque poignée de main TLS.
-Rien ne « prévient » côté serveur : un certificat expiré continue d'être présenté
-tel quel, c'est le **client** qui refuse. D'où deux conséquences : (1) il faut
-surveiller l'échéance de façon active, côté serveur, avant qu'un client ne la
-découvre ; (2) `openssl x509 -checkend N` (secondes) rend un code non nul si le
-certificat expire avant `N` secondes — c'est l'outil exact d'une sonde.
-Réémettre depuis la **CSR** garde la même clé privée : les pinning et l'HPKP
-éventuels ne cassent pas, et on ne redéploie pas de clé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La validité d'un certificat est une propriété du certificat lui-même
+> (`notBefore`/`notAfter`), vérifiée par le client à chaque poignée de main TLS.
+> Rien ne « prévient » côté serveur : un certificat expiré continue d'être présenté
+> tel quel, c'est le **client** qui refuse. D'où deux conséquences : (1) il faut
+> surveiller l'échéance de façon active, côté serveur, avant qu'un client ne la
+> découvre ; (2) `openssl x509 -checkend N` (secondes) rend un code non nul si le
+> certificat expire avant `N` secondes — c'est l'outil exact d'une sonde.
+> Réémettre depuis la **CSR** garde la même clé privée : les pinning et l'HPKP
+> éventuels ne cassent pas, et on ne redéploie pas de clé.
 
-::: piege
-L'erreur qui coûte le poste : générer un `openssl req -x509` auto-signé « pour
-que ça remarche vite ». Le cadenas revient chez toi (tu as ajouté ta CA de test)
-mais **casse chez tous les clients** qui ne connaissent pas cet émetteur, et tu
-as remplacé une chaîne de confiance propre par un bricolage. Autre piège :
-`systemctl restart nginx` au lieu de `reload` — inutile (reload relit les
-certificats), et sur ce ticket, un restart n'est pas un reboot mais reste plus
-brutal que nécessaire. Enfin, ne jamais toucher `factura.lab.local.key` : si tu
-régénères la clé sans refaire signer, `nginx -t` échoue sur la non-correspondance
-clé/certificat.
-:::
+> [!WARNING]
+> **Piège**
+>
+> L'erreur qui coûte le poste : générer un `openssl req -x509` auto-signé « pour
+> que ça remarche vite ». Le cadenas revient chez toi (tu as ajouté ta CA de test)
+> mais **casse chez tous les clients** qui ne connaissent pas cet émetteur, et tu
+> as remplacé une chaîne de confiance propre par un bricolage. Autre piège :
+> `systemctl restart nginx` au lieu de `reload` — inutile (reload relit les
+> certificats), et sur ce ticket, un restart n'est pas un reboot mais reste plus
+> brutal que nécessaire. Enfin, ne jamais toucher `factura.lab.local.key` : si tu
+> régénères la clé sans refaire signer, `nginx -t` échoue sur la non-correspondance
+> clé/certificat.
 
 **Ce qu'il fallait écrire dans le ticket :** « Certificat `factura.lab.local`
 (CA de lab) expiré le 19/09 01:00 UTC. Réémis 90 j depuis la CSR existante,
@@ -132,7 +142,7 @@ mettre en place (voir PC revue). Aucune VM redémarrée. »
 
 ---
 
-### PC.1.2 — max_connections PostgreSQL atteint
+### <a id="pc-1-2"></a>[PC.1.2](README.md#pc-1-2) — max_connections PostgreSQL atteint
 
 `FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute`*. Interdit : redémarrer la base hors de la fenêtre 12 :30–13 :00.*
 
@@ -211,28 +221,30 @@ sudo -u postgres psql -c \
 sudo -u postgres psql -c 'select pg_reload_conf();'   # pas de restart
 ```
 
-::: pourquoi
-Chaque connexion PostgreSQL est un **processus** (`postgres: user db ...`) qui
-réserve une place dans la limite `max_connections`. Une session `idle in
-transaction` a fini sa requête mais n'a pas clos sa transaction : elle garde sa
-place **et** des verrous, et empêche le nettoyage (VACUUM) des lignes mortes.
-`pg_terminate_backend(pid)` coupe proprement une session sans toucher aux
-autres — d'où la remise en service **sans redémarrage**.
-`idle_in_transaction_session_timeout` fait tuer automatiquement par le serveur
-toute transaction laissée ouverte trop longtemps : c'est le filet exact contre
-ce genre d'ETL. Il se recharge par `pg_reload_conf()` (SIGHUP), sans restart ;
-`max_connections`, lui, est alloué au démarrage et exige un restart.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque connexion PostgreSQL est un **processus** (`postgres: user db ...`) qui
+> réserve une place dans la limite `max_connections`. Une session `idle in
+> transaction` a fini sa requête mais n'a pas clos sa transaction : elle garde sa
+> place **et** des verrous, et empêche le nettoyage (VACUUM) des lignes mortes.
+> `pg_terminate_backend(pid)` coupe proprement une session sans toucher aux
+> autres — d'où la remise en service **sans redémarrage**.
+> `idle_in_transaction_session_timeout` fait tuer automatiquement par le serveur
+> toute transaction laissée ouverte trop longtemps : c'est le filet exact contre
+> ce genre d'ETL. Il se recharge par `pg_reload_conf()` (SIGHUP), sans restart ;
+> `max_connections`, lui, est alloué au démarrage et exige un restart.
 
-::: piege
-Le réflexe « je redémarre PostgreSQL, ça vide les connexions » viole
-l'interdiction **et** détruit la preuve (`pg_stat_activity` est remis à zéro,
-tu ne sauras jamais qui saturait). Autre piège : remonter `max_connections` à
-500 « pour être tranquille » — chaque connexion coûte de la RAM (work_mem,
-buffers), tu déplaces la panne vers l'OOM killer. La vraie limite basse était
-une régression de config, pas un manque de capacité ; le vrai problème était
-l'ETL. Corriger les deux, pas gonfler le chiffre.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le réflexe « je redémarre PostgreSQL, ça vide les connexions » viole
+> l'interdiction **et** détruit la preuve (`pg_stat_activity` est remis à zéro,
+> tu ne sauras jamais qui saturait). Autre piège : remonter `max_connections` à
+> 500 « pour être tranquille » — chaque connexion coûte de la RAM (work_mem,
+> buffers), tu déplaces la panne vers l'OOM killer. La vraie limite basse était
+> une régression de config, pas un manque de capacité ; le vrai problème était
+> l'ETL. Corriger les deux, pas gonfler le chiffre.
 
 **Ce qu'il fallait écrire dans le ticket :** « Saturation `max_connections`
 (=8, abaissé par un tuning non validé de vendredi 18 :40) aggravée par 5 sessions *idle in
@@ -243,7 +255,7 @@ terminées via `pg_terminate_backend` → accès rétabli 09:52 sans restart.
 
 ---
 
-### PC.1.3 — Nouveau vhost docs.factura.lab.local
+### <a id="pc-1-3"></a>[PC.1.3](README.md#pc-1-3) — Nouveau vhost docs.factura.lab.local
 
 *Publier `/srv/www/docs` sur `docs.factura.lab.local` en HTTPS avant 17:00, sans
 casser le vhost principal, avec des droits sains.*
@@ -311,24 +323,26 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 `nginx -t` obligatoire avant reload, et un contrôle « aucun fichier
 world-writable dans une racine servie ».
 
-::: pourquoi
-`try_files $uri $uri/ =404` sert un fichier statique s'il existe, sinon
-l'index du répertoire, sinon 404 — c'est le bon patron pour du contenu
-statique, sans proxy. On réutilise le certificat du vhost principal parce que
-son SAN couvre déjà `docs.factura.lab.local` : pas besoin d'en émettre un
-second. `nginx -t` valide la syntaxe **et** la présence des fichiers de
-certificat avant qu'un `reload` ne prenne effet : c'est ce qui évite de casser
-le frontal en publiant le nouveau.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `try_files $uri $uri/ =404` sert un fichier statique s'il existe, sinon
+> l'index du répertoire, sinon 404 — c'est le bon patron pour du contenu
+> statique, sans proxy. On réutilise le certificat du vhost principal parce que
+> son SAN couvre déjà `docs.factura.lab.local` : pas besoin d'en émettre un
+> second. `nginx -t` valide la syntaxe **et** la présence des fichiers de
+> certificat avant qu'un `reload` ne prenne effet : c'est ce qui évite de casser
+> le frontal en publiant le nouveau.
 
-::: piege
-`chmod -R 777 /srv/www/docs` « pour que nginx puisse lire » est la faute
-classique (on la traite en vrai à PC.5.3 côté inodes, et l'esprit est le même) :
-un répertoire servi par le web en 777 est modifiable par n'importe quel
-processus de la machine. La lecture par nginx demande `755`/`644`, rien de plus : le propriétaire reste `root`, pas `www-data` (un frontal compromis ne doit pas pouvoir réécrire le contenu qu'il sert). Autre piège : oublier le bloc port 80 → les
-utilisateurs qui tapent `http://docs...` tombent sur une erreur au lieu d'être
-redirigés.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `chmod -R 777 /srv/www/docs` « pour que nginx puisse lire » est la faute
+> classique (on la traite en vrai à PC.5.3 côté inodes, et l'esprit est le même) :
+> un répertoire servi par le web en 777 est modifiable par n'importe quel
+> processus de la machine. La lecture par nginx demande `755`/`644`, rien de plus : le propriétaire reste `root`, pas `www-data` (un frontal compromis ne doit pas pouvoir réécrire le contenu qu'il sert). Autre piège : oublier le bloc port 80 → les
+> utilisateurs qui tapent `http://docs...` tombent sur une erreur au lieu d'être
+> redirigés.
 
 **Ce qu'il fallait écrire dans le ticket :** « Vhost `docs.factura.lab.local`
 publié en HTTPS (certificat existant, SAN OK), redirection 80→443, droits
@@ -337,7 +351,7 @@ Vhost principal vérifié intact. Conf commitée. »
 
 ---
 
-### PC.1.4 — 502 Bad Gateway après déploiement
+### <a id="pc-1-4"></a>[PC.1.4](README.md#pc-1-4) — 502 Bad Gateway après déploiement
 
 *502 partout depuis le déploiement 15:10 ; `systemctl status` dit *active*.
 Interdit : rollback de la 2.4.0, reboot.*
@@ -397,25 +411,27 @@ ou un `drop-in` non touché par le déploiement, et ajouter au pipeline un test 
 fumée post-déploiement (`curl https://factura.lab.local/version` doit renvoyer
 200 **à travers nginx**, pas juste `is-active`).
 
-::: pourquoi
-`active (running)` signifie seulement que le processus principal de l'unité
-tourne et n'a pas planté — pas qu'il fait ce qu'on attend, ni qu'il écoute où il
-faut. C'est exactement le piège du module 19 (« le service tourne mais ne répond
-pas ») transposé au couple nginx/upstream. Le bon réflexe pour un 502 est
-toujours : lire `error.log` de nginx (il nomme l'upstream et l'erreur), puis
-comparer le port réel d'écoute (`ss -tlnp`) au port ciblé par la conf. Ici
-`Connection refused` (pas `timed out`) dit « personne n'écoute là », ce qui
-oriente d'emblée vers un mauvais port, pas vers une appli lente.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `active (running)` signifie seulement que le processus principal de l'unité
+> tourne et n'a pas planté — pas qu'il fait ce qu'on attend, ni qu'il écoute où il
+> faut. C'est exactement le piège du module 19 (« le service tourne mais ne répond
+> pas ») transposé au couple nginx/upstream. Le bon réflexe pour un 502 est
+> toujours : lire `error.log` de nginx (il nomme l'upstream et l'erreur), puis
+> comparer le port réel d'écoute (`ss -tlnp`) au port ciblé par la conf. Ici
+> `Connection refused` (pas `timed out`) dit « personne n'écoute là », ce qui
+> oriente d'emblée vers un mauvais port, pas vers une appli lente.
 
-::: piege
-Le réflexe « ça vient du déploiement, je rollback en 2.3.1 » est interdit **et**
-inutile : le code va très bien, seul le port a changé. Rollback t'aurait fait
-perdre le correctif de la 2.4.0 et masqué la vraie cause (un `.env.example`
-qui pilote un port). Autre piège : changer le `proxy_pass` de nginx vers 8082 au
-lieu de corriger l'API — ça marche aussi, mais choisis **un** point de vérité et
-documente-le, sinon le prochain déploiement recassera.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le réflexe « ça vient du déploiement, je rollback en 2.3.1 » est interdit **et**
+> inutile : le code va très bien, seul le port a changé. Rollback t'aurait fait
+> perdre le correctif de la 2.4.0 et masqué la vraie cause (un `.env.example`
+> qui pilote un port). Autre piège : changer le `proxy_pass` de nginx vers 8082 au
+> lieu de corriger l'API — ça marche aussi, mais choisis **un** point de vérité et
+> documente-le, sinon le prochain déploiement recassera.
 
 **Ce qu'il fallait écrire dans le ticket :** « 502 = upstream refusé
 (`nginx error.log`). API 2.4.0 *active* mais écoutant 8082 au lieu de 8081, car
@@ -428,7 +444,7 @@ post-déploiement à travers nginx. »
 
 ## C.2 Mardi
 
-### PC.2.1 — lab-db à 95 %
+### <a id="pc-2-1"></a>[PC.2.1](README.md#pc-2-1) — lab-db à 95 %
 
 *`DiskSpaceLow` sur lab-db, disque à 95 %, base encore vivante. Interdit :
 reboot ; ne jamais `rm` dans `pg_wal/`.*
@@ -512,26 +528,28 @@ df -h /var        # repassé sous 85 %
 }
 ```
 
-::: pourquoi
-`copytruncate` parce que PostgreSQL (lancé par `pg_ctlcluster`) garde son journal ouvert; `su root root` parce que `/var/log/postgresql` est inscriptible par le groupe `postgres` et que logrotate refuse sinon d'y travailler. (Restaurer le `postgresql-common` d'origine, depuis le paquet, est l'autre option — mais pas les deux : deux règles sur le même fichier et logrotate s'arrête en « duplicate log entry ».) Un slot de réplication garantit à PostgreSQL qu'un consommateur en retard pourra
-rejouer le WAL : tant que le slot existe, le serveur **refuse** de recycler les
-segments WAL au-delà de `restart_lsn`, quitte à saturer le disque. C'est une
-sécurité qui se retourne contre toi si le consommateur a disparu sans qu'on
-supprime le slot. La seule façon correcte de récupérer ce WAL est de
-`pg_drop_replication_slot` : PostgreSQL recycle alors les segments de lui-même au
-prochain checkpoint. Supprimer les fichiers de `pg_wal/` à la main corrompt la
-base — d'où l'interdiction. `log_min_duration_statement=0` journalise toutes les
-requêtes (0 ms de seuil) : parfait pour déboguer une heure, catastrophique en
-permanence.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `copytruncate` parce que PostgreSQL (lancé par `pg_ctlcluster`) garde son journal ouvert; `su root root` parce que `/var/log/postgresql` est inscriptible par le groupe `postgres` et que logrotate refuse sinon d'y travailler. (Restaurer le `postgresql-common` d'origine, depuis le paquet, est l'autre option — mais pas les deux : deux règles sur le même fichier et logrotate s'arrête en « duplicate log entry ».) Un slot de réplication garantit à PostgreSQL qu'un consommateur en retard pourra
+> rejouer le WAL : tant que le slot existe, le serveur **refuse** de recycler les
+> segments WAL au-delà de `restart_lsn`, quitte à saturer le disque. C'est une
+> sécurité qui se retourne contre toi si le consommateur a disparu sans qu'on
+> supprime le slot. La seule façon correcte de récupérer ce WAL est de
+> `pg_drop_replication_slot` : PostgreSQL recycle alors les segments de lui-même au
+> prochain checkpoint. Supprimer les fichiers de `pg_wal/` à la main corrompt la
+> base — d'où l'interdiction. `log_min_duration_statement=0` journalise toutes les
+> requêtes (0 ms de seuil) : parfait pour déboguer une heure, catastrophique en
+> permanence.
 
-::: piege
-`rm` dans `pg_wal/` pour « faire de la place » : tu perds la capacité de
-recovery et, si tu supprimes un segment encore nécessaire, la base ne redémarre
-plus. Autre piège : traiter le symptôme (purger les logs) sans supprimer le
-slot — le WAL regonfle en quelques heures et tu rappelles à 3 h. Toujours
-chercher **pourquoi** le WAL grossit avant de chercher de la place.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `rm` dans `pg_wal/` pour « faire de la place » : tu perds la capacité de
+> recovery et, si tu supprimes un segment encore nécessaire, la base ne redémarre
+> plus. Autre piège : traiter le symptôme (purger les logs) sans supprimer le
+> slot — le WAL regonfle en quelques heures et tu rappelles à 3 h. Toujours
+> chercher **pourquoi** le WAL grossit avant de chercher de la place.
 
 **Ce qu'il fallait écrire dans le ticket :** « lab-db 95 %. Trois causes : slot
 de réplication `replica_reporting` inactif retenant du WAL sans limite (réplica
@@ -541,7 +559,7 @@ logrotate rétabli + alerte slots inactifs. Aucun restart. »
 
 ---
 
-### PC.2.2 — Montage NFS bloqué
+### <a id="pc-2-2"></a>[PC.2.2](README.md#pc-2-2) — Montage NFS bloqué
 
 *`df` et `ls /mnt/archives` se figent, export nocturne en état `D`, charge
 haute / CPU au repos. Interdit : reboot.*
@@ -604,27 +622,29 @@ sudo systemctl daemon-reload
 sudo umount /mnt/archives && sudo mount /mnt/archives   # nouvelles options
 ```
 
-::: pourquoi
-Un montage NFS `hard` (le défaut) garantit qu'aucune donnée n'est perdue : le
-client **réessaie indéfiniment** jusqu'à ce que le serveur réponde. Le prix, si
-le serveur disparaît, est que tout processus qui touche le point de montage part
-en `D` (attente dans le noyau) — un état qui ignore les signaux ordinaires; pour NFS l'attente est « killable » (le `_killable` du `wchan`) : seul
-`SIGKILL` passe, mais tuer les processus ne débloque pas le montage, et tout nouvel accès se refige. `df` sans argument fige parce
-qu'il parcourt **tous** les montages, y compris le NFS mort ; d'où le réflexe
-`df -x nfs` ou la lecture de `/proc/mounts`. `soft` fait abandonner après
-`timeo*retrans` : acceptable pour des archives, dangereux pour des données en
-écriture (risque de corruption silencieuse). `nofail` empêche qu'un NAS absent
-bloque le démarrage de la VM.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un montage NFS `hard` (le défaut) garantit qu'aucune donnée n'est perdue : le
+> client **réessaie indéfiniment** jusqu'à ce que le serveur réponde. Le prix, si
+> le serveur disparaît, est que tout processus qui touche le point de montage part
+> en `D` (attente dans le noyau) — un état qui ignore les signaux ordinaires; pour NFS l'attente est « killable » (le `_killable` du `wchan`) : seul
+> `SIGKILL` passe, mais tuer les processus ne débloque pas le montage, et tout nouvel accès se refige. `df` sans argument fige parce
+> qu'il parcourt **tous** les montages, y compris le NFS mort ; d'où le réflexe
+> `df -x nfs` ou la lecture de `/proc/mounts`. `soft` fait abandonner après
+> `timeo*retrans` : acceptable pour des archives, dangereux pour des données en
+> écriture (risque de corruption silencieuse). `nofail` empêche qu'un NAS absent
+> bloque le démarrage de la VM.
 
-::: piege
-Rebooter « parce que c'est la seule façon de débloquer » est justement interdit,
-et souvent la VM **ne redémarre pas proprement** tant que le NFS hard est monté
-(le shutdown attend le umount). Autre piège : `umount /mnt/archives` simple, qui
-se fige lui aussi — il faut `-f` (force) et/ou `-l` (lazy). Enfin, mettre `soft`
-sur un partage en **écriture** de données importantes : tu troques un blocage
-visible contre une corruption invisible.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Rebooter « parce que c'est la seule façon de débloquer » est justement interdit,
+> et souvent la VM **ne redémarre pas proprement** tant que le NFS hard est monté
+> (le shutdown attend le umount). Autre piège : `umount /mnt/archives` simple, qui
+> se fige lui aussi — il faut `-f` (force) et/ou `-l` (lazy). Enfin, mettre `soft`
+> sur un partage en **écriture** de données importantes : tu troques un blocage
+> visible contre une corruption invisible.
 
 **Ce qu'il fallait écrire dans le ticket :** « NAS injoignable ⇒ montage NFS
 *hard* `/mnt/archives` fige `df`/`ls` et laisse l'export en `D` (charge haute,
@@ -634,7 +654,7 @@ x-systemd.mount-timeout=10`. Aucun reboot. »
 
 ---
 
-### PC.2.3 — Sauvegardes vides mais « OK »
+### <a id="pc-2-3"></a>[PC.2.3](README.md#pc-2-3) — Sauvegardes vides mais « OK »
 
 *Le timer tourne, le rapport dit « Sauvegarde OK », l'archive est vide. Ne pas se
 contenter de relancer.*
@@ -699,25 +719,27 @@ done
 répertoire jetable et compter les fichiers), et une alerte si l'archive du jour
 pèse moins qu'un seuil. Le principe : **une sauvegarde non testée n'existe pas**.
 
-::: pourquoi
-Le mensonge vient de trois anti-patterns cumulés : `2>/dev/null` masque
-l'erreur de `tar`, l'absence de `set -e` laisse le script continuer après
-l'échec, et `exit 0` en fin force un succès. Le code de retour d'un job de
-sauvegarde est ce que le timer et le monitoring observent : s'il est toujours 0,
-personne ne voit rien. La correction clé n'est pas le chemin (une donnée peut
-disparaître pour d'autres raisons demain) mais le **contrôle du résultat** :
-compter les entrées de l'archive et rendre un code non nul si c'est vide. C'est
-la version « sauvegarde » de la règle « mesurer, ne pas supposer ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mensonge vient de trois anti-patterns cumulés : `2>/dev/null` masque
+> l'erreur de `tar`, l'absence de `set -e` laisse le script continuer après
+> l'échec, et `exit 0` en fin force un succès. Le code de retour d'un job de
+> sauvegarde est ce que le timer et le monitoring observent : s'il est toujours 0,
+> personne ne voit rien. La correction clé n'est pas le chemin (une donnée peut
+> disparaître pour d'autres raisons demain) mais le **contrôle du résultat** :
+> compter les entrées de l'archive et rendre un code non nul si c'est vide. C'est
+> la version « sauvegarde » de la règle « mesurer, ne pas supposer ».
 
-::: piege
-Relancer la sauvegarde et cocher le ticket : tu n'as rien corrigé, la prochaine
-migration recassera. Autre piège : corriger le chemin sans ajouter le contrôle
-de contenu — le jour où la source est vide pour une autre raison, tu réarchives
-du vide en silence. Et surtout : découvrir le problème **le jour où on a besoin
-de restaurer** est déjà un demi-échec ; le contrôle de restauration doit être
-proactif.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Relancer la sauvegarde et cocher le ticket : tu n'as rien corrigé, la prochaine
+> migration recassera. Autre piège : corriger le chemin sans ajouter le contrôle
+> de contenu — le jour où la source est vide pour une autre raison, tu réarchives
+> du vide en silence. Et surtout : découvrir le problème **le jour où on a besoin
+> de restaurer** est déjà un demi-échec ; le contrôle de restauration doit être
+> proactif.
 
 **Ce qu'il fallait écrire dans le ticket :** « Sauvegardes vides depuis la
 migration `donnees`→`data` : script figé sur l'ancien chemin, erreurs de `tar`
@@ -728,7 +750,7 @@ planifié + alerte taille. »
 
 ---
 
-### PC.2.4 — Purge planifiée des exports
+### <a id="pc-2-4"></a>[PC.2.4](README.md#pc-2-4) — Purge planifiée des exports
 
 *Garder 30 jours d'exports `.csv`, ne jamais toucher aux `-legal.csv` ni à
 `archives-legales/`. Timer dimanche, journalisé, avec `--dry-run`.*
@@ -784,24 +806,26 @@ sudo systemctl start factura-purge.service             # exécution réelle
 journalctl -u factura-purge.service -n 20 --no-pager    # traces
 ```
 
-::: pourquoi
-Trois protections rendent une purge sûre : (1) filtrer **positivement**
-(`-name '*.csv'`) plutôt que « tout sauf » — on ne supprime que ce qu'on a
-explicitement ciblé ; (2) exclure les cas protégés (`! -name '*-legal.csv'`,
-`-not -path ".. ./archives-legales/*"`) ; (3) un `--dry-run` qui montre ce qui
-serait supprimé avant de le faire, et une **journalisation** de chaque
-suppression (systemd la capture dans le journal). `find -print0` + `read -d ''`
-gère les espaces/retours dans les noms. `OnCalendar=Sun` cible le dimanche ;
-`Persistent=true` rattrape une exécution manquée si la VM était éteinte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois protections rendent une purge sûre : (1) filtrer **positivement**
+> (`-name '*.csv'`) plutôt que « tout sauf » — on ne supprime que ce qu'on a
+> explicitement ciblé ; (2) exclure les cas protégés (`! -name '*-legal.csv'`,
+> `-not -path ".. ./archives-legales/*"`) ; (3) un `--dry-run` qui montre ce qui
+> serait supprimé avant de le faire, et une **journalisation** de chaque
+> suppression (systemd la capture dans le journal). `find -print0` + `read -d ''`
+> gère les espaces/retours dans les noms. `OnCalendar=Sun` cible le dimanche ;
+> `Persistent=true` rattrape une exécution manquée si la VM était éteinte.
 
-::: piege
-`find ... -delete` sans filtre positif, ou `rm -rf $DIR/*` : un jour un fichier
-légal au mauvais endroit disparaît. Autre piège : un cron `@weekly` opaque au
-lieu d'un timer systemd — pas de journal exploitable, pas de `Persistent`. Et
-tester directement en réel sans `--dry-run` : sur une purge, la première
-exécution doit être une simulation.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `find ... -delete` sans filtre positif, ou `rm -rf $DIR/*` : un jour un fichier
+> légal au mauvais endroit disparaît. Autre piège : un cron `@weekly` opaque au
+> lieu d'un timer systemd — pas de journal exploitable, pas de `Persistent`. Et
+> tester directement en réel sans `--dry-run` : sur une purge, la première
+> exécution doit être une simulation.
 
 **Ce qu'il fallait écrire dans le ticket :** « Purge exports CSV >30 j via
 `factura-purge.timer` (dimanche 03:00, `Persistent`). Script filtrant `*.csv`
@@ -812,7 +836,7 @@ journalisation systemd. Dry-run validé avant la 1re exécution réelle. »
 
 ## C.3 Mercredi
 
-### PC.3.1 — Compte deploy compromis
+### <a id="pc-3-1"></a>[PC.3.1](README.md#pc-3-1) — Compte deploy compromis
 
 *Alerte SIEM : connexion SSH réussie après échecs, sur `deploy`, depuis une IP
 externe. Collecter avant de nettoyer ; ne pas casser la CI.*
@@ -887,27 +911,29 @@ dans `api.env` sur cette VM : le considérer comme compromis et le changer),
 alerte SIEM sur « Accepted password » (qui ne devrait jamais arriver si l'auth
 par mot de passe est off), et fail2ban.
 
-::: pourquoi
-Une compromission se lit dans l'ordre : **entrée** (comment), **persistance**
-(ce qui a été laissé pour revenir), **actions** (ce qui a été fait). `auth.log`
-donne l'entrée (`Accepted password` = par mot de passe, l'IP, l'heure) ; la
-persistance se cache dans `authorized_keys` (clé ajoutée) et les mécanismes
-d'exécution (`crontab`, unités systemd, `~/.bashrc`). On **collecte avant de
-nettoyer** parce que supprimer la clé et le cron détruit la seule trace qui
-permet de dater et de comprendre l'étendue. Verrouiller le compte (`passwd -l`)
-et couper l'auth par mot de passe ferment la porte sans attendre l'analyse
-complète.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une compromission se lit dans l'ordre : **entrée** (comment), **persistance**
+> (ce qui a été laissé pour revenir), **actions** (ce qui a été fait). `auth.log`
+> donne l'entrée (`Accepted password` = par mot de passe, l'IP, l'heure) ; la
+> persistance se cache dans `authorized_keys` (clé ajoutée) et les mécanismes
+> d'exécution (`crontab`, unités systemd, `~/.bashrc`). On **collecte avant de
+> nettoyer** parce que supprimer la clé et le cron détruit la seule trace qui
+> permet de dater et de comprendre l'étendue. Verrouiller le compte (`passwd -l`)
+> et couper l'auth par mot de passe ferment la porte sans attendre l'analyse
+> complète.
 
-::: piege
-Le réflexe « je supprime la clé et le cron, c'est réglé » sans copier `auth.log`
-d'abord : tu perds la chronologie et tu ne sauras jamais si l'attaquant a fait
-autre chose (autre compte, autre machine). Autre piège : supprimer **toutes** les
-clés de `authorized_keys`, y compris celle de la CI — tu casses le déploiement
-(le `check` le vérifie). Enfin, oublier que le secret DB présent dans `api.env`
-sur la VM doit être considéré comme lu par l'attaquant : le rétablissement inclut
-sa rotation.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le réflexe « je supprime la clé et le cron, c'est réglé » sans copier `auth.log`
+> d'abord : tu perds la chronologie et tu ne sauras jamais si l'attaquant a fait
+> autre chose (autre compte, autre machine). Autre piège : supprimer **toutes** les
+> clés de `authorized_keys`, y compris celle de la CI — tu casses le déploiement
+> (le `check` le vérifie). Enfin, oublier que le secret DB présent dans `api.env`
+> sur la VM doit être considéré comme lu par l'attaquant : le rétablissement inclut
+> sa rotation.
 
 **Ce qu'il fallait écrire dans le ticket :** « Compromission `deploy` confirmée :
 entrée par mot de passe (198.51.100.7) rendue possible par `PasswordAuthentication
@@ -920,7 +946,7 @@ fail2ban. »
 
 ---
 
-### PC.3.2 — Clé SSH révoquée bloque le déploiement
+### <a id="pc-3-2"></a>[PC.3.2](README.md#pc-3-2) — Clé SSH révoquée bloque le déploiement
 
 *Le déploiement échoue en `Permission denied (publickey)` après une rotation de
 clés. Interdit : réactiver l'auth par mot de passe.*
@@ -981,25 +1007,27 @@ sudo factura-deploy && echo "déploiement rétabli"
 nouvelle clé publique **et** on déploie la nouvelle privée sur le client, on
 vérifie que ça marche, **puis** seulement on retire l'ancienne. Jamais l'inverse.
 
-::: pourquoi
-`Permission denied (publickey)` signifie que le serveur n'a accepté aucune des
-clés offertes : soit le client ne présente pas la bonne clé privée, soit la clé
-publique correspondante n'est pas (ou plus) dans `authorized_keys`. Le
-diagnostic tient en une comparaison : `ssh-keygen -y -f <privée>` recalcule la
-publique à partir de la privée, et on cherche cette chaîne dans
-`authorized_keys`. L'ordre d'une rotation est ce qui fait tout : retirer
-l'ancienne clé avant que le client n'ait la nouvelle privée coupe l'accès. C'est
-la version SSH du « on ne débranche pas l'ancien système avant que le nouveau
-tourne ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `Permission denied (publickey)` signifie que le serveur n'a accepté aucune des
+> clés offertes : soit le client ne présente pas la bonne clé privée, soit la clé
+> publique correspondante n'est pas (ou plus) dans `authorized_keys`. Le
+> diagnostic tient en une comparaison : `ssh-keygen -y -f <privée>` recalcule la
+> publique à partir de la privée, et on cherche cette chaîne dans
+> `authorized_keys`. L'ordre d'une rotation est ce qui fait tout : retirer
+> l'ancienne clé avant que le client n'ait la nouvelle privée coupe l'accès. C'est
+> la version SSH du « on ne débranche pas l'ancien système avant que le nouveau
+> tourne ».
 
-::: piege
-Réactiver `PasswordAuthentication yes` pour « débloquer vite » : interdit, et
-c'est exactement la faute qui a mené à PC.3.1. Autre piège : ajouter encore une
-clé sans retirer la clé orpheline `ci-factura-2026` dont personne n'a la
-privée — ça marche, mais tu laisses une clé publique inutile dans
-`authorized_keys`, dette et confusion pour le prochain.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Réactiver `PasswordAuthentication yes` pour « débloquer vite » : interdit, et
+> c'est exactement la faute qui a mené à PC.3.1. Autre piège : ajouter encore une
+> clé sans retirer la clé orpheline `ci-factura-2026` dont personne n'a la
+> privée — ça marche, mais tu laisses une clé publique inutile dans
+> `authorized_keys`, dette et confusion pour le prochain.
 
 **Ce qu'il fallait écrire dans le ticket :** « Déploiement KO :
 `Permission denied (publickey)`. Rotation de clé CI faite à moitié (nouvelle
@@ -1010,7 +1038,7 @@ mot de passe). Prévention : rotation add-then-remove documentée. »
 
 ---
 
-### PC.3.3 — Résolution interne cassée
+### <a id="pc-3-3"></a>[PC.3.3](README.md#pc-3-3) — Résolution interne cassée
 
 *`/sante` renvoie 503, `could not translate host name "lab-db"`. La base répond
 par IP. Interdit : IP en dur dans `api.env`.*
@@ -1059,24 +1087,26 @@ résolution (ce n'est pas le cas ici).
 nettoyage manuel soit détecté et rétabli, ou basculer vers un vrai DNS interne
 (le module 13 monte un DNS BIND/Unbound) avec supervision de la résolution.
 
-::: pourquoi
-`could not translate host name` est une erreur de **résolution** (`getaddrinfo`
-/ `gaierror`), pas de connexion : le client n'a même pas essayé de joindre la
-base, il ne sait pas quelle IP viser. C'est pour ça que « ça marche par IP » et
-« ça ne marche pas par nom » coexistent. La chaîne de résolution suit
-`/etc/nsswitch.conf` (`files dns` : d'abord `/etc/hosts`, puis DNS). Retirer la
-ligne de `/etc/hosts` sans qu'un DNS ne prenne le relais casse tout. Corriger
-**la résolution** (et non coder l'IP dans l'appli) garde une seule source de
-vérité pour l'adressage.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `could not translate host name` est une erreur de **résolution** (`getaddrinfo`
+> / `gaierror`), pas de connexion : le client n'a même pas essayé de joindre la
+> base, il ne sait pas quelle IP viser. C'est pour ça que « ça marche par IP » et
+> « ça ne marche pas par nom » coexistent. La chaîne de résolution suit
+> `/etc/nsswitch.conf` (`files dns` : d'abord `/etc/hosts`, puis DNS). Retirer la
+> ligne de `/etc/hosts` sans qu'un DNS ne prenne le relais casse tout. Corriger
+> **la résolution** (et non coder l'IP dans l'appli) garde une seule source de
+> vérité pour l'adressage.
 
-::: piege
-Mettre `DB_HOST=10.10.10.12` dans `api.env` « pour contourner » : interdit, et
-c'est une dette. Le jour où lab-db change d'IP, tu as des IP en dur éparpillées
-dans les confs. La résolution de noms existe précisément pour éviter ça. Autre
-piège : conclure « la base est tombée » sans tester la résolution — on répare la
-base pendant une heure alors que le problème est une ligne de `/etc/hosts`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Mettre `DB_HOST=10.10.10.12` dans `api.env` « pour contourner » : interdit, et
+> c'est une dette. Le jour où lab-db change d'IP, tu as des IP en dur éparpillées
+> dans les confs. La résolution de noms existe précisément pour éviter ça. Autre
+> piège : conclure « la base est tombée » sans tester la résolution — on répare la
+> base pendant une heure alors que le problème est une ligne de `/etc/hosts`.
 
 **Ce qu'il fallait écrire dans le ticket :** « `/sante` 503 :
 `could not translate host name lab-db`. Base joignable par IP ⇒ panne de
@@ -1086,7 +1116,7 @@ manuel). Rétablie ⇒ /sante 200, pas de restart, pas d'IP en dur. Prévention 
 
 ---
 
-### PC.3.4 — Message de statut (corrigé modèle)
+### <a id="pc-3-4"></a>[PC.3.4](README.md#pc-3-4) — Message de statut (corrigé modèle)
 
 *Trois messages de la cadence 15 min, public non technique, incident PC.3.3.*
 
@@ -1114,29 +1144,31 @@ manuel). Rétablie ⇒ /sante 200, pas de restart, pas d'IP en dur. Prévention 
 > patience. Nous menons une analyse pour éviter que cela se reproduise et
 > reviendrons vers vous si une action est requise de votre côté.
 
-::: pourquoi
-Un bon message de statut répond à trois questions que se pose l'utilisateur :
-**suis-je concerné ?** (ce qui est touché, ce qui marche), **que dois-je
-faire ?** (une action claire, ou « rien »), **quand aurai-je des nouvelles ?**
-(une heure, tenue). On traduit le jargon (« résolution DNS » → « annuaire
-interne »), on rassure sur les données sans mentir, et on ne promet **jamais**
-un délai de rétablissement chiffré tant qu'on n'a pas la cause : promettre « dans
-10 minutes » et rater crée un second incident, de confiance.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un bon message de statut répond à trois questions que se pose l'utilisateur :
+> **suis-je concerné ?** (ce qui est touché, ce qui marche), **que dois-je
+> faire ?** (une action claire, ou « rien »), **quand aurai-je des nouvelles ?**
+> (une heure, tenue). On traduit le jargon (« résolution DNS » → « annuaire
+> interne »), on rassure sur les données sans mentir, et on ne promet **jamais**
+> un délai de rétablissement chiffré tant qu'on n'a pas la cause : promettre « dans
+> 10 minutes » et rater crée un second incident, de confiance.
 
-::: piege
-Écrire « le serveur DNS ne résout plus lab-db » à des clients : incompréhensible
-et anxiogène. Donner une heure de rétablissement à T+0 (« réglé avant 14h30 »)
-alors qu'on ne sait pas encore : si on rate, on a menti. Accuser (« erreur d'un
-prestataire ») : hors sujet et contre-productif. Se taire jusqu'à la résolution :
-le silence est pire que la panne pour la confiance.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Écrire « le serveur DNS ne résout plus lab-db » à des clients : incompréhensible
+> et anxiogène. Donner une heure de rétablissement à T+0 (« réglé avant 14h30 »)
+> alors qu'on ne sait pas encore : si on rate, on a menti. Accuser (« erreur d'un
+> prestataire ») : hors sujet et contre-productif. Se taire jusqu'à la résolution :
+> le silence est pire que la panne pour la confiance.
 
 ---
 
 ## C.4 Jeudi
 
-### PC.4.1 — Ouverture de port pour un partenaire
+### <a id="pc-4-1"></a>[PC.4.1](README.md#pc-4-1) — Ouverture de port pour un partenaire
 
 *Ouvrir `9443/tcp` de lab-web au seul partenaire `203.0.113.42`, sans rien
 ouvrir d'autre.*
@@ -1157,24 +1189,26 @@ Test depuis l'IP autorisée (et vérification que le reste n'a pas bougé) :
 sudo ufw status numbered      # 22, 80, 443 toujours là, rien d'autre en 9443
 ```
 
-::: pourquoi
-`ufw allow from <IP> to any port 9443 proto tcp` crée une règle **restreinte à
-la source** : seul `203.0.113.42` peut atteindre le port. C'est le moindre
-privilège appliqué au réseau — on ouvre le strict nécessaire, à qui de droit, sur
-le bon protocole. À l'inverse, `ufw allow 9443/tcp` ouvre à **tout Internet**
-(`Anywhere`), ce qui exposerait l'endpoint de collecte à n'importe qui. Une
-demande d'ouverture de port se traite comme une demande de privilège : qui, vers
-quoi, pourquoi, pour combien de temps.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ufw allow from <IP> to any port 9443 proto tcp` crée une règle **restreinte à
+> la source** : seul `203.0.113.42` peut atteindre le port. C'est le moindre
+> privilège appliqué au réseau — on ouvre le strict nécessaire, à qui de droit, sur
+> le bon protocole. À l'inverse, `ufw allow 9443/tcp` ouvre à **tout Internet**
+> (`Anywhere`), ce qui exposerait l'endpoint de collecte à n'importe qui. Une
+> demande d'ouverture de port se traite comme une demande de privilège : qui, vers
+> quoi, pourquoi, pour combien de temps.
 
-::: piege
-`ufw allow 9443` (sans source, sans proto) : ouvert à tous, en TCP **et** UDP.
-C'est la faute typique « ça marche pour le partenaire » qui laisse une porte
-béante. Autre piège : ouvrir sans avoir vérifié que le service écoute (`ss`) —
-tu ouvres un port sur rien, le partenaire aura un `Connection refused` et tu
-croiras à un problème de pare-feu. Enfin : ne pas noter la date de fin / la
-justification, alors qu'un accès partenaire doit être revu.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `ufw allow 9443` (sans source, sans proto) : ouvert à tous, en TCP **et** UDP.
+> C'est la faute typique « ça marche pour le partenaire » qui laisse une porte
+> béante. Autre piège : ouvrir sans avoir vérifié que le service écoute (`ss`) —
+> tu ouvres un port sur rien, le partenaire aura un `Connection refused` et tu
+> croiras à un problème de pare-feu. Enfin : ne pas noter la date de fin / la
+> justification, alors qu'un accès partenaire doit être revu.
 
 **Ce qu'il fallait écrire dans le ticket :** « Ouverture `9443/tcp` sur lab-web
 restreinte à la source `203.0.113.42` (Comptaflux) via ufw. Services 22/80/443
@@ -1183,7 +1217,7 @@ contrat Comptaflux. À revoir/retirer en fin de contrat. »
 
 ---
 
-### PC.4.2 — Horloge dérivée casse TLS
+### <a id="pc-4-2"></a>[PC.4.2](README.md#pc-4-2) — Horloge dérivée casse TLS
 
 *TLS échoue depuis lab-web (`certificate`* `is not yet valid`*), horodatages en retard; certificats non touchés à la main. Interdit : régénérer les certificats, reboot.*
 
@@ -1231,21 +1265,23 @@ que la dérive ne revienne pas), et superviser l'écart d'horloge (alerte si
 `|offset| > 1 s`). Sur un parc, un serveur de temps interne évite de dépendre du
 réseau externe.
 
-::: pourquoi
-Toute la cryptographie basée sur le temps (validité des certificats, jetons,
-Kerberos, TOTP) suppose des horloges **proches**. La poignée de main TLS vérifie
-`notBefore <= maintenant <= notAfter`, sans aucune tolérance côté OpenSSL : une horloge en retard de 3 h rejette tout certificat émis depuis moins de 3 h (« not yet valid »), une horloge en avance fait tomber un certificat juste avant son expiration. Seuls les clients **dont l'horloge est fausse** échouent — les postes à l'heure acceptent le même certificat — d'où un symptôme qui semble intermittent vu de l'équipe. `timedatectl`
-donne d'un coup l'heure, l'état NTP et la synchro — c'est le premier réflexe dès
-qu'on voit des horodatages incohérents.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Toute la cryptographie basée sur le temps (validité des certificats, jetons,
+> Kerberos, TOTP) suppose des horloges **proches**. La poignée de main TLS vérifie
+> `notBefore <= maintenant <= notAfter`, sans aucune tolérance côté OpenSSL : une horloge en retard de 3 h rejette tout certificat émis depuis moins de 3 h (« not yet valid »), une horloge en avance fait tomber un certificat juste avant son expiration. Seuls les clients **dont l'horloge est fausse** échouent — les postes à l'heure acceptent le même certificat — d'où un symptôme qui semble intermittent vu de l'équipe. `timedatectl`
+> donne d'un coup l'heure, l'état NTP et la synchro — c'est le premier réflexe dès
+> qu'on voit des horodatages incohérents.
 
-::: piege
-Régénérer les certificats parce que l'erreur parle de certificat : interdit, et
-inutile — les certificats sont bons, c'est l'horloge qui ment. Tu aurais changé
-des certificats sains et laissé la vraie cause (la dérive reviendra). Autre
-piège : `date -s` à la main sans réactiver NTP — tu recales une fois, l'horloge
-redérive. Toujours réactiver la synchro **et** l'activer au boot.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Régénérer les certificats parce que l'erreur parle de certificat : interdit, et
+> inutile — les certificats sont bons, c'est l'horloge qui ment. Tu aurais changé
+> des certificats sains et laissé la vraie cause (la dérive reviendra). Autre
+> piège : `date -s` à la main sans réactiver NTP — tu recales une fois, l'horloge
+> redérive. Toujours réactiver la synchro **et** l'activer au boot.
 
 **Ce qu'il fallait écrire dans le ticket :** « TLS `not yet valid` depuis lab-web + horodatages en retard = horloge dérivée (−3 h), synchro NTP
 désactivée; le certificat renouvelé cette nuit n'était pas encore valide pour cette horloge. Certificats sains (non touchés). `timedatectl set-ntp true` +
@@ -1254,7 +1290,7 @@ de l'offset + serveur de temps interne. Aucun reboot. »
 
 ---
 
-### PC.4.3 — Redis qui swappe
+### <a id="pc-4-3"></a>[PC.4.3](README.md#pc-4-3) — Redis qui swappe
 
 *lab-db swappe (si/so actifs), Redis lent, `used_memory` énorme. Interdit :
 reboot, `FLUSHALL` à l'aveugle.*
@@ -1309,27 +1345,29 @@ d'éviction cohérente avec l'usage (cache → `allkeys-lru` ; file/persistance 
 choisir en connaissance de cause), et alerte sur `used_memory / maxmemory > 80 %`
 et sur le swap actif.
 
-::: pourquoi
-`maxmemory 0` veut dire « pas de limite » : Redis, qui vit en mémoire,
-consomme alors sans borne jusqu'à épuiser la RAM. Sous pression, le noyau pagine
-vers le swap ; comme Redis accède à ses données en permanence, ces pages sont
-constamment relues (`si`) et réécrites (`so`) — c'est le **thrash**, et un accès
-mémoire qui devait coûter des nanosecondes coûte des millisecondes (disque). La
-politique d'éviction décide quoi faire quand `maxmemory` est atteint :
-`noeviction` fait **échouer les écritures** (mauvais pour un cache),
-`allkeys-lru` supprime les clés les moins récemment utilisées (comportement de
-cache attendu). Le distinguo du module 19 s'applique : du swap **utilisé** n'est
-pas un problème, du swap **en mouvement** en est un.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `maxmemory 0` veut dire « pas de limite » : Redis, qui vit en mémoire,
+> consomme alors sans borne jusqu'à épuiser la RAM. Sous pression, le noyau pagine
+> vers le swap ; comme Redis accède à ses données en permanence, ces pages sont
+> constamment relues (`si`) et réécrites (`so`) — c'est le **thrash**, et un accès
+> mémoire qui devait coûter des nanosecondes coûte des millisecondes (disque). La
+> politique d'éviction décide quoi faire quand `maxmemory` est atteint :
+> `noeviction` fait **échouer les écritures** (mauvais pour un cache),
+> `allkeys-lru` supprime les clés les moins récemment utilisées (comportement de
+> cache attendu). Le distinguo du module 19 s'applique : du swap **utilisé** n'est
+> pas un problème, du swap **en mouvement** en est un.
 
-::: piege
-`FLUSHALL` pour « libérer » : interdit, tu détruis toutes les sessions actives
-et provoques une tempête de reconnexions/recalculs. `config set` seul sans
-éditer `redis.conf` : le réglage se perd au prochain redémarrage et la panne
-revient. Choisir `noeviction` avec une `maxmemory` : les écritures commencent à
-échouer, tu déplaces le symptôme. Et lire `used_memory` sans regarder si le swap
-**bouge** : du swap utilisé ne prouve rien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `FLUSHALL` pour « libérer » : interdit, tu détruis toutes les sessions actives
+> et provoques une tempête de reconnexions/recalculs. `config set` seul sans
+> éditer `redis.conf` : le réglage se perd au prochain redémarrage et la panne
+> revient. Choisir `noeviction` avec une `maxmemory` : les écritures commencent à
+> échouer, tu déplaces le symptôme. Et lire `used_memory` sans regarder si le swap
+> **bouge** : du swap utilisé ne prouve rien.
 
 **Ce qu'il fallait écrire dans le ticket :** « lab-db en thrash (vmstat si/so
 actifs) : Redis sans `maxmemory` (0) et `noeviction` a saturé la RAM.
@@ -1339,7 +1377,7 @@ Aucun reboot, aucun FLUSHALL. »
 
 ---
 
-### PC.4.4 — Healthcheck de conteneur trop strict
+### <a id="pc-4-4"></a>[PC.4.4](README.md#pc-4-4) — Healthcheck de conteneur trop strict
 
 *factura-worker clignote (starting/unhealthy), ne traite plus rien ; sonde
 resserrée la veille. Interdit : supprimer le healthcheck, reboot.*
@@ -1396,28 +1434,30 @@ sonde (avec marge), donner plusieurs `retries` pour absorber un pic isolé, et
 une `start-period` cohérente avec le temps de démarrage de l'appli. Surveiller
 les redémarrages (journal de l'autoheal, `StartedAt` qui rajeunit; `RestartCount` ne compte que les relances de la *restart policy* Docker, ni les `docker restart` de l'autoheal ni les recréations par systemd).
 
-::: pourquoi
-Un healthcheck Docker déclare `unhealthy` quand la sonde échoue `retries` fois
-d'affilée, chaque essai étant coupé à `timeout`. Si `timeout < temps de réponse`
-de la sonde, **tous** les essais expirent — le conteneur est jugé malade alors
-qu'il répond, juste un peu plus lentement que la fenêtre autorisée. La
-`start-period` existe pour ne pas compter les échecs pendant le démarrage : trop
-courte, un service lent à chauffer est tué avant d'être prêt. Un healthcheck est
-un contrat de temps : il doit refléter le comportement réel du service, pas un
-idéal. C'est le pendant conteneur de `StartLimitBurst` en systemd (module 19,
-BF19.8) : le mécanisme de redémarrage se retourne contre un service sain quand
-ses seuils sont trop serrés.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un healthcheck Docker déclare `unhealthy` quand la sonde échoue `retries` fois
+> d'affilée, chaque essai étant coupé à `timeout`. Si `timeout < temps de réponse`
+> de la sonde, **tous** les essais expirent — le conteneur est jugé malade alors
+> qu'il répond, juste un peu plus lentement que la fenêtre autorisée. La
+> `start-period` existe pour ne pas compter les échecs pendant le démarrage : trop
+> courte, un service lent à chauffer est tué avant d'être prêt. Un healthcheck est
+> un contrat de temps : il doit refléter le comportement réel du service, pas un
+> idéal. C'est le pendant conteneur de `StartLimitBurst` en systemd (module 19,
+> BF19.8) : le mécanisme de redémarrage se retourne contre un service sain quand
+> ses seuils sont trop serrés.
 
-::: piege
-Supprimer le healthcheck « puisqu'il pose problème » : interdit, tu perds la
-détection des vraies pannes et un worker mort passera inaperçu. Augmenter à
-l'aveugle `interval` sans corriger `timeout` : le conteneur reste unhealthy,
-juste moins souvent testé. Et croire que « ça redémarre donc l'appli plante » :
-ici c'est **systemd/l'autoheal** qui tue un conteneur sain à cause du seuil, pas
-l'appli qui échoue — la distinction « qui a arrêté le service » est la même
-qu'au module 19.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Supprimer le healthcheck « puisqu'il pose problème » : interdit, tu perds la
+> détection des vraies pannes et un worker mort passera inaperçu. Augmenter à
+> l'aveugle `interval` sans corriger `timeout` : le conteneur reste unhealthy,
+> juste moins souvent testé. Et croire que « ça redémarre donc l'appli plante » :
+> ici c'est **systemd/l'autoheal** qui tue un conteneur sain à cause du seuil, pas
+> l'appli qui échoue — la distinction « qui a arrêté le service » est la même
+> qu'au module 19.
 
 **Ce qu'il fallait écrire dans le ticket :** « factura-worker en boucle
 unhealthy : sonde ~1,5 s mais `health-timeout=1s`, `retries=1`, `start=1s`
@@ -1429,7 +1469,7 @@ Healthcheck conservé. Prévention : timeout > temps de sonde + alerte sur les r
 
 ## C.5 Vendredi
 
-### PC.5.1 — Compte lecture seule pour l'audit
+### <a id="pc-5-1"></a>[PC.5.1](README.md#pc-5-1) — Compte lecture seule pour l'audit
 
 *Rôle PostgreSQL lecture seule sur `factura`, 2 semaines, depuis lab-adm, moindre
 privilège.*
@@ -1472,25 +1512,27 @@ PGPASSWORD='AudiT-Revizor-2026' psql -h 10.10.10.12 -U revizor_ro -d factura \
 # ERROR: permission denied for table factures
 ```
 
-::: pourquoi
-Le moindre privilège sur une base se compose de plusieurs couches
-indépendantes : les **attributs** du rôle (`NOSUPERUSER NOCREATEDB
-NOCREATEROLE` — un superuser ignore tous les GRANT), les **privilèges objets**
-(`GRANT SELECT`, jamais `INSERT/UPDATE/DELETE`), la **portée dans le temps**
-(`VALID UNTIL` expire le compte automatiquement, ce qui évite l'oubli d'un accès
-temporaire), la **charge** (`CONNECTION LIMIT`), et l'**accès réseau**
-(`pg_hba.conf` : `10.10.10.10/32` autorisé, tout le reste rejeté pour ce rôle). `ALTER DEFAULT PRIVILEGES` couvre
-les tables futures, sinon l'auditeur ne verrait pas une table créée après le
-GRANT. Un `SET ROLE` permet de tester exactement ce que le rôle peut faire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le moindre privilège sur une base se compose de plusieurs couches
+> indépendantes : les **attributs** du rôle (`NOSUPERUSER NOCREATEDB
+> NOCREATEROLE` — un superuser ignore tous les GRANT), les **privilèges objets**
+> (`GRANT SELECT`, jamais `INSERT/UPDATE/DELETE`), la **portée dans le temps**
+> (`VALID UNTIL` expire le compte automatiquement, ce qui évite l'oubli d'un accès
+> temporaire), la **charge** (`CONNECTION LIMIT`), et l'**accès réseau**
+> (`pg_hba.conf` : `10.10.10.10/32` autorisé, tout le reste rejeté pour ce rôle). `ALTER DEFAULT PRIVILEGES` couvre
+> les tables futures, sinon l'auditeur ne verrait pas une table créée après le
+> GRANT. Un `SET ROLE` permet de tester exactement ce que le rôle peut faire.
 
-::: piege
-Donner `SELECT` sans `USAGE` sur un schéma applicatif dédié : l'auditeur ne voit rien
-(permission denied sur le schéma) — sur `public`, PostgreSQL 16 accorde encore `USAGE` à `PUBLIC`, mais pas sur les schémas que tu crées. Oublier `VALID UNTIL` : l'accès temporaire
-devient permanent, personne ne le révoque. Créer le rôle superuser « pour que ça
-marche » : il peut alors tout écrire, l'audit devient un risque. Et ouvrir
-`pg_hba` en `0.0.0.0/0` : la base est exposée bien au-delà de lab-adm.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Donner `SELECT` sans `USAGE` sur un schéma applicatif dédié : l'auditeur ne voit rien
+> (permission denied sur le schéma) — sur `public`, PostgreSQL 16 accorde encore `USAGE` à `PUBLIC`, mais pas sur les schémas que tu crées. Oublier `VALID UNTIL` : l'accès temporaire
+> devient permanent, personne ne le révoque. Créer le rôle superuser « pour que ça
+> marche » : il peut alors tout écrire, l'audit devient un risque. Et ouvrir
+> `pg_hba` en `0.0.0.0/0` : la base est exposée bien au-delà de lab-adm.
 
 **Ce qu'il fallait écrire dans le ticket :** « Rôle `revizor_ro` (audit
 Revizor) : LOGIN, NOSUPERUSER/NOCREATEDB/NOCREATEROLE, `VALID UNTIL 2026-10-03`,
@@ -1500,7 +1542,7 @@ Compte expire seul en fin de mission. »
 
 ---
 
-### PC.5.2 — Mise à jour qui remplace la conf nginx
+### <a id="pc-5-2"></a>[PC.5.2](README.md#pc-5-2) — Mise à jour qui remplace la conf nginx
 
 *Plus de HTTPS, page « Welcome to nginx » sur 80, API vivante ; fenêtre de MAJ
 nocturne. Interdit : reboot avant d'avoir compris, réinstaller nginx.*
@@ -1548,25 +1590,27 @@ modification), ne jamais éditer un conffile du paquet (vhost dans son propre fi
 lancer les mises à jour avec un **smoke test** post-MAJ (probe HTTPS) plutôt
 qu'en aveugle la nuit.
 
-::: pourquoi
-Quand un paquet met à jour un fichier marqué « conffile » et que tu l'as modifié,
-dpkg ne l'écrase pas silencieusement : il demande. S'il est configuré pour prendre la version du paquet (réponse « Y »,
-ou `--force-confnew` dans les options apt de la MAJ automatique), il garde la tienne
-en `.dpkg-old` ; avec `--force-confold` (le choix d'unattended-upgrades), c'est l'inverse : ta version reste en place et celle du paquet arrive en `.dpkg-dist`. dpkg ne touche d'ailleurs qu'aux conffiles **qu'il a livrés** (`dpkg-query -W -f '${Conffiles}' nginx-common`) : le scénario reproduit le cas réel d'un vhost écrit directement dans le fichier du paquet (`sites-available/default`); un fichier à toi, bien séparé, n'aurait jamais été touché. Le symptôme « page par
-défaut + plus de TLS » est la signature d'une conf applicative remplacée par
-celle du paquet. La réparation n'est jamais « réinstaller nginx » (ça ne
-ramène pas ta conf) : c'est **restaurer** le vhost depuis le `.dpkg-old`, valider
-(`nginx -t`) et recharger.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Quand un paquet met à jour un fichier marqué « conffile » et que tu l'as modifié,
+> dpkg ne l'écrase pas silencieusement : il demande. S'il est configuré pour prendre la version du paquet (réponse « Y »,
+> ou `--force-confnew` dans les options apt de la MAJ automatique), il garde la tienne
+> en `.dpkg-old` ; avec `--force-confold` (le choix d'unattended-upgrades), c'est l'inverse : ta version reste en place et celle du paquet arrive en `.dpkg-dist`. dpkg ne touche d'ailleurs qu'aux conffiles **qu'il a livrés** (`dpkg-query -W -f '${Conffiles}' nginx-common`) : le scénario reproduit le cas réel d'un vhost écrit directement dans le fichier du paquet (`sites-available/default`); un fichier à toi, bien séparé, n'aurait jamais été touché. Le symptôme « page par
+> défaut + plus de TLS » est la signature d'une conf applicative remplacée par
+> celle du paquet. La réparation n'est jamais « réinstaller nginx » (ça ne
+> ramène pas ta conf) : c'est **restaurer** le vhost depuis le `.dpkg-old`, valider
+> (`nginx -t`) et recharger.
 
-::: piege
-Réinstaller/`purge` nginx « pour repartir propre » : tu perds définitivement ta
-conf si tu n'as pas gardé le `.dpkg-old`, et tu allonges la panne. Rebooter avant
-d'avoir compris : inutile, la conf par défaut reviendra au boot. Copier-coller un
-vhost de mémoire au lieu de restaurer l'exact `.dpkg-old` : tu réintroduis des
-erreurs. Toujours d'abord **comprendre** (que dit `error.log`, `ss`, le `.dpkg-*`)
-puis restaurer la source exacte.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Réinstaller/`purge` nginx « pour repartir propre » : tu perds définitivement ta
+> conf si tu n'as pas gardé le `.dpkg-old`, et tu allonges la panne. Rebooter avant
+> d'avoir compris : inutile, la conf par défaut reviendra au boot. Copier-coller un
+> vhost de mémoire au lieu de restaurer l'exact `.dpkg-old` : tu réintroduis des
+> erreurs. Toujours d'abord **comprendre** (que dit `error.log`, `ss`, le `.dpkg-*`)
+> puis restaurer la source exacte.
 
 **Ce qu'il fallait écrire dans le ticket :** « MAJ nocturne nginx a remplacé le
 vhost Factura par la conf par défaut (ancienne en `.dpkg-old`) : plus de 443,
@@ -1576,7 +1620,7 @@ post-MAJ. Pas de reboot, pas de réinstallation. »
 
 ---
 
-### PC.5.3 — Inodes épuisés
+### <a id="pc-5-3"></a>[PC.5.3](README.md#pc-5-3) — Inodes épuisés
 
 *`No space left on device` mais `df -h` montre le volume quasi vide. Interdit :
 reboot, agrandir le volume.*
@@ -1621,25 +1665,27 @@ utiliser un stockage adapté aux nombreux petits objets), et, à la création d'
 FS destiné à beaucoup de petits fichiers, prévoir assez d'inodes (`mkfs -N` /
 `-i`). Une sonde minimale, à lancer par un timer : `sudo tee /usr/local/sbin/inode-check >/dev/null <<'EOF' #!/usr/bin/env bash # alerte si un système de fichiers dépasse 90 % d'inodes utilisés (df -i) df -i --output=ipcent,target -x tmpfs -x devtmpfs -x squashfs \ | awk 'NR > 1 && $1 + 0 > 90 { print "inodes", $0; e = 1 } END { exit e }' EOF sudo chmod +x /usr/local/sbin/inode-check`
 
-::: pourquoi
-Un système de fichiers a **deux** ressources finies : les blocs (l'espace en
-octets) et les **inodes** (une structure par fichier/répertoire, allouée à la
-création du FS). Des millions de fichiers **vides** consomment tous les inodes
-sans consommer d'espace : `df -h` reste bas, `df -i` est à 100 %, et toute
-création échoue avec `ENOSPC` (« No space left »), le même code d'erreur que
-pour un disque plein — d'où la confusion. La commande qui tranche est `df -i`.
-C'est le pendant du module 19 (« df plein, du d'accord ? fichier supprimé ?
-inodes ? ») : ici, la troisième branche. Agrandir un ext4 n'ajoute des inodes qu'en ajoutant des groupes de blocs, au même ratio octets/inode (ici, un volume de 64 Mo tient dans un seul groupe : l'agrandir un peu n'en ajoute aucun) ; et de toute façon le processus fautif remplirait les nouveaux. Changer le ratio exige de recréer le FS — ce n'est pas un geste d'astreinte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un système de fichiers a **deux** ressources finies : les blocs (l'espace en
+> octets) et les **inodes** (une structure par fichier/répertoire, allouée à la
+> création du FS). Des millions de fichiers **vides** consomment tous les inodes
+> sans consommer d'espace : `df -h` reste bas, `df -i` est à 100 %, et toute
+> création échoue avec `ENOSPC` (« No space left »), le même code d'erreur que
+> pour un disque plein — d'où la confusion. La commande qui tranche est `df -i`.
+> C'est le pendant du module 19 (« df plein, du d'accord ? fichier supprimé ?
+> inodes ? ») : ici, la troisième branche. Agrandir un ext4 n'ajoute des inodes qu'en ajoutant des groupes de blocs, au même ratio octets/inode (ici, un volume de 64 Mo tient dans un seul groupe : l'agrandir un peu n'en ajoute aucun) ; et de toute façon le processus fautif remplirait les nouveaux. Changer le ratio exige de recréer le FS — ce n'est pas un geste d'astreinte.
 
-::: piege
-Agrandir le volume « puisqu'il est plein » : au mieux quelques inodes de plus au même ratio, vite remangés par le processus, la panne
-revient. Supprimer les fichiers sans arrêter le processus qui les crée : les
-inodes se re-remplissent en secondes. Ne surveiller que l'espace (`df -h`) et
-rater l'épuisement d'inodes jusqu'à l'incident : l'alerte doit inclure `df -i`.
-Enfin, `chmod -R 777` « pour que ça écrive enfin » (le réflexe du ticket réel) :
-ça ne change rien aux inodes et ça ouvre un trou de sécurité.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Agrandir le volume « puisqu'il est plein » : au mieux quelques inodes de plus au même ratio, vite remangés par le processus, la panne
+> revient. Supprimer les fichiers sans arrêter le processus qui les crée : les
+> inodes se re-remplissent en secondes. Ne surveiller que l'espace (`df -h`) et
+> rater l'épuisement d'inodes jusqu'à l'incident : l'alerte doit inclure `df -i`.
+> Enfin, `chmod -R 777` « pour que ça écrive enfin » (le réflexe du ticket réel) :
+> ça ne change rien aux inodes et ça ouvre un trou de sécurité.
 
 **Ce qu'il fallait écrire dans le ticket :** « `No space left` sur
 /var/lib/factura-cache alors que `df -h` à 5 % : inodes épuisés (`df -i` 100 %,
@@ -1650,7 +1696,7 @@ inodes. Pas de reboot, pas d'agrandissement. »
 
 ---
 
-### PC.5.4 — Post-mortem complet (corrigé modèle)
+### <a id="pc-5-4"></a>[PC.5.4](README.md#pc-5-4) — Post-mortem complet (corrigé modèle)
 
 *Post-mortem blameless de l'incident PC.5.2 (site HTTPS remplacé par la conf par
 défaut après MAJ nocturne).*
@@ -1729,26 +1775,28 @@ L'incident a eu lieu la nuit, la détection a traîné jusqu'au matin.
 Journal de bord PC-5-2, sortie check_PC_5_2, extrait deploy.log, diff .dpkg-old.
 ```
 
-::: pourquoi
-Un post-mortem blameless décrit des **décisions prises avec l'information du
-moment** et corrige le **système**, pas les personnes : la chronologie et la
-cause racine ne nomment personne. Les cinq pourquoi doivent descendre d'un fait
-technique (plus de HTTPS) à une **cause systémique** (aucun processus n'impose de
-versionner la conf ni de tester après MAJ) : s'arrêter à « on a restauré le
-vhost » garantit la récidive à la prochaine mise à jour. Chaque action corrective
-a un **type** (prévention/détection/atténuation), un responsable et une échéance,
-et — c'est ce que la revue exige — une **automatisation** (hook git, sonde, smoke
-test), pas un « rappel des consignes ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un post-mortem blameless décrit des **décisions prises avec l'information du
+> moment** et corrige le **système**, pas les personnes : la chronologie et la
+> cause racine ne nomment personne. Les cinq pourquoi doivent descendre d'un fait
+> technique (plus de HTTPS) à une **cause systémique** (aucun processus n'impose de
+> versionner la conf ni de tester après MAJ) : s'arrêter à « on a restauré le
+> vhost » garantit la récidive à la prochaine mise à jour. Chaque action corrective
+> a un **type** (prévention/détection/atténuation), un responsable et une échéance,
+> et — c'est ce que la revue exige — une **automatisation** (hook git, sonde, smoke
+> test), pas un « rappel des consignes ».
 
-::: piege
-« Erreur humaine, rappel des consignes » : aucune action corrective réelle, la
-récidive est garantie. Nommer la personne qui a activé les MAJ auto : blâme,
-inutile, décourage le signalement. S'arrêter au premier pourquoi (« on a
-restauré la conf ») : on n'a rien empêché. Oublier la section « ce qui a bien
-marché » : le post-mortem ne sert pas qu'à corriger, il sert aussi à garder ce
-qui protège.
-:::
+> [!WARNING]
+> **Piège**
+>
+> « Erreur humaine, rappel des consignes » : aucune action corrective réelle, la
+> récidive est garantie. Nommer la personne qui a activé les MAJ auto : blâme,
+> inutile, décourage le signalement. S'arrêter au premier pourquoi (« on a
+> restauré la conf ») : on n'a rien empêché. Oublier la section « ce qui a bien
+> marché » : le post-mortem ne sert pas qu'à corriger, il sert aussi à garder ce
+> qui protège.
 
 ---
 
@@ -1789,14 +1837,15 @@ changements bien menés comptent 0). « Réelles » veut dire **du début de la 
 * Disponibilité de la semaine seule (base 7 j = 10 080 min) :
   (10 080 − 684) / 10 080 = **93,21 %** — très loin des 99,5 %.
 
-::: pourquoi
-Le budget d'erreur est le complément du SLO : 99,5 % de dispo autorise 0,5 %
-d'indisponibilité, soit ~216 min sur 30 jours. On le consomme avec les minutes
-**réellement** indisponibles (les incidents P1 surtout ; une demande de
-changement menée sans coupure ne consomme rien). Raisonner en budget transforme
-la fiabilité en quantité gérable : à 337 % consommé,
-la question n' est plus « a-t-on de la marge? » mais « qu'arrête-t-on? » — c'est un signal d'arbitrage, pas une note de blâme. Noter aussi d'où viennent ces minutes : trois incidents seulement (PC.1.1, PC.3.3, PC.5.2) font 93 % du total, et l'essentiel est du temps **avant** la prise en charge.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le budget d'erreur est le complément du SLO : 99,5 % de dispo autorise 0,5 %
+> d'indisponibilité, soit ~216 min sur 30 jours. On le consomme avec les minutes
+> **réellement** indisponibles (les incidents P1 surtout ; une demande de
+> changement menée sans coupure ne consomme rien). Raisonner en budget transforme
+> la fiabilité en quantité gérable : à 337 % consommé,
+> la question n' est plus « a-t-on de la marge? » mais « qu'arrête-t-on? » — c'est un signal d'arbitrage, pas une note de blâme. Noter aussi d'où viennent ces minutes : trois incidents seulement (PC.1.1, PC.3.3, PC.5.2) font 93 % du total, et l'essentiel est du temps **avant** la prise en charge.
 
 ### Budget d'erreur : décision
 
@@ -1814,22 +1863,30 @@ restent possibles avec smoke test obligatoire.
 | 2 | confs critiques écrasées/dérivées (nginx, hosts, pg) sans trace | /etc et confs sous git + hook qui alerte sur divergence | astreinte | S+1 | divergence détectée < 5 min en test |
 | 3 | déploiements qui cassent le service sans qu'on le sache (port, conf) | smoke test post-déploiement bloquant (curl HTTPS/version à travers nginx) | CI | S+2 | un déploiement fautif est rejeté en CI |
 
-::: pourquoi
-Les trois améliorations à plus fort levier de la semaine ne sont pas des
-correctifs ponctuels mais des **boucles de détection** : près de 80 % du temps
-d'indisponibilité (543 min sur 684) s'écoule entre le début réel et la prise en charge (certificat
-expiré à 03:00 traité à 08:02, DNS cassé à 12 :00 vu à 13 :55, HTTPS perdu à 06:04 vu à 08:10). Une sonde qui teste
-ce que voit l'utilisateur (dispo, validité TLS) raccourcit le MTTD ; le
-versionnage des confs détecte les dérives et écrasements ; le smoke test
-post-déploiement empêche un changement de partir en prod cassé. Chacune a une
-**preuve d'efficacité** mesurable — sinon on ne saura jamais si elle marche,
-exactement comme on ne déploie pas un `sysctl` sans baseline.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois améliorations à plus fort levier de la semaine ne sont pas des
+> correctifs ponctuels mais des **boucles de détection** : près de 80 % du temps
+> d'indisponibilité (543 min sur 684) s'écoule entre le début réel et la prise en charge (certificat
+> expiré à 03:00 traité à 08:02, DNS cassé à 12 :00 vu à 13 :55, HTTPS perdu à 06:04 vu à 08:10). Une sonde qui teste
+> ce que voit l'utilisateur (dispo, validité TLS) raccourcit le MTTD ; le
+> versionnage des confs détecte les dérives et écrasements ; le smoke test
+> post-déploiement empêche un changement de partir en prod cassé. Chacune a une
+> **preuve d'efficacité** mesurable — sinon on ne saura jamais si elle marche,
+> exactement comme on ne déploie pas un `sysctl` sans baseline.
 
-::: piege
-Proposer comme « amélioration » un simple « faire plus attention » ou « rappeler
-la procédure » : ce n'est pas automatisé, ça ne tiendra pas un vendredi soir à
-17h40. Empiler dix actions : on n'en fait aucune ; trois, avec responsable et
-échéance, se réalisent. Oublier la preuve d'efficacité : une action qu'on ne
-sait pas mesurer est une intention, pas une amélioration.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Proposer comme « amélioration » un simple « faire plus attention » ou « rappeler
+> la procédure » : ce n'est pas automatisé, ça ne tiendra pas un vendredi soir à
+> 17h40. Empiler dix actions : on n'en fait aucune ; trois, avec responsable et
+> échéance, se réalisent. Oublier la preuve d'efficacité : une action qu'on ne
+> sait pas mesurer est une intention, pas une amélioration.
+
+<!-- nav:début -->
+---
+
+[← Projet B](../P2-factura-devops/corrige.md) · [Énoncé](README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

@@ -1,44 +1,71 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 21**  
+[← Module 20](../20-virtualisation-kvm/README.md) · [Corrigé](corrige.md) · [Module 22 →](../22-docker/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M21.sh`](../../scripts/setup/setup_M21.sh) | prépare le module |
+| [`check_M21_01.sh`](../../scripts/check/check_M21_01.sh) | vérification |
+| [`check_M21_02.sh`](../../scripts/check/check_M21_02.sh) | vérification |
+| [`check_M21_03.sh`](../../scripts/check/check_M21_03.sh) | vérification |
+| [`check_M21_04.sh`](../../scripts/check/check_M21_04.sh) | vérification |
+| [`check_M21_05.sh`](../../scripts/check/check_M21_05.sh) | vérification |
+| [`check_M21_06.sh`](../../scripts/check/check_M21_06.sh) | vérification |
+| [`break_M21_01.sh`](../../scripts/break/break_M21_01.sh) | installe une panne |
+| [`break_M21_02.sh`](../../scripts/break/break_M21_02.sh) | installe une panne |
+| [`break_M21_03.sh`](../../scripts/break/break_M21_03.sh) | installe une panne |
+| [`break_M21_04.sh`](../../scripts/break/break_M21_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 21 — Git pour l'ops et l'infra-as-code
 
 ## 21.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* expliquer le modèle d'objets de Git (blob, tree, commit, tag), les trois
-  zones (working directory, index, HEAD) et pourquoi un commit est
-  immuable : son SHA est le condensé de tout ce qu'il contient, parents
-  compris ;
-* lire un historique avec `log --oneline --graph --all`, retrouver **qui** a
-  changé **quoi** et **quand** (`-S`, `--author`, `--since`, `blame`,
-  `show`), et comparer n'importe quelles zones ou branches avec `diff` ;
-* construire un `.gitignore` qui tient (patrons, négation, répertoire vs
-  `dir/*`, fichier global) et forcer les fins de ligne avec
-  `.gitattributes` ;
-* travailler en branches : `switch`, `merge` fast-forward ou `--no-ff`,
-  `rebase` interactif (squash/fixup/reword), résoudre un conflit sans
-  perdre l'un des deux côtés, `cherry-pick`, `stash -u` ;
-* dialoguer avec un distant : `fetch` puis décider, `pull --rebase`,
-  `push -u`, `--force-with-lease` (jamais `--force`), tags annotés ;
-* réparer : choisir entre `reset --soft/--mixed/--hard`, `revert`,
-  `restore`, retrouver un commit « perdu » avec `reflog`, nettoyer avec
-  `clean -ndx` avant `-fdx`, et localiser une régression avec
-  `bisect run` ;
-* choisir un workflow (trunk-based, GitHub flow, git-flow) adapté à un dépôt
-  d'infrastructure et écrire des messages Conventional Commits ;
-* purger un secret commité par erreur (`git filter-repo`), expliquer
-  pourquoi la rotation reste obligatoire, et empêcher la récidive avec un
-  hook `pre-commit` ;
-* monter un serveur Git minimal (dépôt bare en SSH + hook `post-receive`)
-  et une forge Gitea pour le lab ;
-* signer mes commits (SSH), configurer proprement `git config`
-  (`pull.rebase`, `push.default`, `core.autocrlf`, alias), et diagnostiquer
-  les messages « detached HEAD », « non-fast-forward », « have diverged ».
-
-Temps estimé : 8 h
-Prérequis : module 07 (bash, pour les hooks), module 14 (SSH, clés et
-`authorized_keys`), module 04 (groupes, setgid) pour le serveur Git.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * expliquer le modèle d'objets de Git (blob, tree, commit, tag), les trois
+>   zones (working directory, index, HEAD) et pourquoi un commit est
+>   immuable : son SHA est le condensé de tout ce qu'il contient, parents
+>   compris ;
+> * lire un historique avec `log --oneline --graph --all`, retrouver **qui** a
+>   changé **quoi** et **quand** (`-S`, `--author`, `--since`, `blame`,
+>   `show`), et comparer n'importe quelles zones ou branches avec `diff` ;
+> * construire un `.gitignore` qui tient (patrons, négation, répertoire vs
+>   `dir/*`, fichier global) et forcer les fins de ligne avec
+>   `.gitattributes` ;
+> * travailler en branches : `switch`, `merge` fast-forward ou `--no-ff`,
+>   `rebase` interactif (squash/fixup/reword), résoudre un conflit sans
+>   perdre l'un des deux côtés, `cherry-pick`, `stash -u` ;
+> * dialoguer avec un distant : `fetch` puis décider, `pull --rebase`,
+>   `push -u`, `--force-with-lease` (jamais `--force`), tags annotés ;
+> * réparer : choisir entre `reset --soft/--mixed/--hard`, `revert`,
+>   `restore`, retrouver un commit « perdu » avec `reflog`, nettoyer avec
+>   `clean -ndx` avant `-fdx`, et localiser une régression avec
+>   `bisect run` ;
+> * choisir un workflow (trunk-based, GitHub flow, git-flow) adapté à un dépôt
+>   d'infrastructure et écrire des messages Conventional Commits ;
+> * purger un secret commité par erreur (`git filter-repo`), expliquer
+>   pourquoi la rotation reste obligatoire, et empêcher la récidive avec un
+>   hook `pre-commit` ;
+> * monter un serveur Git minimal (dépôt bare en SSH + hook `post-receive`)
+>   et une forge Gitea pour le lab ;
+> * signer mes commits (SSH), configurer proprement `git config`
+>   (`pull.rebase`, `push.default`, `core.autocrlf`, alias), et diagnostiquer
+>   les messages « detached HEAD », « non-fast-forward », « have diverged ».
+>
+> **Temps estimé** : 8 h
+>
+> **Prérequis** : module 07 (bash, pour les hooks), module 14 (SSH, clés et
+> `authorized_keys`), module 04 (groupes, setgid) pour le serveur Git.
 
 ---
 
@@ -63,11 +90,12 @@ sudo apt install -y git git-filter-repo shellcheck yamllint
 git --version        # 2.43 sur Ubuntu 24.04
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y git` (2.43 dans AppStream) ;
-`git-filter-repo`, `ShellCheck` et `yamllint` viennent d'EPEL
-(`sudo dnf install -y epel-release` d'abord).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y git` (2.43 dans AppStream) ;
+> `git-filter-repo`, `ShellCheck` et `yamllint` viennent d'EPEL
+> (`sudo dnf install -y epel-release` d'abord).
 
 Identité et réglages de base, **avant** le premier commit (E21.1 les
 détaille) :
@@ -99,21 +127,23 @@ un merge, deux tags (`v0.9.0` léger, `v1.0.0` annoté), deux branches
 puis « retiré »**, et **un commit qui casse `bin/healthcheck.sh`**. Le script
 est déterministe : tout le monde a les **mêmes SHA**, les corrigés les citent.
 
-::: attention
-Le setup **remet le dépôt à zéro** à chaque exécution (les SHA doivent rester
-identiques pour tout le monde). Ne stocke rien d'important dedans en dehors
-de `~/lab21/rapports/`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le setup **remet le dépôt à zéro** à chaque exécution (les SHA doivent rester
+> identiques pour tout le monde). Ne stocke rien d'important dedans en dehors
+> de `~/lab21/rapports/`.
 
-::: astuce
-Deux alias dès maintenant, tu les taperas cent fois :
-
-```bash
-git config --global alias.lg \
-  "log --oneline --graph --all --decorate"
-git config --global alias.st "status -sb"
-```
-:::
+> [!TIP]
+> **Astuce**
+>
+> Deux alias dès maintenant, tu les taperas cent fois :
+>
+> ```bash
+> git config --global alias.lg \
+>   "log --oneline --graph --all --decorate"
+> git config --global alias.st "status -sb"
+> ```
 
 ---
 
@@ -143,7 +173,9 @@ Références : `refs/heads/main` (branche = pointeur mobile),
 distant au dernier `fetch`), `HEAD` (→ la branche courante, ou un commit :
 **detached**).
 
-@fig(git-zones): Les quatre zones de Git et les commandes qui font passer les changements de l'une à l'autre ; `reset` recule HEAD plus ou moins profondément, le reflog garde une porte de sortie.
+<p align="center"><img src="../../assets/figures/git-zones.svg" alt="Schéma : git-zones"></p>
+
+*Figure — Les quatre zones de Git et les commandes qui font passer les changements de l'une à l'autre ; `reset` recule HEAD plus ou moins profondément, le reflog garde une porte de sortie.*
 
 ```bash
 git cat-file -t <sha>     # type      git cat-file -p <sha>   # contenu
@@ -238,7 +270,9 @@ des autres ; `--force-with-lease` n'écrase que ce que tu as déjà vu.
 Tag **annoté** (`-a`, objet avec auteur/date/message, signable) pour les
 versions ; tag léger (simple pointeur) pour un repère perso.
 
-@fig(git-merge-rebase): Le même historique divergent intégré par `merge` (commit de fusion à deux parents) et par `rebase` (commits rejoués, nouveaux SHA), puis le `push` qui suit un rebase : `--force-with-lease`, jamais `--force`.
+<p align="center"><img src="../../assets/figures/git-merge-rebase.svg" alt="Schéma : git-merge-rebase"></p>
+
+*Figure — Le même historique divergent intégré par `merge` (commit de fusion à deux parents) et par `rebase` (commits rejoués, nouveaux SHA), puis le `push` qui suit un rebase : `--force-with-lease`, jamais `--force`.*
 
 ### Réparer
 
@@ -310,7 +344,7 @@ Ordre de priorité : `--local` (`.git/config`) > `--global`
 
 ## 21.3 Quiz — QCM
 
-**Q21.1** — `git cat-file -p HEAD` affiche `tree f1e0365…`, `parent
+<a id="q21-1"></a>**[Q21.1](corrige.md#q21-1)** — `git cat-file -p HEAD` affiche `tree f1e0365…`, `parent
 a6736e7…`, auteur, committer et message. Tu modifies **uniquement** le
 message de ce commit avec `--amend`. Que devient le SHA du commit, et
 celui de son `tree` ?
@@ -320,7 +354,7 @@ b) le SHA du commit change, le tree reste `f1e0365…`
 c) aucun ne change, seul le message est réécrit en place
 d) le tree change, le SHA du commit reste identique
 
-**Q21.2** — Dans `~/lab21/factura-infra`, `git status -sb` affiche
+<a id="q21-2"></a>**[Q21.2](corrige.md#q21-2)** — Dans `~/lab21/factura-infra`, `git status -sb` affiche
 `## main...origin/main [ahead 2, behind 3]`. Que signifie-t-il ?
 
 a) tu as 2 commits non poussés et le distant en a 3 que tu n'as pas :
@@ -329,7 +363,7 @@ b) tu es en retard de 5 commits
 c) `origin/main` a été supprimée
 d) tu as 2 commits de plus que la branche `main` locale
 
-**Q21.3** — Après `git add -p` où tu as accepté un seul des deux hunks
+<a id="q21-3"></a>**[Q21.3](corrige.md#q21-3)** — Après `git add -p` où tu as accepté un seul des deux hunks
 de `README.md`, quelles commandes montrent une partie de ta modification de `README.md` ?
 **Deux réponses correctes.**
 
@@ -338,7 +372,7 @@ b) `git diff --staged`
 c) `git diff HEAD~1 HEAD`
 d) `git show`
 
-**Q21.4** — `.gitignore` contient `logs/` puis `!logs/.gitkeep`. Le fichier
+<a id="q21-4"></a>**[Q21.4](corrige.md#q21-4)** — `.gitignore` contient `logs/` puis `!logs/.gitkeep`. Le fichier
 `logs/.gitkeep` n'est pas encore suivi. `git status` :
 
 a) propose `logs/.gitkeep` en non suivi
@@ -347,7 +381,7 @@ b) n'affiche rien : on ne peut pas ré-inclure un fichier dont le répertoire
 c) affiche une erreur de syntaxe
 d) propose tout `logs/`
 
-**Q21.5** — `terraform/terraform.tfstate` est suivi par Git depuis 3 mois.
+<a id="q21-5"></a>**[Q21.5](corrige.md#q21-5)** — `terraform/terraform.tfstate` est suivi par Git depuis 3 mois.
 Tu ajoutes `*.tfstate` au `.gitignore` et commites. Au prochain
 `terraform apply` :
 
@@ -357,7 +391,7 @@ b) le fichier apparaît toujours comme modifié : un fichier suivi n'est jamais
 c) Git le supprime du working directory
 d) `git status` affiche un avertissement `ignored but tracked`
 
-**Q21.6** — `git merge feature/x` sur `main` ne crée **pas** de commit de
+<a id="q21-6"></a>**[Q21.6](corrige.md#q21-6)** — `git merge feature/x` sur `main` ne crée **pas** de commit de
 merge. Pourquoi ?
 
 a) la branche était vide
@@ -365,7 +399,7 @@ b) `main` n'avait pas avancé depuis la création de `feature/x` : fast-forward
 c) le merge a échoué silencieusement
 d) `merge.ff=false` est réglé
 
-**Q21.7** — Pendant `git rebase main` sur ta branche, le fichier contient :
+<a id="q21-7"></a>**[Q21.7](corrige.md#q21-7)** — Pendant `git rebase main` sur ta branche, le fichier contient :
 
 ```text
 <<<<<<< HEAD
@@ -382,7 +416,7 @@ b) `HEAD` est `main` (la base), `994e070` est ton commit en cours de rejeu
 c) `HEAD` est la version commune aux deux
 d) les deux blocs viennent de ta branche
 
-**Q21.8** — Tu as commité un mot de passe dans `.env`, puis tu as fait
+<a id="q21-8"></a>**[Q21.8](corrige.md#q21-8)** — Tu as commité un mot de passe dans `.env`, puis tu as fait
 `git rm .env` et un second commit `fix: retire .env`, puis poussé.
 Quelle affirmation est vraie ? **Deux réponses correctes.**
 
@@ -391,7 +425,7 @@ b) le second commit suffit, le fichier n'est plus dans `HEAD`
 c) le mot de passe doit être changé quoi qu'il arrive
 d) `git gc` va supprimer l'ancien blob au prochain passage
 
-**Q21.9** — Tu veux annuler le dernier commit **poussé** sur `main`
+<a id="q21-9"></a>**[Q21.9](corrige.md#q21-9)** — Tu veux annuler le dernier commit **poussé** sur `main`
 (branche partagée). La bonne commande :
 
 a) `git reset --hard HEAD~1` puis `git push --force`
@@ -399,7 +433,7 @@ b) `git revert HEAD` puis `git push`
 c) `git checkout HEAD~1`
 d) `git restore --source=HEAD~1 .`
 
-**Q21.10** — `git reset --soft HEAD~2` puis `git commit -m "feat: x"`.
+<a id="q21-10"></a>**[Q21.10](corrige.md#q21-10)** — `git reset --soft HEAD~2` puis `git commit -m "feat: x"`.
 Résultat ?
 
 a) les deux derniers commits sont perdus définitivement
@@ -407,7 +441,7 @@ b) les changements des deux commits sont réunis dans un seul nouveau commit
 c) les fichiers du working directory reviennent à `HEAD~2`
 d) erreur : `--soft` exige un seul commit
 
-**Q21.11** — Après `git switch --detach v1.0.0`, tu as fait deux commits,
+<a id="q21-11"></a>**[Q21.11](corrige.md#q21-11)** — Après `git switch --detach v1.0.0`, tu as fait deux commits,
 puis `git switch main`. Où sont ces commits ?
 
 a) sur `main`, Git les a rapatriés
@@ -415,7 +449,7 @@ b) perdus, `switch` les a supprimés
 c) toujours dans la base d'objets, atteignables par `git reflog`
 d) sur une branche automatique nommée `detached`
 
-**Q21.12** — Ton `git push` est rejeté : `! [rejected] main -> main
+<a id="q21-12"></a>**[Q21.12](corrige.md#q21-12)** — Ton `git push` est rejeté : `! [rejected] main -> main
 (non-fast-forward)`. Quelle option est **acceptable** ?
 
 a) `git push --force`
@@ -423,7 +457,7 @@ b) `git pull --rebase` puis `git push`
 c) supprimer le clone et recloner
 d) `git push --delete origin main` puis `git push`
 
-**Q21.13** — Différence entre `git push --force` et
+<a id="q21-13"></a>**[Q21.13](corrige.md#q21-13)** — Différence entre `git push --force` et
 `git push --force-with-lease` :
 
 a) aucune, `--force-with-lease` est un alias
@@ -432,7 +466,7 @@ b) `--force-with-lease` refuse si la branche distante ne pointe plus sur ce
 c) `--force-with-lease` demande une confirmation interactive
 d) `--force-with-lease` ne fonctionne que sur les tags
 
-**Q21.14** — `git cat-file -t v0.9.0` répond `commit` et
+<a id="q21-14"></a>**[Q21.14](corrige.md#q21-14)** — `git cat-file -t v0.9.0` répond `commit` et
 `git cat-file -t v1.0.0` répond `tag`. Conclusion ?
 
 a) `v0.9.0` est corrompu
@@ -441,7 +475,7 @@ b) `v0.9.0` est un tag léger (pointeur), `v1.0.0` un tag annoté (objet avec
 c) `v1.0.0` est un commit de merge
 d) `v0.9.0` pointe sur une branche
 
-**Q21.15** — Le healthcheck passe à `v1.0.0` et échoue sur `main`, 8 commits
+<a id="q21-15"></a>**[Q21.15](corrige.md#q21-15)** — Le healthcheck passe à `v1.0.0` et échoue sur `main`, 8 commits
 plus loin. Combien d'essais `git bisect` fait-il au maximum ?
 
 a) 8
@@ -449,7 +483,7 @@ b) 4
 c) 3
 d) 1
 
-**Q21.16** — `git clean -fdx` dans un dépôt Terraform. Que supprime-t-il ?
+<a id="q21-16"></a>**[Q21.16](corrige.md#q21-16)** — `git clean -fdx` dans un dépôt Terraform. Que supprime-t-il ?
 **Deux réponses correctes.**
 
 a) les fichiers non suivis, dont `.terraform/` **et** `terraform.tfstate`
@@ -458,7 +492,7 @@ b) les fichiers modifiés mais suivis
 c) les répertoires non suivis
 d) les commits non poussés
 
-**Q21.17** — Quel workflow est le plus adapté à un dépôt Ansible déployé
+<a id="q21-17"></a>**[Q21.17](corrige.md#q21-17)** — Quel workflow est le plus adapté à un dépôt Ansible déployé
 plusieurs fois par jour par une équipe de quatre personnes ?
 
 a) git-flow avec `develop`, `release/*` et `hotfix/*`
@@ -466,7 +500,7 @@ b) trunk-based ou GitHub flow : `main` protégée, branches courtes, revue
 c) une branche par personne, fusionnée le vendredi
 d) pas de branches, tout le monde sur `main`
 
-**Q21.18** — Une clé SSH privée a été commitée. Tu lances
+<a id="q21-18"></a>**[Q21.18](corrige.md#q21-18)** — Une clé SSH privée a été commitée. Tu lances
 `git filter-repo --invert-paths --path id_rsa` et pousses en force. Que
 manque-t-il ? **Deux réponses correctes.**
 
@@ -480,86 +514,68 @@ d) lancer `git gc` sur le poste de l'attaquant
 
 ## 21.4 Quiz — questions ouvertes
 
-**QO21.1** — Explique pourquoi un commit Git est immuable en partant de ce
+<a id="qo21-1"></a>**[QO21.1](corrige.md#qo21-1)** — Explique pourquoi un commit Git est immuable en partant de ce
 que contient réellement l'objet commit, puis déduis-en ce que font
 vraiment `--amend`, `rebase` et `filter-repo`, et pourquoi le reflog permet
 de « revenir en arrière » malgré tout.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO21.2** — *On te demande en entretien* : « Merge ou rebase pour intégrer
+<a id="qo21-2"></a>**[QO21.2](corrige.md#qo21-2)** — *On te demande en entretien* : « Merge ou rebase pour intégrer
 une branche de feature ? » Réponds avec les critères qui font pencher d'un
 côté ou de l'autre (historique partagé ou non, lisibilité du graphe,
 bisect, revue), et donne la règle que tu imposerais à une équipe infra.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO21.3** — Décris précisément ce que `git reset --soft`, `--mixed` et
+<a id="qo21-3"></a>**[QO21.3](corrige.md#qo21-3)** — Décris précisément ce que `git reset --soft`, `--mixed` et
 `--hard` font aux trois zones, avec un cas d'usage légitime pour chacun,
 puis le cas où `reset` est interdit et ce qu'on fait à la place.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO21.4** — Un collègue a poussé une clé API dans `terraform.tfvars` il y a
+<a id="qo21-4"></a>**[QO21.4](corrige.md#qo21-4)** — Un collègue a poussé une clé API dans `terraform.tfvars` il y a
 trois jours. Décris la procédure complète, dans l'ordre, en expliquant
 **pourquoi** l'ordre compte (rotation, purge, force-push, re-clone,
 prévention), et ce que tu réponds à « on n'a qu'à supprimer le fichier ».
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO21.5** — *On te demande en entretien* : « Un push est rejeté en
+<a id="qo21-5"></a>**[QO21.5](corrige.md#qo21-5)** — *On te demande en entretien* : « Un push est rejeté en
 `non-fast-forward`. Explique ce qui s'est passé et pourquoi `--force` est
 la mauvaise réponse dans 99 % des cas. » Réponds en décrivant l'état des
 deux dépôts, les deux façons correctes d'intégrer, et le seul cas où un
 push forcé est légitime (avec quelle option).
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO21.6** — Compare `fetch` et `pull`, puis `pull` avec et sans `--rebase`.
+<a id="qo21-6"></a>**[QO21.6](corrige.md#qo21-6)** — Compare `fetch` et `pull`, puis `pull` avec et sans `--rebase`.
 Quel réglage global recommandes-tu à un ops et pourquoi le `pull` par
 défaut de Git 2.43 refuse-t-il parfois de faire quoi que ce soit
 (`Need to specify how to reconcile divergent branches`) ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO21.7** — Explique la différence entre `.gitignore`, `.git/info/exclude`
+<a id="qo21-7"></a>**[QO21.7](corrige.md#qo21-7)** — Explique la différence entre `.gitignore`, `.git/info/exclude`
 et `core.excludesFile`, dis ce qui va dans chacun, puis décris les deux
 raisons pour lesquelles un fichier « refuse » de s'ignorer et la commande
 qui tranche.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO21.8** — Tu dois convaincre ton équipe de versionner `/etc` des cinq VM
+<a id="qo21-8"></a>**[QO21.8](corrige.md#qo21-8)** — Tu dois convaincre ton équipe de versionner `/etc` des cinq VM
 du lab avec `etckeeper`. Qu'est-ce que ça apporte concrètement lors d'un
 incident, quelles limites (secrets dans `/etc`, taille, droits), et
 comment `etckeeper` s'articule-t-il avec `apt` ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO21.9** — Décris la démarche de diagnostic quand `git status` affirme
+<a id="qo21-9"></a>**[QO21.9](corrige.md#qo21-9)** — Décris la démarche de diagnostic quand `git status` affirme
 `HEAD detached at 4a34e42` alors que tu pensais être sur `main` : comment
 c'est arrivé (trois causes courantes), comment sauver le travail éventuel,
 et comment revenir sur `main`.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
@@ -569,7 +585,7 @@ Sauf mention contraire, travaille dans `~/lab21/factura-infra`. Les SHA
 cités sont ceux produits par `setup_M21.sh` ; s'ils diffèrent chez toi,
 relance le setup.
 
-**E21.1** — Configure ton identité globale, `init.defaultBranch=main`,
+<a id="e21-1"></a>**[E21.1](corrige.md#e21-1)** — Configure ton identité globale, `init.defaultBranch=main`,
 `pull.rebase=true`, `push.default=simple`, `fetch.prune=true`, un alias
 `lg` (graphe complet décoré) et un alias `st` (`status -sb`). Affiche
 ensuite la liste des réglages **avec leur fichier d'origine**, et explique
@@ -578,33 +594,33 @@ dans ce dépôt. Bonus : quelle valeur de `core.autocrlf` recommandes-tu à
 un collègue sous Windows, et pourquoi le `.gitattributes` du dépôt rend ce
 réglage presque inutile ?
 
-**E21.2** — Sans ouvrir aucun fichier : affiche le type puis le contenu de
+<a id="e21-2"></a>**[E21.2](corrige.md#e21-2)** — Sans ouvrir aucun fichier : affiche le type puis le contenu de
 l'objet `HEAD`, le contenu de son `tree`, puis celui du sous-arbre `bin`.
 Prouve que le blob de `README.md` a le même SHA que
 `git hash-object README.md`. Enfin, montre que `v1.0.0` et
 `v1.0.0^{commit}` ne désignent pas le même objet, et explique.
 
-**E21.3** — Réponds avec une seule commande `git log` à chaque question :
+<a id="e21-3"></a>**[E21.3](corrige.md#e21-3)** — Réponds avec une seule commande `git log` à chaque question :
 (a) quel commit a changé `worker_connections` de 1024 à 4096 ?
 (b) quels commits d'alice sur `main` entre le 20 juin et le 1er juillet ?
 (c) quels commits ont touché `.env`, y compris ceux qui l'ont supprimé ?
 (d) combien de commits par auteur, toutes branches confondues ?
 (e) le graphe complet sur une ligne par commit, avec branches et tags.
 
-**E21.4** — Compare `main` et `feature/tls-letsencrypt` avec
+<a id="e21-4"></a>**[E21.4](corrige.md#e21-4)** — Compare `main` et `feature/tls-letsencrypt` avec
 `git diff --stat main..feature/tls-letsencrypt` puis avec
 `main...feature/tls-letsencrypt`. Les deux résultats diffèrent
 (4 fichiers vs 2). Explique lequel répond à « qu'apporte cette branche ? »
 et pourquoi l'autre montre `.gitattributes` et `docs/runbook.md` en
 **suppression**.
 
-**E21.5** — Modifie `README.md` à deux endroits éloignés : le titre
+<a id="e21-5"></a>**[E21.5](corrige.md#e21-5)** — Modifie `README.md` à deux endroits éloignés : le titre
 (ajoute ` (lab.local)`) et une section `## Contact` en fin de fichier.
 Commite **uniquement** le changement de titre, en un seul commit, sans
 toucher la section Contact, puis prouve avec deux `diff` que le titre est
 dans `HEAD` et Contact toujours dans le working directory.
 
-**E21.6** — Ton commit précédent s'appelle `docs(readme): titre avec le
+<a id="e21-6"></a>**[E21.6](corrige.md#e21-6)** — Ton commit précédent s'appelle `docs(readme): titre avec le
 domaine`. Renomme-le en `docs(readme): précise le domaine dans le titre`
 sans créer de commit supplémentaire. Compare le SHA avant/après et le
 `git status -sb` : que signifie `[ahead 1]` ? Commite ensuite la section
@@ -612,14 +628,14 @@ Contact avec `commit -a` sans passer par `add`. Enfin, sur une branche jetable `
 `ansible/roles/nginx/tasks_certbot.yml` vers `ansible/roles/nginx/tasks/main.yml` en
 un commit qui apparaît comme un **renommage** dans `git log --stat`, puis supprime la branche jetable.
 
-**E21.7** — `git status` liste `ansible/notes-perso.txt` et `logs/`. Fais en
+<a id="e21-7"></a>**[E21.7](corrige.md#e21-7)** — `git status` liste `ansible/notes-perso.txt` et `logs/`. Fais en
 sorte que : le contenu de `logs/` soit ignoré **mais** que `logs/.gitkeep`
 soit commité ; `notes-perso.txt` soit ignoré **sans modifier le
 `.gitignore` du projet** (c'est ton brouillon, pas celui de l'équipe).
 Vérifie avec `git check-ignore -v` quelle règle et quel fichier ignorent
 `terraform/terraform.tfstate`, `.README.md.swp` et `notes-perso.txt`.
 
-**E21.8** — Sur `main`, fusionne `hotfix/ansible-timeout` de deux façons
+<a id="e21-8"></a>**[E21.8](corrige.md#e21-8)** — Sur `main`, fusionne `hotfix/ansible-timeout` de deux façons
 successives : d'abord un merge ordinaire, note le résultat et le graphe,
 `reset --hard` pour revenir, puis `merge --no-ff`. Explique pourquoi le
 premier n'a **pas** été un fast-forward alors que le hotfix ne contient
@@ -630,7 +646,7 @@ considère-t-il la branche « non fusionnée dans HEAD » alors que le contenu
 est sur `main`, et qu'est-ce qui l'a quand même autorisé à la supprimer ?
 (Garde ce `main` : E21.11 l'utilise.)
 
-**E21.9** — La branche `feature/tls-letsencrypt` contient `wip`,
+<a id="e21-9"></a>**[E21.9](corrige.md#e21-9)** — La branche `feature/tls-letsencrypt` contient `wip`,
 `fix typo` et `feat(nginx): renouvellement automatique…`, trois commits qui
 ne touchent que `tasks_certbot.yml`. Avec un rebase interactif **sur la
 base commune** (pas sur `main`), réunis-les en **un seul** commit nommé
@@ -640,31 +656,31 @@ Vérifie avec `git log --oneline --stat main..HEAD` puis `git status -sb` :
 pourquoi `994e070` a-t-il gardé son SHA, et que signifient `ahead 1,
 behind 3` alors que tu n'as ajouté aucun contenu ?
 
-**E21.10** — Tu es sur `main` avec le titre du README modifié (non
+<a id="e21-10"></a>**[E21.10](corrige.md#e21-10)** — Tu es sur `main` avec le titre du README modifié (non
 commité) et un fichier `brouillon.txt` non suivi. On te demande de basculer
 d'urgence sur `feature/tls-letsencrypt`. Fais-le sans commiter ni perdre
 quoi que ce soit, y compris `brouillon.txt`, reviens sur `main` et
 récupère tout. Montre pourquoi `git stash` **sans** `-u` aurait laissé un
 piège.
 
-**E21.11** — Le commit `9c33a91` (timeout SSH) doit aller sur `main` **sans**
+<a id="e21-11"></a>**[E21.11](corrige.md#e21-11)** — Le commit `9c33a91` (timeout SSH) doit aller sur `main` **sans**
 fusionner la branche `hotfix/ansible-timeout`. Applique-le, compare les
 deux SHA et les deux dates (`git log --format='%h %ad %cd'`) : qu'est-ce
 qui a été conservé, qu'est-ce qui a changé, et pourquoi ?
 
-**E21.12** — Crée un tag léger `essai` sur `HEAD` et un tag annoté
+<a id="e21-12"></a>**[E21.12](corrige.md#e21-12)** — Crée un tag léger `essai` sur `HEAD` et un tag annoté
 `v1.1.0-rc1` avec message. Montre avec `git cat-file -t` et `git show` ce
 qui les distingue, puis pousse **uniquement** `v1.1.0-rc1` vers `origin`
 (pas `essai`). Vérifie côté distant avec `git ls-remote --tags origin` :
 pourquoi `v1.1.0-rc1` apparaît-il **deux fois** (`^{}`) ?
 
-**E21.13** — Alice a poussé un commit sur `origin/main` que tu n'as pas.
+<a id="e21-13"></a>**[E21.13](corrige.md#e21-13)** — Alice a poussé un commit sur `origin/main` que tu n'as pas.
 Sans `pull` : constate l'écart avec `fetch` puis `status -sb` et
 `log main..origin/main`. Intègre-le ensuite avec `pull --rebase`, et
 explique ce que `pull` a fait exactement, et ce qu'il aurait fait avec
 `pull.rebase=false` si tu avais eu un commit local.
 
-**E21.14** — Fais trois commits jetables sur `main` (`touch a; git add a;
+<a id="e21-14"></a>**[E21.14](corrige.md#e21-14)** — Fais trois commits jetables sur `main` (`touch a; git add a;
 git commit -m "tmp a"`, etc.). Remplis le tableau `--soft/--mixed/--hard`
 en exécutant réellement `git reset --soft HEAD~1`, puis `--mixed HEAD~1`,
 puis `--hard HEAD~1`, et en notant après chacun la sortie de
@@ -672,13 +688,13 @@ puis `--hard HEAD~1`, et en notant après chacun la sortie de
 `git reflog -5` et remets `main` **exactement** là où elle était avant
 les trois commits, sans compter à la main.
 
-**E21.15** — `git branch -D feature/tls-letsencrypt` (oui, `-D`). Elle est
+<a id="e21-15"></a>**[E21.15](corrige.md#e21-15)** — `git branch -D feature/tls-letsencrypt` (oui, `-D`). Elle est
 perdue ? Retrouve le SHA de son dernier commit **de deux manières**
 (reflog de `HEAD`, et `git fsck --lost-found` ou `git log -g`), recrée la
 branche au même endroit et compare-la à
 `origin/feature/tls-letsencrypt`.
 
-**E21.16** — `bin/healthcheck.sh` échoue sur `main` et passait à `v1.0.0`.
+<a id="e21-16"></a>**[E21.16](corrige.md#e21-16)** — `bin/healthcheck.sh` échoue sur `main` et passait à `v1.0.0`.
 Trouve le commit fautif **sans lire aucun diff**, en laissant Git tester
 lui-même (`bisect run`). Puis, avec `blame`, identifie la ligne et son
 auteur. Ne corrige pas encore : c'est L21.2.
@@ -687,16 +703,16 @@ auteur. Ne corrige pas encore : c'est L21.2.
 
 ## 21.6 Labs ★★
 
-### **L21.1** — Intégrer la branche TLS d'alice : rebase, conflit, release
+### <a id="l21-1"></a>**[L21.1](corrige.md#l21-1)** — Intégrer la branche TLS d'alice : rebase, conflit, release
 
-::: contexte
-Alice part en congé ; sa branche `feature/tls-letsencrypt` doit être en
-production lundi. Elle contient deux commits `wip` et `fix typo` que la
-revue refuse, et elle a été créée avant que `main` reçoive les en-têtes
-HSTS sur le **même** bloc `server` du template nginx. On veut : un
-historique propre, un `main` qui garde HSTS **et** gagne TLS, un tag de
-version, et la branche supprimée du distant.
-:::
+> **Contexte**
+>
+> Alice part en congé ; sa branche `feature/tls-letsencrypt` doit être en
+> production lundi. Elle contient deux commits `wip` et `fix typo` que la
+> revue refuse, et elle a été créée avant que `main` reçoive les en-têtes
+> HSTS sur le **même** bloc `server` du template nginx. On veut : un
+> historique propre, un `main` qui garde HSTS **et** gagne TLS, un tag de
+> version, et la branche supprimée du distant.
 
 1. Pousse d'abord ce que tu as sur `main` (`git push`), puis passe sur
    `feature/tls-letsencrypt`. Constate avec `git log --oneline main..HEAD`
@@ -719,26 +735,27 @@ version, et la branche supprimée du distant.
 7. Active `rerere` et note dans `~/lab21/rapports/L21.1.md` ce qu'il
    aurait changé si tu avais dû résoudre ce conflit une seconde fois.
 
-::: check
-Critère de succès : `git show main:ansible/roles/nginx/templates/factura.conf.j2`
-contient `listen 443 ssl` **et** `Strict-Transport-Security`, aucun
-commit `wip` dans `git log main`, `v1.1.0` annoté et présent sur `origin`.
-
-```bash
-bash check_M21_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `git show main:ansible/roles/nginx/templates/factura.conf.j2`
+> contient `listen 443 ssl` **et** `Strict-Transport-Security`, aucun
+> commit `wip` dans `git log main`, `v1.1.0` annoté et présent sur `origin`.
+>
+> ```bash
+> bash check_M21_01.sh
+> ```
 
 ---
 
-### **L21.2** — Bisect : « le healthcheck est rouge depuis quelques jours »
+### <a id="l21-2"></a>**[L21.2](corrige.md#l21-2)** — Bisect : « le healthcheck est rouge depuis quelques jours »
 
-::: contexte
-Le pipeline exécute `bin/healthcheck.sh` avant chaque déploiement. Il est
-rouge « depuis le milieu du mois » ; personne ne sait quel commit. Il
-passait à `v1.0.0`. Interdit de lire les diffs un par un : il y a 40 commits
-dans la vraie vie, et le script de test existe déjà.
-:::
+> **Contexte**
+>
+> Le pipeline exécute `bin/healthcheck.sh` avant chaque déploiement. Il est
+> rouge « depuis le milieu du mois » ; personne ne sait quel commit. Il
+> passait à `v1.0.0`. Interdit de lire les diffs un par un : il y a 40 commits
+> dans la vraie vie, et le script de test existe déjà.
 
 1. Confirme le symptôme : `bin/healthcheck.sh` sur `main` (code de retour),
    et sur `v1.0.0` (dans un `git worktree add ../wt-v1 v1.0.0` pour ne pas
@@ -756,23 +773,24 @@ dans la vraie vie, et le script de test existe déjà.
    lignes sur ce qu'un `commit-msg` hook ou une CI aurait pu empêcher.
 6. Pousse `main`.
 
-::: check
-```bash
-bash check_M21_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M21_02.sh
+> ```
 
 ---
 
-### **L21.3** — Serveur Git minimal : dépôt bare en SSH et déploiement par hook
+### <a id="l21-3"></a>**[L21.3](corrige.md#l21-3)** — Serveur Git minimal : dépôt bare en SSH et déploiement par hook
 
-::: contexte
-Pas de forge encore. On veut que `lab-adm` héberge le dépôt de référence
-`factura-infra`, accessible en SSH par les membres du groupe `git`, et que
-chaque push sur `main` **déploie** automatiquement la configuration dans
-`/srv/factura-conf/`. Le hook doit refuser de déployer autre chose que
-`main`.
-:::
+> **Contexte**
+>
+> Pas de forge encore. On veut que `lab-adm` héberge le dépôt de référence
+> `factura-infra`, accessible en SSH par les membres du groupe `git`, et que
+> chaque push sur `main` **déploie** automatiquement la configuration dans
+> `/srv/factura-conf/`. Le hook doit refuser de déployer autre chose que
+> `main`.
 
 Sur **`lab-adm`** :
 
@@ -798,30 +816,32 @@ Sur **`lab-ops`** :
    rester muet. Puis force un push non fast-forward sur `main` : que
    répond le serveur, et quel réglage en est responsable ?
 
-::: astuce
-Dans un hook côté serveur, le répertoire courant est le dépôt bare et
-`GIT_DIR` est positionné : `git archive main` fonctionne sans option.
-Tout ce que le hook écrit sur stdout/stderr remonte au client préfixé
-`remote:`.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Dans un hook côté serveur, le répertoire courant est le dépôt bare et
+> `GIT_DIR` est positionné : `git archive main` fonctionne sans option.
+> Tout ce que le hook écrit sur stdout/stderr remonte au client préfixé
+> `remote:`.
 
-::: check
-```bash
-bash check_M21_03.sh      # sur lab-adm
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M21_03.sh      # sur lab-adm
+> ```
 
 ---
 
-### **L21.4** — Un mot de passe dans l'historique : purge, rotation, garde-fou
+### <a id="l21-4"></a>**[L21.4](corrige.md#l21-4)** — Un mot de passe dans l'historique : purge, rotation, garde-fou
 
-::: contexte
-Audit de sécurité : `git log --all -p | grep -i password` sur
-`factura-infra` remonte `DB_PASSWORD=S3cr3t-Factura-2026!` et une clé
-`AKIA…`. Bob avait « retiré » le fichier en juin. Tu dois rendre le secret
-introuvable dans **tous** les dépôts (origin, clones), sans perdre les
-tags ni les branches, et faire en sorte que ça ne se reproduise pas.
-:::
+> **Contexte**
+>
+> Audit de sécurité : `git log --all -p | grep -i password` sur
+> `factura-infra` remonte `DB_PASSWORD=S3cr3t-Factura-2026!` et une clé
+> `AKIA…`. Bob avait « retiré » le fichier en juin. Tu dois rendre le secret
+> introuvable dans **tous** les dépôts (origin, clones), sans perdre les
+> tags ni les branches, et faire en sorte que ça ne se reproduise pas.
 
 1. Prouve la fuite : le commit qui a ajouté `.env`, celui qui l'a supprimé,
    et la commande qui affiche encore le mot de passe **aujourd'hui** depuis
@@ -849,28 +869,30 @@ tags ni les branches, et faire en sorte que ça ne se reproduise pas.
    **indexé** (pas le working directory). Il laisse passer un commit sain.
    Mentionne `gitleaks` dans le rapport comme version industrielle.
 
-::: attention
-`filter-repo` réécrit **tous** les SHA après le commit purgé. Toute
-personne ayant un clone doit le jeter : un `git pull` depuis un vieux
-clone repousserait les anciens commits. Prévenir avant le `--mirror`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `filter-repo` réécrit **tous** les SHA après le commit purgé. Toute
+> personne ayant un clone doit le jeter : un `git pull` depuis un vieux
+> clone repousserait les anciens commits. Prévenir avant le `--mirror`.
 
-::: check
-```bash
-bash check_M21_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M21_04.sh
+> ```
 
 ---
 
-### **L21.5** — Forge locale : Gitea sur `lab-ops`
+### <a id="l21-5"></a>**[L21.5](corrige.md#l21-5)** — Forge locale : Gitea sur `lab-ops`
 
-::: contexte
-Les modules 25 (CI) et 26 (GitOps) ont besoin d'une forge avec merge
-requests, protection de branche et webhooks. Gitea tient en un binaire et
-tourne en 5 minutes sur `lab-ops`. Le dépôt `factura-infra` y sera poussé
-avec `main` protégée.
-:::
+> **Contexte**
+>
+> Les modules 25 (CI) et 26 (GitOps) ont besoin d'une forge avec merge
+> requests, protection de branche et webhooks. Gitea tient en un binaire et
+> tourne en 5 minutes sur `lab-ops`. Le dépôt `factura-infra` y sera poussé
+> avec `main` protégée.
 
 Sur **`lab-ops`** :
 
@@ -900,31 +922,34 @@ Sur **`lab-ops`** :
    une MR dans l'interface, fusionne-la avec « rebase then merge » ou
    « merge commit », puis `git pull` sur `lab-adm`.
 
-::: astuce
-Variante Docker en une ligne (si Docker est déjà là, sinon module 22) :
-`docker run -d --name gitea -p 3000:3000 -p 2222:22 -v gitea:/data
---restart always gitea/gitea:1` — même écran d'installation.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Variante Docker en une ligne (si Docker est déjà là, sinon module 22) :
+> `docker run -d --name gitea -p 3000:3000 -p 2222:22 -v gitea:/data
+> --restart always gitea/gitea:1` — même écran d'installation.
 
-::: check
-```bash
-bash check_M21_05.sh      # depuis lab-adm
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M21_05.sh      # depuis lab-adm
+> ```
 
 ---
 
 ## 21.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf21`. Chaque panne
-construit son **propre** dépôt dans `~/lab21/bfN/` : le dépôt principal
-n'est pas touché. Les scripts sauvegardent un `git bundle` de l'état
-initial dans `/root/.breakfix-backup/`, mais l'utiliser vaut échec : ici
-on répare avec Git, pas avec une sauvegarde.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf21`. Chaque panne
+> construit son **propre** dépôt dans `~/lab21/bfN/` : le dépôt principal
+> n'est pas touché. Les scripts sauvegardent un `git bundle` de l'état
+> initial dans `/root/.breakfix-backup/`, mais l'utiliser vaut échec : ici
+> on répare avec Git, pas avec une sauvegarde.
 
-### **BF21.1** — « Le rebase d'alice est resté en plan »
+### <a id="bf21-1"></a>**[BF21.1](corrige.md#bf21-1)** — « Le rebase d'alice est resté en plan »
 
 ```bash
 sudo bash break_M21_01.sh
@@ -947,11 +972,9 @@ jour, `git status` propre. Explique pourquoi `git rebase --continue` tel
 quel aurait été pire que la panne, et quelle commande l'aurait détecté en
 une ligne.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF21.2** — « Les correctifs de l'astreinte ont disparu »
+### <a id="bf21-2"></a>**[BF21.2](corrige.md#bf21-2)** — « Les correctifs de l'astreinte ont disparu »
 
 ```bash
 sudo bash break_M21_02.sh
@@ -971,11 +994,9 @@ toute commande qui expire le reflog.
 remettre dans une branche `hotfix/deploy-quotes`, l'intégrer à `main`
 proprement, et dire combien de temps il te restait pour les retrouver.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF21.3** — « Impossible de pousser, et pull ne veut rien faire »
+### <a id="bf21-3"></a>**[BF21.3](corrige.md#bf21-3)** — « Impossible de pousser, et pull ne veut rien faire »
 
 ```bash
 sudo bash break_M21_03.sh
@@ -996,11 +1017,9 @@ groupe, plus aucune divergence. Identifie le réglage local responsable du
 comportement de `pull`, dis s'il faut le garder, et donne les deux
 stratégies d'intégration possibles avec le graphe résultant de chacune.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF21.4** — « git status affiche 2 000 fichiers »
+### <a id="bf21-4"></a>**[BF21.4](corrige.md#bf21-4)** — « git status affiche 2 000 fichiers »
 
 ```bash
 sudo bash break_M21_04.sh
@@ -1022,23 +1041,21 @@ depuis l'historique (pas de réécriture à la main), et explique ce qui
 reste à faire au sujet du mot de passe dans le `tfstate` — même une fois
 le fichier non suivi.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 21.8 Défi du module ★★★
 
-**D21 — Le dépôt de référence de l'équipe infra**
+<a id="d21"></a>**[D21](corrige.md#d21) — Le dépôt de référence de l'équipe infra**
 
-::: contexte
-`factura-infra` devient le dépôt officiel : cinq personnes, déploiements
-quotidiens, audit annuel. On te demande de le rendre **gouvernable** : les
-règles sont dans le dépôt, appliquées par des hooks côté client **et**
-côté serveur, les commits sont signés, les releases sont taguées et
-documentées.
-:::
+> **Contexte**
+>
+> `factura-infra` devient le dépôt officiel : cinq personnes, déploiements
+> quotidiens, audit annuel. On te demande de le rendre **gouvernable** : les
+> règles sont dans le dépôt, appliquées par des hooks côté client **et**
+> côté serveur, les commits sont signés, les releases sont taguées et
+> documentées.
 
 Cahier des charges, dans `~/lab21/factura-infra` :
 
@@ -1075,11 +1092,12 @@ Cahier des charges, dans `~/lab21/factura-infra` :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M21_06.sh      # sur lab-adm
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M21_06.sh      # sur lab-adm
+> ```
 
 ---
 
@@ -1116,3 +1134,9 @@ Pour aller plus loin :
 * Essaie `git worktree` pour tenir une branche `hotfix` et `main`
   extraites en parallèle, et `git lfs` sur un dépôt contenant une image
   de VM : note ce que ça change pour `clone`.
+
+<!-- nav:début -->
+---
+
+[← Module 20](../20-virtualisation-kvm/README.md) · [Corrigé](corrige.md) · [Module 22 →](../22-docker/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

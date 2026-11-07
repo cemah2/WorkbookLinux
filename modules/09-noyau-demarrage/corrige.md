@@ -1,429 +1,458 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 09** · corrigé  
+[← Module 08](../08-processus-systemd/corrige.md) · [Énoncé](README.md) · [Module 10 →](../10-paquets/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 09 — Corrigé
 
 ## 9.3 Quiz — QCM
 
-**Q9.1** — *`strace -c ls /` : 25 noms affichés, un seul `write`. Pourquoi ?*
+<a id="q9-1"></a>**[Q9.1](README.md#q9-1)** — *`strace -c ls /` : 25 noms affichés, un seul `write`. Pourquoi ?*
 
 **Réponse : b)** `printf` tamponne en espace utilisateur.
 
-::: pourquoi
-`strace` ne voit que ce qui franchit la frontière noyau : les **appels
-système**. `printf`, `readdir`, `malloc` sont des fonctions de la libc qui
-vivent en espace utilisateur ; elles n'apparaissent jamais dans `strace`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `strace` ne voit que ce qui franchit la frontière noyau : les **appels
+> système**. `printf`, `readdir`, `malloc` sont des fonctions de la libc qui
+> vivent en espace utilisateur ; elles n'apparaissent jamais dans `strace`.
+>
+> La libc (glibc) gère un tampon de sortie : tant que la sortie standard n'est
+> pas un terminal, ou tant que le tampon (4 Ko à 8 Ko) n'est pas plein, rien ne
+> part. `ls` construit toute sa sortie en mémoire, puis, au `exit()`, la libc
+> vide le tampon : **un** `write(1, "bin\nboot\n...", 190)`. Sur un terminal, la
+> sortie est *line-buffered* : tu verrais alors un `write` par ligne — d'où une
+> différence de comptage entre `strace -c ls` (terminal) et
+> `strace -c -o out ls > /dev/null`.
+>
+> Même logique pour `readdir` : la libc appelle `getdents64` avec un gros tampon
+> (32 Ko) et sert les entrées une à une depuis ce tampon. Deux appels
+> `getdents64` suffisent pour 25 entrées (le second retourne 0 = fin). C'est
+> tout l'intérêt de la libc : **amortir** le coût d'un passage en mode noyau.
 
-La libc (glibc) gère un tampon de sortie : tant que la sortie standard n'est
-pas un terminal, ou tant que le tampon (4 Ko à 8 Ko) n'est pas plein, rien ne
-part. `ls` construit toute sa sortie en mémoire, puis, au `exit()`, la libc
-vide le tampon : **un** `write(1, "bin\nboot\n...", 190)`. Sur un terminal, la
-sortie est *line-buffered* : tu verrais alors un `write` par ligne — d'où une
-différence de comptage entre `strace -c ls` (terminal) et
-`strace -c -o out ls > /dev/null`.
-
-Même logique pour `readdir` : la libc appelle `getdents64` avec un gros tampon
-(32 Ko) et sert les entrées une à une depuis ce tampon. Deux appels
-`getdents64` suffisent pour 25 entrées (le second retourne 0 = fin). C'est
-tout l'intérêt de la libc : **amortir** le coût d'un passage en mode noyau.
-:::
-
-::: piege
-« `strace` montre tout ce que fait un programme » est faux. Il montre les
-appels système ; `ltrace` montre les appels de bibliothèque ; `perf` montre
-où part le temps CPU. Et `strace -c` sur un programme court affiche des durées
-à 0.000000 : les appels sont trop rapides pour la résolution du compteur, seul
-le **nombre** est significatif ici. L'analyse fine est au module 19.
-:::
+> [!WARNING]
+> **Piège**
+>
+> « `strace` montre tout ce que fait un programme » est faux. Il montre les
+> appels système ; `ltrace` montre les appels de bibliothèque ; `perf` montre
+> où part le temps CPU. Et `strace -c` sur un programme court affiche des durées
+> à 0.000000 : les appels sont trop rapides pour la résolution du compteur, seul
+> le **nombre** est significatif ici. L'analyse fine est au module 19.
 
 ---
 
-**Q9.2** — *`/proc/2231/syscall` affiche `0 0x3 0x7f1c2a00 0x2000 ...` (deux
+<a id="q9-2"></a>**[Q9.2](README.md#q9-2)** — *`/proc/2231/syscall` affiche `0 0x3 0x7f1c2a00 0x2000 ...` (deux
 réponses).*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-Le format de `/proc/PID/syscall` est : numéro d'appel, six arguments, pointeur
-de pile, pointeur d'instruction. `0` sur x86_64 est `read` (`ausyscall 0` →
-`read`, `ausyscall --dump` pour toute la table). Les arguments sont ceux de
-`read(fd, buf, count)` : le descripteur `3`, un tampon, `0x2000` = 8192 octets.
-`ls -l /proc/2231/fd/3` dit sur quoi porte la lecture (fichier, pipe, socket).
-
-Si le processus tournait en espace utilisateur, le fichier contiendrait
-`running`. S'il était bloqué **hors** d'un appel système (rare, par exemple
-stoppé), il contiendrait `-1` suivi des pointeurs. Cette lecture est
-instantanée et sans effet sur le processus, contrairement à `strace -p` qui
-pose un `ptrace` et le ralentit : c'est le premier réflexe sur un serveur en
-production quand un processus « ne fait rien ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le format de `/proc/PID/syscall` est : numéro d'appel, six arguments, pointeur
+> de pile, pointeur d'instruction. `0` sur x86_64 est `read` (`ausyscall 0` →
+> `read`, `ausyscall --dump` pour toute la table). Les arguments sont ceux de
+> `read(fd, buf, count)` : le descripteur `3`, un tampon, `0x2000` = 8192 octets.
+> `ls -l /proc/2231/fd/3` dit sur quoi porte la lecture (fichier, pipe, socket).
+>
+> Si le processus tournait en espace utilisateur, le fichier contiendrait
+> `running`. S'il était bloqué **hors** d'un appel système (rare, par exemple
+> stoppé), il contiendrait `-1` suivi des pointeurs. Cette lecture est
+> instantanée et sans effet sur le processus, contrairement à `strace -p` qui
+> pose un `ptrace` et le ralentit : c'est le premier réflexe sur un serveur en
+> production quand un processus « ne fait rien ».
 
 ---
 
-**Q9.3** — *Processus en `D` depuis dix minutes : quelle affirmation est
+<a id="q9-3"></a>**[Q9.3](README.md#q9-3)** — *Processus en `D` depuis dix minutes : quelle affirmation est
 juste ?*
 
 **Réponse : b)** bloqué dans un appel système, en attente d'un pilote.
 
-::: pourquoi
-`D` = `TASK_UNINTERRUPTIBLE`. Le processus a franchi la porte des appels
-système et attend, **dans le noyau**, qu'un pilote lui rende la main : bloc
-disque, réponse NFS, verrou de système de fichiers. Il ne consomme pas de CPU
-(il dort). Les signaux sont mis en attente et ne seront regardés qu'au retour
-en espace utilisateur ; `SIGKILL` inclus, sauf chemins `TASK_KILLABLE`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `D` = `TASK_UNINTERRUPTIBLE`. Le processus a franchi la porte des appels
+> système et attend, **dans le noyau**, qu'un pilote lui rende la main : bloc
+> disque, réponse NFS, verrou de système de fichiers. Il ne consomme pas de CPU
+> (il dort). Les signaux sont mis en attente et ne seront regardés qu'au retour
+> en espace utilisateur ; `SIGKILL` inclus, sauf chemins `TASK_KILLABLE`.
+>
+> Deux fichiers disent où il dort : `/proc/PID/wchan` (le nom de la fonction
+> noyau, par exemple `nfs_wait_bit_killable` ou `io_schedule`) et
+> `/proc/PID/stack` (la pile noyau complète, root requis). Le coupable est
+> toujours **en dessous** : `dmesg -T | grep -iE 'I/O error|blocked for more'`,
+> `iostat -xz 1`, l'état du NFS ou du stockage Proxmox. On répare la couche du
+> dessous, et le processus repart tout seul.
 
-Deux fichiers disent où il dort : `/proc/PID/wchan` (le nom de la fonction
-noyau, par exemple `nfs_wait_bit_killable` ou `io_schedule`) et
-`/proc/PID/stack` (la pile noyau complète, root requis). Le coupable est
-toujours **en dessous** : `dmesg -T | grep -iE 'I/O error|blocked for more'`,
-`iostat -xz 1`, l'état du NFS ou du stockage Proxmox. On répare la couche du
-dessous, et le processus repart tout seul.
-:::
-
-::: piege
-d) confond `D` et `Z`. Un zombie est **mort** et attend `wait()` ; un `D` est
-**vivant** et attend le matériel. Le premier ne coûte rien, le second compte
-dans la charge moyenne. Module 08 pour le détail des états.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) confond `D` et `Z`. Un zombie est **mort** et attend `wait()` ; un `D` est
+> **vivant** et attend le matériel. Le premier ne coûte rien, le second compte
+> dans la charge moyenne. Module 08 pour le détail des états.
 
 ---
 
-**Q9.4** — *Chaîne de démarrage correcte sur une VM UEFI.*
+<a id="q9-4"></a>**[Q9.4](README.md#q9-4)** — *Chaîne de démarrage correcte sur une VM UEFI.*
 
 **Réponse : b)**
 
-::: pourquoi
-Le firmware UEFI lit ses variables NVRAM (`efibootmgr -v`), trouve la
-partition ESP (FAT32, type `EFI System`, montée sur `/boot/efi`), et charge
-`\EFI\ubuntu\shimx64.efi`. `shim` est signé par Microsoft : c'est ce qui permet
-de démarrer avec Secure Boot ; il vérifie et charge `grubx64.efi`. GRUB lit
-`/boot/efi/EFI/ubuntu/grub.cfg` (trois lignes qui pointent vers le vrai
-`/boot/grub/grub.cfg`), affiche le menu, charge `vmlinuz-*` et
-`initrd.img-*` en mémoire, et saute dans le noyau avec la ligne de commande.
-
-Le noyau décompresse l'initramfs en RAM (`rootfs`), exécute son `/init`, qui
-charge les pilotes (`virtio_scsi`, `dm-mod`), active LVM, monte la vraie
-racine sur `/root`, puis `switch_root` vers `/sbin/init` → `systemd`, PID 1.
-GRUB ne lit **jamais** `/etc/default/grub` : c'est l'entrée de `update-grub`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le firmware UEFI lit ses variables NVRAM (`efibootmgr -v`), trouve la
+> partition ESP (FAT32, type `EFI System`, montée sur `/boot/efi`), et charge
+> `\EFI\ubuntu\shimx64.efi`. `shim` est signé par Microsoft : c'est ce qui permet
+> de démarrer avec Secure Boot ; il vérifie et charge `grubx64.efi`. GRUB lit
+> `/boot/efi/EFI/ubuntu/grub.cfg` (trois lignes qui pointent vers le vrai
+> `/boot/grub/grub.cfg`), affiche le menu, charge `vmlinuz-*` et
+> `initrd.img-*` en mémoire, et saute dans le noyau avec la ligne de commande.
+>
+> Le noyau décompresse l'initramfs en RAM (`rootfs`), exécute son `/init`, qui
+> charge les pilotes (`virtio_scsi`, `dm-mod`), active LVM, monte la vraie
+> racine sur `/root`, puis `switch_root` vers `/sbin/init` → `systemd`, PID 1.
+> GRUB ne lit **jamais** `/etc/default/grub` : c'est l'entrée de `update-grub`.
 
 ---
 
-**Q9.5** — *`net.ifnames=0` ajouté dans `/etc/default/grub`, absent de
+<a id="q9-5"></a>**[Q9.5](README.md#q9-5)** — *`net.ifnames=0` ajouté dans `/etc/default/grub`, absent de
 `/proc/cmdline` après reboot.*
 
 **Réponse : b)** `update-grub` n'a pas été lancé.
 
-::: pourquoi
-`/etc/default/grub` est un fichier shell **source** par `grub-mkconfig`
-(`update-grub` est un alias de `grub-mkconfig -o /boot/grub/grub.cfg`). Les
-scripts de `/etc/grub.d/` (`10_linux` surtout) génèrent une entrée par noyau
-trouvé dans `/boot` en y collant `GRUB_CMDLINE_LINUX` et
-`GRUB_CMDLINE_LINUX_DEFAULT`. Sans régénération, `grub.cfg` reste l'ancien.
-
-La vérification avant reboot : `grep -E '^\s+linux' /boot/grub/grub.cfg` doit
-montrer le paramètre sur chaque ligne. `_DEFAULT` va sur les entrées normales
-seulement, `GRUB_CMDLINE_LINUX` sur toutes, y compris *recovery* — c) n'est
-donc pas une cause d'absence. d) est faux : l'initramfs ne contient pas la
-ligne de commande, il la **reçoit**.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `/etc/default/grub` est un fichier shell **source** par `grub-mkconfig`
+> (`update-grub` est un alias de `grub-mkconfig -o /boot/grub/grub.cfg`). Les
+> scripts de `/etc/grub.d/` (`10_linux` surtout) génèrent une entrée par noyau
+> trouvé dans `/boot` en y collant `GRUB_CMDLINE_LINUX` et
+> `GRUB_CMDLINE_LINUX_DEFAULT`. Sans régénération, `grub.cfg` reste l'ancien.
+>
+> La vérification avant reboot : `grep -E '^\s+linux' /boot/grub/grub.cfg` doit
+> montrer le paramètre sur chaque ligne. `_DEFAULT` va sur les entrées normales
+> seulement, `GRUB_CMDLINE_LINUX` sur toutes, y compris *recovery* — c) n'est
+> donc pas une cause d'absence. d) est faux : l'initramfs ne contient pas la
+> ligne de commande, il la **reçoit**.
 
 ---
 
-**Q9.6** — *`quiet` dans `/etc/default/grub`, `console=ttyS0` sans `quiet`
+<a id="q9-6"></a>**[Q9.6](README.md#q9-6)** — *`quiet` dans `/etc/default/grub`, `console=ttyS0` sans `quiet`
 dans `/proc/cmdline`, `update-grub` fait.*
 
 **Réponse : b)** un fichier de `/etc/default/grub.d/` redéfinit la variable.
 
-::: pourquoi
-Sur Ubuntu, `grub-mkconfig` source `/etc/default/grub` **puis** tous les
-`/etc/default/grub.d/*.cfg` dans l'ordre. Une variable affectée dans le second
-écrase la première. Les images cloud livrent
-`50-cloudimg-settings.cfg` avec `GRUB_CMDLINE_LINUX_DEFAULT="console=tty1
-console=ttyS0"` ; `init-select.cfg` vient de `init-system-helpers`. C'est la
-première cause de « j'ai modifié la ligne noyau et rien ne change ».
-
-Diagnostic en une commande : `grep -r CMDLINE /etc/default/grub /etc/default/grub.d/`.
-Correctif : modifier ou supprimer le fichier de `grub.d/`, ou y mettre sa
-propre valeur dans un fichier `99-local.cfg`. Rocky n'a pas ce mécanisme, mais
-a `grubby` qui écrit directement dans `/boot/loader/entries/`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sur Ubuntu, `grub-mkconfig` source `/etc/default/grub` **puis** tous les
+> `/etc/default/grub.d/*.cfg` dans l'ordre. Une variable affectée dans le second
+> écrase la première. Les images cloud livrent
+> `50-cloudimg-settings.cfg` avec `GRUB_CMDLINE_LINUX_DEFAULT="console=tty1
+> console=ttyS0"` ; `init-select.cfg` vient de `init-system-helpers`. C'est la
+> première cause de « j'ai modifié la ligne noyau et rien ne change ».
+>
+> Diagnostic en une commande : `grep -r CMDLINE /etc/default/grub /etc/default/grub.d/`.
+> Correctif : modifier ou supprimer le fichier de `grub.d/`, ou y mettre sa
+> propre valeur dans un fichier `99-local.cfg`. Rocky n'a pas ce mécanisme, mais
+> a `grubby` qui écrit directement dans `/boot/loader/entries/`.
 
 ---
 
-**Q9.7** — *Quand faut-il régénérer l'initramfs ? (deux réponses)*
+<a id="q9-7"></a>**[Q9.7](README.md#q9-7)** — *Quand faut-il régénérer l'initramfs ? (deux réponses)*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-L'initramfs est un mini-système de fichiers chargé par GRUB **avant** que la
-vraie racine soit accessible. Il contient ce qu'il faut pour la monter :
-modules de stockage, `lvm`, `cryptsetup`, `mdadm`, la configuration de
-`modprobe.d`, les scripts de montage. Tout ce qui change la façon d'atteindre
-`/` impose de le refaire : nouvelle disposition LVM/LUKS/RAID de la racine,
-nouveau pilote de contrôleur, blacklist ou option d'un module utilisé tôt.
+> [!NOTE]
+> **Pourquoi**
+>
+> L'initramfs est un mini-système de fichiers chargé par GRUB **avant** que la
+> vraie racine soit accessible. Il contient ce qu'il faut pour la monter :
+> modules de stockage, `lvm`, `cryptsetup`, `mdadm`, la configuration de
+> `modprobe.d`, les scripts de montage. Tout ce qui change la façon d'atteindre
+> `/` impose de le refaire : nouvelle disposition LVM/LUKS/RAID de la racine,
+> nouveau pilote de contrôleur, blacklist ou option d'un module utilisé tôt.
+>
+> `/etc/modprobe.d/` est copié dans l'initrd par `initramfs-tools` : un
+> `blacklist` ajouté pour un pilote de stockage sans régénération ne s'applique
+> pas dans l'initrd (le module est chargé quand même tôt), et inversement une
+> blacklist déjà dans l'initrd survit à la suppression du fichier tant qu'on n'a
+> pas régénéré. `sysctl` et `/etc/hosts` sont lus par systemd, après le
+> `switch_root` : sans rapport.
 
-`/etc/modprobe.d/` est copié dans l'initrd par `initramfs-tools` : un
-`blacklist` ajouté pour un pilote de stockage sans régénération ne s'applique
-pas dans l'initrd (le module est chargé quand même tôt), et inversement une
-blacklist déjà dans l'initrd survit à la suppression du fichier tant qu'on n'a
-pas régénéré. `sysctl` et `/etc/hosts` sont lus par systemd, après le
-`switch_root` : sans rapport.
-:::
-
-::: piege
-Un noyau **et** son initrd vont ensemble : `update-initramfs -u` ne régénère
-que celui du noyau le plus récent ; `-k all` les refait tous ; `-k $(uname -r)`
-celui qui tourne. Sur Rocky, `dracut -f` sans argument refait celui du noyau
-courant, `dracut -f --regenerate-all` tous.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un noyau **et** son initrd vont ensemble : `update-initramfs -u` ne régénère
+> que celui du noyau le plus récent ; `-k all` les refait tous ; `-k $(uname -r)`
+> celui qui tourne. Sur Rocky, `dracut -f` sans argument refait celui du noyau
+> courant, `dracut -f --regenerate-all` tous.
 
 ---
 
-**Q9.8** — *`/boot` à 100 % : quelle action est dangereuse ?*
+<a id="q9-8"></a>**[Q9.8](README.md#q9-8)** — *`/boot` à 100 % : quelle action est dangereuse ?*
 
 **Réponse : c)** supprimer l'initrd du noyau en cours.
 
-::: pourquoi
-Sans `initrd.img-$(uname -r)`, le prochain démarrage sur ce noyau échoue :
-le noyau se charge, ne trouve ni `virtio_scsi` ni `lvm`, et finit sur
-`VFS: Unable to mount root fs on unknown-block(0,0)`. Tant que tu ne redémarres
-pas, rien ne se voit — c'est ce qui rend l'erreur sournoise.
-
-La bonne séquence : `uname -r` (ce qu'il faut protéger), `dpkg -l
-'linux-image-*' | grep ^ii` (ce qui est installé), `dpkg -S /boot/*` (ce qui
-appartient à un paquet, et ce qui est orphelin : `dpkg-query: no path found`),
-`apt autoremove --purge` (les noyaux non protégés), puis suppression manuelle
-des orphelins, puis `update-initramfs -u -k all` et `update-grub`. Si `apt`
-est bloqué en `dpkg was interrupted`, d'abord libérer, ensuite
-`dpkg --configure -a`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sans `initrd.img-$(uname -r)`, le prochain démarrage sur ce noyau échoue :
+> le noyau se charge, ne trouve ni `virtio_scsi` ni `lvm`, et finit sur
+> `VFS: Unable to mount root fs on unknown-block(0,0)`. Tant que tu ne redémarres
+> pas, rien ne se voit — c'est ce qui rend l'erreur sournoise.
+>
+> La bonne séquence : `uname -r` (ce qu'il faut protéger), `dpkg -l
+> 'linux-image-*' | grep ^ii` (ce qui est installé), `dpkg -S /boot/*` (ce qui
+> appartient à un paquet, et ce qui est orphelin : `dpkg-query: no path found`),
+> `apt autoremove --purge` (les noyaux non protégés), puis suppression manuelle
+> des orphelins, puis `update-initramfs -u -k all` et `update-grub`. Si `apt`
+> est bloqué en `dpkg was interrupted`, d'abord libérer, ensuite
+> `dpkg --configure -a`.
 
 ---
 
-**Q9.9** — *Rocky 9 : ajouter `console=ttyS0,115200` à tous les noyaux et
+<a id="q9-9"></a>**[Q9.9](README.md#q9-9)** — *Rocky 9 : ajouter `console=ttyS0,115200` à tous les noyaux et
 aux suivants (deux réponses).*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-Rocky 9 utilise BLS (*Boot Loader Specification*) : une entrée par noyau dans
-`/boot/loader/entries/<machine-id>-<version>.conf`, avec sa ligne `options`.
-`grubby --update-kernel=ALL --args="..."` modifie ces fichiers directement, et
-`grubby --info=ALL` les relit. Aucune régénération de `grub.cfg` n'est
-nécessaire pour ça.
-
-Un noyau installé plus tard reçoit les options de l'entrée par défaut
-courante — donc le `grubby` suffit en pratique. Mais `grub2-mkconfig -o
-/boot/grub2/grub.cfg`, lancé un jour par quelqu'un, réécrit les options des
-entrées à partir de `GRUB_CMDLINE_LINUX` : garder `/etc/default/grub` aligné
-évite de perdre l'option à ce moment-là. c) est écrasé à la prochaine
-génération ; d) est la commande Ubuntu, absente sur Rocky.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Rocky 9 utilise BLS (*Boot Loader Specification*) : une entrée par noyau dans
+> `/boot/loader/entries/<machine-id>-<version>.conf`, avec sa ligne `options`.
+> `grubby --update-kernel=ALL --args="..."` modifie ces fichiers directement, et
+> `grubby --info=ALL` les relit. Aucune régénération de `grub.cfg` n'est
+> nécessaire pour ça.
+>
+> Un noyau installé plus tard reçoit les options de l'entrée par défaut
+> courante — donc le `grubby` suffit en pratique. Mais `grub2-mkconfig -o
+> /boot/grub2/grub.cfg`, lancé un jour par quelqu'un, réécrit les options des
+> entrées à partir de `GRUB_CMDLINE_LINUX` : garder `/etc/default/grub` aligné
+> évite de perdre l'option à ce moment-là. c) est écrasé à la prochaine
+> génération ; d) est la commande Ubuntu, absente sur Rocky.
 
 ---
 
-**Q9.10** — *Rôle de `/etc/modprobe.d/dummy.conf` et
+<a id="q9-10"></a>**[Q9.10](README.md#q9-10)** — *Rôle de `/etc/modprobe.d/dummy.conf` et
 `/etc/modules-load.d/dummy.conf`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Deux mécanismes, deux lecteurs. `modprobe` lit `/etc/modprobe.d/*.conf` à
-**chaque** chargement de module, quel qu'en soit l'auteur (udev, systemd, toi) :
-`options` y fixe les paramètres, `blacklist`/`install`/`softdep`/`alias` y
-règlent le comportement. Ce fichier ne charge rien.
-
-`systemd-modules-load.service` lit `/etc/modules-load.d/*.conf` (et
-`/etc/modules` sur Ubuntu) tôt au boot et fait un `modprobe` de chaque nom
-listé, lequel applique alors les `options`. Sans le second fichier, `dummy`
-n'est jamais chargé au boot (rien ne le demande : pas de matériel, pas
-d'alias). Sans le premier, il est chargé avec `numdummies=1`. Les deux sont
-donc nécessaires ; `modprobe dummy numdummies=2` à la main est volatil.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux mécanismes, deux lecteurs. `modprobe` lit `/etc/modprobe.d/*.conf` à
+> **chaque** chargement de module, quel qu'en soit l'auteur (udev, systemd, toi) :
+> `options` y fixe les paramètres, `blacklist`/`install`/`softdep`/`alias` y
+> règlent le comportement. Ce fichier ne charge rien.
+>
+> `systemd-modules-load.service` lit `/etc/modules-load.d/*.conf` (et
+> `/etc/modules` sur Ubuntu) tôt au boot et fait un `modprobe` de chaque nom
+> listé, lequel applique alors les `options`. Sans le second fichier, `dummy`
+> n'est jamais chargé au boot (rien ne le demande : pas de matériel, pas
+> d'alias). Sans le premier, il est chargé avec `numdummies=1`. Les deux sont
+> donc nécessaires ; `modprobe dummy numdummies=2` à la main est volatil.
 
 ---
 
-**Q9.11** — *`blacklist virtio_net` : affirmations vraies (deux réponses).*
+<a id="q9-11"></a>**[Q9.11](README.md#q9-11)** — *`blacklist virtio_net` : affirmations vraies (deux réponses).*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-`blacklist` ne fait qu'une chose : ignorer les **alias internes** du module.
-Or udev charge les pilotes par alias — il lit `modalias` du périphérique
-(`virtio:d00000001v00001AF4`), et `modprobe` résout cet alias vers
-`virtio_net`. Blacklisté, l'alias est ignoré : le périphérique reste sans
-pilote, plus de `ens18`. Mais `modprobe virtio_net` par son nom passe outre
-(le nom n'est pas un alias). C'est voulu : `blacklist` sert à empêcher
-l'**automatisme**, pas à interdire.
-
-Pour interdire vraiment : `install virtio_net /bin/false` — `modprobe`
-exécute la commande à la place du chargement, et `/bin/false` échoue. Les deux
-lignes ensemble forment le « blacklist dur » qu'utilisent les guides de
-durcissement (`install usb-storage /bin/false`). Le fichier `.ko` n'est pas
-touché, et `module verification failed` concerne la signature, pas la
-blacklist.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `blacklist` ne fait qu'une chose : ignorer les **alias internes** du module.
+> Or udev charge les pilotes par alias — il lit `modalias` du périphérique
+> (`virtio:d00000001v00001AF4`), et `modprobe` résout cet alias vers
+> `virtio_net`. Blacklisté, l'alias est ignoré : le périphérique reste sans
+> pilote, plus de `ens18`. Mais `modprobe virtio_net` par son nom passe outre
+> (le nom n'est pas un alias). C'est voulu : `blacklist` sert à empêcher
+> l'**automatisme**, pas à interdire.
+>
+> Pour interdire vraiment : `install virtio_net /bin/false` — `modprobe`
+> exécute la commande à la place du chargement, et `/bin/false` échoue. Les deux
+> lignes ensemble forment le « blacklist dur » qu'utilisent les guides de
+> durcissement (`install usb-storage /bin/false`). Le fichier `.ko` n'est pas
+> touché, et `module verification failed` concerne la signature, pas la
+> blacklist.
 
 ---
 
-**Q9.12** — *`10-factura.conf` = 10, `/etc/sysctl.conf` = 60 : valeur
+<a id="q9-12"></a>**[Q9.12](README.md#q9-12)** — *`10-factura.conf` = 10, `/etc/sysctl.conf` = 60 : valeur
 effective ?*
 
 **Réponse : b)** 60.
 
-::: pourquoi
-`sysctl --system` (et `systemd-sysctl.service` au boot) construit une liste
-de fichiers : tous les `*.conf` de `/etc/sysctl.d`, `/run/sysctl.d`,
-`/usr/local/lib/sysctl.d`, `/usr/lib/sysctl.d`, `/lib/sysctl.d`, triés par
-**nom de base** toutes provenances confondues, puis `/etc/sysctl.conf`. Un
-même nom présent dans `/etc` et `/usr/lib` : seul celui de `/etc` est lu (pour
-neutraliser un fichier système, on crée un lien vers `/dev/null` de même nom
-dans `/etc/sysctl.d`). Chaque fichier applique ses clés dans l'ordre ; **la
-dernière écriture gagne**.
-
-Ubuntu ajoute un détail : `/etc/sysctl.d/99-sysctl.conf` est un lien
-symbolique vers `../sysctl.conf`. Le fichier historique est donc rejoué en
-position 99, après `10-factura.conf`. Rocky n'a pas ce lien mais
-`sysctl - -system` lit quand même `/etc/sysctl.conf` en dernier. Conclusion
-pratique : ne jamais rien mettre dans `/etc/sysctl.conf`, et numéroter ses
-fichiers **au-dessus** de ce que livrent les paquets (`60-`, `90-`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `sysctl --system` (et `systemd-sysctl.service` au boot) construit une liste
+> de fichiers : tous les `*.conf` de `/etc/sysctl.d`, `/run/sysctl.d`,
+> `/usr/local/lib/sysctl.d`, `/usr/lib/sysctl.d`, `/lib/sysctl.d`, triés par
+> **nom de base** toutes provenances confondues, puis `/etc/sysctl.conf`. Un
+> même nom présent dans `/etc` et `/usr/lib` : seul celui de `/etc` est lu (pour
+> neutraliser un fichier système, on crée un lien vers `/dev/null` de même nom
+> dans `/etc/sysctl.d`). Chaque fichier applique ses clés dans l'ordre ; **la
+> dernière écriture gagne**.
+>
+> Ubuntu ajoute un détail : `/etc/sysctl.d/99-sysctl.conf` est un lien
+> symbolique vers `../sysctl.conf`. Le fichier historique est donc rejoué en
+> position 99, après `10-factura.conf`. Rocky n'a pas ce lien mais
+> `sysctl - -system` lit quand même `/etc/sysctl.conf` en dernier. Conclusion
+> pratique : ne jamais rien mettre dans `/etc/sysctl.conf`, et numéroter ses
+> fichiers **au-dessus** de ce que livrent les paquets (`60-`, `90-`).
 
 ---
 
-**Q9.13** — *`nf_conntrack_max` : `cannot stat ... No such file or
+<a id="q9-13"></a>**[Q9.13](README.md#q9-13)** — *`nf_conntrack_max` : `cannot stat ... No such file or
 directory`.*
 
 **Réponse : b)** module non chargé, donc clé inexistante.
 
-::: pourquoi
-`/proc/sys` est une vue **dynamique** : chaque module enregistre ses clés
-au chargement. `net.netfilter.*` n'existe que si `nf_conntrack` est chargé,
-ce qui arrive à la première règle `iptables`/`nft` à état, ou à un `modprobe`.
-Sur une machine fraîche, la clé est absente et `sysctl -w` échoue. Au boot,
-`systemd-sysctl` passe **avant** que quiconque ait chargé le module : le
-paramètre est ignoré avec un avertissement dans le journal, et la machine
-tourne avec la valeur par défaut.
-
-Correctif en deux fichiers : `/etc/modules-load.d/nf_conntrack.conf`
-(contenu : `nf_conntrack`) — `systemd-modules-load.service` est ordonné
-**avant** `systemd-sysctl.service`, précisément pour ce cas — et
-`/etc/sysctl.d/60-conntrack.conf` avec la valeur. Même piège pour
-`net.bridge.bridge-nf-call-iptables` (module `br_netfilter`, prérequis
-Kubernetes) et `net.ipv4.vs.*` (`ip_vs`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `/proc/sys` est une vue **dynamique** : chaque module enregistre ses clés
+> au chargement. `net.netfilter.*` n'existe que si `nf_conntrack` est chargé,
+> ce qui arrive à la première règle `iptables`/`nft` à état, ou à un `modprobe`.
+> Sur une machine fraîche, la clé est absente et `sysctl -w` échoue. Au boot,
+> `systemd-sysctl` passe **avant** que quiconque ait chargé le module : le
+> paramètre est ignoré avec un avertissement dans le journal, et la machine
+> tourne avec la valeur par défaut.
+>
+> Correctif en deux fichiers : `/etc/modules-load.d/nf_conntrack.conf`
+> (contenu : `nf_conntrack`) — `systemd-modules-load.service` est ordonné
+> **avant** `systemd-sysctl.service`, précisément pour ce cas — et
+> `/etc/sysctl.d/60-conntrack.conf` avec la valeur. Même piège pour
+> `net.bridge.bridge-nf-call-iptables` (module `br_netfilter`, prérequis
+> Kubernetes) et `net.ipv4.vs.*` (`ip_vs`).
 
 ---
 
-**Q9.14** — *Règle udev avec `SYMLINK+=`, disque déjà présent, lien absent.*
+<a id="q9-14"></a>**[Q9.14](README.md#q9-14)** — *Règle udev avec `SYMLINK+=`, disque déjà présent, lien absent.*
 
 **Réponse : b)** recharger les règles, puis rejouer l'événement.
 
-::: pourquoi
-`systemd-udevd` compile les règles au démarrage et les garde en mémoire ;
-il surveille `/etc/udev/rules.d` par inotify et recharge en général tout seul,
-mais `udevadm control --reload` garantit la prise en compte. Surtout : une
-règle ne s'applique **que lors du traitement d'un événement**. Un disque déjà
-présent a eu son événement `add` au boot ; rien ne se passera tant qu'un
-nouvel événement n'arrive pas. `udevadm trigger --action=add /dev/sdb` (ou
-`--action=change`, le défaut) synthétise cet événement ; `udevadm settle`
-attend la fin du traitement.
-
-`udevadm test /sys/block/sdb` fait la même chose **à blanc** : il affiche les
-règles parcourues et les propriétés résultantes (`DEVLINKS=`) sans rien
-appliquer — c'est l'outil pour vérifier une règle avant de la rejouer.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `systemd-udevd` compile les règles au démarrage et les garde en mémoire ;
+> il surveille `/etc/udev/rules.d` par inotify et recharge en général tout seul,
+> mais `udevadm control --reload` garantit la prise en compte. Surtout : une
+> règle ne s'applique **que lors du traitement d'un événement**. Un disque déjà
+> présent a eu son événement `add` au boot ; rien ne se passera tant qu'un
+> nouvel événement n'arrive pas. `udevadm trigger --action=add /dev/sdb` (ou
+> `--action=change`, le défaut) synthétise cet événement ; `udevadm settle`
+> attend la fin du traitement.
+>
+> `udevadm test /sys/block/sdb` fait la même chose **à blanc** : il affiche les
+> règles parcourues et les propriétés résultantes (`DEVLINKS=`) sans rien
+> appliquer — c'est l'outil pour vérifier une règle avant de la rejouer.
 
 ---
 
-**Q9.15** — *`task jbd2/dm-0-8:312 blocked for more than 120 seconds`.*
+<a id="q9-15"></a>**[Q9.15](README.md#q9-15)** — *`task jbd2/dm-0-8:312 blocked for more than 120 seconds`.*
 
 **Réponse : b)** le journal ext4 attend le stockage.
 
-::: pourquoi
-`jbd2` est le thread de journalisation d'ext4 ; `dm-0` désigne un volume
-LVM. Le détecteur *hung task* (`khungtaskd`) signale toute tâche restée en
-`D` plus de `kernel.hung_task_timeout_secs` (120 s). Le thread a émis une
-écriture vers le disque et attend son acquittement depuis deux minutes : le
-disque, la couche virtio, ou le stockage de l'hôte Proxmox ne répond plus.
-
-Ensuite : `dmesg -T | grep -iE 'I/O error|reset|timeout'` juste au-dessus du
-message, `ps -eo pid,stat,wchan:24,args | awk '$2 ~ /D/'` pour voir qui est
-bloqué, `iostat -xz 1` (`await` énorme, `%util` à 100 avec zéro débit), et
-côté hôte l'état du stockage. La ligne « echo 0 > ... disables this message »
-est une aide à la lecture, pas une recommandation. Ce n'est pas du CPU : la
-tâche dort.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `jbd2` est le thread de journalisation d'ext4 ; `dm-0` désigne un volume
+> LVM. Le détecteur *hung task* (`khungtaskd`) signale toute tâche restée en
+> `D` plus de `kernel.hung_task_timeout_secs` (120 s). Le thread a émis une
+> écriture vers le disque et attend son acquittement depuis deux minutes : le
+> disque, la couche virtio, ou le stockage de l'hôte Proxmox ne répond plus.
+>
+> Ensuite : `dmesg -T | grep -iE 'I/O error|reset|timeout'` juste au-dessus du
+> message, `ps -eo pid,stat,wchan:24,args | awk '$2 ~ /D/'` pour voir qui est
+> bloqué, `iostat -xz 1` (`await` énorme, `%util` à 100 avec zéro débit), et
+> côté hôte l'état du stockage. La ligne « echo 0 > ... disables this message »
+> est une aide à la lecture, pas une recommandation. Ce n'est pas du CPU : la
+> tâche dort.
 
 ---
 
-**Q9.16** — *`soft lockup - CPU#1 stuck for 23s! [postgres:1204]` dans une
+<a id="q9-16"></a>**[Q9.16](README.md#q9-16)** — *`soft lockup - CPU#1 stuck for 23s! [postgres:1204]` dans une
 VM.*
 
 **Réponse : b)** le vCPU n'a pas été ordonnancé par l'hôte.
 
-::: pourquoi
-Un *soft lockup* signifie que le *watchdog* du noyau n'a pas pu s'exécuter sur
-ce CPU pendant N secondes : le CPU était monopolisé sans préemption. Sur du
-matériel physique, c'est un bug noyau ou un pilote en boucle. Dans une VM,
-c'est presque toujours le vCPU qui **n'a pas tourné** : l'hôte était saturé,
-une sauvegarde, un snapshot avec mémoire ou une migration a gelé la VM, et au
-réveil le noyau invité constate un trou de 23 s. Le nom entre crochets est
-simplement le processus qui avait le CPU au moment du gel — pas le coupable.
-
-Vérification : `st` (*steal*) dans `top`/`vmstat`, `journalctl -k` autour de
-l'heure, et côté Proxmox les tâches (backup, snapshot) et la charge de l'hôte.
-`kernel.softlockup_panic=0` par défaut, sinon la VM redémarrerait.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un *soft lockup* signifie que le *watchdog* du noyau n'a pas pu s'exécuter sur
+> ce CPU pendant N secondes : le CPU était monopolisé sans préemption. Sur du
+> matériel physique, c'est un bug noyau ou un pilote en boucle. Dans une VM,
+> c'est presque toujours le vCPU qui **n'a pas tourné** : l'hôte était saturé,
+> une sauvegarde, un snapshot avec mémoire ou une migration a gelé la VM, et au
+> réveil le noyau invité constate un trou de 23 s. Le nom entre crochets est
+> simplement le processus qui avait le CPU au moment du gel — pas le coupable.
+>
+> Vérification : `st` (*steal*) dans `top`/`vmstat`, `journalctl -k` autour de
+> l'heure, et côté Proxmox les tâches (backup, snapshot) et la charge de l'hôte.
+> `kernel.softlockup_panic=0` par défaut, sinon la VM redémarrerait.
 
 ---
 
-**Q9.17** — *`System clock synchronized: no`, TLS « not yet valid » (deux
+<a id="q9-17"></a>**[Q9.17](README.md#q9-17)** — *`System clock synchronized: no`, TLS « not yet valid » (deux
 réponses).*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-Un certificat X.509 a une fenêtre `notBefore`/`notAfter` ; une horloge locale
-en retard le voit « pas encore valide », en avance « expiré ». La correction
-est de remettre l'heure **par le service de temps**, pas d'ignorer TLS.
-
-chrony corrige par *slew* (ralentir ou accélérer l'horloge, au plus 8,3 % sur
-Ubuntu : `maxslewrate 83333.333`) pour ne jamais faire sauter le temps, sauf
-au démarrage où `makestep 1 3` autorise un saut si l'écart dépasse 1 s dans
-les 3 premières mesures. Passé ce délai, un décalage de 44 jours mettrait des
-mois à se résorber : `chronyc makestep` force un saut immédiat. Mais sans
-source joignable (`chronyc sources` vide ou `?`), chrony n'a rien à quoi se
-comparer et ne fait rien — d'où b) avant a). d) écrit l'horloge matérielle
-dans l'horloge système : sur une VM, le RTC est lui-même faux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un certificat X.509 a une fenêtre `notBefore`/`notAfter` ; une horloge locale
+> en retard le voit « pas encore valide », en avance « expiré ». La correction
+> est de remettre l'heure **par le service de temps**, pas d'ignorer TLS.
+>
+> chrony corrige par *slew* (ralentir ou accélérer l'horloge, au plus 8,3 % sur
+> Ubuntu : `maxslewrate 83333.333`) pour ne jamais faire sauter le temps, sauf
+> au démarrage où `makestep 1 3` autorise un saut si l'écart dépasse 1 s dans
+> les 3 premières mesures. Passé ce délai, un décalage de 44 jours mettrait des
+> mois à se résorber : `chronyc makestep` force un saut immédiat. Mais sans
+> source joignable (`chronyc sources` vide ou `?`), chrony n'a rien à quoi se
+> comparer et ne fait rien — d'où b) avant a). d) écrit l'horloge matérielle
+> dans l'horloge système : sur une VM, le RTC est lui-même faux.
 
 ---
 
-**Q9.18** — *Module DKMS : `Key was rejected by service`.*
+<a id="q9-18"></a>**[Q9.18](README.md#q9-18)** — *Module DKMS : `Key was rejected by service`.*
 
 **Réponse : b)** Secure Boot exige un module signé.
 
-::: pourquoi
-Avec Secure Boot actif, le noyau Ubuntu passe en mode *lockdown integrity* :
-il n'accepte que les modules signés par une clé de sa base de confiance
-(clé Canonical intégrée, plus les clés MOK enrôlées dans le firmware). Un
-module compilé par DKMS est signé avec une clé locale générée dans
-`/var/lib/shim-signed/mok/` ; si cette clé n'a pas été enrôlée
-(`mokutil --import MOK.der`, puis confirmation au reboot dans l'interface
-`MokManager`), le noyau la rejette avec ce message précis. `dmesg` montre
-`Loading of unsigned module is rejected` ou `module verification failed`.
-
-Vérification : `mokutil --sb-state`, `mokutil --list-enrolled`,
-`modinfo -F signer module.ko`. Alternatives : désactiver Secure Boot dans le
-firmware (sur Proxmox : VM OVMF, option *pre-enrolled keys* décochée), ou
-utiliser un module livré et signé par la distribution. `kernel.modules_disabled=1`
-donnerait `Operation not permitted`, pas un rejet de clé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Avec Secure Boot actif, le noyau Ubuntu passe en mode *lockdown integrity* :
+> il n'accepte que les modules signés par une clé de sa base de confiance
+> (clé Canonical intégrée, plus les clés MOK enrôlées dans le firmware). Un
+> module compilé par DKMS est signé avec une clé locale générée dans
+> `/var/lib/shim-signed/mok/` ; si cette clé n'a pas été enrôlée
+> (`mokutil --import MOK.der`, puis confirmation au reboot dans l'interface
+> `MokManager`), le noyau la rejette avec ce message précis. `dmesg` montre
+> `Loading of unsigned module is rejected` ou `module verification failed`.
+>
+> Vérification : `mokutil --sb-state`, `mokutil --list-enrolled`,
+> `modinfo -F signer module.ko`. Alternatives : désactiver Secure Boot dans le
+> firmware (sur Proxmox : VM OVMF, option *pre-enrolled keys* décochée), ou
+> utiliser un module livré et signé par la distribution. `kernel.modules_disabled=1`
+> donnerait `Operation not permitted`, pas un rejet de clé.
 
 ---
 
 ## 9.4 Quiz — questions ouvertes
 
-**QO9.1** — *Ce qui se passe quand un programme appelle `open()`.*
+<a id="qo9-1"></a>**[QO9.1](README.md#qo9-1)** — *Ce qui se passe quand un programme appelle `open()`.*
 
 **Réponse attendue**
 
@@ -452,19 +481,20 @@ donnerait `Operation not permitted`, pas un rejet de clé.
    côté noyau ; les signaux attendent son retour ; `/proc/PID/syscall` montre
    `257 ...` et `/proc/PID/wchan` la fonction d'attente.
 
-::: pourquoi
-Ce qui distingue une bonne réponse : nommer la libc comme couche
-intermédiaire, expliquer que le noyau **ne fait pas confiance** aux arguments
-(il copie et vérifie chaque pointeur : `copy_from_user`), et distinguer
-mode switch et context switch. Le coût réel d'un appel système explique toute
-l'ingénierie des serveurs modernes : tampons, `epoll` plutôt que `select`,
-`io_uring`, vDSO — et pourquoi `strace` (qui **double** chaque appel par un
-arrêt `ptrace`) est si coûteux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qui distingue une bonne réponse : nommer la libc comme couche
+> intermédiaire, expliquer que le noyau **ne fait pas confiance** aux arguments
+> (il copie et vérifie chaque pointeur : `copy_from_user`), et distinguer
+> mode switch et context switch. Le coût réel d'un appel système explique toute
+> l'ingénierie des serveurs modernes : tampons, `epoll` plutôt que `select`,
+> `io_uring`, vDSO — et pourquoi `strace` (qui **double** chaque appel par un
+> arrêt `ptrace`) est si coûteux.
 
 ---
 
-**QO9.2** — *Le démarrage d'une VM Ubuntu 24.04 UEFI, de l'allumage à
+<a id="qo9-2"></a>**[QO9.2](README.md#qo9-2)** — *Le démarrage d'une VM Ubuntu 24.04 UEFI, de l'allumage à
 `login:`.*
 
 **Réponse attendue**
@@ -503,23 +533,24 @@ arrêt `ptrace`) est si coûteux.
    `systemd-analyze` donne le temps de chacune de ces phases : firmware,
    loader, kernel, userspace.
 
-::: pourquoi
-Un point souvent oublié : **la ligne de commande du noyau est lue par trois
-acteurs** — le noyau (`console=`, `root=`, `quiet`), l'initramfs (`root=`,
-`rd.break`, `break=premount`) et systemd (`systemd.unit=`,
-`systemd.log_level=`). `init=/bin/bash` est lu par le noyau seul : il remplace
-`/sbin/init` par bash au moment du `switch_root`, et systemd ne démarre
-jamais.
-
-En BIOS (SeaBIOS, défaut Proxmox) : pas d'ESP ni de shim ; le firmware charge
-les 440 octets du MBR (`boot.img`), qui charge `core.img` logé dans la
-partition *BIOS boot* (GPT) ou l'espace après le MBR, qui charge
-`/boot/grub/grub.cfg`. Le reste est identique.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un point souvent oublié : **la ligne de commande du noyau est lue par trois
+> acteurs** — le noyau (`console=`, `root=`, `quiet`), l'initramfs (`root=`,
+> `rd.break`, `break=premount`) et systemd (`systemd.unit=`,
+> `systemd.log_level=`). `init=/bin/bash` est lu par le noyau seul : il remplace
+> `/sbin/init` par bash au moment du `switch_root`, et systemd ne démarre
+> jamais.
+>
+> En BIOS (SeaBIOS, défaut Proxmox) : pas d'ESP ni de shim ; le firmware charge
+> les 440 octets du MBR (`boot.img`), qui charge `core.img` logé dans la
+> partition *BIOS boot* (GPT) ou l'espace après le MBR, qui charge
+> `/boot/grub/grub.cfg`. Le reste est identique.
 
 ---
 
-**QO9.3** — *Mot de passe root perdu : procédure Ubuntu et Rocky.*
+<a id="qo9-3"></a>**[QO9.3](README.md#qo9-3)** — *Mot de passe root perdu : procédure Ubuntu et Rocky.*
 
 **Réponse attendue**
 
@@ -558,20 +589,21 @@ pas bloquer le boot automatique) qui empêche `e` ; et le chiffrement du disque
 Sur Proxmox, restreindre qui peut ouvrir la console de la VM (`VM.Console`)
 fait partie de la réponse.
 
-::: pourquoi
-`init=` est traité par le noyau : le programme indiqué est lancé comme PID 1
-avec `/` monté en lecture seule et sans `/proc` ni `/sys` montés (les monter
-si besoin : `mount -t proc proc /proc`). Aucun mot de passe n'est demandé
-parce que personne ne le demande — il n'y a pas de login, pas de PAM. C'est
-aussi pourquoi `systemd.unit=rescue.target` ne suffit pas sur Ubuntu : cette
-cible lance `sulogin`, qui exige le mot de passe root ; or root est
-verrouillé (`!` dans `shadow`), et `sulogin` refuse (`Cannot open access to
-console, the root account is locked`). On peut autoriser ce shell sans mot de passe en posant `Environment=SYSTEMD_SULOGIN_FORCE=1` dans un drop-in de `rescue.service` et `emergency.service` — à faire **avant** l'incident ; à la main, `init=/bin/bash` reste la voie sûre.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `init=` est traité par le noyau : le programme indiqué est lancé comme PID 1
+> avec `/` monté en lecture seule et sans `/proc` ni `/sys` montés (les monter
+> si besoin : `mount -t proc proc /proc`). Aucun mot de passe n'est demandé
+> parce que personne ne le demande — il n'y a pas de login, pas de PAM. C'est
+> aussi pourquoi `systemd.unit=rescue.target` ne suffit pas sur Ubuntu : cette
+> cible lance `sulogin`, qui exige le mot de passe root ; or root est
+> verrouillé (`!` dans `shadow`), et `sulogin` refuse (`Cannot open access to
+> console, the root account is locked`). On peut autoriser ce shell sans mot de passe en posant `Environment=SYSTEMD_SULOGIN_FORCE=1` dans un drop-in de `rescue.service` et `emergency.service` — à faire **avant** l'incident ; à la main, `init=/bin/bash` reste la voie sûre.
 
 ---
 
-**QO9.4** — *À quoi sert l'initramfs, quand le régénérer.*
+<a id="qo9-4"></a>**[QO9.4](README.md#qo9-4)** — *À quoi sert l'initramfs, quand le régénérer.*
 
 **Réponse attendue**
 
@@ -603,19 +635,20 @@ vers un autre hyperviseur, passage IDE → virtio-scsi) ; (3) modification de
 chargé tôt ; (4) après une mise à jour de microcode ou de firmware embarqué,
 et évidemment à chaque nouveau noyau (fait par le paquet).
 
-::: pourquoi
-La question cache une compréhension de la **séquence** : `root=` n'est pas
-résolu par le noyau mais par l'initramfs (c'est lui qui comprend `UUID=`,
-`/dev/mapper`, `LABEL=`). Un `fstab` cassé n'empêche pas de monter `/` (module
-11) ; un initramfs cassé, si. Les symptômes se distinguent : « `VFS: Unable to
-mount root fs` » ou « `Gave up waiting for root file system device` » avec un
-shell `(initramfs)` = problème d'initramfs ; « `emergency mode` » = systemd a
-démarré, donc la racine est montée, et c'est `fstab` ou une unité.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question cache une compréhension de la **séquence** : `root=` n'est pas
+> résolu par le noyau mais par l'initramfs (c'est lui qui comprend `UUID=`,
+> `/dev/mapper`, `LABEL=`). Un `fstab` cassé n'empêche pas de monter `/` (module
+> 11) ; un initramfs cassé, si. Les symptômes se distinguent : « `VFS: Unable to
+> mount root fs` » ou « `Gave up waiting for root file system device` » avec un
+> shell `(initramfs)` = problème d'initramfs ; « `emergency mode` » = systemd a
+> démarré, donc la racine est montée, et c'est `fstab` ou une unité.
 
 ---
 
-**QO9.5** — *Méthode pour poser un `sysctl` en production.*
+<a id="qo9-5"></a>**[QO9.5](README.md#qo9-5)** — *Méthode pour poser un `sysctl` en production.*
 
 **Réponse attendue**
 
@@ -647,18 +680,19 @@ Cas du module : `net.netfilter.nf_conntrack_max`, `net.bridge.*`,
 `systemd-modules-load.service` est ordonné avant `systemd-sysctl.service`.
 Vérification après reboot : `lsmod | grep nf_conntrack` et la valeur.
 
-::: pourquoi
-Pourquoi pas `rc.local` ou un cron `@reboot` : ils s'exécutent après les
-services, donc **après** que l'application a lu `somaxconn` ou que
-`nf_conntrack` a dimensionné sa table ; ils ne sont pas idempotents ni
-visibles pour un audit qui lit `sysctl --system`. Et pourquoi `sysctl -p
-fichier` « marche » mais trompe : il applique ce fichier seul, dans l'instant,
-sans la précédence — c'est un test, pas une preuve de persistance.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Pourquoi pas `rc.local` ou un cron `@reboot` : ils s'exécutent après les
+> services, donc **après** que l'application a lu `somaxconn` ou que
+> `nf_conntrack` a dimensionné sa table ; ils ne sont pas idempotents ni
+> visibles pour un audit qui lit `sysctl --system`. Et pourquoi `sysctl -p
+> fichier` « marche » mais trompe : il applique ce fichier seul, dans l'instant,
+> sans la précédence — c'est un test, pas une preuve de persistance.
 
 ---
 
-**QO9.6** — *Un disque ajouté à chaud : la chaîne complète.*
+<a id="qo9-6"></a>**[QO9.6](README.md#qo9-6)** — *Un disque ajouté à chaud : la chaîne complète.*
 
 **Réponse attendue**
 
@@ -696,17 +730,18 @@ Tester sans reboot : `udevadm test /sys/block/sdb 2>&1 | grep -E
 `udevadm control --reload && udevadm trigger --action=add /dev/sdb &&
 udevadm settle` ; `ls -l /dev/disk/lab/`.
 
-::: pourquoi
-Le point que les candidats ratent : `/dev` est **devtmpfs**, peuplé par le
-noyau, et udev ne fait qu'**enrichir** (liens, permissions, `OWNER`, `GROUP`,
-`ATTR{}`), exécuter (`RUN+=`) et **renommer les interfaces réseau** — les
-seules choses qu'udev renomme, parce qu'une interface n'a pas de nœud dans
-`/dev`. Un disque n'est jamais renommé : on lui ajoute des liens.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point que les candidats ratent : `/dev` est **devtmpfs**, peuplé par le
+> noyau, et udev ne fait qu'**enrichir** (liens, permissions, `OWNER`, `GROUP`,
+> `ATTR{}`), exécuter (`RUN+=`) et **renommer les interfaces réseau** — les
+> seules choses qu'udev renomme, parce qu'une interface n'a pas de nœud dans
+> `/dev`. Un disque n'est jamais renommé : on lui ajoute des liens.
 
 ---
 
-**QO9.7** — *OOM, erreur E/S, soft lockup, hung task : lecture, couche,
+<a id="qo9-7"></a>**[QO9.7](README.md#qo9-7)** — *OOM, erreur E/S, soft lockup, hung task : lecture, couche,
 commande suivante, kdump.*
 
 **Réponse attendue**
@@ -734,18 +769,19 @@ service `kdump-tools`/`kdump` actif, un test `echo c > /proc/sysrq-trigger`
 sur un snapshot, et de la place dans `/var/crash`. `kernel.panic=10` pour
 redémarrer seul ensuite.
 
-::: pourquoi
-Le fil conducteur : le journal noyau nomme une **couche**, pas un coupable.
-Le processus cité dans un OOM est la victime choisie, pas forcément la fuite ;
-celui du soft lockup est celui qui avait le CPU ; celui du hung task est celui
-qui attendait. La commande suivante remonte toujours d'une couche : du
-processus vers la mémoire, du système de fichiers vers le disque, de la VM
-vers l'hôte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le fil conducteur : le journal noyau nomme une **couche**, pas un coupable.
+> Le processus cité dans un OOM est la victime choisie, pas forcément la fuite ;
+> celui du soft lockup est celui qui avait le CPU ; celui du hung task est celui
+> qui attendait. La commande suivante remonte toujours d'une couche : du
+> processus vers la mémoire, du système de fichiers vers le disque, de la VM
+> vers l'hôte.
 
 ---
 
-**QO9.8** — *Pourquoi l'heure d'une VM dérive, et ce que cinq minutes cassent.*
+<a id="qo9-8"></a>**[QO9.8](README.md#qo9-8)** — *Pourquoi l'heure d'une VM dérive, et ce que cinq minutes cassent.*
 
 **Réponse attendue**
 
@@ -782,18 +818,19 @@ journaux entre machines ; `make` et les *builds* (« clock skew detected ») ;
 les bases répliquées et les *leases* Kubernetes/etcd ; `cron` qui saute ou
 double une exécution lors d'un step.
 
-::: pourquoi
-Le point d'entretien : « pourquoi ne pas juste faire `date -s` ? » Parce
-qu'un **saut** en arrière casse tout ce qui suppose un temps monotone (bases
-de données, `cron`, `systemd` timers, journaux) et qu'un saut en avant fait
-expirer des baux et des sessions. chrony *slew* pour rester continu, et ne
-saute que quand l'écart rendrait le slew absurde. Dans une VM, il faut en
-plus une source : le service ne devine rien, il compare.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point d'entretien : « pourquoi ne pas juste faire `date -s` ? » Parce
+> qu'un **saut** en arrière casse tout ce qui suppose un temps monotone (bases
+> de données, `cron`, `systemd` timers, journaux) et qu'un saut en avant fait
+> expirer des baux et des sessions. chrony *slew* pour rester continu, et ne
+> saute que quand l'écart rendrait le slew absurde. Dans une VM, il faut en
+> plus une source : le service ne devine rien, il compare.
 
 ---
 
-**QO9.9** — *Monolithique, eBPF, live patching, temps réel en deux minutes.*
+<a id="qo9-9"></a>**[QO9.9](README.md#qo9-9)** — *Monolithique, eBPF, live patching, temps réel en deux minutes.*
 
 **Réponse attendue**
 
@@ -828,19 +865,20 @@ plus une source : le service ne devine rien, il compare.
   Pro), Rocky/RHEL `kernel-rt`. Ops : `uname -v` contient `PREEMPT_RT`,
   `chrt` fixe les priorités temps réel, et un serveur web n'en a aucun besoin.
 
-::: pourquoi
-Le jury attend surtout que tu distingues **où** s'exécute le code (module =
-ring 0 sans filet, eBPF = ring 0 avec vérificateur, live patch = remplacement
-de fonctions noyau) et **ce que ça change pour l'exploitation** (risque de
-panic, besoin de reboot, coût d'observation). Une réponse qui cite `bpftrace`
-en une ligne vaut plus qu'une théorie sur les micro-noyaux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le jury attend surtout que tu distingues **où** s'exécute le code (module =
+> ring 0 sans filet, eBPF = ring 0 avec vérificateur, live patch = remplacement
+> de fonctions noyau) et **ce que ça change pour l'exploitation** (risque de
+> panic, besoin de reboot, coût d'observation). Une réponse qui cite `bpftrace`
+> en une ligne vaut plus qu'une théorie sur les micro-noyaux.
 
 ---
 
 ## 9.5 Exercices guidés
 
-**E9.1** — *Compter les appels système d'un `ls -l /etc`, top 5, et les
+<a id="e9-1"></a>**[E9.1](README.md#e9-1)** — *Compter les appels système d'un `ls -l /etc`, top 5, et les
 fichiers réellement ouverts.*
 
 ```bash
@@ -861,22 +899,23 @@ syscall`) :
   0.00    0.000000           0        10           fstat
 ```
 
-::: pourquoi
-`-o fichier` sépare la sortie de `strace` de celle de `ls` (par défaut,
-`strace` écrit sur stderr, mêlé aux erreurs de `ls`). `ls -l` fait un `statx` (le successeur de `lstat`, utilisé par coreutils ≥ 8.32)
-par entrée : c'est l'appel dominant, et c'est ce qui rend `ls -l` lent sur un
-NFS ou un répertoire de 100 000 fichiers — un aller-retour noyau par nom.
-
-`readdir` et `printf` n'y sont pas : ce sont des fonctions de la libc.
-`readdir` consomme le tampon rempli par `getdents64` ; `printf` remplit un
-tampon vidé par `write`. `-e trace=openat` filtre à la source (moins de bruit
-que `grep`), et `ENOENT` élimine les tentatives : la libc essaie plusieurs
-chemins pour les bibliothèques et les locales avant de trouver le bon.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-o fichier` sépare la sortie de `strace` de celle de `ls` (par défaut,
+> `strace` écrit sur stderr, mêlé aux erreurs de `ls`). `ls -l` fait un `statx` (le successeur de `lstat`, utilisé par coreutils ≥ 8.32)
+> par entrée : c'est l'appel dominant, et c'est ce qui rend `ls -l` lent sur un
+> NFS ou un répertoire de 100 000 fichiers — un aller-retour noyau par nom.
+>
+> `readdir` et `printf` n'y sont pas : ce sont des fonctions de la libc.
+> `readdir` consomme le tampon rempli par `getdents64` ; `printf` remplit un
+> tampon vidé par `write`. `-e trace=openat` filtre à la source (moins de bruit
+> que `grep`), et `ENOENT` élimine les tentatives : la libc essaie plusieurs
+> chemins pour les bibliothèques et les locales avant de trouver le bon.
 
 ---
 
-**E9.2** — *`sleep 300 &` : appel bloquant, fonction noyau, état ; comparer
+<a id="e9-2"></a>**[E9.2](README.md#e9-2)** — *`sleep 300 &` : appel bloquant, fonction noyau, état ; comparer
 avec `yes`.*
 
 ```bash
@@ -891,23 +930,24 @@ grep State /proc/$Y/status       # State:  R (running)
 kill $P $Y
 ```
 
-::: pourquoi
-`sleep` est dans `clock_nanosleep` (230 sur x86_64) : il a demandé au noyau
-d'être réveillé plus tard, et dort en `S` (interruptible : un signal le
-réveille). `wchan` (*wait channel*) donne la fonction noyau d'attente,
-`hrtimer_nanosleep` : c'est le même fichier que `ps -o wchan` lit.
-
-`yes` alterne entre espace utilisateur (construire le tampon) et `write`
-(1) : selon l'instant, `syscall` affiche `running` ou `1 0x1 ...`. Il est en
-`R`. Un processus en `D` afficherait un numéro d'appel (souvent `0` read,
-`1` write, `74` fsync, `257` openat) et un `wchan` de type `io_schedule`,
-`wait_on_page_bit`, `nfs_wait_bit_killable` : c'est ainsi qu'on sait **où**
-il est bloqué sans `strace`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `sleep` est dans `clock_nanosleep` (230 sur x86_64) : il a demandé au noyau
+> d'être réveillé plus tard, et dort en `S` (interruptible : un signal le
+> réveille). `wchan` (*wait channel*) donne la fonction noyau d'attente,
+> `hrtimer_nanosleep` : c'est le même fichier que `ps -o wchan` lit.
+>
+> `yes` alterne entre espace utilisateur (construire le tampon) et `write`
+> (1) : selon l'instant, `syscall` affiche `running` ou `1 0x1 ...`. Il est en
+> `R`. Un processus en `D` afficherait un numéro d'appel (souvent `0` read,
+> `1` write, `74` fsync, `257` openat) et un `wchan` de type `io_schedule`,
+> `wait_on_page_bit`, `nfs_wait_bit_killable` : c'est ainsi qu'on sait **où**
+> il est bloqué sans `strace`.
 
 ---
 
-**E9.3** — *Provenance de chaque paramètre de `/proc/cmdline`.*
+<a id="e9-3"></a>**[E9.3](README.md#e9-3)** — *Provenance de chaque paramètre de `/proc/cmdline`.*
 
 ```bash
 cat /proc/cmdline
@@ -925,22 +965,23 @@ grep -E '^\s+linux' /boot/grub/grub.cfg | head -2
 | `quiet` / `splash` | `GRUB_CMDLINE_LINUX_DEFAULT` | masque les messages |
 | `console=` | `grub.d/50-cloudimg-settings.cfg` si présent | console série |
 
-::: pourquoi
-Trois provenances : ce que **GRUB** ajoute lui-même (`BOOT_IMAGE`), ce que
-le script `/etc/grub.d/10_linux` génère (`root=`, `ro`, et l'entrée
-*recovery* avec `single` ou `recovery nomodeset`), et ce que tu écris dans
-`GRUB_CMDLINE_LINUX` (toutes les entrées) ou `GRUB_CMDLINE_LINUX_DEFAULT`
-(entrées normales). Le `root=` est décidé par `grub-mkconfig` selon
-`GRUB_DISABLE_LINUX_UUID` : `/dev/mapper/...` pour LVM, `UUID=` sinon.
-
-`/etc/default/grub.d/*.cfg` est propre à Debian/Ubuntu ; le `grep -r` sur ce
-répertoire est la commande à retenir avant tout diagnostic « mon paramètre
-n'est pas appliqué ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois provenances : ce que **GRUB** ajoute lui-même (`BOOT_IMAGE`), ce que
+> le script `/etc/grub.d/10_linux` génère (`root=`, `ro`, et l'entrée
+> *recovery* avec `single` ou `recovery nomodeset`), et ce que tu écris dans
+> `GRUB_CMDLINE_LINUX` (toutes les entrées) ou `GRUB_CMDLINE_LINUX_DEFAULT`
+> (entrées normales). Le `root=` est décidé par `grub-mkconfig` selon
+> `GRUB_DISABLE_LINUX_UUID` : `/dev/mapper/...` pour LVM, `UUID=` sinon.
+>
+> `/etc/default/grub.d/*.cfg` est propre à Debian/Ubuntu ; le `grep -r` sur ce
+> répertoire est la commande à retenir avant tout diagnostic « mon paramètre
+> n'est pas appliqué ».
 
 ---
 
-**E9.4** — *BIOS ou UEFI, par deux moyens ; ESP ou emplacement GRUB.*
+<a id="e9-4"></a>**[E9.4](README.md#e9-4)** — *BIOS ou UEFI, par deux moyens ; ESP ou emplacement GRUB.*
 
 ```bash
 [ -d /sys/firmware/efi ] && echo UEFI || echo BIOS
@@ -956,23 +997,24 @@ lsblk -o NAME,SIZE,PARTTYPENAME /dev/sda | grep -i 'bios boot'
 sudo dd if=/dev/sda bs=512 count=1 2>/dev/null | strings | grep -i grub
 ```
 
-::: pourquoi
-`/sys/firmware/efi` n'existe que si le noyau a été démarré par un firmware
-UEFI (les *runtime services* sont exposés). Le second moyen : `dmesg` affiche
-`efi: EFI v2.70 by EDK II` avec OVMF, ou `BIOS-provided physical RAM map`
-seul en SeaBIOS. `efibootmgr -v` lit la NVRAM : `BootCurrent`, `BootOrder`,
-et chaque entrée avec son chemin `\EFI\ubuntu\shimx64.efi`.
-
-Sur Proxmox, une VM créée avec les défauts est en **SeaBIOS** : pas d'ESP,
-GRUB (`boot.img`, 440 octets) dans le MBR et `core.img` dans la partition
-*BIOS boot* de 1 Mo créée par l'installeur Ubuntu sur un disque GPT. La
-chaîne `strings` du premier secteur montre `GRUB` et le message d'erreur
-`Geom` / `Hard Disk` / `Read` / `Error` embarqué dans `boot.img`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `/sys/firmware/efi` n'existe que si le noyau a été démarré par un firmware
+> UEFI (les *runtime services* sont exposés). Le second moyen : `dmesg` affiche
+> `efi: EFI v2.70 by EDK II` avec OVMF, ou `BIOS-provided physical RAM map`
+> seul en SeaBIOS. `efibootmgr -v` lit la NVRAM : `BootCurrent`, `BootOrder`,
+> et chaque entrée avec son chemin `\EFI\ubuntu\shimx64.efi`.
+>
+> Sur Proxmox, une VM créée avec les défauts est en **SeaBIOS** : pas d'ESP,
+> GRUB (`boot.img`, 440 octets) dans le MBR et `core.img` dans la partition
+> *BIOS boot* de 1 Mo créée par l'installeur Ubuntu sur un disque GPT. La
+> chaîne `strings` du premier secteur montre `GRUB` et le message d'erreur
+> `Geom` / `Hard Disk` / `Read` / `Error` embarqué dans `boot.img`.
 
 ---
 
-**E9.5** — *Contenu de l'initramfs, modules, taille, `initramfs.conf`.*
+<a id="e9-5"></a>**[E9.5](README.md#e9-5)** — *Contenu de l'initramfs, modules, taille, `initramfs.conf`.*
 
 ```bash
 K=$(uname -r)
@@ -993,23 +1035,24 @@ BUSYBOX=auto
 COMPRESS=zstd
 ```
 
-::: pourquoi
-L'initrd fait cinq fois le noyau parce que `MODULES=most` y met tous les
-pilotes de stockage, réseau, USB, et le microcode CPU (`kernel/x86/microcode`
-en tête de l'archive, non compressé — d'où `unmkinitramfs` qui produit deux
-répertoires `early/` et `main/`). `.ko.zst` : les modules d'Ubuntu 24.04 sont
-compressés individuellement en zstd, comme l'archive.
-
-Le nombre de `.ko` (plus de 1 000 avec `most`, une cinquantaine avec `dep`)
-est la mesure du compromis. Sur une VM Proxmox jamais migrée, `MODULES=dep`
-diviserait l'initrd par trois et gagnerait une seconde au boot ; sur un
-modèle cloné vers des hyperviseurs différents, c'est un risque de
-`Unable to mount root fs`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'initrd fait cinq fois le noyau parce que `MODULES=most` y met tous les
+> pilotes de stockage, réseau, USB, et le microcode CPU (`kernel/x86/microcode`
+> en tête de l'archive, non compressé — d'où `unmkinitramfs` qui produit deux
+> répertoires `early/` et `main/`). `.ko.zst` : les modules d'Ubuntu 24.04 sont
+> compressés individuellement en zstd, comme l'archive.
+>
+> Le nombre de `.ko` (plus de 1 000 avec `most`, une cinquantaine avec `dep`)
+> est la mesure du compromis. Sur une VM Proxmox jamais migrée, `MODULES=dep`
+> diviserait l'initrd par trois et gagnerait une seconde au boot ; sur un
+> modèle cloné vers des hyperviseurs différents, c'est un risque de
+> `Unable to mount root fs`.
 
 ---
 
-**E9.6** — *Temps de boot, dix unités lentes, chaîne critique, `boot.svg`.*
+<a id="e9-6"></a>**[E9.6](README.md#e9-6)** — *Temps de boot, dix unités lentes, chaîne critique, `boot.svg`.*
 
 ```bash
 systemd-analyze
@@ -1024,25 +1067,26 @@ Startup finished in 3.212s (firmware) + 1.802s (loader) + 4.118s (kernel)
 multi-user.target reached after 9.601s in userspace.
 ```
 
-::: pourquoi
-`firmware` et `loader` n'existent qu'en UEFI (le firmware transmet les
-horodatages) ; en BIOS la ligne commence à `kernel`. `blame` donne le temps
-**propre** de chaque unité, trié, mais deux unités parallèles ne s'additionnent
-pas ; `critical-chain` donne le chemin le plus long jusqu'à la cible, avec
-`@` (moment d'activation) et `+` (durée). C'est lui qu'on lit pour attaquer un
-boot lent : on ne gagne rien à accélérer une unité hors chemin critique.
-
-Sur une VM Ubuntu Server typique, les coupables sont `snapd.seeded.service`,
-`cloud-init` (quatre unités), `systemd-networkd-wait-online.service` (attend
-un lien, 2 min si une interface configurée n'a pas de câble), et
-`apt-daily`. `plot` produit un diagramme de Gantt SVG à ouvrir dans un
-navigateur (copie-le via `scp`) : les barres rouges sont les unités actives,
-la ligne pointillée la cible.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `firmware` et `loader` n'existent qu'en UEFI (le firmware transmet les
+> horodatages) ; en BIOS la ligne commence à `kernel`. `blame` donne le temps
+> **propre** de chaque unité, trié, mais deux unités parallèles ne s'additionnent
+> pas ; `critical-chain` donne le chemin le plus long jusqu'à la cible, avec
+> `@` (moment d'activation) et `+` (durée). C'est lui qu'on lit pour attaquer un
+> boot lent : on ne gagne rien à accélérer une unité hors chemin critique.
+>
+> Sur une VM Ubuntu Server typique, les coupables sont `snapd.seeded.service`,
+> `cloud-init` (quatre unités), `systemd-networkd-wait-online.service` (attend
+> un lien, 2 min si une interface configurée n'a pas de câble), et
+> `apt-daily`. `plot` produit un diagramme de Gantt SVG à ouvrir dans un
+> navigateur (copie-le via `scp`) : les barres rouges sont les unités actives,
+> la ligne pointillée la cible.
 
 ---
 
-**E9.7** — *Inventaire des noyaux et capacité de `/boot`.*
+<a id="e9-7"></a>**[E9.7](README.md#e9-7)** — *Inventaire des noyaux et capacité de `/boot`.*
 
 ```bash
 uname -r
@@ -1061,23 +1105,24 @@ ii  linux-image-generic          6.8.0-52.53
 95M  total
 ```
 
-::: pourquoi
-Un noyau Ubuntu occupe dans `/boot` : `vmlinuz` (14 Mo), `initrd.img`
-(70–140 Mo), `System.map` (8 Mo), `config` (280 Ko). Avec 2 Go, on loge une
-quinzaine de versions ; avec le `/boot` de 1 Go des anciennes installations,
-six ou sept — et `apt` n'installe **jamais** en remplaçant : il ajoute une
-version, garde la précédente, et `autoremove` ne purge que celles qui ne sont
-ni courante, ni la plus récente, ni la précédente. Trois versions à 140 Mo
-d'initrd tenaient mal dans 1 Go : c'est la panne BF9.1.
-
-`GRUB_DEFAULT=0` désigne la première entrée, donc le noyau le plus récent
-(`10_linux` trie par version décroissante). Le sous-menu *Advanced options*
-liste les autres et les entrées *recovery*.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un noyau Ubuntu occupe dans `/boot` : `vmlinuz` (14 Mo), `initrd.img`
+> (70–140 Mo), `System.map` (8 Mo), `config` (280 Ko). Avec 2 Go, on loge une
+> quinzaine de versions ; avec le `/boot` de 1 Go des anciennes installations,
+> six ou sept — et `apt` n'installe **jamais** en remplaçant : il ajoute une
+> version, garde la précédente, et `autoremove` ne purge que celles qui ne sont
+> ni courante, ni la plus récente, ni la précédente. Trois versions à 140 Mo
+> d'initrd tenaient mal dans 1 Go : c'est la panne BF9.1.
+>
+> `GRUB_DEFAULT=0` désigne la première entrée, donc le noyau le plus récent
+> (`10_linux` trie par version décroissante). Le sous-menu *Advanced options*
+> liste les autres et les entrées *recovery*.
 
 ---
 
-**E9.8** — *Du périphérique au pilote via `/sys`, `modinfo`, modules virtio.*
+<a id="e9-8"></a>**[E9.8](README.md#e9-8)** — *Du périphérique au pilote via `/sys`, `modinfo`, modules virtio.*
 
 ```bash
 basename "$(readlink /sys/class/net/ens18/device/driver)"       # virtio_net
@@ -1099,25 +1144,26 @@ virtio_pci_modern_dev  20480  1 virtio_pci
 virtio_balloon         28672  0
 ```
 
-::: pourquoi
-`/sys/class/net/ens18/device` est un lien vers le périphérique PCI/virtio, et
-`driver` un lien vers le pilote qui l'a réclamé : c'est la **vérité** du
-noyau, contrairement à `lsmod` qui ne dit pas qui pilote quoi. Pour un disque,
-la chaîne est plus longue : `sda` est piloté par `sd` (générique SCSI), dont
-le parent est la cible SCSI, puis l'hôte SCSI, puis le périphérique virtio dont le pilote est `virtio_scsi` (trois niveaux au-dessus de `device`).
-
-`modalias` est la clé du chargement automatique : udev le lit, `modprobe`
-le résout via `/lib/modules/$(uname -r)/modules.alias` (généré par `depmod`).
-`signer: Build time autogenerated kernel key` sur Ubuntu : chaque noyau est
-signé avec une clé jetable générée à la compilation, et les modules tiers
-(DKMS) avec la clé MOK de la machine. `Used by` compte les références : 2 pour
-`virtio_scsi` = deux disques ; un module à 0 se décharge, un module utilisé
-non (`rmmod: Module is in use`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `/sys/class/net/ens18/device` est un lien vers le périphérique PCI/virtio, et
+> `driver` un lien vers le pilote qui l'a réclamé : c'est la **vérité** du
+> noyau, contrairement à `lsmod` qui ne dit pas qui pilote quoi. Pour un disque,
+> la chaîne est plus longue : `sda` est piloté par `sd` (générique SCSI), dont
+> le parent est la cible SCSI, puis l'hôte SCSI, puis le périphérique virtio dont le pilote est `virtio_scsi` (trois niveaux au-dessus de `device`).
+>
+> `modalias` est la clé du chargement automatique : udev le lit, `modprobe`
+> le résout via `/lib/modules/$(uname -r)/modules.alias` (généré par `depmod`).
+> `signer: Build time autogenerated kernel key` sur Ubuntu : chaque noyau est
+> signé avec une clé jetable générée à la compilation, et les modules tiers
+> (DKMS) avec la clé MOK de la machine. `Used by` compte les références : 2 pour
+> `virtio_scsi` = deux disques ; un module à 0 se décharge, un module utilisé
+> non (`rmmod: Module is in use`).
 
 ---
 
-**E9.9** — *`udevadm monitor` pendant le chargement de `dummy`, paramètre,
+<a id="e9-9"></a>**[E9.9](README.md#e9-9)** — *`udevadm monitor` pendant le chargement de `dummy`, paramètre,
 décharge, dépendances, propriétés stables de `sda`.*
 
 ```bash
@@ -1134,23 +1180,24 @@ modinfo -F parm dummy
 # numdummies:Number of dummy pseudo devices (int)
 ```
 
-::: pourquoi
-Les paramètres d'un module se passent à `modprobe` (`nom=valeur`) ou dans
-`/etc/modprobe.d/` (`options nom nom=valeur`) ; ils sont lus **au
-chargement** et exposés en lecture (parfois en écriture) dans
-`/sys/module/<m>/parameters/`. Pour changer `numdummies`, il faut décharger
-et recharger : un module en usage (interface montée avec une adresse)
-refuse `modprobe -r`. Les paramètres d'un module compilé en dur (`=y`) se
-passent sur la ligne du noyau : `dummy.numdummies=2`.
-
-`modules.dep` est la table produite par `depmod -a` à partir des symboles
-importés/exportés de chaque `.ko` : `modprobe` la lit pour charger les
-dépendances d'abord (ligne vide après `:` pour `dummy` : aucune). Un `.ko`
-copié à la main sans `depmod` est invisible pour `modprobe`
-(`Module not found`), même s'il est au bon endroit — c'est l'erreur classique
-après un pilote compilé maison. `insmod` charge un fichier sans résoudre les
-dépendances ; on ne s'en sert que pour tester.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les paramètres d'un module se passent à `modprobe` (`nom=valeur`) ou dans
+> `/etc/modprobe.d/` (`options nom nom=valeur`) ; ils sont lus **au
+> chargement** et exposés en lecture (parfois en écriture) dans
+> `/sys/module/<m>/parameters/`. Pour changer `numdummies`, il faut décharger
+> et recharger : un module en usage (interface montée avec une adresse)
+> refuse `modprobe -r`. Les paramètres d'un module compilé en dur (`=y`) se
+> passent sur la ligne du noyau : `dummy.numdummies=2`.
+>
+> `modules.dep` est la table produite par `depmod -a` à partir des symboles
+> importés/exportés de chaque `.ko` : `modprobe` la lit pour charger les
+> dépendances d'abord (ligne vide après `:` pour `dummy` : aucune). Un `.ko`
+> copié à la main sans `depmod` est invisible pour `modprobe`
+> (`Module not found`), même s'il est au bon endroit — c'est l'erreur classique
+> après un pilote compilé maison. `insmod` charge un fichier sans résoudre les
+> dépendances ; on ne s'en sert que pour tester.
 
 Terminal 1 :
 
@@ -1179,24 +1226,25 @@ udevadm info -q property -n /dev/sda | grep -E \
   '^(ID_SERIAL|ID_PATH|ID_WWN|ID_BUS|ID_MODEL|DEVNAME|MAJOR|MINOR)='
 ```
 
-::: pourquoi
-Chaque ligne `KERNEL` est un uevent brut émis par le noyau ; la ligne `UDEV`
-correspondante est émise par `systemd-udevd` **après** avoir traité les règles.
-Le délai entre les deux est le temps de traitement (règles, `blkid`,
-`scsi_id`). Un uevent `KERNEL` sans `UDEV` qui suit = udevd bloqué ou une
-règle `RUN+=` qui ne rend pas la main (`udevadm settle - -timeout=5` échoue).
-
-Propriétés stables de `sda` sur Proxmox : `ID_SERIAL=0QEMU_QEMU_HARDDISK_drive-scsi0`
-(le nom du disque dans la config de la VM), `ID_PATH=pci-0000:05:00.0-scsi-0:0:0:0`
-(position sur le bus), `ID_MODEL=QEMU_HARDDISK`. Non stables : `DEVNAME`,
-`MAJOR`/`MINOR`, `ID_PATH` si le contrôleur change de slot PCI. Le lien
-`/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0` est donc la clé de
-choix pour un `fstab` ou une règle — après l'UUID du système de fichiers.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque ligne `KERNEL` est un uevent brut émis par le noyau ; la ligne `UDEV`
+> correspondante est émise par `systemd-udevd` **après** avoir traité les règles.
+> Le délai entre les deux est le temps de traitement (règles, `blkid`,
+> `scsi_id`). Un uevent `KERNEL` sans `UDEV` qui suit = udevd bloqué ou une
+> règle `RUN+=` qui ne rend pas la main (`udevadm settle - -timeout=5` échoue).
+>
+> Propriétés stables de `sda` sur Proxmox : `ID_SERIAL=0QEMU_QEMU_HARDDISK_drive-scsi0`
+> (le nom du disque dans la config de la VM), `ID_PATH=pci-0000:05:00.0-scsi-0:0:0:0`
+> (position sur le bus), `ID_MODEL=QEMU_HARDDISK`. Non stables : `DEVNAME`,
+> `MAJOR`/`MINOR`, `ID_PATH` si le contrôleur change de slot PCI. Le lien
+> `/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0` est donc la clé de
+> choix pour un `fstab` ou une règle — après l'UUID du système de fichiers.
 
 ---
 
-**E9.10** — *`/proc` uniquement : CPU, mémoire, interruptions, et `sshd`.*
+<a id="e9-10"></a>**[E9.10](README.md#e9-10)** — *`/proc` uniquement : CPU, mémoire, interruptions, et `sshd`.*
 
 ```bash
 grep -c ^processor /proc/cpuinfo
@@ -1211,26 +1259,27 @@ tr '\0' '\n' < /proc/$P/environ | head -5
 readlink /proc/$P/exe /proc/$P/cwd
 ```
 
-::: pourquoi
-Le drapeau `hypervisor` dans `flags` est positionné par le noyau invité quand
-il détecte un hyperviseur via CPUID : c'est le test le plus simple « suis-je
-dans une VM » (avec `systemd-detect-virt`). `Dirty`/`Writeback` dans
-`meminfo` sont les pages modifiées pas encore écrites sur disque : c'est ce
-que `vm.dirty_ratio` plafonne, et ce qui rend un `sync` lent.
-
-`/proc/interrupts` ligne par IRQ, colonne par CPU : `virtio1-req.0` (disque),
-`virtio0-input.0`/`output.0` (réseau). Une ligne qui n'incrémente que sur
-`CPU0` signale une affinité d'interruption mal répartie (`irqbalance`). Pour
-`sshd`, `cgroup` prouve que systemd le gère (`system.slice/ssh.service`),
-`limits` donne les valeurs effectives héritées de l'unité (`LimitNOFILE`), et
-`exe` le binaire réel — avec ` (deleted)` en suffixe si le paquet a été mis à
-jour sans redémarrage du service : la façon fiable de détecter un service
-qui tourne sur un vieux binaire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le drapeau `hypervisor` dans `flags` est positionné par le noyau invité quand
+> il détecte un hyperviseur via CPUID : c'est le test le plus simple « suis-je
+> dans une VM » (avec `systemd-detect-virt`). `Dirty`/`Writeback` dans
+> `meminfo` sont les pages modifiées pas encore écrites sur disque : c'est ce
+> que `vm.dirty_ratio` plafonne, et ce qui rend un `sync` lent.
+>
+> `/proc/interrupts` ligne par IRQ, colonne par CPU : `virtio1-req.0` (disque),
+> `virtio0-input.0`/`output.0` (réseau). Une ligne qui n'incrémente que sur
+> `CPU0` signale une affinité d'interruption mal répartie (`irqbalance`). Pour
+> `sshd`, `cgroup` prouve que systemd le gère (`system.slice/ssh.service`),
+> `limits` donne les valeurs effectives héritées de l'unité (`LimitNOFILE`), et
+> `exe` le binaire réel — avec ` (deleted)` en suffixe si le paquet a été mis à
+> jour sans redémarrage du service : la façon fiable de détecter un service
+> qui tourne sur un vieux binaire.
 
 ---
 
-**E9.11** — *Deux réglages volatils de `/sys` : ordonnanceur de `sda`, puis
+<a id="e9-11"></a>**[E9.11](README.md#e9-11)** — *Deux réglages volatils de `/sys` : ordonnanceur de `sda`, puis
 transparent hugepages.*
 
 ```bash
@@ -1241,23 +1290,24 @@ echo mq-deadline | sudo tee /sys/block/sda/queue/scheduler
 cat /sys/block/sda/queue/rotational         # 1 (QEMU se déclare rotatif)
 ```
 
-::: pourquoi
-L'ordonnanceur E/S réordonne et fusionne les requêtes avant le périphérique.
-`mq-deadline` (défaut Ubuntu pour un disque SCSI) garantit une latence
-maximale par requête ; `bfq` répartit équitablement (postes de travail) ;
-`kyber` vise les SSD ; `none` transmet dans l'ordre, sans travail. Sur une
-VM, le « disque » est un fichier ou un LV sur l'hôte, qui a **déjà** son
-propre ordonnanceur et son propre cache : réordonner deux fois coûte du CPU
-pour rien, d'où `none` sur virtio, comme sur NVMe. C'est aussi ce qui explique
-que `ionice` (classes `idle`, `best-effort`) n'ait d'effet complet qu'avec `bfq` :
-`mq-deadline` ne gère que la classe (pas le niveau 0–7) depuis le noyau 5.14, et `none` ignore tout.
-
-`/sys` est un système de fichiers en mémoire, recréé à chaque boot : rien de
-ce qu'on y écrit ne survit. La persistance passe par une règle udev
-(`ATTR{queue/scheduler}="none"` — L9.4) ou par le paramètre noyau
-`elevator=` (obsolète, ignoré en multi-queue). Un `rotational=1` sur une VM
-est un mensonge de QEMU : le choix de l'ordonnanceur ne doit pas s'y fier.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordonnanceur E/S réordonne et fusionne les requêtes avant le périphérique.
+> `mq-deadline` (défaut Ubuntu pour un disque SCSI) garantit une latence
+> maximale par requête ; `bfq` répartit équitablement (postes de travail) ;
+> `kyber` vise les SSD ; `none` transmet dans l'ordre, sans travail. Sur une
+> VM, le « disque » est un fichier ou un LV sur l'hôte, qui a **déjà** son
+> propre ordonnanceur et son propre cache : réordonner deux fois coûte du CPU
+> pour rien, d'où `none` sur virtio, comme sur NVMe. C'est aussi ce qui explique
+> que `ionice` (classes `idle`, `best-effort`) n'ait d'effet complet qu'avec `bfq` :
+> `mq-deadline` ne gère que la classe (pas le niveau 0–7) depuis le noyau 5.14, et `none` ignore tout.
+>
+> `/sys` est un système de fichiers en mémoire, recréé à chaque boot : rien de
+> ce qu'on y écrit ne survit. La persistance passe par une règle udev
+> (`ATTR{queue/scheduler}="none"` — L9.4) ou par le paramètre noyau
+> `elevator=` (obsolète, ignoré en multi-queue). Un `rotational=1` sur une VM
+> est un mensonge de QEMU : le choix de l'ordonnanceur ne doit pas s'y fier.
 
 Transparent hugepages :
 
@@ -1290,25 +1340,26 @@ ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled'
 WantedBy=basic.target
 ```
 
-::: pourquoi
-Les THP font allouer des pages de 2 Mo au lieu de 4 Ko pour réduire les
-défauts de TLB : gain pour des calculs sur de grands tableaux, **perte** pour
-les bases de données et caches qui gèrent leur mémoire finement (Redis,
-MongoDB, PostgreSQL, Oracle exigent `never` ou `madvise`) : `khugepaged`
-compacte en arrière-plan, provoque des latences de dizaines de ms, et la
-mémoire est gaspillée par des pages de 2 Mo à moitié vides. `madvise` (défaut
-Ubuntu) ne les donne qu'aux programmes qui les demandent : c'est le bon
-compromis ; Rocky est à `always`, et `tuned` sait le changer par profil.
-
-Ce n'est pas un `sysctl` : `/sys/kernel/mm` n'est pas sous `/proc/sys`, donc
-pas de fichier `sysctl.d` possible. D'où les deux voies : paramètre noyau
-(appliqué avant tout processus, le plus propre) ou unité `oneshot` ordonnée
-avant `basic.target` pour passer avant les services.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les THP font allouer des pages de 2 Mo au lieu de 4 Ko pour réduire les
+> défauts de TLB : gain pour des calculs sur de grands tableaux, **perte** pour
+> les bases de données et caches qui gèrent leur mémoire finement (Redis,
+> MongoDB, PostgreSQL, Oracle exigent `never` ou `madvise`) : `khugepaged`
+> compacte en arrière-plan, provoque des latences de dizaines de ms, et la
+> mémoire est gaspillée par des pages de 2 Mo à moitié vides. `madvise` (défaut
+> Ubuntu) ne les donne qu'aux programmes qui les demandent : c'est le bon
+> compromis ; Rocky est à `always`, et `tuned` sait le changer par profil.
+>
+> Ce n'est pas un `sysctl` : `/sys/kernel/mm` n'est pas sous `/proc/sys`, donc
+> pas de fichier `sysctl.d` possible. D'où les deux voies : paramètre noyau
+> (appliqué avant tout processus, le plus propre) ou unité `oneshot` ordonnée
+> avant `basic.target` pour passer avant les services.
 
 ---
 
-**E9.12** — *Deux sysctl persistants, application, preuve, ordre de lecture.*
+<a id="e9-12"></a>**[E9.12](README.md#e9-12)** — *Deux sysctl persistants, application, preuve, ordre de lecture.*
 
 ```bash
 sudo tee /etc/sysctl.d/60-factura.conf >/dev/null <<'EOF'
@@ -1331,23 +1382,24 @@ net.core.somaxconn = 8192
 * Applying /etc/sysctl.conf ...
 ```
 
-::: pourquoi
-La sortie de `--system` **est** la preuve : chaque fichier dans l'ordre, et
-la valeur au moment de l'application. Si `swappiness` apparaissait encore
-sous `99-sysctl.conf` ou `/etc/sysctl.conf`, elle serait réécrite, et le
-`grep -rl` final le montrerait. Le rang `60` passe après les `10-*` d'Ubuntu
-(`10-kernel-hardening.conf`, `10-magic-sysrq.conf`, `10-ptrace.conf`…) et
-après `/usr/lib/sysctl.d/50-*` de systemd, avant `99-sysctl.conf`.
-
-`somaxconn` mérite une remarque : la valeur est lue par l'application au
-`listen()`. Après `sysctl --system`, nginx ou PostgreSQL tournent encore avec
-l'ancien backlog jusqu'à leur redémarrage. Un `sysctl` n'est pas toujours
-« immédiat » au sens de l'application.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La sortie de `--system` **est** la preuve : chaque fichier dans l'ordre, et
+> la valeur au moment de l'application. Si `swappiness` apparaissait encore
+> sous `99-sysctl.conf` ou `/etc/sysctl.conf`, elle serait réécrite, et le
+> `grep -rl` final le montrerait. Le rang `60` passe après les `10-*` d'Ubuntu
+> (`10-kernel-hardening.conf`, `10-magic-sysrq.conf`, `10-ptrace.conf`…) et
+> après `/usr/lib/sysctl.d/50-*` de systemd, avant `99-sysctl.conf`.
+>
+> `somaxconn` mérite une remarque : la valeur est lue par l'application au
+> `listen()`. Après `sysctl --system`, nginx ou PostgreSQL tournent encore avec
+> l'ancien backlog jusqu'à leur redémarrage. Un `sysctl` n'est pas toujours
+> « immédiat » au sens de l'application.
 
 ---
 
-**E9.13** — *Le paramètre absent : `nf_conntrack_max`.*
+<a id="e9-13"></a>**[E9.13](README.md#e9-13)** — *Le paramètre absent : `nf_conntrack_max`.*
 
 ```bash
 sysctl net.netfilter.nf_conntrack_max
@@ -1363,26 +1415,27 @@ systemctl list-dependencies --before systemd-modules-load.service | \
   grep sysctl                                       # systemd-sysctl.service
 ```
 
-::: pourquoi
-Le module enregistre ses clés dans `/proc/sys` au chargement ; avant, le
-fichier n'existe pas et `sysctl` le dit littéralement. Au boot, l'ordre est :
-`systemd-modules-load.service` (lit `modules-load.d`) **puis**
-`systemd-sysctl.service` — `After=systemd-modules-load.service` est déclaré dans cette dernière
-justement pour ce cas. Sans le premier fichier, le second échoue en silence
-au boot (visible seulement dans `journalctl -u systemd-sysctl -b`), et la
-machine tourne avec la valeur par défaut : sur 2 Go, 65 536 entrées, qu'un
-serveur web derrière un NAT remplit en quelques minutes de pic
-(`nf_conntrack: table full, dropping packet` dans `dmesg`, module 19).
-
-Sur une machine avec `ufw`/`nftables` actif, le module est chargé tôt par la
-première règle à état, et le piège ne se voit pas — jusqu'au jour où on
-désactive le pare-feu sur un serveur, et où la valeur n'est plus appliquée.
-Le fichier `modules-load.d` rend le comportement indépendant du pare-feu.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le module enregistre ses clés dans `/proc/sys` au chargement ; avant, le
+> fichier n'existe pas et `sysctl` le dit littéralement. Au boot, l'ordre est :
+> `systemd-modules-load.service` (lit `modules-load.d`) **puis**
+> `systemd-sysctl.service` — `After=systemd-modules-load.service` est déclaré dans cette dernière
+> justement pour ce cas. Sans le premier fichier, le second échoue en silence
+> au boot (visible seulement dans `journalctl -u systemd-sysctl -b`), et la
+> machine tourne avec la valeur par défaut : sur 2 Go, 65 536 entrées, qu'un
+> serveur web derrière un NAT remplit en quelques minutes de pic
+> (`nf_conntrack: table full, dropping packet` dans `dmesg`, module 19).
+>
+> Sur une machine avec `ufw`/`nftables` actif, le module est chargé tôt par la
+> première règle à état, et le piège ne se voit pas — jusqu'au jour où on
+> désactive le pare-feu sur un serveur, et où la valeur n'est plus appliquée.
+> Le fichier `modules-load.d` rend le comportement indépendant du pare-feu.
 
 ---
 
-**E9.14** — *Messages noyau filtrés, boot précédent, `printk`, SysRq `m`.*
+<a id="e9-14"></a>**[E9.14](README.md#e9-14)** — *Messages noyau filtrés, boot précédent, `printk`, SysRq `m`.*
 
 ```bash
 sudo dmesg -T --level=err,warn
@@ -1393,32 +1446,33 @@ sudo dmesg -T | tail -30             # "sysrq: Show Memory" puis le détail
 cat /proc/sys/kernel/sysrq           # 176
 ```
 
-::: pourquoi
-`dmesg` lit le tampon circulaire du noyau (*ring buffer*, taille fixée par
-`log_buf_len=` au boot, 256 Ko à quelques Mo ; `dmesg | head -1` montre s'il
-a déjà tourné quand il ne commence pas à `[0.000000]`). `journalctl -k`
-lit les mêmes messages **persistés** par journald, ce qui donne accès aux
-boots précédents (`-b -1`) — indispensable après un crash. `-T` traduit les
-secondes depuis le boot en heure lisible (approximative après une suspension).
-
-`kernel.printk` = quatre niveaux : ce qui va sur la **console** (4 = warning
-et plus grave ; `quiet` le baisse à 1), le niveau des messages sans niveau,
-le minimum autorisé pour la console, le défaut au boot. Monter le premier à 7
-fait tout apparaître sur la console série : utile pendant un débogage de boot,
-insupportable ensuite.
-
-SysRq : `176` = 128 (reboot/poweroff) + 32 (remonter en lecture seule) + 16
-(sync). `m` (état mémoire) n'est **pas** dans ce masque (il faut 8 =
-`dump`)… sauf que `/proc/sysrq-trigger` en tant que root ignore le masque —
-il ne s'applique qu'à la combinaison clavier. `t` liste toutes les tâches
-avec leur pile, `w` seulement les tâches bloquées : c'est **la** commande
-quand une machine a des `D` et qu'on ne sait pas pourquoi. `c` provoque un
-panic (test kdump), `b` redémarre sans rien synchroniser.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `dmesg` lit le tampon circulaire du noyau (*ring buffer*, taille fixée par
+> `log_buf_len=` au boot, 256 Ko à quelques Mo ; `dmesg | head -1` montre s'il
+> a déjà tourné quand il ne commence pas à `[0.000000]`). `journalctl -k`
+> lit les mêmes messages **persistés** par journald, ce qui donne accès aux
+> boots précédents (`-b -1`) — indispensable après un crash. `-T` traduit les
+> secondes depuis le boot en heure lisible (approximative après une suspension).
+>
+> `kernel.printk` = quatre niveaux : ce qui va sur la **console** (4 = warning
+> et plus grave ; `quiet` le baisse à 1), le niveau des messages sans niveau,
+> le minimum autorisé pour la console, le défaut au boot. Monter le premier à 7
+> fait tout apparaître sur la console série : utile pendant un débogage de boot,
+> insupportable ensuite.
+>
+> SysRq : `176` = 128 (reboot/poweroff) + 32 (remonter en lecture seule) + 16
+> (sync). `m` (état mémoire) n'est **pas** dans ce masque (il faut 8 =
+> `dump`)… sauf que `/proc/sysrq-trigger` en tant que root ignore le masque —
+> il ne s'applique qu'à la combinaison clavier. `t` liste toutes les tâches
+> avec leur pile, `w` seulement les tâches bloquées : c'est **la** commande
+> quand une machine a des `D` et qu'on ne sait pas pourquoi. `c` provoque un
+> panic (test kdump), `b` redémarre sans rien synchroniser.
 
 ---
 
-**E9.15** — *Heures système et matérielle, fuseau, source, synchronisation,
+<a id="e9-15"></a>**[E9.15](README.md#e9-15)** — *Heures système et matérielle, fuseau, source, synchronisation,
 services par défaut.*
 
 ```bash
@@ -1440,25 +1494,26 @@ System clock synchronized: yes
           RTC in local TZ: no
 ```
 
-::: pourquoi
-Ubuntu Server 24.04 livre `systemd-timesyncd` : un client SNTP minimal (une
-seule source à la fois, pas de serveur, pas de `chronyc`) — suffisant pour un
-poste, insuffisant pour un serveur qui veut plusieurs sources, du
-monitoring et servir d'autres machines. Rocky 9 livre `chrony`
-(`chronyd.service`). Installer `chrony` sur Ubuntu **désinstalle**
-`systemd-timesyncd` : les deux paquets fournissent `time-daemon` et se déclarent en conflit (`apt` l'annonce dans « REMOVED »).
-
-`current_clocksource` vaut `kvm-clock` dans une VM KVM : l'horloge est
-fournie par l'hôte via une page partagée (paravirtualisation), ce qui rend
-les lectures rapides et cohérentes… avec l'hôte. `/etc/adjtime` contient
-la dérive estimée du RTC, le dernier calage, et `UTC` ou `LOCAL` : sur un
-serveur, toujours `UTC` — `RTC in local TZ: yes` est un héritage du double
-boot Windows et casse le changement d'heure.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ubuntu Server 24.04 livre `systemd-timesyncd` : un client SNTP minimal (une
+> seule source à la fois, pas de serveur, pas de `chronyc`) — suffisant pour un
+> poste, insuffisant pour un serveur qui veut plusieurs sources, du
+> monitoring et servir d'autres machines. Rocky 9 livre `chrony`
+> (`chronyd.service`). Installer `chrony` sur Ubuntu **désinstalle**
+> `systemd-timesyncd` : les deux paquets fournissent `time-daemon` et se déclarent en conflit (`apt` l'annonce dans « REMOVED »).
+>
+> `current_clocksource` vaut `kvm-clock` dans une VM KVM : l'horloge est
+> fournie par l'hôte via une page partagée (paravirtualisation), ce qui rend
+> les lectures rapides et cohérentes… avec l'hôte. `/etc/adjtime` contient
+> la dérive estimée du RTC, le dernier calage, et `UTC` ou `LOCAL` : sur un
+> serveur, toujours `UTC` — `RTC in local TZ: yes` est un héritage du double
+> boot Windows et casse le changement d'heure.
 
 ---
 
-**E9.16** — *Trois niveaux de limite de fichiers, allocation, inotify.*
+<a id="e9-16"></a>**[E9.16](README.md#e9-16)** — *Trois niveaux de limite de fichiers, allocation, inotify.*
 
 ```bash
 sysctl -n fs.file-max            # système : 9223372036854775807 ou ~ 200000
@@ -1473,32 +1528,33 @@ sudo find /proc/[0-9]*/fdinfo -type f 2>/dev/null | \
   {for (p in a) print a[p], p}' | sort -rn | head -3
 ```
 
-::: pourquoi
-Trois plafonds, trois messages différents. `fs.file-max` : total de
-descripteurs ouvrables sur la machine (systemd le relève à 2⁶³−1) ;
-dépassé, le noyau écrit `VFS: file-max limit reached` dans `dmesg` et tout
-le monde est affecté. `fs.nr_open` : ce qu'un processus peut demander au
-maximum (`ulimit -n` ne peut pas le dépasser : `ulimit -n 2000000` échoue).
-`ulimit -n` / `RLIMIT_NOFILE` : la limite **du processus**, celle qui produit
-`EMFILE: Too many open files` dans l'application — 99 % des cas, réglée par
-`LimitNOFILE=` dans l'unité (module 08). `file-nr` donne alloués, libres
-(toujours 0 sur les noyaux récents), maximum.
-
-inotify a ses propres compteurs, **par utilisateur** : `max_user_instances`
-(128 : nombre de `inotify_init`, ce que consomment les IDE, les agents de
-supervision, `systemd --user`) et `max_user_watches` (chemins surveillés).
-Dépassés, l'erreur est `ENOSPC` ou… `EMFILE: Too many open files` pour les
-instances — le message trompe, `ulimit -n` n'y changera rien, et c'est
-`sysctl fs.inotify.max_user_instances=512` qui répare. Le `find` sur `fdinfo`
-compte les lignes `inotify wd:` de chaque descripteur : c'est la seule façon
-de savoir **qui** consomme les watches.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois plafonds, trois messages différents. `fs.file-max` : total de
+> descripteurs ouvrables sur la machine (systemd le relève à 2⁶³−1) ;
+> dépassé, le noyau écrit `VFS: file-max limit reached` dans `dmesg` et tout
+> le monde est affecté. `fs.nr_open` : ce qu'un processus peut demander au
+> maximum (`ulimit -n` ne peut pas le dépasser : `ulimit -n 2000000` échoue).
+> `ulimit -n` / `RLIMIT_NOFILE` : la limite **du processus**, celle qui produit
+> `EMFILE: Too many open files` dans l'application — 99 % des cas, réglée par
+> `LimitNOFILE=` dans l'unité (module 08). `file-nr` donne alloués, libres
+> (toujours 0 sur les noyaux récents), maximum.
+>
+> inotify a ses propres compteurs, **par utilisateur** : `max_user_instances`
+> (128 : nombre de `inotify_init`, ce que consomment les IDE, les agents de
+> supervision, `systemd --user`) et `max_user_watches` (chemins surveillés).
+> Dépassés, l'erreur est `ENOSPC` ou… `EMFILE: Too many open files` pour les
+> instances — le message trompe, `ulimit -n` n'y changera rien, et c'est
+> `sysctl fs.inotify.max_user_instances=512` qui répare. Le `find` sur `fdinfo`
+> compte les lignes `inotify wd:` de chaque descripteur : c'est la seule façon
+> de savoir **qui** consomme les watches.
 
 ---
 
 ## 9.6 Labs
 
-### **L9.1** — *Documenter le démarrage de `lab-adm` et ouvrir une console de
+### <a id="l9-1"></a>**[L9.1](README.md#l9-1)** — *Documenter le démarrage de `lab-adm` et ouvrir une console de
 secours.*
 
 **1. Mode de démarrage**
@@ -1599,49 +1655,51 @@ Mot de passe perdu : e ; init=/bin/bash ; mount -o remount,rw / ; passwd ;
   sync ; exec /sbin/init.
 ```
 
-::: pourquoi
-**Pourquoi `grub.d/90-*.cfg` plutôt qu'éditer `/etc/default/grub`.** Le
-fichier principal appartient au paquet `grub-common` ; une mise à jour peut
-proposer de le remplacer. Un fichier séparé, à rang élevé, est lu après et
-gagne : c'est la même logique que les drop-ins systemd et que `sysctl.d`.
-Le rang 90 passe après `50-cloudimg-settings.cfg` d'une image cloud.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi `grub.d/90-*.cfg` plutôt qu'éditer `/etc/default/grub`.** Le
+> fichier principal appartient au paquet `grub-common` ; une mise à jour peut
+> proposer de le remplacer. Un fichier séparé, à rang élevé, est lu après et
+> gagne : c'est la même logique que les drop-ins systemd et que `sysctl.d`.
+> Le rang 90 passe après `50-cloudimg-settings.cfg` d'une image cloud.
+>
+> **Deux `console=`.** Le noyau écrit ses messages sur **toutes** les consoles
+> listées, mais `/dev/console` (celle qui reçoit les entrées, et que systemd
+> utilise pour `sulogin`) est la **dernière**. `console=tty0 console=ttyS0`
+> donne donc la série comme console principale tout en gardant l'écran noVNC
+> informé. systemd voit `console=ttyS0` et démarre tout seul
+> `serial-getty@ttyS0.service` (générateur `systemd-getty-generator`) : pas
+> d'unité à activer.
+>
+> **`rescue.target` contre `init=/bin/bash`.** La cible *rescue* démarre
+> systemd, monte les systèmes de fichiers, puis lance `sulogin`, qui demande le
+> mot de passe root. Sur Ubuntu, root est verrouillé : `sulogin` refuse. C'est
+> pratique sur Rocky (root a un mot de passe) et inutile sur Ubuntu sans
+> `--force`. `init=/bin/bash` court-circuite : le noyau lance bash comme PID 1,
+> sans systemd, sans PAM, racine en lecture seule — d'où le `remount,rw`. On en
+> sort par `exec /sbin/init` (bash est remplacé par systemd, le boot continue
+> normalement) ; `reboot` simple échouerait parce qu'il parle à un systemd
+> absent.
+>
+> **`GRUB_TERMINAL="serial console"`** fait afficher le menu **sur les deux**
+> sorties et accepter les touches des deux : sans ça, la console série voit le
+> noyau démarrer mais jamais le menu, et l'étape 5 est impossible depuis
+> `qm terminal`.
 
-**Deux `console=`.** Le noyau écrit ses messages sur **toutes** les consoles
-listées, mais `/dev/console` (celle qui reçoit les entrées, et que systemd
-utilise pour `sulogin`) est la **dernière**. `console=tty0 console=ttyS0`
-donne donc la série comme console principale tout en gardant l'écran noVNC
-informé. systemd voit `console=ttyS0` et démarre tout seul
-`serial-getty@ttyS0.service` (générateur `systemd-getty-generator`) : pas
-d'unité à activer.
-
-**`rescue.target` contre `init=/bin/bash`.** La cible *rescue* démarre
-systemd, monte les systèmes de fichiers, puis lance `sulogin`, qui demande le
-mot de passe root. Sur Ubuntu, root est verrouillé : `sulogin` refuse. C'est
-pratique sur Rocky (root a un mot de passe) et inutile sur Ubuntu sans
-`--force`. `init=/bin/bash` court-circuite : le noyau lance bash comme PID 1,
-sans systemd, sans PAM, racine en lecture seule — d'où le `remount,rw`. On en
-sort par `exec /sbin/init` (bash est remplacé par systemd, le boot continue
-normalement) ; `reboot` simple échouerait parce qu'il parle à un systemd
-absent.
-
-**`GRUB_TERMINAL="serial console"`** fait afficher le menu **sur les deux**
-sorties et accepter les touches des deux : sans ça, la console série voit le
-noyau démarrer mais jamais le menu, et l'étape 5 est impossible depuis
-`qm terminal`.
-:::
-
-::: piege
-Oublier `GRUB_TIMEOUT_STYLE=menu` : avec `hidden` et `GRUB_TIMEOUT=0`, le
-menu ne s'affiche jamais, et intercepter avec `Échap` dans une console série
-demande un timing de quelques dizaines de millisecondes. Un serveur de
-production doit avoir un menu visible 3 à 5 s : ce n'est pas du confort,
-c'est la condition du dépannage.
-
-Autre piège : `qm terminal` ne rend pas la main. La sortie est `Ctrl-O`. Et
-si tu ajoutes le port série **après** un boot, le noyau en cours ne l'a pas
-énuméré : un reboot est nécessaire avant que `qm terminal` montre quoi que
-ce soit.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Oublier `GRUB_TIMEOUT_STYLE=menu` : avec `hidden` et `GRUB_TIMEOUT=0`, le
+> menu ne s'affiche jamais, et intercepter avec `Échap` dans une console série
+> demande un timing de quelques dizaines de millisecondes. Un serveur de
+> production doit avoir un menu visible 3 à 5 s : ce n'est pas du confort,
+> c'est la condition du dépannage.
+>
+> Autre piège : `qm terminal` ne rend pas la main. La sortie est `Ctrl-O`. Et
+> si tu ajoutes le port série **après** un boot, le noyau en cours ne l'a pas
+> énuméré : un reboot est nécessaire avant que `qm terminal` montre quoi que
+> ce soit.
 
 Variante Rocky :
 
@@ -1663,7 +1721,7 @@ sudo grub2-mkconfig -o /boot/grub2/grub.cfg
 
 ---
 
-### **L9.2** — *Passer `lab-adm` au noyau HWE et tenir `/boot` propre.*
+### <a id="l9-2"></a>**[L9.2](README.md#l9-2)** — *Passer `lab-adm` au noyau HWE et tenir `/boot` propre.*
 
 **1. Inventaire avant**
 
@@ -1742,40 +1800,41 @@ sudo dmesg | grep -i 'secure boot'
 modinfo -F signer virtio_net ; modinfo -F sig_key virtio_net | head -c 60
 ```
 
-::: pourquoi
-**HWE.** Ubuntu LTS livre son noyau d'origine (GA, 6.8 pour 24.04) pendant
-cinq ans, et propose en parallèle le noyau de la version intermédiaire
-suivante, mis à jour à chaque *point release* (`24.04.2` → 6.11, `24.04.3` →
-6.14, et ainsi de suite jusqu'au noyau de la LTS suivante). Le métapaquet
-`linux-generic-hwe-24.04` suit ce train : chaque mise à jour peut changer de
-version majeure, ce qui casse les modules DKMS plus souvent. GA = stabilité
-maximale, HWE = matériel et fonctionnalités récents. Un serveur sans besoin
-particulier reste en GA ; on passe en HWE pour un pilote, ou parce que le
-noyau GA sera abandonné avant la fin de la LTS.
-
-**Pourquoi le nouveau noyau est en tête.** `/etc/grub.d/10_linux` trie les
-`vmlinuz-*` de `/boot` par version décroissante (`linux-version sort`), et
-`GRUB_DEFAULT=0` désigne cette première entrée. Fixer un repli par
-**identifiant** (`gnulinux-.. .`) et non par numéro évite que le défaut se
-décale à la prochaine installation. Le `>` sépare le sous-menu de l'entrée.
-
-**La protection du noyau courant.** Le script
-`/etc/kernel/postinst.d/apt-auto-removal` génère
-`/etc/apt/apt.conf.d/01autoremove-kernels` à chaque installation de noyau :
-il y liste comme `APT::NeverAutoRemove` le noyau en cours, le plus récent et
-le précédent. Un `apt purge` explicite du noyau courant déclenche
-`linux-check-removal`, qui demande confirmation ; il n'interdit pas, il
-prévient — et sur une machine sans terminal interactif, `apt -y` passerait
-outre. `apt-mark hold` sur `linux-image-$(uname -r)` est la ceinture.
-
-**Secure Boot en SeaBIOS.** Il n'y a pas de Secure Boot sans UEFI :
-`mokutil` répond `EFI variables are not supported on this system`. Sur une VM
-OVMF avec les clés pré-enrôlées, `SecureBoot enabled`, `dmesg` montre
-`Secure boot enabled` et `Kernel is locked down`, et un module DKMS devrait
-être signé avec la clé de `/var/lib/shim-signed/mok/` enrôlée via
-`mokutil --import`. Les modules Ubuntu sont signés par la clé de build du
-noyau : `signer: Build time autogenerated kernel key`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> **HWE.** Ubuntu LTS livre son noyau d'origine (GA, 6.8 pour 24.04) pendant
+> cinq ans, et propose en parallèle le noyau de la version intermédiaire
+> suivante, mis à jour à chaque *point release* (`24.04.2` → 6.11, `24.04.3` →
+> 6.14, et ainsi de suite jusqu'au noyau de la LTS suivante). Le métapaquet
+> `linux-generic-hwe-24.04` suit ce train : chaque mise à jour peut changer de
+> version majeure, ce qui casse les modules DKMS plus souvent. GA = stabilité
+> maximale, HWE = matériel et fonctionnalités récents. Un serveur sans besoin
+> particulier reste en GA ; on passe en HWE pour un pilote, ou parce que le
+> noyau GA sera abandonné avant la fin de la LTS.
+>
+> **Pourquoi le nouveau noyau est en tête.** `/etc/grub.d/10_linux` trie les
+> `vmlinuz-*` de `/boot` par version décroissante (`linux-version sort`), et
+> `GRUB_DEFAULT=0` désigne cette première entrée. Fixer un repli par
+> **identifiant** (`gnulinux-.. .`) et non par numéro évite que le défaut se
+> décale à la prochaine installation. Le `>` sépare le sous-menu de l'entrée.
+>
+> **La protection du noyau courant.** Le script
+> `/etc/kernel/postinst.d/apt-auto-removal` génère
+> `/etc/apt/apt.conf.d/01autoremove-kernels` à chaque installation de noyau :
+> il y liste comme `APT::NeverAutoRemove` le noyau en cours, le plus récent et
+> le précédent. Un `apt purge` explicite du noyau courant déclenche
+> `linux-check-removal`, qui demande confirmation ; il n'interdit pas, il
+> prévient — et sur une machine sans terminal interactif, `apt -y` passerait
+> outre. `apt-mark hold` sur `linux-image-$(uname -r)` est la ceinture.
+>
+> **Secure Boot en SeaBIOS.** Il n'y a pas de Secure Boot sans UEFI :
+> `mokutil` répond `EFI variables are not supported on this system`. Sur une VM
+> OVMF avec les clés pré-enrôlées, `SecureBoot enabled`, `dmesg` montre
+> `Secure boot enabled` et `Kernel is locked down`, et un module DKMS devrait
+> être signé avec la clé de `/var/lib/shim-signed/mok/` enrôlée via
+> `mokutil --import`. Les modules Ubuntu sont signés par la clé de build du
+> noyau : `signer: Build time autogenerated kernel key`.
 
 Variante Rocky :
 
@@ -1804,7 +1863,7 @@ plus récent.
 
 ---
 
-### **L9.3** — *Modules : interface `dummy`, module interdit, inventaire
+### <a id="l9-3"></a>**[L9.3](README.md#l9-3)** — *Modules : interface `dummy`, module interdit, inventaire
 virtio.*
 
 **1. Inventaire virtio**
@@ -1873,60 +1932,62 @@ lsmod | grep -c joydev                    # 0
 **6. et 7.** Après le reboot final : `ip -br addr | grep dummy` montre
 `dummy0` avec l'adresse et `dummy1` sans ; rapport `~/lab09/rapports/modules.md`.
 
-::: pourquoi
-**Remonter du périphérique au pilote.** `lsmod` liste ce qui est chargé, pas
-ce qui sert. Le lien `device/driver` de `/sys` est posé par le noyau au
-moment où un pilote **réclame** (*probe*) le périphérique ; c'est la seule
-preuve. Pour un disque SCSI, `sd` est le pilote de haut niveau (commun aux
-disques SATA, SAS, USB, virtio-scsi), et l'hôte SCSI deux niveaux plus haut
-révèle `virtio_scsi`. `lspci -k` donne le même résultat côté PCI (`Kernel
-driver in use: virtio-pci`) mais pas le pilote de la fonction virtio.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Remonter du périphérique au pilote.** `lsmod` liste ce qui est chargé, pas
+> ce qui sert. Le lien `device/driver` de `/sys` est posé par le noyau au
+> moment où un pilote **réclame** (*probe*) le périphérique ; c'est la seule
+> preuve. Pour un disque SCSI, `sd` est le pilote de haut niveau (commun aux
+> disques SATA, SAS, USB, virtio-scsi), et l'hôte SCSI deux niveaux plus haut
+> révèle `virtio_scsi`. `lspci -k` donne le même résultat côté PCI (`Kernel
+> driver in use: virtio-pci`) mais pas le pilote de la fonction virtio.
+>
+> **Le redémarrage de `systemd-modules-load`.** L'unité est `Type=oneshot`,
+> `RemainAfterExit=yes` : la redémarrer rejoue la lecture de
+> `modules-load.d`, donc un `modprobe dummy`, qui applique
+> `/etc/modprobe.d/dummy.conf`. Si `dummy` était resté chargé avec
+> `numdummies=1`, le `modprobe` n'aurait rien fait (déjà chargé) et tu
+> n'aurais qu'une interface — d'où le `modprobe -r` avant. Vérifier « deux
+> interfaces » teste réellement les deux fichiers.
+>
+> **Netplan et `dummy0`.** Netplan (backend `systemd-networkd` sur Ubuntu
+> Server) configure une interface dès qu'elle apparaît, par son nom : il
+> n'a pas besoin de la créer. Sur Rocky, NetworkManager sait créer
+> l'interface lui-même (`type dummy`), ce qui dispense de `modules-load.d` —
+> mais pas de `modprobe.d` pour `numdummies` si on en veut deux.
+>
+> **`blacklist` + `install`.** `blacklist` bloque le chargement par alias
+> (udev, `modprobe` d'un `modalias`) ; `install X /bin/false` fait exécuter
+> `/bin/false` à la place de l'insertion, y compris pour `modprobe joydev` et
+> pour une dépendance. Ensemble, c'est l'interdiction que demandent les guides
+> de durcissement (CIS : `install cramfs /bin/false`, `install usb-storage
+> /bin/false`). Pourquoi régénérer l'initramfs alors que `joydev` ne sert pas
+> au boot : parce que `initramfs-tools` **copie** `/etc/modprobe.d/` dans
+> l'archive, et qu'un pilote de stockage ou réseau blacklisté par erreur y
+> serait bloqué aussi — ou, inversement, qu'une blacklist retirée resterait
+> active dans l'initrd jusqu'à régénération. Régénérer systématiquement évite
+> d'avoir deux vérités.
+>
+> **DKMS.** *Dynamic Kernel Module Support* recompile automatiquement un module
+> tiers (ZFS, pilotes NVIDIA, VirtualBox, WireGuard sur vieux noyaux) à chaque
+> installation de noyau, via un *hook* dans `/etc/kernel/postinst.d/dkms`.
+> `dkms status` liste les modules et leur état par version de noyau ; un
+> module `added` mais pas `installed` après une mise à jour de noyau est la
+> cause classique du « ça marchait avant le reboot ».
 
-**Le redémarrage de `systemd-modules-load`.** L'unité est `Type=oneshot`,
-`RemainAfterExit=yes` : la redémarrer rejoue la lecture de
-`modules-load.d`, donc un `modprobe dummy`, qui applique
-`/etc/modprobe.d/dummy.conf`. Si `dummy` était resté chargé avec
-`numdummies=1`, le `modprobe` n'aurait rien fait (déjà chargé) et tu
-n'aurais qu'une interface — d'où le `modprobe -r` avant. Vérifier « deux
-interfaces » teste réellement les deux fichiers.
-
-**Netplan et `dummy0`.** Netplan (backend `systemd-networkd` sur Ubuntu
-Server) configure une interface dès qu'elle apparaît, par son nom : il
-n'a pas besoin de la créer. Sur Rocky, NetworkManager sait créer
-l'interface lui-même (`type dummy`), ce qui dispense de `modules-load.d` —
-mais pas de `modprobe.d` pour `numdummies` si on en veut deux.
-
-**`blacklist` + `install`.** `blacklist` bloque le chargement par alias
-(udev, `modprobe` d'un `modalias`) ; `install X /bin/false` fait exécuter
-`/bin/false` à la place de l'insertion, y compris pour `modprobe joydev` et
-pour une dépendance. Ensemble, c'est l'interdiction que demandent les guides
-de durcissement (CIS : `install cramfs /bin/false`, `install usb-storage
-/bin/false`). Pourquoi régénérer l'initramfs alors que `joydev` ne sert pas
-au boot : parce que `initramfs-tools` **copie** `/etc/modprobe.d/` dans
-l'archive, et qu'un pilote de stockage ou réseau blacklisté par erreur y
-serait bloqué aussi — ou, inversement, qu'une blacklist retirée resterait
-active dans l'initrd jusqu'à régénération. Régénérer systématiquement évite
-d'avoir deux vérités.
-
-**DKMS.** *Dynamic Kernel Module Support* recompile automatiquement un module
-tiers (ZFS, pilotes NVIDIA, VirtualBox, WireGuard sur vieux noyaux) à chaque
-installation de noyau, via un *hook* dans `/etc/kernel/postinst.d/dkms`.
-`dkms status` liste les modules et leur état par version de noyau ; un
-module `added` mais pas `installed` après une mise à jour de noyau est la
-cause classique du « ça marchait avant le reboot ».
-:::
-
-::: piege
-Un module qui refuse de se décharger (`rmmod: ERROR: Module dummy is in
-use`) est un module dont un périphérique est encore utilisé : ici `dummy0`
-avec une adresse tenue par networkd. `ip link del dummy0` ou `netplan`
-d'abord. Et `modprobe -r` ne retire que le module **et ses dépendances
-devenues inutiles** ; `rmmod` ne retire que lui.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un module qui refuse de se décharger (`rmmod: ERROR: Module dummy is in
+> use`) est un module dont un périphérique est encore utilisé : ici `dummy0`
+> avec une adresse tenue par networkd. `ip link del dummy0` ou `netplan`
+> d'abord. Et `modprobe -r` ne retire que le module **et ses dépendances
+> devenues inutiles** ; `rmmod` ne retire que lui.
 
 ---
 
-### **L9.4** — *Un disque à chaud, un nom stable, un ordonnanceur adapté.*
+### <a id="l9-4"></a>**[L9.4](README.md#l9-4)** — *Un disque à chaud, un nom stable, un ordonnanceur adapté.*
 
 **1. Hotplug observé**
 
@@ -2025,61 +2086,63 @@ sudo udevadm test /sys/class/net/ens18 2>&1 | grep -E '^NAME=|70-lan'
 sudo rm /run/udev/rules.d/70-lan.rules ; sudo udevadm control --reload
 ```
 
-::: pourquoi
-**Pourquoi l'événement arrive tout seul.** Le contrôleur virtio-scsi de QEMU
-supporte le *hotplug* : il signale l'ajout d'une cible, le pilote
-`virtio_scsi` déclenche un *scan* de la cible, la couche SCSI crée
-`2:0:1:0` (hôte 2, canal 0, cible 1, LUN 0 — `HCTL`), `sd` réclame le disque,
-le noyau alloue `sdb` et émet les uevents. Le `echo '- - -' > .../scan`
-(*wildcard* canal, cible, LUN) demande le même scan à la main : nécessaire
-sur des contrôleurs sans notification (certains SAS physiques, iSCSI après
-ajout d'un LUN), inutile ici mais à connaître. Le `rescan` par disque, lui,
-relit la **capacité** : c'est ce que fait `echo 1 > device/rescan` après un
-`qm disk resize`, sans quoi le noyau garde l'ancienne taille en cache.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi l'événement arrive tout seul.** Le contrôleur virtio-scsi de QEMU
+> supporte le *hotplug* : il signale l'ajout d'une cible, le pilote
+> `virtio_scsi` déclenche un *scan* de la cible, la couche SCSI crée
+> `2:0:1:0` (hôte 2, canal 0, cible 1, LUN 0 — `HCTL`), `sd` réclame le disque,
+> le noyau alloue `sdb` et émet les uevents. Le `echo '- - -' > .../scan`
+> (*wildcard* canal, cible, LUN) demande le même scan à la main : nécessaire
+> sur des contrôleurs sans notification (certains SAS physiques, iSCSI après
+> ajout d'un LUN), inutile ici mais à connaître. Le `rescan` par disque, lui,
+> relit la **capacité** : c'est ce que fait `echo 1 > device/rescan` après un
+> `qm disk resize`, sans quoi le noyau garde l'ancienne taille en cache.
+>
+> **Anatomie de la règle.** `SUBSYSTEM=="block"` et `ENV{DEVTYPE}=="disk"`
+> limitent aux disques entiers (pas aux partitions, qui ont leur propre uevent
+> avec `DEVTYPE=partition` et hériteraient sinon du lien). `ENV{ID_SERIAL}`
+> est une propriété importée par une règle **antérieure** :
+> `60-persistent-storage.rules` exécute `scsi_id` et `blkid`. Ta règle doit
+> donc trier **après** elle : l'ordre est alphabétique sur le nom de fichier,
+> et `60-lab-disque.rules` passerait **avant** `60-persistent-storage.rules`
+> (`l` < `p`) — `ID_SERIAL` serait encore vide au moment du test, et le lien
+> ne serait jamais créé. D'où le rang `61`. `udevadm test` révèle ce genre
+> d'erreur : la règle est bien lue, mais ne correspond pas.
+> `ATTR{queue/scheduler}=` écrit
+> dans le fichier `sysfs` du périphérique : l'affectation `=` sur `ATTR{}`
+> est **le** mécanisme de persistance des réglages `/sys`.
+>
+> **`SYMLINK+=` et jamais `NAME=` pour un disque.** udev refuse de renommer
+> un nœud bloc (`NAME=` est ignoré avec un avertissement pour tout sauf les
+> interfaces réseau) : le nom `sdb` est au noyau, les liens sont à udev. Le
+> lien `/dev/disk/lab/cache` survit à un changement d'ordre d'énumération, à
+> un changement de contrôleur, et à une réinstallation — tant que le disque
+> garde son nom de *drive* dans la configuration de la VM.
+>
+> **Le `.link` contre la règle udev.** Depuis systemd 209, le nommage des
+> interfaces est fait par udev via le *builtin* `net_setup_link`
+> (`80-net-setup-link.rules`), qui lit les fichiers `.link` et applique la
+> politique `NamePolicy=` de `99-default.link` (`ens18` = *slot* PCI 18). Une
+> règle `NAME=` dans un fichier de rang inférieur à 80 gagne, parce que
+> `80-net-setup-link` ne pose `NAME` que s'il est encore vide. Un `.link` est
+> préférable : même syntaxe partout, testable avec `udevadm test-builtin
+> net_setup_link /sys/class/net/ens18`, et compris par Netplan (`set-name:`
+> génère justement un `.link`).
 
-**Anatomie de la règle.** `SUBSYSTEM=="block"` et `ENV{DEVTYPE}=="disk"`
-limitent aux disques entiers (pas aux partitions, qui ont leur propre uevent
-avec `DEVTYPE=partition` et hériteraient sinon du lien). `ENV{ID_SERIAL}`
-est une propriété importée par une règle **antérieure** :
-`60-persistent-storage.rules` exécute `scsi_id` et `blkid`. Ta règle doit
-donc trier **après** elle : l'ordre est alphabétique sur le nom de fichier,
-et `60-lab-disque.rules` passerait **avant** `60-persistent-storage.rules`
-(`l` < `p`) — `ID_SERIAL` serait encore vide au moment du test, et le lien
-ne serait jamais créé. D'où le rang `61`. `udevadm test` révèle ce genre
-d'erreur : la règle est bien lue, mais ne correspond pas.
-`ATTR{queue/scheduler}=` écrit
-dans le fichier `sysfs` du périphérique : l'affectation `=` sur `ATTR{}`
-est **le** mécanisme de persistance des réglages `/sys`.
-
-**`SYMLINK+=` et jamais `NAME=` pour un disque.** udev refuse de renommer
-un nœud bloc (`NAME=` est ignoré avec un avertissement pour tout sauf les
-interfaces réseau) : le nom `sdb` est au noyau, les liens sont à udev. Le
-lien `/dev/disk/lab/cache` survit à un changement d'ordre d'énumération, à
-un changement de contrôleur, et à une réinstallation — tant que le disque
-garde son nom de *drive* dans la configuration de la VM.
-
-**Le `.link` contre la règle udev.** Depuis systemd 209, le nommage des
-interfaces est fait par udev via le *builtin* `net_setup_link`
-(`80-net-setup-link.rules`), qui lit les fichiers `.link` et applique la
-politique `NamePolicy=` de `99-default.link` (`ens18` = *slot* PCI 18). Une
-règle `NAME=` dans un fichier de rang inférieur à 80 gagne, parce que
-`80-net-setup-link` ne pose `NAME` que s'il est encore vide. Un `.link` est
-préférable : même syntaxe partout, testable avec `udevadm test-builtin
-net_setup_link /sys/class/net/ens18`, et compris par Netplan (`set-name:`
-génère justement un `.link`).
-:::
-
-::: piege
-`udevadm trigger` sans cible rejoue **tous** les périphériques : sur un
-serveur, ça ré-exécute toutes les règles `RUN+=`, remet les permissions, et
-peut faire réapparaître des liens supprimés. Toujours cibler
-(`--name-match`, `--subsystem-match`, ou le chemin). Et `udevadm test`
-n'applique rien — il liste les `RUN+=` sans les lancer, mais exécute pour de vrai les `PROGRAM=` et `IMPORT{program}=` : un programme à effet de bord appelé ainsi agit même «  à blanc ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> `udevadm trigger` sans cible rejoue **tous** les périphériques : sur un
+> serveur, ça ré-exécute toutes les règles `RUN+=`, remet les permissions, et
+> peut faire réapparaître des liens supprimés. Toujours cibler
+> (`--name-match`, `--subsystem-match`, ou le chemin). Et `udevadm test`
+> n'applique rien — il liste les `RUN+=` sans les lancer, mais exécute pour de vrai les `PROGRAM=` et `IMPORT{program}=` : un programme à effet de bord appelé ainsi agit même «  à blanc ».
 
 ---
 
-### **L9.5** — *Un serveur de temps pour le lab, et une horloge qui dérive.*
+### <a id="l9-5"></a>**[L9.5](README.md#l9-5)** — *Un serveur de temps pour le lab, et une horloge qui dérive.*
 
 **1. État initial et installation**
 
@@ -2190,61 +2253,63 @@ Le RTC reste en UTC (`RTC in local TZ: no`), l'horloge système compte des
 secondes UTC (`date +%s` ne change pas), seule la **représentation** suit
 `/etc/localtime`.
 
-::: pourquoi
-**Ce qu'installer chrony change.** Le paquet `chrony` déclare
-`Conflicts: time-daemon` et `Provides: time-daemon` ; comme `systemd-timesyncd` fournit le même `time-daemon`, `apt` le retire en installant chrony : deux démons NTP se battraient pour la même
-horloge. chrony apporte ce que timesyncd n'a pas : plusieurs sources
-comparées (l'algorithme écarte un *falseticker*), un serveur, un mode
-sans réseau (`local stratum`), la mesure de la dérive de fréquence
-persistante (`driftfile`), et `chronyc` pour le diagnostic.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Ce qu'installer chrony change.** Le paquet `chrony` déclare
+> `Conflicts: time-daemon` et `Provides: time-daemon` ; comme `systemd-timesyncd` fournit le même `time-daemon`, `apt` le retire en installant chrony : deux démons NTP se battraient pour la même
+> horloge. chrony apporte ce que timesyncd n'a pas : plusieurs sources
+> comparées (l'algorithme écarte un *falseticker*), un serveur, un mode
+> sans réseau (`local stratum`), la mesure de la dérive de fréquence
+> persistante (`driftfile`), et `chronyc` pour le diagnostic.
+>
+> **`local stratum 10`.** Si toutes les sources amont deviennent
+> injoignables, chrony refuse normalement de servir (il se déclare
+> non synchronisé et les clients l'ignorent). `local stratum 10` lui fait
+> servir sa propre horloge à une strate basse (10, contre 2 ou 3 quand il est
+> synchronisé) : les VM du lab restent **cohérentes entre elles** même si
+> Internet tombe, ce qui est ce qui compte pour les journaux, TLS interne et
+> Kerberos. La strate 10 signale honnêtement aux clients que la source est
+> médiocre.
+>
+> **Lire `tracking`.** `Reference ID` = la source retenue ; `Stratum` = la
+> distance à une horloge de référence ; `System time` = l'écart **actuel**
+> que chrony est en train de résorber ; `Last offset` = l'écart mesuré à la
+> dernière réponse ; `Frequency` = de combien l'horloge locale dérive
+> naturellement (12 ppm = 1 s par jour, typique d'une VM), et `Skew` la
+> confiance sur cette estimation ; `Leap status : Normal` = synchronisé
+> (`Not synchronised` sinon). Dans `sources`, `^*` est la source retenue,
+> `^+` une source combinée, `^-` écartée, `^?` injoignable ; `Reach 377` en
+> octal = les 8 dernières requêtes ont répondu.
+>
+> **Slew contre step.** chrony n'accélère ou ne ralentit l'horloge que de
+> 8,33 % maximum pour que les applications ne voient jamais le temps sauter.
+> C'est excellent pour 100 ms, absurde pour 3 minutes. D'où `makestep` avec
+> une fenêtre au démarrage (le cas normal : le RTC était faux) et `chronyc
+> makestep` en intervention. Un `date -s` corrige aussi, mais **sans** que
+> chrony le sache : il continue de croire à l'ancien écart et peut
+> sur-corriger, et l'horloge matérielle n'est pas recalée.
+>
+> **RTC en UTC.** `hwclock` écrit dans le RTC ce que dit `/etc/adjtime`
+> (`UTC`) ; à `LOCAL`, chaque changement d'heure d'été impose une correction
+> et un double boot avec Windows la double. Un serveur n'a aucune raison
+> d'avoir autre chose qu'UTC dans le matériel, et Ubuntu comme Rocky le font
+> par défaut.
 
-**`local stratum 10`.** Si toutes les sources amont deviennent
-injoignables, chrony refuse normalement de servir (il se déclare
-non synchronisé et les clients l'ignorent). `local stratum 10` lui fait
-servir sa propre horloge à une strate basse (10, contre 2 ou 3 quand il est
-synchronisé) : les VM du lab restent **cohérentes entre elles** même si
-Internet tombe, ce qui est ce qui compte pour les journaux, TLS interne et
-Kerberos. La strate 10 signale honnêtement aux clients que la source est
-médiocre.
-
-**Lire `tracking`.** `Reference ID` = la source retenue ; `Stratum` = la
-distance à une horloge de référence ; `System time` = l'écart **actuel**
-que chrony est en train de résorber ; `Last offset` = l'écart mesuré à la
-dernière réponse ; `Frequency` = de combien l'horloge locale dérive
-naturellement (12 ppm = 1 s par jour, typique d'une VM), et `Skew` la
-confiance sur cette estimation ; `Leap status : Normal` = synchronisé
-(`Not synchronised` sinon). Dans `sources`, `^*` est la source retenue,
-`^+` une source combinée, `^-` écartée, `^?` injoignable ; `Reach 377` en
-octal = les 8 dernières requêtes ont répondu.
-
-**Slew contre step.** chrony n'accélère ou ne ralentit l'horloge que de
-8,33 % maximum pour que les applications ne voient jamais le temps sauter.
-C'est excellent pour 100 ms, absurde pour 3 minutes. D'où `makestep` avec
-une fenêtre au démarrage (le cas normal : le RTC était faux) et `chronyc
-makestep` en intervention. Un `date -s` corrige aussi, mais **sans** que
-chrony le sache : il continue de croire à l'ancien écart et peut
-sur-corriger, et l'horloge matérielle n'est pas recalée.
-
-**RTC en UTC.** `hwclock` écrit dans le RTC ce que dit `/etc/adjtime`
-(`UTC`) ; à `LOCAL`, chaque changement d'heure d'été impose une correction
-et un double boot avec Windows la double. Un serveur n'a aucune raison
-d'avoir autre chose qu'UTC dans le matériel, et Ubuntu comme Rocky le font
-par défaut.
-:::
-
-::: piege
-`chronyc clients` sur le serveur affiche des compteurs vides tant que le
-service n'a pas reçu de requête depuis son démarrage : redémarre le serveur
-**avant** les clients, pas après. Et sur Rocky, `firewalld` bloque l'UDP 123
-entrant si tu faisais de `lab-rhel` le serveur : `firewall-cmd
---add-service=ntp --permanent`. Un client, lui, n'ouvre rien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `chronyc clients` sur le serveur affiche des compteurs vides tant que le
+> service n'a pas reçu de requête depuis son démarrage : redémarre le serveur
+> **avant** les clients, pas après. Et sur Rocky, `firewalld` bloque l'UDP 123
+> entrant si tu faisais de `lab-rhel` le serveur : `firewall-cmd
+> --add-service=ntp --permanent`. Un client, lui, n'ouvre rien.
 
 ---
 
 ## 9.7 Break & Fix
 
-### **BF9.1** — *La mise à jour du noyau échoue, `/boot` est plein.*
+### <a id="bf9-1"></a>**[BF9.1](README.md#bf9-1)** — *La mise à jour du noyau échoue, `/boot` est plein.*
 
 **Démarche de diagnostic**
 
@@ -2310,41 +2375,43 @@ défaut sur 24.04), et une alerte de supervision sur `/boot` à 70 % (module 16)
 Un contrôle mensuel : `ls /boot/vmlinuz-* | wc -l` doit valoir le nombre de
 paquets `linux-image-*` installés.
 
-::: pourquoi
-**Pourquoi `update-grub` après le nettoyage.** `10_linux` génère une entrée
-pour chaque `vmlinuz-*` trouvé dans `/boot`, orphelin ou pas : avant le
-nettoyage, le menu proposait des noyaux dont l'initrd était un fichier
-factice ; après, il ne propose que le vrai. Sans régénération, GRUB garde des
-entrées vers des fichiers absents (`error: file not found` si on les choisit).
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi `update-grub` après le nettoyage.** `10_linux` génère une entrée
+> pour chaque `vmlinuz-*` trouvé dans `/boot`, orphelin ou pas : avant le
+> nettoyage, le menu proposait des noyaux dont l'initrd était un fichier
+> factice ; après, il ne propose que le vrai. Sans régénération, GRUB garde des
+> entrées vers des fichiers absents (`error: file not found` si on les choisit).
+>
+> **Pourquoi `-k all`.** `update-initramfs -u` seul ne régénère que l'initrd
+> du noyau le plus récent ; après un incident de ce type, on veut être sûr que
+> chaque version restante a un initrd complet et non tronqué — un initrd
+> partiellement écrit puis renommé serait une bombe à retardement.
+> `mkinitramfs` écrit dans `.new` et renomme à la fin, donc l'échec n'a rien
+> abîmé, mais la vérification coûte dix secondes.
+>
+> **Distinguer paquet et fichier.** `dpkg -S chemin` répond au nom du paquet
+> propriétaire ou `no path found matching pattern`. C'est la frontière entre ce
+> que `apt` sait gérer et ce que l'administrateur a laissé derrière lui. Sur
+> Rocky, l'équivalent est `rpm -qf /boot/vmlinuz-*`, et les orphelins y sont
+> plus rares parce que `dnf` retire aussi l'initramfs via le script `%preun`
+> du paquet `kernel-core`.
 
-**Pourquoi `-k all`.** `update-initramfs -u` seul ne régénère que l'initrd
-du noyau le plus récent ; après un incident de ce type, on veut être sûr que
-chaque version restante a un initrd complet et non tronqué — un initrd
-partiellement écrit puis renommé serait une bombe à retardement.
-`mkinitramfs` écrit dans `.new` et renomme à la fin, donc l'échec n'a rien
-abîmé, mais la vérification coûte dix secondes.
-
-**Distinguer paquet et fichier.** `dpkg -S chemin` répond au nom du paquet
-propriétaire ou `no path found matching pattern`. C'est la frontière entre ce
-que `apt` sait gérer et ce que l'administrateur a laissé derrière lui. Sur
-Rocky, l'équivalent est `rpm -qf /boot/vmlinuz-*`, et les orphelins y sont
-plus rares parce que `dnf` retire aussi l'initramfs via le script `%preun`
-du paquet `kernel-core`.
-:::
-
-::: piege
-Supprimer « le plus vieux » sans regarder `uname -r`. Après un reboot manqué
-ou un `grub-reboot`, la machine peut tourner sur un noyau qui n'est pas le
-plus récent : `uname -r` est la seule vérité, et le `check` refuse toute
-solution qui a touché aux fichiers de la version en cours. Et ne jamais
-`rm /boot/initrd.img-<courant>` « pour faire de la place, on le régénère
-après » : si la régénération échoue (elle vient d'échouer !), la machine ne
-redémarre plus.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Supprimer « le plus vieux » sans regarder `uname -r`. Après un reboot manqué
+> ou un `grub-reboot`, la machine peut tourner sur un noyau qui n'est pas le
+> plus récent : `uname -r` est la seule vérité, et le `check` refuse toute
+> solution qui a touché aux fichiers de la version en cours. Et ne jamais
+> `rm /boot/initrd.img-<courant>` « pour faire de la place, on le régénère
+> après » : si la régénération échoue (elle vient d'échouer !), la machine ne
+> redémarre plus.
 
 ---
 
-### **BF9.2** — *Le `swappiness` revient à 60 à chaque reboot.*
+### <a id="bf9-2"></a>**[BF9.2](README.md#bf9-2)** — *Le `swappiness` revient à 60 à chaque reboot.*
 
 **Démarche de diagnostic**
 
@@ -2408,33 +2475,34 @@ paquet), toujours `.conf`, un rang ≥ 60, `sysctl --system` comme test
 d'acceptation (pas `-p`), et lire `journalctl -u systemd-sysctl -b` après
 chaque reboot — c'est une ligne dans le script de contrôle de D9.
 
-::: pourquoi
-**Pourquoi le lien `99-sysctl.conf` existe.** Historiquement, `procps` lisait
-`/etc/sysctl.conf` ; systemd lit `sysctl.d`. Pour que les anciennes
-configurations restent appliquées par `systemd-sysctl.service`, Debian a
-placé un lien symbolique dans `sysctl.d` vers le fichier historique, en
-position 99 : « ce que l'administrateur a écrit dans `sysctl.conf` gagne sur
-les paquets ». Conséquence : un fichier `sysctl.d` à rang inférieur à 99 est
-subordonné à `sysctl.conf`. L'ordre affiché par `sysctl --system` le
-prouve et suffit à convaincre le collègue.
-
-**`sysctl -p` contre `sysctl --system`.** `-p fichier` applique un fichier
-et un seul, immédiatement, sans précédence, sans filtre d'extension. C'est
-un outil de test, jamais une preuve de persistance. `--system` rejoue
-**exactement** ce que fait le boot. Quand un `sysctl` « ne tient pas », la
-question à poser est « qu'affiche `--system` ? », pas « que contient mon
-fichier ? ».
-
-**Pourquoi pas `rc.local`.** Un script tardif appliquerait bien la valeur,
-mais après que les services l'ont lue (`somaxconn` au `listen()`), sans
-visibilité pour `sysctl --system`, et sans ordre garanti par rapport au
-chargement de `nf_conntrack`. La solution systemd — `modules-load.d` puis
-`sysctl.d` — est ordonnée par construction.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi le lien `99-sysctl.conf` existe.** Historiquement, `procps` lisait
+> `/etc/sysctl.conf` ; systemd lit `sysctl.d`. Pour que les anciennes
+> configurations restent appliquées par `systemd-sysctl.service`, Debian a
+> placé un lien symbolique dans `sysctl.d` vers le fichier historique, en
+> position 99 : « ce que l'administrateur a écrit dans `sysctl.conf` gagne sur
+> les paquets ». Conséquence : un fichier `sysctl.d` à rang inférieur à 99 est
+> subordonné à `sysctl.conf`. L'ordre affiché par `sysctl --system` le
+> prouve et suffit à convaincre le collègue.
+>
+> **`sysctl -p` contre `sysctl --system`.** `-p fichier` applique un fichier
+> et un seul, immédiatement, sans précédence, sans filtre d'extension. C'est
+> un outil de test, jamais une preuve de persistance. `--system` rejoue
+> **exactement** ce que fait le boot. Quand un `sysctl` « ne tient pas », la
+> question à poser est « qu'affiche `--system` ? », pas « que contient mon
+> fichier ? ».
+>
+> **Pourquoi pas `rc.local`.** Un script tardif appliquerait bien la valeur,
+> mais après que les services l'ont lue (`somaxconn` au `listen()`), sans
+> visibilité pour `sysctl --system`, et sans ordre garanti par rapport au
+> chargement de `nf_conntrack`. La solution systemd — `modules-load.d` puis
+> `sysctl.d` — est ordonnée par construction.
 
 ---
 
-### **BF9.3** — *Plus de réseau après le reboot : module blacklisté.*
+### <a id="bf9-3"></a>**[BF9.3](README.md#bf9-3)** — *Plus de réseau après le reboot : module blacklisté.*
 
 **Démarche de diagnostic**
 
@@ -2490,45 +2558,46 @@ liens `device/driver` avant d'interdire un module ; en revue, chaque
 un bloqueur. Et la console série avec menu GRUB visible (L9.1) est ce qui a
 rendu la réparation possible en cinq minutes.
 
-::: pourquoi
-**Pourquoi `rescue.target` ne convenait pas.** La cible *rescue* lance
-`sulogin`, qui exige le mot de passe root ; sur Ubuntu root est verrouillé,
-et le mot de passe de `mathieu` est réputé inconnu. `emergency.target`
-souffre du même `sulogin`. Seul `init=/bin/bash` donne un shell **sans
-authentification**, parce qu'il remplace `init` : il n'y a plus personne
-pour demander quoi que ce soit. Sur Rocky, `rd.break` joue le même rôle
-depuis l'initramfs.
-
-**Pourquoi le réseau revient sans toucher à l'initramfs.** L'initrd contient
-une copie du fichier de blacklist, donc pendant l'initramfs `virtio_net`
-reste interdit — mais l'initramfs n'a pas besoin du réseau pour monter `/`.
-Après `switch_root`, `systemd-udevd` démarre depuis la vraie racine, rejoue
-les uevents (*coldplug*, `systemd-udev-trigger.service`), et `modprobe` lit
-le `/etc/modprobe.d` **de la vraie racine**, corrigé. Le pilote se charge.
-On régénère quand même l'initrd pour n'avoir qu'une seule vérité : un jour,
-la blacklist en cause portera sur `virtio_scsi`, et là l'initramfs bloquera
-avant même le montage de la racine — et c'est `break=premount` sur la ligne
-`linux` qui donnera un shell `(initramfs)` pour comprendre.
-
-**`blacklist` et `install`, encore.** `blacklist` empêche uniquement la
-résolution d'alias (le mécanisme d'udev). La ligne `install X /bin/false`
-est celle qui aurait bloqué un `modprobe virtio_net` tapé à la main dans le
-shell de secours. Un dépanneur qui ne connaît que `blacklist` aurait tenté
-`modprobe virtio_net`, obtenu `modprobe: ERROR: ../libkmod/libkmod-module.c
-... command failed`, et perdu du temps. Le `grep -rn` sur tout `modprobe.d`
-évite de découvrir la seconde ligne après le reboot.
-
-**Pourquoi `exec /sbin/init` et pas `reboot`.** Dans un shell PID 1, il n'y a
-pas de systemd pour recevoir la demande de `reboot` ; `reboot -f` force via
-l'appel système et saute tout arrêt propre (les tampons ont été poussés par
-`sync`, mais un `fsck` peut suivre). `exec /sbin/init` remplace bash par
-systemd, qui démarre normalement : c'est la sortie la plus propre et la plus
-rapide.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi `rescue.target` ne convenait pas.** La cible *rescue* lance
+> `sulogin`, qui exige le mot de passe root ; sur Ubuntu root est verrouillé,
+> et le mot de passe de `mathieu` est réputé inconnu. `emergency.target`
+> souffre du même `sulogin`. Seul `init=/bin/bash` donne un shell **sans
+> authentification**, parce qu'il remplace `init` : il n'y a plus personne
+> pour demander quoi que ce soit. Sur Rocky, `rd.break` joue le même rôle
+> depuis l'initramfs.
+>
+> **Pourquoi le réseau revient sans toucher à l'initramfs.** L'initrd contient
+> une copie du fichier de blacklist, donc pendant l'initramfs `virtio_net`
+> reste interdit — mais l'initramfs n'a pas besoin du réseau pour monter `/`.
+> Après `switch_root`, `systemd-udevd` démarre depuis la vraie racine, rejoue
+> les uevents (*coldplug*, `systemd-udev-trigger.service`), et `modprobe` lit
+> le `/etc/modprobe.d` **de la vraie racine**, corrigé. Le pilote se charge.
+> On régénère quand même l'initrd pour n'avoir qu'une seule vérité : un jour,
+> la blacklist en cause portera sur `virtio_scsi`, et là l'initramfs bloquera
+> avant même le montage de la racine — et c'est `break=premount` sur la ligne
+> `linux` qui donnera un shell `(initramfs)` pour comprendre.
+>
+> **`blacklist` et `install`, encore.** `blacklist` empêche uniquement la
+> résolution d'alias (le mécanisme d'udev). La ligne `install X /bin/false`
+> est celle qui aurait bloqué un `modprobe virtio_net` tapé à la main dans le
+> shell de secours. Un dépanneur qui ne connaît que `blacklist` aurait tenté
+> `modprobe virtio_net`, obtenu `modprobe: ERROR: ../libkmod/libkmod-module.c
+> ... command failed`, et perdu du temps. Le `grep -rn` sur tout `modprobe.d`
+> évite de découvrir la seconde ligne après le reboot.
+>
+> **Pourquoi `exec /sbin/init` et pas `reboot`.** Dans un shell PID 1, il n'y a
+> pas de systemd pour recevoir la demande de `reboot` ; `reboot -f` force via
+> l'appel système et saute tout arrêt propre (les tampons ont été poussés par
+> `sync`, mais un `fsck` peut suivre). `exec /sbin/init` remplace bash par
+> systemd, qui démarre normalement : c'est la sortie la plus propre et la plus
+> rapide.
 
 ---
 
-### **BF9.4** — *L'interface a changé de nom, Netplan ne trouve plus rien.*
+### <a id="bf9-4"></a>**[BF9.4](README.md#bf9-4)** — *L'interface a changé de nom, Netplan ne trouve plus rien.*
 
 **Démarche de diagnostic**
 
@@ -2589,46 +2658,48 @@ Netplan génère alors **lui-même** le fichier `.link`
 (`/run/systemd/network/10-netplan-lan0.link`) et le `.network` cohérent :
 une seule source de vérité.
 
-::: pourquoi
-**Qui nomme une interface, et quand.** Le noyau crée l'interface avec un nom
-provisoire (`eth0`). À l'uevent `add`, udev exécute les règles : une règle
-`NAME=` explicite gagne si elle vient avant `80-net-setup-link.rules` ;
-sinon le *builtin* `net_setup_link` lit les `.link` (`/etc/systemd/network`
-puis `/run` puis `/usr/lib`, tri par nom) et applique `NamePolicy=` : `ens18`
-vient de `slot` (numéro de slot PCI 18 de la carte virtio). Le renommage
-n'est possible **qu'à ce moment** : une interface déjà `up` ne se renomme pas
-(`RTNETLINK answers: Device or resource busy`), d'où le `down` obligatoire
-dans le correctif à chaud. Après, networkd (piloté par Netplan) cherche une
-interface qui matche `[Match] Name=` ou `MACAddress=` : c'est là que la
-configuration s'applique — ou non.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Qui nomme une interface, et quand.** Le noyau crée l'interface avec un nom
+> provisoire (`eth0`). À l'uevent `add`, udev exécute les règles : une règle
+> `NAME=` explicite gagne si elle vient avant `80-net-setup-link.rules` ;
+> sinon le *builtin* `net_setup_link` lit les `.link` (`/etc/systemd/network`
+> puis `/run` puis `/usr/lib`, tri par nom) et applique `NamePolicy=` : `ens18`
+> vient de `slot` (numéro de slot PCI 18 de la carte virtio). Le renommage
+> n'est possible **qu'à ce moment** : une interface déjà `up` ne se renomme pas
+> (`RTNETLINK answers: Device or resource busy`), d'où le `down` obligatoire
+> dans le correctif à chaud. Après, networkd (piloté par Netplan) cherche une
+> interface qui matche `[Match] Name=` ou `MACAddress=` : c'est là que la
+> configuration s'applique — ou non.
+>
+> **Priorités.** Règle udev `NAME=` avec un rang < 80 > fichier `.link` >
+> politique par défaut. Netplan `set-name` produit un `.link` dans `/run`, qui
+> passe **après** un `.link` de `/etc` de même nom, et après toute règle
+> udev `NAME=`. La règle du collègue gagnait donc sur tout, et Netplan ne
+> pouvait rien. Avec `match: macaddress` + `set-name`, Netplan possède les
+> deux bouts : le nom et la configuration.
+>
+> **Pourquoi « stable » était déjà le cas.** `ens18` **est** un nom stable :
+> il dépend du slot PCI, pas de l'ordre de détection ni du MAC. La règle
+> ajoutée ne résolvait aucun problème réel ; elle en créait un. Les noms
+> prévisibles (`enX`, `ensX`, `enpXsY`) existent précisément pour ne plus
+> avoir à écrire ces règles. Le cas légitime : une machine physique dont on
+> remplace une carte et dont on veut conserver le nom dans la conf — et là,
+> Netplan `match`/`set-name` ou un `.link` dans `/etc` sont les outils.
 
-**Priorités.** Règle udev `NAME=` avec un rang < 80 > fichier `.link` >
-politique par défaut. Netplan `set-name` produit un `.link` dans `/run`, qui
-passe **après** un `.link` de `/etc` de même nom, et après toute règle
-udev `NAME=`. La règle du collègue gagnait donc sur tout, et Netplan ne
-pouvait rien. Avec `match: macaddress` + `set-name`, Netplan possède les
-deux bouts : le nom et la configuration.
-
-**Pourquoi « stable » était déjà le cas.** `ens18` **est** un nom stable :
-il dépend du slot PCI, pas de l'ordre de détection ni du MAC. La règle
-ajoutée ne résolvait aucun problème réel ; elle en créait un. Les noms
-prévisibles (`enX`, `ensX`, `enpXsY`) existent précisément pour ne plus
-avoir à écrire ces règles. Le cas légitime : une machine physique dont on
-remplace une carte et dont on veut conserver le nom dans la conf — et là,
-Netplan `match`/`set-name` ou un `.link` dans `/etc` sont les outils.
-:::
-
-::: piege
-Renommer une interface à chaud sans la mettre `down` échoue ; la mettre
-`down` sur la **seule** interface d'une machine distante coupe SSH — c'est
-pour ça que ce Break & Fix se joue en console série. En production, sur une
-machine sans console, on corrige la règle et on redémarre dans une fenêtre
-de maintenance ; on ne renomme jamais à chaud en SSH.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Renommer une interface à chaud sans la mettre `down` échoue ; la mettre
+> `down` sur la **seule** interface d'une machine distante coupe SSH — c'est
+> pour ça que ce Break & Fix se joue en console série. En production, sur une
+> machine sans console, on corrige la règle et on redémarre dans une fenêtre
+> de maintenance ; on ne renomme jamais à chaud en SSH.
 
 ---
 
-### **BF9.5** — *Tout ce qui est en HTTPS échoue : horloge dérivée.*
+### <a id="bf9-5"></a>**[BF9.5](README.md#bf9-5)** — *Tout ce qui est en HTTPS échoue : horloge dérivée.*
 
 **Démarche de diagnostic**
 
@@ -2674,49 +2745,51 @@ $4}'` en seuil (> 0,5 s = alerte), ou `timedatectl show -p NTPSynchronized
 --value` = `no` ; avec `node_exporter` (module 16) :
 `abs(node_timex_offset_seconds) > 0.5` et `node_timex_sync_status == 0`.
 
-::: pourquoi
-**TLS et le temps.** Un certificat X.509 porte `notBefore`/`notAfter`. Une
-horloge en avance fait tomber tous les certificats des serveurs contactés
-dans le passé : « expired ». En retard : « not yet valid ». Le client
-vérifie, pas le serveur : c'est donc la machine cliente qu'on répare, et
-`-k` (ignorer la vérification) désactive la seule protection contre une
-interception. `apt` a sa propre fenêtre : `Valid-Until` dans `InRelease`,
-justement pour empêcher qu'on rejoue un vieux dépôt contenant des paquets
-vulnérables.
+> [!NOTE]
+> **Pourquoi**
+>
+> **TLS et le temps.** Un certificat X.509 porte `notBefore`/`notAfter`. Une
+> horloge en avance fait tomber tous les certificats des serveurs contactés
+> dans le passé : « expired ». En retard : « not yet valid ». Le client
+> vérifie, pas le serveur : c'est donc la machine cliente qu'on répare, et
+> `-k` (ignorer la vérification) désactive la seule protection contre une
+> interception. `apt` a sa propre fenêtre : `Valid-Until` dans `InRelease`,
+> justement pour empêcher qu'on rejoue un vieux dépôt contenant des paquets
+> vulnérables.
+>
+> **Slew et step, la règle.** chrony n'accepte de **sauter** que si la
+> directive `makestep seuil nombre` l'y autorise ; `1 3` = plus de 1 s
+> d'écart dans les 3 premières mesures après démarrage. Passé ce cadre, il
+> *slew*. `chronyc makestep` (sans argument) force un saut **une fois**, quelle
+> que soit la configuration : c'est la commande d'intervention. Après le saut,
+> chrony mesure à nouveau et affine par slew.
+>
+> **Pourquoi le RTC était faux.** Le noyau ne recopie l'heure système dans le
+> RTC (toutes les 11 minutes) **que** quand un démon NTP le lui dit (drapeau
+> `STA_UNSYNC` **abaissé** par chrony grâce à `rtcsync`). Sans chrony, seul
+> `hwclock --systohc` écrit — et le collègue l'a fait. Après correction, chrony
+> abaissera de nouveau le drapeau et le noyau recalera le RTC de lui-même, mais un
+> `hwclock --systohc` immédiat évite un reboot dans les 11 minutes qui
+> repartirait de l'heure fausse.
+>
+> **`timedatectl set-ntp`.** Sur une machine avec chrony, `timedatectl
+> set-ntp true` active l'unité déclarée dans
+> `/usr/lib/systemd/ntp-units.d/50-chrony.list` — c'est équivalent à `systemctl
+> enable --now chrony`, et c'est ce que lit `NTP service: active`.
 
-**Slew et step, la règle.** chrony n'accepte de **sauter** que si la
-directive `makestep seuil nombre` l'y autorise ; `1 3` = plus de 1 s
-d'écart dans les 3 premières mesures après démarrage. Passé ce cadre, il
-*slew*. `chronyc makestep` (sans argument) force un saut **une fois**, quelle
-que soit la configuration : c'est la commande d'intervention. Après le saut,
-chrony mesure à nouveau et affine par slew.
-
-**Pourquoi le RTC était faux.** Le noyau ne recopie l'heure système dans le
-RTC (toutes les 11 minutes) **que** quand un démon NTP le lui dit (drapeau
-`STA_UNSYNC` **abaissé** par chrony grâce à `rtcsync`). Sans chrony, seul
-`hwclock --systohc` écrit — et le collègue l'a fait. Après correction, chrony
-abaissera de nouveau le drapeau et le noyau recalera le RTC de lui-même, mais un
-`hwclock --systohc` immédiat évite un reboot dans les 11 minutes qui
-repartirait de l'heure fausse.
-
-**`timedatectl set-ntp`.** Sur une machine avec chrony, `timedatectl
-set-ntp true` active l'unité déclarée dans
-`/usr/lib/systemd/ntp-units.d/50-chrony.list` — c'est équivalent à `systemctl
-enable --now chrony`, et c'est ce que lit `NTP service: active`.
-:::
-
-::: piege
-`date -s` sur la bonne heure « répare » TLS en dix secondes, et c'est
-interdit ici pour une raison : sans service de temps, la dérive reprend, le
-RTC reste faux, et le prochain incident arrive en silence. La preuve de
-réparation n'est pas `date`, c'est `System clock synchronized: yes`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `date -s` sur la bonne heure « répare » TLS en dix secondes, et c'est
+> interdit ici pour une raison : sans service de temps, la dérive reprend, le
+> RTC reste faux, et le prochain incident arrive en silence. La preuve de
+> réparation n'est pas `date`, c'est `System clock synchronized: yes`.
 
 ---
 
 ## 9.8 Défi du module
 
-**D9 — Une base noyau de production pour les VM Factura**
+<a id="d9"></a>**[D9](README.md#d9) — Une base noyau de production pour les VM Factura**
 
 ### /etc/sysctl.d/60-factura.conf
 
@@ -2898,36 +2971,43 @@ ni régénération de GRUB, et il appartient au même fichier que le reste de la
 base — une seule source. `panic=` a sa place seulement pour couvrir un panic
 **avant** que `systemd-sysctl` ait tourné, c'est-à-dire dans l'initramfs.
 
-::: pourquoi
-**Le prérequis caché de `nf_conntrack_max`.** Le cahier des charges exige
-que le fichier s'applique intégralement au boot sans avertissement : c'est
-le piège d'E9.13 et de BF9.2 en conditions réelles. Le fichier
-`modules-load.d` est la seule solution ordonnée ; la vérification est
-`journalctl -u systemd-sysctl -b` vide d'erreur après reboot, et c'est ce que
-teste le script en comparant les valeurs **effectives**.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Le prérequis caché de `nf_conntrack_max`.** Le cahier des charges exige
+> que le fichier s'applique intégralement au boot sans avertissement : c'est
+> le piège d'E9.13 et de BF9.2 en conditions réelles. Le fichier
+> `modules-load.d` est la seule solution ordonnée ; la vérification est
+> `journalctl -u systemd-sysctl -b` vide d'erreur après reboot, et c'est ce que
+> teste le script en comparant les valeurs **effectives**.
+>
+> **Le script lit l'état, pas la configuration.** `sysctl -n` et
+> `/proc/sys` disent ce que le noyau applique ; le fichier dit ce qu'on
+> voulait. Un audit sur le fichier valide un fichier ignoré (BF9.2) ; un audit
+> sur `/proc/sys` détecte aussi la valeur remise par un autre acteur (Docker
+> qui force `ip_forward=1`, `tuned` qui écrase `swappiness`). Idem pour kdump :
+> `/sys/kernel/kexec_crash_loaded` prouve que le noyau de secours est chargé
+> en mémoire **maintenant**, alors que `systemctl is-enabled kdump-tools` ne
+> dit rien de l'état réel après un changement de noyau.
+>
+> **`crashkernel=256M`.** kdump réserve cette mémoire au boot, indisponible
+> pour tout le reste (`free -m` montre 2 Go − 256). Trop peu : le noyau de
+> secours manque de mémoire et le dump échoue au pire moment. Les syntaxes à
+> plages (`2G-4G:320M`, début inclus, fin exclue) sont pratiques pour un
+> modèle déployé sur des tailles variées, mais piègent la VM de 2 Go dont le
+> noyau ne voit que 2 047 Mo. Rocky utilise `crashkernel=1G-4G:192M,...` par
+> défaut, avec le même écueil. Le test réel est indispensable : un kdump
+> jamais testé est un kdump qui ne marche pas, et `kexec_crash_loaded` à 0
+> après reboot est le premier signe d'une réservation manquée.
+>
+> **`transparent_hugepage=madvise` sur la ligne noyau plutôt qu'en unité** :
+> la valeur est en place avant le premier processus, donc avant que
+> PostgreSQL ou Redis alloue sa mémoire. Une unité `oneshot` arrive après
+> `sysinit.target` — suffisant en général, mais un service ordonné tôt pourrait
+> la précéder. Le paramètre noyau n'a pas ce problème.
 
-**Le script lit l'état, pas la configuration.** `sysctl -n` et
-`/proc/sys` disent ce que le noyau applique ; le fichier dit ce qu'on
-voulait. Un audit sur le fichier valide un fichier ignoré (BF9.2) ; un audit
-sur `/proc/sys` détecte aussi la valeur remise par un autre acteur (Docker
-qui force `ip_forward=1`, `tuned` qui écrase `swappiness`). Idem pour kdump :
-`/sys/kernel/kexec_crash_loaded` prouve que le noyau de secours est chargé
-en mémoire **maintenant**, alors que `systemctl is-enabled kdump-tools` ne
-dit rien de l'état réel après un changement de noyau.
+<!-- nav:début -->
+---
 
-**`crashkernel=256M`.** kdump réserve cette mémoire au boot, indisponible
-pour tout le reste (`free -m` montre 2 Go − 256). Trop peu : le noyau de
-secours manque de mémoire et le dump échoue au pire moment. Les syntaxes à
-plages (`2G-4G:320M`, début inclus, fin exclue) sont pratiques pour un
-modèle déployé sur des tailles variées, mais piègent la VM de 2 Go dont le
-noyau ne voit que 2 047 Mo. Rocky utilise `crashkernel=1G-4G:192M,...` par
-défaut, avec le même écueil. Le test réel est indispensable : un kdump
-jamais testé est un kdump qui ne marche pas, et `kexec_crash_loaded` à 0
-après reboot est le premier signe d'une réservation manquée.
-
-**`transparent_hugepage=madvise` sur la ligne noyau plutôt qu'en unité** :
-la valeur est en place avant le premier processus, donc avant que
-PostgreSQL ou Redis alloue sa mémoire. Une unité `oneshot` arrive après
-`sysinit.target` — suffisant en général, mais un service ordonné tôt pourrait
-la précéder. Le paramètre noyau n'a pas ce problème.
-:::
+[← Module 08](../08-processus-systemd/corrige.md) · [Énoncé](README.md) · [Module 10 →](../10-paquets/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

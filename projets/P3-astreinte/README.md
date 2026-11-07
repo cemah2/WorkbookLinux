@@ -1,34 +1,87 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet C — Une semaine d'astreinte › **Projet C**  
+[← Projet B](../P2-factura-devops/README.md) · [Corrigé](corrige.md)
+
+<details><summary>Scripts du module (37)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_P3.sh`](../../scripts/projects/P3/setup_P3.sh) | prépare le module |
+| [`check_PC_1_1.sh`](../../scripts/projects/P3/check_PC_1_1.sh) | vérification |
+| [`check_PC_1_2.sh`](../../scripts/projects/P3/check_PC_1_2.sh) | vérification |
+| [`check_PC_1_3.sh`](../../scripts/projects/P3/check_PC_1_3.sh) | vérification |
+| [`check_PC_1_4.sh`](../../scripts/projects/P3/check_PC_1_4.sh) | vérification |
+| [`check_PC_2_1.sh`](../../scripts/projects/P3/check_PC_2_1.sh) | vérification |
+| [`check_PC_2_2.sh`](../../scripts/projects/P3/check_PC_2_2.sh) | vérification |
+| [`check_PC_2_3.sh`](../../scripts/projects/P3/check_PC_2_3.sh) | vérification |
+| [`check_PC_2_4.sh`](../../scripts/projects/P3/check_PC_2_4.sh) | vérification |
+| [`check_PC_3_1.sh`](../../scripts/projects/P3/check_PC_3_1.sh) | vérification |
+| [`check_PC_3_2.sh`](../../scripts/projects/P3/check_PC_3_2.sh) | vérification |
+| [`check_PC_3_3.sh`](../../scripts/projects/P3/check_PC_3_3.sh) | vérification |
+| [`check_PC_4_1.sh`](../../scripts/projects/P3/check_PC_4_1.sh) | vérification |
+| [`check_PC_4_2.sh`](../../scripts/projects/P3/check_PC_4_2.sh) | vérification |
+| [`check_PC_4_3.sh`](../../scripts/projects/P3/check_PC_4_3.sh) | vérification |
+| [`check_PC_4_4.sh`](../../scripts/projects/P3/check_PC_4_4.sh) | vérification |
+| [`check_PC_5_1.sh`](../../scripts/projects/P3/check_PC_5_1.sh) | vérification |
+| [`check_PC_5_2.sh`](../../scripts/projects/P3/check_PC_5_2.sh) | vérification |
+| [`check_PC_5_3.sh`](../../scripts/projects/P3/check_PC_5_3.sh) | vérification |
+| [`break_PC_1_1.sh`](../../scripts/projects/P3/break_PC_1_1.sh) | installe une panne |
+| [`break_PC_1_2.sh`](../../scripts/projects/P3/break_PC_1_2.sh) | installe une panne |
+| [`break_PC_1_3.sh`](../../scripts/projects/P3/break_PC_1_3.sh) | installe une panne |
+| [`break_PC_1_4.sh`](../../scripts/projects/P3/break_PC_1_4.sh) | installe une panne |
+| [`break_PC_2_1.sh`](../../scripts/projects/P3/break_PC_2_1.sh) | installe une panne |
+| [`break_PC_2_2.sh`](../../scripts/projects/P3/break_PC_2_2.sh) | installe une panne |
+| [`break_PC_2_3.sh`](../../scripts/projects/P3/break_PC_2_3.sh) | installe une panne |
+| [`break_PC_2_4.sh`](../../scripts/projects/P3/break_PC_2_4.sh) | installe une panne |
+| [`break_PC_3_1.sh`](../../scripts/projects/P3/break_PC_3_1.sh) | installe une panne |
+| [`break_PC_3_2.sh`](../../scripts/projects/P3/break_PC_3_2.sh) | installe une panne |
+| [`break_PC_3_3.sh`](../../scripts/projects/P3/break_PC_3_3.sh) | installe une panne |
+| [`break_PC_4_1.sh`](../../scripts/projects/P3/break_PC_4_1.sh) | installe une panne |
+| [`break_PC_4_2.sh`](../../scripts/projects/P3/break_PC_4_2.sh) | installe une panne |
+| [`break_PC_4_3.sh`](../../scripts/projects/P3/break_PC_4_3.sh) | installe une panne |
+| [`break_PC_4_4.sh`](../../scripts/projects/P3/break_PC_4_4.sh) | installe une panne |
+| [`break_PC_5_1.sh`](../../scripts/projects/P3/break_PC_5_1.sh) | installe une panne |
+| [`break_PC_5_2.sh`](../../scripts/projects/P3/break_PC_5_2.sh) | installe une panne |
+| [`break_PC_5_3.sh`](../../scripts/projects/P3/break_PC_5_3.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Projet C — Une semaine d'astreinte
 
 ## C.0 Présentation et règles du jeu
 
-::: objectif
-Ce projet est l'**examen final** de la partie exploitation. Il ne t'apprend
-presque aucune commande nouvelle : il te met en situation de t'en servir sous
-pression, pendant cinq jours d'astreinte fictifs sur la plateforme **Factura**.
-À la fin, tu sais :
-
-* prendre un ticket écrit par un non-technicien, en extraire le **symptôme
-  mesurable**, le **périmètre** et les **contraintes**, avant de toucher un
-  clavier ;
-* traiter aussi bien une **demande de changement** (vhost, ouverture de port,
-  compte restreint, purge planifiée) qu'un **incident** (certificat expiré,
-  base saturée, disque plein, intrusion, DNS cassé…) ;
-* respecter des **interdictions d'exploitation** (« pas de reboot », « pas de
-  rollback de snapshot », « pas de redémarrage du service ») et savoir quand,
-  exceptionnellement, les lever — en le traçant ;
-* **communiquer** pendant un incident (message de statut) et **après**
-  (post-mortem blameless) ;
-* mesurer la **disponibilité** d'un service contre un **SLO**, raisonner en
-  **budget d'erreur**, et transformer chaque incident en action d'amélioration
-  **automatisée**.
-
-Temps estimé : 12 à 16 h (étalées, comme une vraie semaine d'astreinte).
-Prérequis : toute la partie système, en particulier les modules 08 (systemd),
-12 (réseau), 14 (SSH), 16 (logs), 17 (timers), 18 (sécurité) et **19 (dépannage, performance, gestion d'incident)**, dont ce projet est le
-prolongement appliqué. Les huit pannes du module 19 ne sont **pas** rejouées
-ici : les scénarios sont tous différents.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> Ce projet est l'**examen final** de la partie exploitation. Il ne t'apprend
+> presque aucune commande nouvelle : il te met en situation de t'en servir sous
+> pression, pendant cinq jours d'astreinte fictifs sur la plateforme **Factura**.
+> À la fin, tu sais :
+>
+> * prendre un ticket écrit par un non-technicien, en extraire le **symptôme
+>   mesurable**, le **périmètre** et les **contraintes**, avant de toucher un
+>   clavier ;
+> * traiter aussi bien une **demande de changement** (vhost, ouverture de port,
+>   compte restreint, purge planifiée) qu'un **incident** (certificat expiré,
+>   base saturée, disque plein, intrusion, DNS cassé…) ;
+> * respecter des **interdictions d'exploitation** (« pas de reboot », « pas de
+>   rollback de snapshot », « pas de redémarrage du service ») et savoir quand,
+>   exceptionnellement, les lever — en le traçant ;
+> * **communiquer** pendant un incident (message de statut) et **après**
+>   (post-mortem blameless) ;
+> * mesurer la **disponibilité** d'un service contre un **SLO**, raisonner en
+>   **budget d'erreur**, et transformer chaque incident en action d'amélioration
+>   **automatisée**.
+>
+> **Temps estimé** : 12 à 16 h (étalées, comme une vraie semaine d'astreinte).
+>
+> **Prérequis** : toute la partie système, en particulier les modules 08 (systemd),
+> 12 (réseau), 14 (SSH), 16 (logs), 17 (timers), 18 (sécurité) et **19 (dépannage, performance, gestion d'incident)**, dont ce projet est le
+> prolongement appliqué. Les huit pannes du module 19 ne sont **pas** rejouées
+> ici : les scénarios sont tous différents.
 
 ### La plateforme Factura
 
@@ -52,18 +105,19 @@ la CI. Les secrets applicatifs sont dans `/etc/factura/api.env` sur `lab-web`.
 
 ### Mise en place
 
-::: attention
-Avant toute chose, snapshot des VM concernées depuis Proxmox. Le rollback
-`qm rollback <vmid> snap-clean` reste le filet de sécurité, mais **l'utiliser
-pendant un scénario vaut échec** : l'objectif est de réparer une machine qu'on
-ne peut pas rembobiner, ce qui est exactement la situation en production.
-
-```bash
-qm snapshot 9002 avant-P3   # lab-web
-qm snapshot 9003 avant-P3   # lab-db
-qm snapshot 9005 avant-P3   # lab-ops
-```
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant toute chose, snapshot des VM concernées depuis Proxmox. Le rollback
+> `qm rollback <vmid> snap-clean` reste le filet de sécurité, mais **l'utiliser
+> pendant un scénario vaut échec** : l'objectif est de réparer une machine qu'on
+> ne peut pas rembobiner, ce qui est exactement la situation en production.
+>
+> ```bash
+> qm snapshot 9002 avant-P3   # lab-web
+> qm snapshot 9003 avant-P3   # lab-db
+> qm snapshot 9005 avant-P3   # lab-ops
+> ```
 
 Le script de préparation déploie l'état minimal **selon le hostname** (ou
 `--role`). Lance-le sur chaque VM que le scénario du jour concerne :
@@ -106,11 +160,12 @@ service avec (les `check` lisent des fichiers réservés à root, d'où `sudo`) 
 sudo bash check_PC_X_Y.sh
 ```
 
-::: astuce
-Garde **deux sessions SSH** ouvertes sur la VM concernée en permanence. Quand
-une machine part en swap, épuise ses descripteurs ou sature ses inodes, ouvrir
-une nouvelle session devient impossible — celle qui est déjà ouverte tient.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Garde **deux sessions SSH** ouvertes sur la VM concernée en permanence. Quand
+> une machine part en swap, épuise ses descripteurs ou sature ses inodes, ouvrir
+> une nouvelle session devient impossible — celle qui est déjà ouverte tient.
 
 ### Règle du jeu et priorités
 
@@ -134,18 +189,18 @@ incident majeur. Chaque journée se clôt par un **rapport de fin de journée**
 démarres la semaine avec 43 minutes de budget d'erreur déjà consommées ce
 mois-ci sur les 216 disponibles.*
 
-### PC.1.1 — Le site n'est plus en HTTPS
+### <a id="pc-1-1"></a>[PC.1.1](corrige.md#pc-1-1) — Le site n'est plus en HTTPS
 
-::: contexte
-**03:14** — canal : alerte Prometheus `SSLCertExpired` (page).
-**08:02** — mail de la responsable commerciale : « Bonjour, ce matin quand je
-vais sur le site des factures mon navigateur affiche un gros avertissement rouge
-"votre connexion n'est pas privée" et refuse d'afficher la page. Les clients
-vont paniquer. C'est urgent, on a une démo à 10h. Merci !! »
-
-Priorité : **P1**. Fenêtre : avant 10:00.
-Interdit : redémarrer la VM.
-:::
+> **Contexte**
+>
+> **03:14** — canal : alerte Prometheus `SSLCertExpired` (page).
+> **08:02** — mail de la responsable commerciale : « Bonjour, ce matin quand je
+> vais sur le site des factures mon navigateur affiche un gros avertissement rouge
+> "votre connexion n'est pas privée" et refuse d'afficher la page. Les clients
+> vont paniquer. C'est urgent, on a une démo à 10h. Merci !! »
+>
+> Priorité : **P1**. Fenêtre : avant 10:00.
+> Interdit : redémarrer la VM.
 
 ```bash
 sudo bash break_PC_1_1.sh
@@ -155,27 +210,26 @@ Objectif : rétablir un HTTPS **valide** (chaîne de confiance de la CA de lab
 intacte, pas un auto-signé bricolé), sans reboot, et poser la mesure qui fait
 qu'un certificat n'expire plus jamais en silence.
 
-::: check
-```bash
-   sudo bash check_PC_1_1.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_1_1.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.1.2 — « Plus personne n'arrive à se connecter à l'appli »
+### <a id="pc-1-2"></a>[PC.1.2](corrige.md#pc-1-2) — « Plus personne n'arrive à se connecter à l'appli »
 
-::: contexte
-**09:36** — Slack, canal #support : « les utilisateurs ont "erreur base de
-données" quand ils se connectent. Moi aussi. Ça marchait hier. » Un peu plus
-tard : « le message exact c'est *FATAL : remaining connection slots are reserved for roles with the SUPERUSER attribute*. »
-
-Priorité : **P1**. Interdit : redémarrer PostgreSQL **hors** de la fenêtre de
-maintenance 12:30–13:00 (une coupure en pleine matinée est refusée par le
-métier).
-:::
+> **Contexte**
+>
+> **09:36** — Slack, canal #support : « les utilisateurs ont "erreur base de
+> données" quand ils se connectent. Moi aussi. Ça marchait hier. » Un peu plus
+> tard : « le message exact c'est *FATAL : remaining connection slots are reserved for roles with the SUPERUSER attribute*. »
+>
+> Priorité : **P1**. Interdit : redémarrer PostgreSQL **hors** de la fenêtre de
+> maintenance 12:30–13:00 (une coupure en pleine matinée est refusée par le
+> métier).
 
 ```bash
 sudo bash break_PC_1_2.sh
@@ -185,28 +239,27 @@ Objectif : rendre l'accès aux utilisateurs **sans** redémarrer la base en
 matinée, trouver **qui** mange les connexions, distinguer le réglage de fond du
 symptôme, et poser un garde-fou contre les transactions abandonnées.
 
-::: check
-```bash
-   sudo bash check_PC_1_2.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_1_2.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.1.3 — Demande : publier le site de documentation
+### <a id="pc-1-3"></a>[PC.1.3](corrige.md#pc-1-3) — Demande : publier le site de documentation
 
-::: contexte
-**11:10** — ticket de Julie (dev) : « On a fini la doc de l'API. Les fichiers
-sont dans `/srv/www/docs` sur lab-web. Est-ce que tu peux la mettre en ligne sur
-`docs.factura.lab.local` (en HTTPS bien sûr) avant la fin de journée ? Pas
-pressé, c'est pour la démo de demain. »
-
-Priorité : **P3** (changement). Fenêtre : avant 17:00.
-Contrainte : ne pas casser le vhost principal ; respecter le moindre privilège
-sur les droits de fichiers (la livraison arrive avec des droits douteux).
-:::
+> **Contexte**
+>
+> **11:10** — ticket de Julie (dev) : « On a fini la doc de l'API. Les fichiers
+> sont dans `/srv/www/docs` sur lab-web. Est-ce que tu peux la mettre en ligne sur
+> `docs.factura.lab.local` (en HTTPS bien sûr) avant la fin de journée ? Pas
+> pressé, c'est pour la démo de demain. »
+>
+> Priorité : **P3** (changement). Fenêtre : avant 17:00.
+> Contrainte : ne pas casser le vhost principal ; respecter le moindre privilège
+> sur les droits de fichiers (la livraison arrive avec des droits douteux).
 
 ```bash
 sudo bash break_PC_1_3.sh
@@ -216,28 +269,27 @@ Objectif : nouveau vhost `docs.factura.lab.local` en HTTPS (certificat couvrant
 le nom), redirection HTTP→HTTPS, `factura.lab.local` intact, aucun fichier
 world-writable dans la racine servie.
 
-::: check
-```bash
-   sudo bash check_PC_1_3.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_1_3.sh
+> ```
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
-### PC.1.4 — 502 partout après le déploiement de 15 h
+### <a id="pc-1-4"></a>[PC.1.4](corrige.md#pc-1-4) — 502 partout après le déploiement de 15 h
 
-::: contexte
-**15:12** — appel du dirigeant : « On vient de mettre en ligne la nouvelle
-version et là plus rien ne marche, tout affiche *502 Bad Gateway*. Julie dit que
-son code est bon. Répare, on perd des commandes ! »
-**15:13** — Slack de Julie : « `systemctl status factura-api` dit pourtant
-*active (running)*, je comprends pas. »
-
-Priorité : **P1**. Interdit : **rollback** de la version applicative (le métier
-veut garder la 2.4.0, qui corrige un autre bogue) et reboot de la VM.
-:::
+> **Contexte**
+>
+> **15:12** — appel du dirigeant : « On vient de mettre en ligne la nouvelle
+> version et là plus rien ne marche, tout affiche *502 Bad Gateway*. Julie dit que
+> son code est bon. Répare, on perd des commandes ! »
+> **15:13** — Slack de Julie : « `systemctl status factura-api` dit pourtant
+> *active (running)*, je comprends pas. »
+>
+> Priorité : **P1**. Interdit : **rollback** de la version applicative (le métier
+> veut garder la 2.4.0, qui corrige un autre bogue) et reboot de la VM.
 
 ```bash
 sudo bash break_PC_1_4.sh
@@ -247,15 +299,14 @@ Objectif : comprendre pourquoi nginx renvoie 502 alors que l'API tourne,
 réconcilier la configuration sans revenir à l'ancienne version, et remettre le
 service en ligne.
 
-::: check
-```bash
-   sudo bash check_PC_1_4.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_1_4.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 **Fin de journée :** remplis `~/astreinte/rapports/lundi.md` à partir du modèle.
 
@@ -266,15 +317,15 @@ lignes: 8
 *Journée « stockage et sauvegardes ». Tu commences avec le budget d'erreur
 entamé lundi.*
 
-### PC.2.1 — lab-db à 95 %
+### <a id="pc-2-1"></a>[PC.2.1](corrige.md#pc-2-1) — lab-db à 95 %
 
-::: contexte
-**07:48** — alerte Prometheus `DiskSpaceLow` sur lab-db (85 % → 95 % en trois
-heures). Aucun utilisateur ne se plaint encore : la base tourne toujours.
-
-Priorité : **P2** (avant que ça devienne P1). Interdit : reboot, et surtout
-**ne jamais** supprimer de fichiers dans `pg_wal/` à la main.
-:::
+> **Contexte**
+>
+> **07:48** — alerte Prometheus `DiskSpaceLow` sur lab-db (85 % → 95 % en trois
+> heures). Aucun utilisateur ne se plaint encore : la base tourne toujours.
+>
+> Priorité : **P2** (avant que ça devienne P1). Interdit : reboot, et surtout
+> **ne jamais** supprimer de fichiers dans `pg_wal/` à la main.
 
 ```bash
 sudo bash break_PC_2_1.sh
@@ -285,27 +336,26 @@ journalisation trop bavarde, un slot de réplication orphelin qui retient le WAL
 de vieux journaux non tournés), récupérer l'espace proprement, et poser la
 rotation qui manquait — sans redémarrer PostgreSQL.
 
-::: check
-```bash
-   sudo bash check_PC_2_1.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_2_1.sh
+> ```
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### PC.2.2 — L'export nocturne est figé
+### <a id="pc-2-2"></a>[PC.2.2](corrige.md#pc-2-2) — L'export nocturne est figé
 
-::: contexte
-**09:05** — mail de la compta : « L'export des archives vers le serveur de
-fichiers n'a pas fini cette nuit, il est toujours "en cours" ce matin. Et quand
-j'essaie de regarder le dossier, mon terminal se fige complètement. »
-Sur lab-ops, `df -h` ne rend jamais la main ; la charge monte, le CPU est au
-repos.
-
-Priorité : **P2**. Interdit : reboot de la VM (d'autres jobs tournent dessus).
-:::
+> **Contexte**
+>
+> **09:05** — mail de la compta : « L'export des archives vers le serveur de
+> fichiers n'a pas fini cette nuit, il est toujours "en cours" ce matin. Et quand
+> j'essaie de regarder le dossier, mon terminal se fige complètement. »
+> Sur lab-ops, `df -h` ne rend jamais la main ; la charge monte, le CPU est au
+> repos.
+>
+> Priorité : **P2**. Interdit : reboot de la VM (d'autres jobs tournent dessus).
 
 ```bash
 sudo bash break_PC_2_2.sh
@@ -315,28 +365,27 @@ Objectif : comprendre pourquoi un montage NFS injoignable fige `df` et les
 processus (état `D`), rétablir l'accès, et rendre le montage incapable de
 bloquer le boot et les jobs à l'avenir.
 
-::: check
-```bash
-   sudo bash check_PC_2_2.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_2_2.sh
+> ```
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### PC.2.3 — « La sauvegarde marche mais l'archive est vide »
+### <a id="pc-2-3"></a>[PC.2.3](corrige.md#pc-2-3) — « La sauvegarde marche mais l'archive est vide »
 
-::: contexte
-**14:20** — appel du dirigeant, tendu : « La compta m'a demandé de restaurer une
-facture de la semaine dernière. On est allés chercher la sauvegarde de la nuit :
-elle est **vide**. Mais le rapport dit "Sauvegarde OK" tous les matins depuis des
-semaines ! Comment c'est possible ?! »
-`systemctl list-timers` confirme que `factura-backup.timer` tourne chaque nuit.
-
-Priorité : **P2** (aucune interruption, mais risque majeur). Interdit : aucun,
-mais tu ne dois **pas** te contenter de relancer la sauvegarde.
-:::
+> **Contexte**
+>
+> **14:20** — appel du dirigeant, tendu : « La compta m'a demandé de restaurer une
+> facture de la semaine dernière. On est allés chercher la sauvegarde de la nuit :
+> elle est **vide**. Mais le rapport dit "Sauvegarde OK" tous les matins depuis des
+> semaines ! Comment c'est possible ?! »
+> `systemctl list-timers` confirme que `factura-backup.timer` tourne chaque nuit.
+>
+> Priorité : **P2** (aucune interruption, mais risque majeur). Interdit : aucun,
+> mais tu ne dois **pas** te contenter de relancer la sauvegarde.
 
 ```bash
 sudo bash break_PC_2_3.sh
@@ -347,28 +396,27 @@ Objectif : trouver pourquoi une sauvegarde « réussit » avec une archive vide
 **échoue** quand il n'archive rien, purger les fausses archives, et vérifier une
 restauration.
 
-::: check
-```bash
-   sudo bash check_PC_2_3.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_2_3.sh
+> ```
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### PC.2.4 — Demande : purge automatique des exports
+### <a id="pc-2-4"></a>[PC.2.4](corrige.md#pc-2-4) — Demande : purge automatique des exports
 
-::: contexte
-**16:40** — ticket de la compta : « Le dossier des exports CSV grossit sans
-arrêt sur lab-ops. Peux-tu mettre en place un nettoyage automatique ? On veut
-garder **30 jours** d'exports, mais **surtout ne jamais toucher** aux fichiers
-légaux (ceux dont le nom finit par `-legal.csv` et tout ce qui est dans
-`archives-legales/`). »
-
-Priorité : **P3** (changement). Contrainte : purge planifiée (timer, dimanche),
-qui **journalise** ce qu'elle supprime et propose un mode simulation.
-:::
+> **Contexte**
+>
+> **16:40** — ticket de la compta : « Le dossier des exports CSV grossit sans
+> arrêt sur lab-ops. Peux-tu mettre en place un nettoyage automatique ? On veut
+> garder **30 jours** d'exports, mais **surtout ne jamais toucher** aux fichiers
+> légaux (ceux dont le nom finit par `-legal.csv` et tout ce qui est dans
+> `archives-legales/`). »
+>
+> Priorité : **P3** (changement). Contrainte : purge planifiée (timer, dimanche),
+> qui **journalise** ce qu'elle supprime et propose un mode simulation.
 
 ```bash
 sudo bash break_PC_2_4.sh
@@ -378,15 +426,14 @@ Objectif : un timer systemd + un script de purge sûr (n'efface que les `.csv`
 de plus de 30 jours, épargne les fichiers légaux, trace ses suppressions, a un
 `--dry-run`).
 
-::: check
-```bash
-   sudo bash check_PC_2_4.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_2_4.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 **Fin de journée :** `~/astreinte/rapports/mardi.md`.
 
@@ -397,17 +444,17 @@ lignes: 8
 *Journée « accès, réseau et sécurité ». Elle se termine par ton premier
 exercice de communication.*
 
-### PC.3.1 — Alerte : connexion réussie après des échecs répétés
+### <a id="pc-3-1"></a>[PC.3.1](corrige.md#pc-3-1) — Alerte : connexion réussie après des échecs répétés
 
-::: contexte
-**06:20** — le SIEM lève une alerte sur lab-web : « connexion SSH réussie sur le
-compte `deploy` après une série d'échecs, depuis une IP externe ». Personne dans
-l'équipe ne reconnaît cette connexion.
-
-Priorité : **P1** (sécurité). Interdit : détruire les preuves. Tu **collectes
-avant de nettoyer**. Le déploiement légitime (clé de la CI) ne doit pas être
-cassé par ta remédiation.
-:::
+> **Contexte**
+>
+> **06:20** — le SIEM lève une alerte sur lab-web : « connexion SSH réussie sur le
+> compte `deploy` après une série d'échecs, depuis une IP externe ». Personne dans
+> l'équipe ne reconnaît cette connexion.
+>
+> Priorité : **P1** (sécurité). Interdit : détruire les preuves. Tu **collectes
+> avant de nettoyer**. Le déploiement légitime (clé de la CI) ne doit pas être
+> cassé par ta remédiation.
 
 ```bash
 sudo bash break_PC_3_1.sh
@@ -418,34 +465,34 @@ artefacts (crontab de `deploy`, `authorized_keys`), **contenir** (couper l'accè
 de l'attaquant, verrouiller le compte, désactiver l'auth par mot de passe),
 **préserver les preuves**, et remédier sans casser la CI.
 
-::: attention
-C'est un exercice d'analyse sur un jeu de données de lab (le script pose des
-lignes de journal factices et une fausse clé, l'IP est une adresse de
-documentation). On ne « pirate » rien : on apprend à **lire** une compromission
-et à réagir proprement.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> C'est un exercice d'analyse sur un jeu de données de lab (le script pose des
+> lignes de journal factices et une fausse clé, l'IP est une adresse de
+> documentation). On ne « pirate » rien : on apprend à **lire** une compromission
+> et à réagir proprement.
 
-::: check
-```bash
-   sudo bash check_PC_3_1.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_3_1.sh
+> ```
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### PC.3.2 — Le déploiement échoue : Permission denied (publickey)
+### <a id="pc-3-2"></a>[PC.3.2](corrige.md#pc-3-2) — Le déploiement échoue : Permission denied (publickey)
 
-::: contexte
-**10:30** — Slack de Julie : « Mon déploiement plante à l'étape "redémarrer
-l'API". Le job affiche `deploy@lab-web: Permission denied (publickey)`. Je n'ai
-rien changé de mon côté ! » En creusant : les clés SSH de la CI ont été
-« tournées » hier soir pour la sécurité.
-
-Priorité : **P2**. Interdit : réactiver l'authentification par mot de passe
-comme contournement.
-:::
+> **Contexte**
+>
+> **10:30** — Slack de Julie : « Mon déploiement plante à l'étape "redémarrer
+> l'API". Le job affiche `deploy@lab-web: Permission denied (publickey)`. Je n'ai
+> rien changé de mon côté ! » En creusant : les clés SSH de la CI ont été
+> « tournées » hier soir pour la sécurité.
+>
+> Priorité : **P2**. Interdit : réactiver l'authentification par mot de passe
+> comme contournement.
 
 ```bash
 sudo bash break_PC_3_2.sh
@@ -455,27 +502,26 @@ Objectif : comprendre qu'une **rotation de clé** a été faite à moitié (anci
 clé publique retirée de `deploy`, mais la CI utilise encore l'ancienne privée),
 rétablir un déploiement par clé cohérent, sans jamais repasser au mot de passe.
 
-::: check
-```bash
-   sudo bash check_PC_3_2.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_3_2.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.3.3 — « La base est injoignable » (mais elle répond)
+### <a id="pc-3-3"></a>[PC.3.3](corrige.md#pc-3-3) — « La base est injoignable » (mais elle répond)
 
-::: contexte
-**13:55** — Slack #support : « L'appli dit "base de données injoignable" depuis
-midi. Mais l'admin de la base jure qu'elle tourne, et il arrive à s'y connecter
-en tapant l'IP directement. » `/sante` renvoie 503 avec
-`could not translate host name "lab-db" to address`.
-
-Priorité : **P1**. Interdit : coder une IP en dur dans `api.env` (corrige la
-**résolution**, pas le symptôme).
-:::
+> **Contexte**
+>
+> **13:55** — Slack #support : « L'appli dit "base de données injoignable" depuis
+> midi. Mais l'admin de la base jure qu'elle tourne, et il arrive à s'y connecter
+> en tapant l'IP directement. » `/sante` renvoie 503 avec
+> `could not translate host name "lab-db" to address`.
+>
+> Priorité : **P1**. Interdit : coder une IP en dur dans `api.env` (corrige la
+> **résolution**, pas le symptôme).
 
 ```bash
 sudo bash break_PC_3_3.sh
@@ -485,23 +531,22 @@ Objectif : montrer que la panne est une **résolution de nom** cassée (entrée
 retirée de `/etc/hosts`), la rétablir au bon endroit, et remettre `/sante` au
 vert.
 
-::: check
-```bash
-   sudo bash check_PC_3_3.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_3_3.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.3.4 — Exercice de communication : message de statut
+### <a id="pc-3-4"></a>[PC.3.4](corrige.md#pc-3-4) — Exercice de communication : message de statut
 
-::: contexte
-Rejoue mentalement l'incident PC.3.3 (site inaccessible depuis 12:00, détecté à
-13:55). Le dirigeant demande « qu'on prévienne les utilisateurs ». Tu n'as pas
-encore la cause à 14:00.
-:::
+> **Contexte**
+>
+> Rejoue mentalement l'incident PC.3.3 (site inaccessible depuis 12:00, détecté à
+> 13:55). Le dirigeant demande « qu'on prévienne les utilisateurs ». Tu n'as pas
+> encore la cause à 14:00.
 
 Rédige les **trois messages** de la cadence 15 minutes, pour un public **non
 technique** (clients + interne), dans
@@ -517,9 +562,7 @@ technique** (clients + interne), dans
 Contraintes : pas de jargon (« résolution DNS » → « annuaire interne »), pas
 d'accusation, pas de délai chiffré non garanti, une action claire par message.
 
-::: repondre
-lignes: 16
-:::
+<!-- repondre: 16 -->
 
 **Fin de journée :** `~/astreinte/rapports/mercredi.md`.
 
@@ -529,19 +572,19 @@ lignes: 16
 
 *Journée « demandes de changement et incidents insidieux ».*
 
-### PC.4.1 — Demande : ouvrir un port pour un partenaire
+### <a id="pc-4-1"></a>[PC.4.1](corrige.md#pc-4-1) — Demande : ouvrir un port pour un partenaire
 
-::: contexte
-**08:30** — ticket du dirigeant, avec justification métier : « On signe avec
-**Comptaflux**. Leur plateforme (IP `203.0.113.42`) doit pouvoir récupérer nos
-données sur le port `9443` de lab-web. Leur intégrateur veut que ce soit ouvert
-pour vendredi. Fais le nécessaire, mais je ne veux pas qu'on ouvre la porte à
-tout Internet. »
-
-Priorité : **P3** (changement). Contrainte : **moindre privilège** — le port
-n'est joignable que depuis l'IP du partenaire, en TCP ; les accès existants (22,
-80, 443) restent intacts.
-:::
+> **Contexte**
+>
+> **08:30** — ticket du dirigeant, avec justification métier : « On signe avec
+> **Comptaflux**. Leur plateforme (IP `203.0.113.42`) doit pouvoir récupérer nos
+> données sur le port `9443` de lab-web. Leur intégrateur veut que ce soit ouvert
+> pour vendredi. Fais le nécessaire, mais je ne veux pas qu'on ouvre la porte à
+> tout Internet. »
+>
+> Priorité : **P3** (changement). Contrainte : **moindre privilège** — le port
+> n'est joignable que depuis l'IP du partenaire, en TCP ; les accès existants (22,
+> 80, 443) restent intacts.
 
 ```bash
 sudo bash break_PC_4_1.sh
@@ -550,26 +593,25 @@ sudo bash break_PC_4_1.sh
 Objectif : une règle de pare-feu restreinte à `203.0.113.42` sur `9443/tcp`,
 rien de plus ouvert, service partenaire joignable.
 
-::: check
-```bash
-   sudo bash check_PC_4_1.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_4_1.sh
+> ```
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
-### PC.4.2 — TLS échoue, sans qu'on ait touché aux certificats
+### <a id="pc-4-2"></a>[PC.4.2](corrige.md#pc-4-2) — TLS échoue, sans qu'on ait touché aux certificats
 
-::: contexte
-**11:20** — Slack d'un dev : « Nos appels HTTPS vers l'API depuis lab-web échouent avec `certificate is not yet valid`. Et les horodatages dans les logs
-sont bizarres, genre en retard de plusieurs heures. On n'a pourtant **rien** changé aux
-certificats. » (Seul le renouvellement automatique posé lundi a tourné cette nuit.)
-
-Priorité : **P2**. Interdit : régénérer les certificats (ce n'est pas le
-problème), reboot.
-:::
+> **Contexte**
+>
+> **11:20** — Slack d'un dev : « Nos appels HTTPS vers l'API depuis lab-web échouent avec `certificate is not yet valid`. Et les horodatages dans les logs
+> sont bizarres, genre en retard de plusieurs heures. On n'a pourtant **rien** changé aux
+> certificats. » (Seul le renouvellement automatique posé lundi a tourné cette nuit.)
+>
+> Priorité : **P2**. Interdit : régénérer les certificats (ce n'est pas le
+> problème), reboot.
 
 ```bash
 sudo bash break_PC_4_2.sh
@@ -579,27 +621,26 @@ Objectif : relier l'erreur TLS et les horodatages en retard à une **horloge
 dérivée** (synchro NTP coupée, horloge en retard de trois heures : le certificat renouvelé cette nuit n'est pas encore « valide » pour elle), la
 resynchroniser, et réactiver la synchro au démarrage.
 
-::: check
-```bash
-   sudo bash check_PC_4_2.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_4_2.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.4.3 — Redis rame et la VM db swappe
+### <a id="pc-4-3"></a>[PC.4.3](corrige.md#pc-4-3) — Redis rame et la VM db swappe
 
-::: contexte
-**14:45** — alerte `NodeSwapUsage` sur lab-db, et Slack #support : « le site est
-lent quand on filtre les factures ». `vmstat` montre du swap **en mouvement**
-(si/so non nuls), Redis répond mollement, `info memory` affiche un
-`used_memory` énorme.
-
-Priorité : **P2**. Interdit : reboot de la VM, `redis-cli FLUSHALL` à l'aveugle
-(tu perdrais les sessions actives).
-:::
+> **Contexte**
+>
+> **14:45** — alerte `NodeSwapUsage` sur lab-db, et Slack #support : « le site est
+> lent quand on filtre les factures ». `vmstat` montre du swap **en mouvement**
+> (si/so non nuls), Redis répond mollement, `info memory` affiche un
+> `used_memory` énorme.
+>
+> Priorité : **P2**. Interdit : reboot de la VM, `redis-cli FLUSHALL` à l'aveugle
+> (tu perdrais les sessions actives).
 
 ```bash
 sudo bash break_PC_4_3.sh
@@ -609,27 +650,26 @@ Objectif : montrer que Redis grossit sans borne (pas de `maxmemory`, politique
 `noeviction`), poser une limite mémoire et une politique d'éviction adaptées,
 persister le réglage, et faire cesser le swap.
 
-::: check
-```bash
-   sudo bash check_PC_4_3.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_4_3.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.4.4 — Le conteneur worker clignote
+### <a id="pc-4-4"></a>[PC.4.4](corrige.md#pc-4-4) — Le conteneur worker clignote
 
-::: contexte
-**16:30** — Slack de Julie : « Le worker n'arrête pas de redémarrer. `docker ps`
-le montre tantôt *health: starting*, tantôt *unhealthy*, et il ne traite plus
-aucun lot. On n'a rien déployé pourtant. » (En fait, la sonde de santé a été
-resserrée hier.)
-
-Priorité : **P3**. Interdit : supprimer purement et simplement le healthcheck
-(garde une vraie sonde), reboot.
-:::
+> **Contexte**
+>
+> **16:30** — Slack de Julie : « Le worker n'arrête pas de redémarrer. `docker ps`
+> le montre tantôt *health: starting*, tantôt *unhealthy*, et il ne traite plus
+> aucun lot. On n'a rien déployé pourtant. » (En fait, la sonde de santé a été
+> resserrée hier.)
+>
+> Priorité : **P3**. Interdit : supprimer purement et simplement le healthcheck
+> (garde une vraie sonde), reboot.
 
 ```bash
 sudo bash break_PC_4_4.sh
@@ -639,18 +679,17 @@ Objectif : comprendre qu'un `--health-timeout` plus court que le temps de
 réponse de la sonde (avec une seule tentative) condamne le conteneur, détendre
 le healthcheck au bon endroit, et retrouver un conteneur `healthy` stable.
 
-::: check
-```bash
-   sudo bash check_PC_4_4.sh
-```
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_4_4.sh
+> ```
+>
+> Si Docker n'est pas disponible sur ta VM, ce ticket est **facultatif** : le
+> `break` te le dira et tu peux passer.
 
-Si Docker n'est pas disponible sur ta VM, ce ticket est **facultatif** : le
-`break` te le dira et tu peux passer.
-:::
-
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 **Fin de journée :** `~/astreinte/rapports/jeudi.md`.
 
@@ -661,17 +700,17 @@ lignes: 8
 *Dernière journée : dette technique, pièges classiques, puis le post-mortem de
 la semaine.*
 
-### PC.5.1 — Demande : accès lecture seule pour l'audit
+### <a id="pc-5-1"></a>[PC.5.1](corrige.md#pc-5-1) — Demande : accès lecture seule pour l'audit
 
-::: contexte
-**09:00** — ticket, avec justification : « Le cabinet **Revizor** démarre son
-audit annuel. Ils ont besoin de lire la base `factura` pendant **2 semaines**,
-depuis lab-adm uniquement. Lecture seule stricte : ils ne doivent **rien**
-pouvoir modifier. »
-
-Priorité : **P3** (changement). Contrainte : moindre privilège — pas de
-superutilisateur, pas d'écriture, date d'expiration, accès réseau restreint.
-:::
+> **Contexte**
+>
+> **09:00** — ticket, avec justification : « Le cabinet **Revizor** démarre son
+> audit annuel. Ils ont besoin de lire la base `factura` pendant **2 semaines**,
+> depuis lab-adm uniquement. Lecture seule stricte : ils ne doivent **rien**
+> pouvoir modifier. »
+>
+> Priorité : **P3** (changement). Contrainte : moindre privilège — pas de
+> superutilisateur, pas d'écriture, date d'expiration, accès réseau restreint.
 
 ```bash
 sudo bash break_PC_5_1.sh
@@ -681,27 +720,26 @@ Objectif : un rôle PostgreSQL `LOGIN` en lecture seule sur `factura`, sans droi
 d'administration, avec `VALID UNTIL`, une limite de connexions, et un `pg_hba`
 qui ne s'ouvre pas à tout Internet.
 
-::: check
-```bash
-   sudo bash check_PC_5_1.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_5_1.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.5.2 — Après les mises à jour de nuit, le site a disparu
+### <a id="pc-5-2"></a>[PC.5.2](corrige.md#pc-5-2) — Après les mises à jour de nuit, le site a disparu
 
-::: contexte
-**08:10** — alerte `ProbeFailed` sur `https://factura.lab.local`, et mail :
-« Le site ne répond plus du tout en HTTPS ce matin. Sur le port normal, on
-tombe sur une page "Welcome to nginx". L'API a l'air de tourner pourtant. »
-La fenêtre de mises à jour automatiques a tourné cette nuit.
-
-Priorité : **P1**. Interdit : reboot avant d'avoir compris ; ne pas réinstaller
-nginx « pour repartir propre ».
-:::
+> **Contexte**
+>
+> **08:10** — alerte `ProbeFailed` sur `https://factura.lab.local`, et mail :
+> « Le site ne répond plus du tout en HTTPS ce matin. Sur le port normal, on
+> tombe sur une page "Welcome to nginx". L'API a l'air de tourner pourtant. »
+> La fenêtre de mises à jour automatiques a tourné cette nuit.
+>
+> Priorité : **P1**. Interdit : reboot avant d'avoir compris ; ne pas réinstaller
+> nginx « pour repartir propre ».
 
 ```bash
 sudo bash break_PC_5_2.sh
@@ -712,26 +750,25 @@ personnalisé (mis de côté en `.dpkg-old`) par une conf par défaut, restaurer
 configuration Factura (TLS + proxy), et proposer de quoi détecter/éviter la
 récidive (conf versionnée).
 
-::: check
-```bash
-   sudo bash check_PC_5_2.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_5_2.sh
+> ```
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### PC.5.3 — « No space left » mais le disque est vide
+### <a id="pc-5-3"></a>[PC.5.3](corrige.md#pc-5-3) — « No space left » mais le disque est vide
 
-::: contexte
-**11:40** — Slack de Julie : « Le cache de sessions sur lab-ops renvoie *No space
-left on device* à chaque écriture, mais `df -h` dit que le volume est **quasi
-vide** ! On y comprend rien. »
-
-Priorité : **P2**. Interdit : reboot, agrandir le volume (ce n'est pas un
-problème de taille).
-:::
+> **Contexte**
+>
+> **11:40** — Slack de Julie : « Le cache de sessions sur lab-ops renvoie *No space
+> left on device* à chaque écriture, mais `df -h` dit que le volume est **quasi
+> vide** ! On y comprend rien. »
+>
+> Priorité : **P2**. Interdit : reboot, agrandir le volume (ce n'est pas un
+> problème de taille).
 
 ```bash
 sudo bash break_PC_5_3.sh
@@ -741,23 +778,22 @@ Objectif : montrer que ce sont les **inodes** qui sont épuisés (des milliers d
 petits fichiers), pas l'espace ; arrêter le processus qui les crée, libérer, et
 poser une surveillance des inodes (pas seulement de l'espace).
 
-::: check
-```bash
-   sudo bash check_PC_5_3.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+>    sudo bash check_PC_5_3.sh
+> ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### PC.5.4 — Exercice : post-mortem complet
+### <a id="pc-5-4"></a>[PC.5.4](corrige.md#pc-5-4) — Exercice : post-mortem complet
 
-::: contexte
-Choisis **l'incident P1 de la semaine qui t'a le plus appris** (PC.1.1, PC.1.4,
-PC.3.1, PC.3.3 ou PC.5.2). Tu vas en écrire le post-mortem **blameless** complet,
-destiné à la direction et à l'équipe.
-:::
+> **Contexte**
+>
+> Choisis **l'incident P1 de la semaine qui t'a le plus appris** (PC.1.1, PC.1.4,
+> PC.3.1, PC.3.3 ou PC.5.2). Tu vas en écrire le post-mortem **blameless** complet,
+> destiné à la direction et à l'équipe.
 
 Remplis le modèle `~/astreinte/modeles/postmortem.md` dans
 `~/astreinte/rapports/postmortem-<incident>.md`. Exigences :
@@ -770,9 +806,7 @@ Remplis le modèle `~/astreinte/modeles/postmortem.md` dans
 * **trois actions correctives** dont au moins une **de détection** et une **de
   prévention**, chacune avec responsable, échéance, et **comment on l'automatise**.
 
-::: repondre
-lignes: 16
-:::
+<!-- repondre: 16 -->
 
 **Fin de journée :** `~/astreinte/rapports/vendredi.md`, puis passe à la revue.
 
@@ -802,9 +836,7 @@ d'amélioration retenue.
 * Calcule la disponibilité de la semaine et le **budget d'erreur consommé**
   (semaine + les 43 min déjà consommées avant lundi).
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
 ### 3. Budget d'erreur : décision
 
@@ -856,12 +888,13 @@ Barème global indicatif : 18 tickets × 5 = 90, + 3 × 10 = 30, soit **120
 points**. Seuil de réussite : **84** (70 %). En dessous de 60, refais les
 journées une par une.
 
-::: attention
-Un `check` au vert ne suffit pas à la note maximale : la **trace écrite** (ton
-journal de bord et tes rapports) est évaluée autant que la remise en service.
-Un service remis en route sans explication n'obtient pas les points de
-diagnostic.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Un `check` au vert ne suffit pas à la note maximale : la **trace écrite** (ton
+> journal de bord et tes rapports) est évaluée autant que la remise en service.
+> Un service remis en route sans explication n'obtient pas les points de
+> diagnostic.
 
 ---
 
@@ -894,9 +927,7 @@ comme en entretien, en 2 à 3 minutes chacune.
 10. « C'est quoi un budget d'erreur, et qu'est-ce que tu proposes quand il est
     épuisé au milieu du mois ? »
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
@@ -918,3 +949,9 @@ lignes: 10
 | Régler un healthcheck de conteneur | ☐ | ☐ |
 | Rédiger un message de statut et un post-mortem blameless | ☐ | ☐ |
 | Raisonner en disponibilité, SLO et budget d'erreur | ☐ | ☐ |
+
+<!-- nav:début -->
+---
+
+[← Projet B](../P2-factura-devops/README.md) · [Corrigé](corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

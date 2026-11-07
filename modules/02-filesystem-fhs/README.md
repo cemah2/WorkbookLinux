@@ -1,37 +1,62 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie I — Fondamentaux du shell et du système de fichiers › **Module 02**  
+[← Module 01](../01-shell-bases/README.md) · [Corrigé](corrige.md) · [Module 03 →](../03-permissions/README.md)
+
+<details><summary>Scripts du module (9)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M02.sh`](../../scripts/setup/setup_M02.sh) | prépare le module |
+| [`check_M02_01.sh`](../../scripts/check/check_M02_01.sh) | vérification |
+| [`check_M02_02.sh`](../../scripts/check/check_M02_02.sh) | vérification |
+| [`check_M02_03.sh`](../../scripts/check/check_M02_03.sh) | vérification |
+| [`check_M02_04.sh`](../../scripts/check/check_M02_04.sh) | vérification |
+| [`check_M02_05.sh`](../../scripts/check/check_M02_05.sh) | vérification |
+| [`break_M02_01.sh`](../../scripts/break/break_M02_01.sh) | installe une panne |
+| [`break_M02_02.sh`](../../scripts/break/break_M02_02.sh) | installe une panne |
+| [`break_M02_03.sh`](../../scripts/break/break_M02_03.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 02 — Système de fichiers et navigation experte
 
 ## 2.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* dire à quoi sert réellement chaque répertoire de premier niveau (`/etc`, `/var`,
-  `/usr`, `/opt`, `/srv`, `/run`, `/tmp`, `/proc`, `/sys`, `/dev`, `/boot`) et
-  ranger une application maison à sa place sans hésiter ;
-* énumérer ce que contient un inode et ce qu'il ne contient **pas**, lire une
-  sortie de `stat` et en déduire l'état réel d'un fichier ;
-* choisir entre lien physique et lien symbolique, prédire ce qui casse en cas de
-  déplacement, de suppression ou de changement de système de fichiers ;
-* expliquer et résoudre le cas « `df` dit plein, `du` ne voit rien », en
-  retrouvant le processus fautif avec `lsof +L1` ou `/proc/PID/fd` ;
-* mesurer l'occupation disque juste : `df` contre `du`, blocs contre taille
-  apparente, fichiers creux, quota d'inodes ;
-* écrire un `find` de production : filtres combinés, `-prune`, `-exec {} +`,
-  `-print0 | xargs -0`, et savoir pourquoi `-delete` se place en dernier ;
-* lire `/proc` et `/sys` comme des sources d'information de diagnostic, et
-  modifier un paramètre noyau par `/sys` ;
-* reconnaître les sept types de fichiers d'Unix et identifier un contenu avec
-  `file` sans se fier à l'extension ;
-* lire une table de montage avec `findmnt`, repérer un `tmpfs` ou un bind mount,
-  et comprendre ce que ça implique au redémarrage ;
-* mener une opération de récupération d'espace disque en production sans couper
-  le service ni perdre de données.
-
-Temps estimé : 5 h
-Prérequis : module 01 (shell, quoting, redirections). Les permissions et les ACL
-sont traitées au module 03, LVM et `/etc/fstab` au module 11 : ici on regarde ce
-qui est déjà monté, on ne partitionne pas.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * dire à quoi sert réellement chaque répertoire de premier niveau (`/etc`, `/var`,
+>   `/usr`, `/opt`, `/srv`, `/run`, `/tmp`, `/proc`, `/sys`, `/dev`, `/boot`) et
+>   ranger une application maison à sa place sans hésiter ;
+> * énumérer ce que contient un inode et ce qu'il ne contient **pas**, lire une
+>   sortie de `stat` et en déduire l'état réel d'un fichier ;
+> * choisir entre lien physique et lien symbolique, prédire ce qui casse en cas de
+>   déplacement, de suppression ou de changement de système de fichiers ;
+> * expliquer et résoudre le cas « `df` dit plein, `du` ne voit rien », en
+>   retrouvant le processus fautif avec `lsof +L1` ou `/proc/PID/fd` ;
+> * mesurer l'occupation disque juste : `df` contre `du`, blocs contre taille
+>   apparente, fichiers creux, quota d'inodes ;
+> * écrire un `find` de production : filtres combinés, `-prune`, `-exec {} +`,
+>   `-print0 | xargs -0`, et savoir pourquoi `-delete` se place en dernier ;
+> * lire `/proc` et `/sys` comme des sources d'information de diagnostic, et
+>   modifier un paramètre noyau par `/sys` ;
+> * reconnaître les sept types de fichiers d'Unix et identifier un contenu avec
+>   `file` sans se fier à l'extension ;
+> * lire une table de montage avec `findmnt`, repérer un `tmpfs` ou un bind mount,
+>   et comprendre ce que ça implique au redémarrage ;
+> * mener une opération de récupération d'espace disque en production sans couper
+>   le service ni perdre de données.
+>
+> **Temps estimé** : 5 h
+>
+> **Prérequis** : module 01 (shell, quoting, redirections). Les permissions et les ACL
+> sont traitées au module 03, LVM et `/etc/fstab` au module 11 : ici on regarde ce
+> qui est déjà monté, on ne partitionne pas.
 
 ---
 
@@ -53,11 +78,12 @@ sudo apt update
 sudo apt install -y lsof ncdu plocate tree file findutils psmisc
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y lsof ncdu mlocate tree file findutils psmisc` (`mlocate` fournit `locate`/`updatedb` ; `plocate` n'y est disponible que via EPEL selon la version).
-`ncdu` vient d'EPEL : `sudo dnf install -y epel-release` d'abord.
-`/etc/os-release` existe aussi sous Rocky et reste le fichier à parser; `/etc/redhat-release` n'est qu'un texte d'affichage.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y lsof ncdu mlocate tree file findutils psmisc` (`mlocate` fournit `locate`/`updatedb` ; `plocate` n'y est disponible que via EPEL selon la version).
+> `ncdu` vient d'EPEL : `sudo dnf install -y epel-release` d'abord.
+> `/etc/os-release` existe aussi sous Rocky et reste le fichier à parser; `/etc/redhat-release` n'est qu'un texte d'affichage.
 
 Préparation du terrain (idempotent, à relancer sans crainte) :
 
@@ -71,13 +97,14 @@ système de fichiers dédié de 256 Mio sur `/srv/appdata` et un autre de 300 Mi
 d'espace réalistes. Compte deux à trois minutes : il écrit près de 300 Mio de
 données aléatoires.
 
-::: attention
-Le script monte deux images disque en boucle, via
-`mount -o loop /var/lib/lab02/appdata.img /srv/appdata` et son équivalent pour
-`/var/log/factura`. Ces montages ne survivent pas au redémarrage : relance le
-script de setup après un reboot. Ne touche pas à `/etc/fstab` dans ce module,
-c'est le sujet du module 11.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le script monte deux images disque en boucle, via
+> `mount -o loop /var/lib/lab02/appdata.img /srv/appdata` et son équivalent pour
+> `/var/log/factura`. Ces montages ne survivent pas au redémarrage : relance le
+> script de setup après un reboot. Ne touche pas à `/etc/fstab` dans ce module,
+> c'est le sujet du module 11.
 
 ---
 
@@ -100,7 +127,9 @@ c'est le sujet du module 11.
 | `/dev` | fichiers de périphériques (`devtmpfs`, peuplé par udev) | n/a |
 | `/boot` | noyaux, initramfs, GRUB — souvent une petite partition | oui |
 
-@fig(fs-fhs): L'arbre FHS en un coup d'œil : ce qui survit au reboot, ce qui est vidé au boot, ce qui n'est qu'une vue du noyau.
+<p align="center"><img src="../../assets/figures/fs-fhs.svg" alt="Schéma : fs-fhs"></p>
+
+*Figure — L'arbre FHS en un coup d'œil : ce qui survit au reboot, ce qui est vidé au boot, ce qui n'est qu'une vue du noyau.*
 
 Règle de décision pour une appli maison `factura` :
 
@@ -148,7 +177,9 @@ Un lien symbolique **relatif** est résolu par rapport au répertoire qui contie
 le lien, pas par rapport au répertoire courant : il survit à un déplacement de
 l'arborescence entière, et casse si on déplace seulement le lien.
 
-@fig(fs-inodes-liens): Entrée de répertoire, inode et blocs : un lien dur est un second nom pour le même inode, un lien symbolique est un inode à part qui contient un chemin.
+<p align="center"><img src="../../assets/figures/fs-inodes-liens.svg" alt="Schéma : fs-inodes-liens"></p>
+
+*Figure — Entrée de répertoire, inode et blocs : un lien dur est un second nom pour le même inode, un lien symbolique est un inode à part qui contient un chemin.*
 
 ### Espace disque
 
@@ -162,13 +193,14 @@ l'arborescence entière, et casse si on déplace seulement le lien.
 | `ncdu -x /` | exploration interactive, `-x` reste sur le même montage |
 | `lsof +L1` | fichiers supprimés encore ouverts (nlink = 0) |
 
-::: rhel
-Sous Rocky 9, le système de fichiers par défaut est **XFS**, pas ext4. Deux
-conséquences : le nombre d'inodes est alloué dynamiquement, donc la saturation
-d'inodes y est beaucoup plus rare ; et `tune2fs` ne fonctionne pas — les
-informations du système de fichiers se lisent avec `xfs_info /point/de/montage`,
-et l'agrandissement se fait avec `xfs_growfs` (jamais de réduction).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9, le système de fichiers par défaut est **XFS**, pas ext4. Deux
+> conséquences : le nombre d'inodes est alloué dynamiquement, donc la saturation
+> d'inodes y est beaucoup plus rare ; et `tune2fs` ne fonctionne pas — les
+> informations du système de fichiers se lisent avec `xfs_info /point/de/montage`,
+> et l'agrandissement se fait avec `xfs_growfs` (jamais de réduction).
 
 Écart `df` / `du` : le coupable habituel est un fichier supprimé qu'un processus
 tient encore ouvert. `du` ne le voit plus (plus de nom), `df` le compte toujours
@@ -238,7 +270,7 @@ mount --bind /srv/data /var/www/html/data   # le même contenu à deux endroits
 
 ## 2.3 Quiz — QCM
 
-**Q2.1** — Tu déploies `factura`, une application livrée par un éditeur sous forme
+<a id="q2-1"></a>**[Q2.1](corrige.md#q2-1)** — Tu déploies `factura`, une application livrée par un éditeur sous forme
 d'archive auto-contenue, qui publie des exports CSV téléchargés par les clients via
 nginx. Où ranges-tu les binaires et où ranges-tu les CSV ?
 
@@ -247,14 +279,14 @@ b) binaires dans `/opt/factura/bin`, CSV dans `/srv/factura/exports`
 c) binaires dans `/usr/local/sbin`, CSV dans `/var/lib/factura`
 d) tout dans `/opt/factura`, c'est auto-contenu
 
-**Q2.2** — Parmi ces informations, laquelle n'est **pas** stockée dans l'inode ?
+<a id="q2-2"></a>**[Q2.2](corrige.md#q2-2)** — Parmi ces informations, laquelle n'est **pas** stockée dans l'inode ?
 
 a) le nombre de liens physiques
 b) le nom du fichier
 c) l'UID du propriétaire
 d) la date de dernière modification du contenu
 
-**Q2.3** — Voici une session sur `lab-web` :
+<a id="q2-3"></a>**[Q2.3](corrige.md#q2-3)** — Voici une session sur `lab-web` :
 
 ```console
 $ ln rapport.txt copie.txt
@@ -269,7 +301,7 @@ b) le contenu s'affiche normalement
 c) `copie.txt` existe mais est vide
 d) `rm` aurait refusé de supprimer un fichier ayant deux liens
 
-**Q2.4** — `/srv/appdata` est un système de fichiers distinct. Tu lances :
+<a id="q2-4"></a>**[Q2.4](corrige.md#q2-4)** — `/srv/appdata` est un système de fichiers distinct. Tu lances :
 
 ```bash
 ln /var/lib/factura/factura.db /srv/appdata/factura.db
@@ -282,7 +314,7 @@ b) `ln: failed to create hard link: Invalid cross-device link`
 c) `ln` bascule automatiquement en lien symbolique
 d) le fichier est copié
 
-**Q2.5** — Sur `lab-web`, `df -h /var` affiche `98%` alors que
+<a id="q2-5"></a>**[Q2.5](corrige.md#q2-5)** — Sur `lab-web`, `df -h /var` affiche `98%` alors que
 `du -sh /var` répond `2,1G` pour une partition de 20 Go. **Deux réponses
 plausibles.**
 
@@ -291,14 +323,14 @@ b) `du` ne compte pas les fichiers cachés
 c) un montage sur `/var/log` masque des fichiers écrits avant qu'il soit monté
 d) `df` compte les fichiers creux à leur taille apparente
 
-**Q2.6** — Que liste exactement `sudo lsof +L1` ?
+<a id="q2-6"></a>**[Q2.6](corrige.md#q2-6)** — Que liste exactement `sudo lsof +L1` ?
 
 a) les fichiers ouverts par plus d'un processus
 b) les fichiers ouverts dont le nombre de liens est inférieur à 1, donc supprimés
 c) les fichiers verrouillés (`flock`)
 d) les liens symboliques ouverts
 
-**Q2.7** — On est le 18 septembre à 14 h. Quels fichiers remonte
+<a id="q2-7"></a>**[Q2.7](corrige.md#q2-7)** — On est le 18 septembre à 14 h. Quels fichiers remonte
 `find /var/log -type f -mtime +7` ?
 
 a) ceux modifiés depuis le 11 septembre 14 h
@@ -306,7 +338,7 @@ b) ceux modifiés avant le 10 septembre 14 h
 c) ceux modifiés exactement le 11 septembre
 d) ceux créés il y a plus de 7 jours, quelle que soit la date de modification
 
-**Q2.8** — Tu dois compresser 40 000 fichiers de log. Quelle différence entre ces
+<a id="q2-8"></a>**[Q2.8](corrige.md#q2-8)** — Tu dois compresser 40 000 fichiers de log. Quelle différence entre ces
 deux lignes ?
 
 ```bash
@@ -319,7 +351,7 @@ b) la première lance 40 000 processus `gzip`, la seconde en lance quelques-uns
 c) la seconde ne traite que le premier fichier trouvé
 d) la première est plus sûre avec les noms contenant des espaces
 
-**Q2.9** — Dans `/var/log`, qui contient des `.log`, tu tapes :
+<a id="q2-9"></a>**[Q2.9](corrige.md#q2-9)** — Dans `/var/log`, qui contient des `.log`, tu tapes :
 
 ```bash
 find /var/log -name *.log
@@ -333,7 +365,7 @@ b) le shell développe `*.log` avant `find`, qui reçoit alors plusieurs argumen
 c) il faut `-iname` pour que les jokers fonctionnent
 d) `find` va supprimer les fichiers trouvés
 
-**Q2.10** — Tu veux tous les `.js` d'un projet **sauf** ceux de `node_modules`.
+<a id="q2-10"></a>**[Q2.10](corrige.md#q2-10)** — Tu veux tous les `.js` d'un projet **sauf** ceux de `node_modules`.
 Quelle commande ?
 
 a) `find . -name node_modules -prune -o -name '*.js' -print`
@@ -341,7 +373,7 @@ b) `find . -name '*.js' -prune node_modules`
 c) `find . ! -path node_modules -name '*.js'`
 d) `find . -name '*.js' -o -name node_modules -prune`
 
-**Q2.11** — `ls -lh disque-vm.img` affiche `2,0G`, `du -h disque-vm.img` affiche
+<a id="q2-11"></a>**[Q2.11](corrige.md#q2-11)** — `ls -lh disque-vm.img` affiche `2,0G`, `du -h disque-vm.img` affiche
 `4,0M`. Que sais-tu de ce fichier ?
 
 a) `du` est en erreur, il faut `du --apparent-size`
@@ -349,7 +381,7 @@ b) c'est un fichier creux : sa taille déclarée dépasse largement les blocs al
 c) le fichier est compressé par le système de fichiers
 d) le fichier est un lien symbolique vers un fichier de 4 Mio
 
-**Q2.12** — `ls -l /proc/meminfo` affiche une taille de 0 octet, pourtant
+<a id="q2-12"></a>**[Q2.12](corrige.md#q2-12)** — `ls -l /proc/meminfo` affiche une taille de 0 octet, pourtant
 `cat /proc/meminfo` produit une cinquantaine de lignes. Pourquoi ?
 
 a) le fichier est creux
@@ -358,7 +390,7 @@ b) `/proc` est un système de fichiers virtuel : le contenu est généré par le
 c) le fichier est un lien vers `/sys/kernel/mm`
 d) la taille n'est mise à jour qu'au redémarrage
 
-**Q2.13** — Ton application écrit son fichier de pid. Où le place-t-elle, et que
+<a id="q2-13"></a>**[Q2.13](corrige.md#q2-13)** — Ton application écrit son fichier de pid. Où le place-t-elle, et que
 devient-il au redémarrage ? **Deux réponses correctes.**
 
 a) dans `/run/factura/`, qui est un `tmpfs` vidé à chaque démarrage
@@ -366,7 +398,7 @@ b) dans `/var/run/factura/`, qui est aujourd'hui un lien symbolique vers `/run`
 c) dans `/tmp/`, seul emplacement garanti inscriptible
 d) dans `/var/lib/factura/`, pour qu'il survive au redémarrage
 
-**Q2.14** — `ls -l` affiche cette ligne :
+<a id="q2-14"></a>**[Q2.14](corrige.md#q2-14)** — `ls -l` affiche cette ligne :
 
 ```console
 srwxr-xr-x 1 postgres postgres 0 Sep 18 09:12 .s.PGSQL.5432
@@ -379,7 +411,7 @@ b) un tube nommé (FIFO)
 c) une socket unix
 d) un lien symbolique cassé
 
-**Q2.15** — Dans `/opt/app`, tu as créé `conf -> ../conf-prod`. Tu déplaces ensuite
+<a id="q2-15"></a>**[Q2.15](corrige.md#q2-15)** — Dans `/opt/app`, tu as créé `conf -> ../conf-prod`. Tu déplaces ensuite
 le lien seul dans `/etc/app/`. Que se passe-t-il ?
 
 a) rien, le lien continue de pointer vers `/opt/conf-prod`
@@ -387,7 +419,7 @@ b) le lien pointe désormais vers `/etc/conf-prod`, qui n'existe pas
 c) le lien devient absolu automatiquement
 d) `mv` refuse de déplacer un lien symbolique relatif
 
-**Q2.16** — Un script échoue avec `No space left on device` sur `/srv/appdata`,
+<a id="q2-16"></a>**[Q2.16](corrige.md#q2-16)** — Un script échoue avec `No space left on device` sur `/srv/appdata`,
 mais `df -h /srv/appdata` affiche `52% used`. Quelle est la cause la plus probable
 et la commande qui le confirme ?
 
@@ -396,7 +428,7 @@ b) les inodes sont épuisés, confirmé par `df -i /srv/appdata`
 c) le système de fichiers est monté en lecture seule, confirmé par `mount`
 d) les 5 % réservés à root, confirmés par `tune2fs -l`
 
-**Q2.17** — `locate factura.conf` ne trouve rien alors que le fichier existe depuis
+<a id="q2-17"></a>**[Q2.17](corrige.md#q2-17)** — `locate factura.conf` ne trouve rien alors que le fichier existe depuis
 dix minutes. Pourquoi, et que fais-tu ?
 
 a) `locate` ne cherche que dans `/usr` ; utilise `find /`
@@ -405,7 +437,7 @@ b) `locate` interroge une base indexée mise à jour périodiquement ; lance
 c) le fichier est dans `/etc`, exclu par défaut de l'index
 d) `locate` ne fonctionne que sur les fichiers exécutables
 
-**Q2.18** — `findmnt -T /tmp` affiche :
+<a id="q2-18"></a>**[Q2.18](corrige.md#q2-18)** — `findmnt -T /tmp` affiche :
 
 ```console
 TARGET SOURCE FSTYPE OPTIONS
@@ -423,137 +455,121 @@ d) `du -sh /tmp` remontera dans `df -h /` sur la ligne du système de fichiers r
 
 ## 2.4 Quiz — questions ouvertes
 
-**QO2.1** — Explique ce qu'est un inode, ce qu'il contient et ce qu'il ne contient
+<a id="qo2-1"></a>**[QO2.1](corrige.md#qo2-1)** — Explique ce qu'est un inode, ce qu'il contient et ce qu'il ne contient
 pas. Déduis-en, en raisonnant sur le compteur de liens, ce que fait réellement `rm`
 et à quel moment précis les blocs d'un fichier sont rendus au système de fichiers.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO2.2** — *On te demande en entretien* : « `df -h` annonce 100 % sur `/var`,
+<a id="qo2-2"></a>**[QO2.2](corrige.md#qo2-2)** — *On te demande en entretien* : « `df -h` annonce 100 % sur `/var`,
 `du -sh /var` répond 3 Go alors que la partition fait 20 Go. Explique-moi ce qui se
 passe, comment tu le prouves, et comment tu récupères l'espace sans redémarrer le
 serveur ni couper le service. »
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO2.3** — Compare lien physique et lien symbolique sur quatre critères au moins,
+<a id="qo2-3"></a>**[QO2.3](corrige.md#qo2-3)** — Compare lien physique et lien symbolique sur quatre critères au moins,
 puis explique lequel tu choisis pour un déploiement de type `releases/` +
 `current -> releases/2026-09-18`, et pourquoi. Précise si tu fais le lien relatif
 ou absolu, avec l'argument correspondant.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO2.4** — *On te demande en entretien* : « Il est 3 h du matin, l'alerte dit
+<a id="qo2-4"></a>**[QO2.4](corrige.md#qo2-4)** — *On te demande en entretien* : « Il est 3 h du matin, l'alerte dit
 `/` à 97 % sur le serveur de production. Déroule ta démarche, commande par
 commande, jusqu'à la remise sous seuil. Dis-moi ce que tu t'interdis de faire. »
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO2.5** — Explique la différence de fonctionnement entre `-exec cmd {} \;`,
+<a id="qo2-5"></a>**[QO2.5](corrige.md#qo2-5)** — Explique la différence de fonctionnement entre `-exec cmd {} \;`,
 `-exec cmd {} +` et `find -print0 | xargs -0 cmd`. Donne pour chacun un cas où
 c'est le bon choix, et explique pourquoi `find | xargs` sans `-print0` est un bug
 en attente.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO2.6** — `/proc` et `/sys` ne consomment aucun espace disque. Explique ce qu'ils
+<a id="qo2-6"></a>**[QO2.6](corrige.md#qo2-6)** — `/proc` et `/sys` ne consomment aucun espace disque. Explique ce qu'ils
 sont, la différence de vocation entre les deux, et donne trois diagnostics concrets
 que tu ne peux mener qu'en les lisant. Cite un cas où tu **écris** dans `/sys`.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO2.7** — Un développeur veut installer son application dans `/usr/bin` « comme
+<a id="qo2-7"></a>**[QO2.7](corrige.md#qo2-7)** — Un développeur veut installer son application dans `/usr/bin` « comme
 les vraies commandes ». Argumente, en te référant au FHS, pour la placer ailleurs.
 Distingue les cas `/opt`, `/usr/local` et `/srv`, et explique ce qui se passe
 concrètement lors d'une mise à jour de paquet si on s'installe dans `/usr/bin`.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO2.8** — Qu'est-ce qu'un fichier creux ? Explique l'écart entre `ls -l` et
+<a id="qo2-8"></a>**[QO2.8](corrige.md#qo2-8)** — Qu'est-ce qu'un fichier creux ? Explique l'écart entre `ls -l` et
 `du`, cite deux cas où on en produit sans le vouloir, et décris ce qui arrive à
 ces fichiers quand on les copie avec `cp` sans option, avec `tar`, et via `rsync`.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 2.5 Exercices guidés ★
 
-**E2.1** — Affiche, pour `~/lab02/liens/source/rapport.txt`, son numéro d'inode,
+<a id="e2-1"></a>**[E2.1](corrige.md#e2-1)** — Affiche, pour `~/lab02/liens/source/rapport.txt`, son numéro d'inode,
 son nombre de liens, sa taille en octets et le nombre de blocs de 512 octets
 réellement alloués — le tout sur une seule ligne, sans passer par `ls`.
 
-**E2.2** — Dans `~/lab02/liens/source`, détermine sans ouvrir les fichiers lesquels
+<a id="e2-2"></a>**[E2.2](corrige.md#e2-2)** — Dans `~/lab02/liens/source`, détermine sans ouvrir les fichiers lesquels
 partagent le même contenu physique et lesquels sont de simples liens symboliques.
 Donne la commande et explique la colonne qui tranche.
 
-**E2.3** — Crée dans `~/lab02/liens/deplace` un lien symbolique **relatif** vers
+<a id="e2-3"></a>**[E2.3](corrige.md#e2-3)** — Crée dans `~/lab02/liens/deplace` un lien symbolique **relatif** vers
 `../source/rapport.txt`, puis déplace le lien d'un niveau plus haut, dans `~/lab02/liens`.
 Montre qu'il est cassé, puis répare-le sans le déplacer à nouveau.
 
-**E2.4** — Prouve qu'on ne peut pas créer de lien physique entre
+<a id="e2-4"></a>**[E2.4](corrige.md#e2-4)** — Prouve qu'on ne peut pas créer de lien physique entre
 `~/lab02/liens/source/rapport.txt` et `/srv/appdata/incoming/`. Note le message
 d'erreur exact et le numéro d'erreur système correspondant.
 
-**E2.5** — Liste les entrées de `~/lab02/liens` qui ne sont ni des fichiers
+<a id="e2-5"></a>**[E2.5](corrige.md#e2-5)** — Liste les entrées de `~/lab02/liens` qui ne sont ni des fichiers
 ordinaires ni des répertoires, en affichant pour chacune son type avec `find`.
 Identifie ensuite le type réel de `~/lab02/arbo/archives/disque-vm.img`,
 `~/lab02/liens/app.sock` et `/etc/os-release` sans les ouvrir.
 
-**E2.6** — `~/lab02/liens/casse.txt` est un lien cassé. Trouve tous les liens
+<a id="e2-6"></a>**[E2.6](corrige.md#e2-6)** — `~/lab02/liens/casse.txt` est un lien cassé. Trouve tous les liens
 symboliques cassés sous `~/lab02` avec une seule commande `find`.
 
-**E2.7** — Affiche les cinq répertoires les plus volumineux directement sous
+<a id="e2-7"></a>**[E2.7](corrige.md#e2-7)** — Affiche les cinq répertoires les plus volumineux directement sous
 `/var`, triés du plus gros au plus petit, en unités lisibles.
 
-**E2.8** — Compare la taille apparente et l'occupation réelle de
+<a id="e2-8"></a>**[E2.8](corrige.md#e2-8)** — Compare la taille apparente et l'occupation réelle de
 `~/lab02/arbo/archives/disque-vm.img`. Donne les deux commandes et l'écart en
 pourcentage.
 
-**E2.9** — Trouve tous les fichiers de plus de 5 Mio sous `~/lab02/arbo`, affiche-les
+<a id="e2-9"></a>**[E2.9](corrige.md#e2-9)** — Trouve tous les fichiers de plus de 5 Mio sous `~/lab02/arbo`, affiche-les
 triés par taille décroissante avec leur taille lisible, sans utiliser `ls -lS`.
 
-**E2.10** — Dans `~/lab02/arbo`, liste les fichiers modifiés il y a moins de 24
+<a id="e2-10"></a>**[E2.10](corrige.md#e2-10)** — Dans `~/lab02/arbo`, liste les fichiers modifiés il y a moins de 24
 heures, puis ceux modifiés il y a moins de 30 minutes. Explique pourquoi la seconde
 liste peut être vide.
 
-**E2.11** — Liste tous les fichiers de `~/lab02/arbo` appartenant à `www-data`,
+<a id="e2-11"></a>**[E2.11](corrige.md#e2-11)** — Liste tous les fichiers de `~/lab02/arbo` appartenant à `www-data`,
 puis tous ceux qui n'appartiennent **pas** à `mathieu`. Les deux listes
 doivent-elles être identiques ?
 
-**E2.12** — Sous `~/lab02/arbo/app`, liste tous les fichiers en ignorant totalement
+<a id="e2-12"></a>**[E2.12](corrige.md#e2-12)** — Sous `~/lab02/arbo/app`, liste tous les fichiers en ignorant totalement
 `node_modules` et `.git` (ces répertoires ne doivent même pas être parcourus).
 
-**E2.13** — Calcule la somme SHA-256 de tous les fichiers `.log` de
+<a id="e2-13"></a>**[E2.13](corrige.md#e2-13)** — Calcule la somme SHA-256 de tous les fichiers `.log` de
 `~/lab02/arbo`, y compris `audit ancien.log`, sans qu'aucun nom ne soit découpé.
 Fais-le d'abord avec `-exec ... +`, puis avec `xargs`.
 
-**E2.14** — Supprime les fichiers `.tmp` de `~/lab02/arbo` vieux de plus de 3
+<a id="e2-14"></a>**[E2.14](corrige.md#e2-14)** — Supprime les fichiers `.tmp` de `~/lab02/arbo` vieux de plus de 3
 jours. Montre d'abord la liste, puis supprime, en une seule commande `find` pour
 chaque étape.
 
-**E2.15** — Pour le processus `1` (`systemd`), affiche son exécutable réel, son
+<a id="e2-15"></a>**[E2.15](corrige.md#e2-15)** — Pour le processus `1` (`systemd`), affiche son exécutable réel, son
 répertoire courant et sa ligne de commande en lisant uniquement `/proc`. Puis
 détermine, en lisant `/sys`, si le disque qui porte `/` est un SSD ou un disque
 mécanique.
 
-**E2.16** — Affiche uniquement les points de montage de type `tmpfs` de ta VM avec
+<a id="e2-16"></a>**[E2.16](corrige.md#e2-16)** — Affiche uniquement les points de montage de type `tmpfs` de ta VM avec
 leur taille, puis indique quel montage porte le fichier
 `/var/log/factura/factura.log` et quel est son type.
 
@@ -561,16 +577,16 @@ leur taille, puis indique quel montage porte le fichier
 
 ## 2.6 Labs ★★
 
-### **L2.1** — Ranger la livraison `factura` selon le FHS
+### <a id="l2-1"></a>**[L2.1](corrige.md#l2-1)** — Ranger la livraison `factura` selon le FHS
 
-::: contexte
-L'éditeur livre `factura-2.4.tar.gz` : une archive à plat contenant un démon, un
-client d'administration, une configuration, une unité systemd, une base initiale et
-un exemple d'export CSV. Le développeur propose de « tout mettre dans
-`/home/mathieu/factura` et de lancer ça avec `nohup` ». On te demande un
-déploiement conforme, qui survivra à la prochaine mise à jour de l'OS et au
-prochain audit.
-:::
+> **Contexte**
+>
+> L'éditeur livre `factura-2.4.tar.gz` : une archive à plat contenant un démon, un
+> client d'administration, une configuration, une unité systemd, une base initiale et
+> un exemple d'export CSV. Le développeur propose de « tout mettre dans
+> `/home/mathieu/factura` et de lancer ça avec `nohup` ». On te demande un
+> déploiement conforme, qui survivra à la prochaine mise à jour de l'OS et au
+> prochain audit.
 
 Travaille sur `lab-web`. L'archive est dans `~/lab02/livraison/`.
 
@@ -591,32 +607,34 @@ Travaille sur `lab-web`. L'archive est dans `~/lab02/livraison/`.
 8. Rédige `~/lab02/rapports/fhs-factura.md` : un tableau à trois colonnes
    (chemin, contenu, justification FHS).
 
-::: astuce
-Pour l'étape 3, `ln -s` dans `/usr/local/bin` est l'usage. Demande-toi si tu fais
-le lien relatif ou absolu, et ce qui se passerait si `/opt` était un montage séparé.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour l'étape 3, `ln -s` dans `/usr/local/bin` est l'usage. Demande-toi si tu fais
+> le lien relatif ou absolu, et ce qui se passerait si `/opt` était un montage séparé.
 
-::: check
-Critère de succès : `systemctl is-active factura` répond `active`,
-`/run/factura/facturad.pid` existe, `facturactl` répond depuis `/tmp`, et aucun
-fichier de l'application ne traîne dans `/usr/bin` ni dans le home.
-
-```bash
-bash check_M02_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `systemctl is-active factura` répond `active`,
+> `/run/factura/facturad.pid` existe, `facturactl` répond depuis `/tmp`, et aucun
+> fichier de l'application ne traîne dans `/usr/bin` ni dans le home.
+>
+> ```bash
+> bash check_M02_01.sh
+> ```
 
 ---
 
-### **L2.2** — Ticket INC-3187 : « partition de logs à 99 % sur lab-web »
+### <a id="l2-2"></a>**[L2.2](corrige.md#l2-2)** — Ticket INC-3187 : « partition de logs à 99 % sur lab-web »
 
-::: contexte
-Supervision a levé une alerte à 23 h 40 : `/var/log/factura`, qui est une partition
-dédiée de 300 Mio, est à 99 %. L'application tourne encore mais ne journalise
-presque plus. On te demande de repasser sous 50 %, sans redémarrer la machine,
-sans arrêter `factura`, et de livrer un rapport expliquant où l'espace était parti.
-Profites-en pour faire le ménage général sur `/`.
-:::
+> **Contexte**
+>
+> Supervision a levé une alerte à 23 h 40 : `/var/log/factura`, qui est une partition
+> dédiée de 300 Mio, est à 99 %. L'application tourne encore mais ne journalise
+> presque plus. On te demande de repasser sous 50 %, sans redémarrer la machine,
+> sans arrêter `factura`, et de livrer un rapport expliquant où l'espace était parti.
+> Profites-en pour faire le ménage général sur `/`.
 
 1. Établis l'état des lieux : occupation par système de fichiers, en excluant les
    montages virtuels (`tmpfs`, `proc`, `sysfs`, `devtmpfs`). Combien de systèmes de
@@ -639,44 +657,47 @@ Profites-en pour faire le ménage général sur `/`.
    combien de fichiers ce dernier contenait et combien d'inodes tu viens de libérer
    sur `/`.
 
-::: rhel
-Sous Rocky 9, l'équivalent de `sudo apt clean` est `sudo dnf clean all`, et le
-cache vidé est `/var/cache/dnf`, qui atteint facilement 1 Gio sur une machine
-ayant plusieurs dépôts actifs. `journalctl --vacuum-size` est identique.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9, l'équivalent de `sudo apt clean` est `sudo dnf clean all`, et le
+> cache vidé est `/var/cache/dnf`, qui atteint facilement 1 Gio sur une machine
+> ayant plusieurs dépôts actifs. `journalctl --vacuum-size` est identique.
 8. `~/lab02/arbo/archives/disque-vm.img` semble peser 2 Gio. **Ne le supprime
    pas** : explique dans le rapport pourquoi il ne pèse pas ce qu'il annonce.
 9. Livre `~/lab02/rapports/inc-3187.md` : état initial (sortie de `df -h`), les
    trois causes, les actions menées, l'état final, et deux recommandations de
    prévention (une sur la rotation, une sur la supervision).
 
-::: attention
-Interdiction absolue de `rm` sur un fichier de log qu'un processus tient ouvert :
-tu ne récupérerais rien tant que le processus vit, et tu perdrais la journalisation
-en cours. C'est exactement le sujet de BF2.1.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Interdiction absolue de `rm` sur un fichier de log qu'un processus tient ouvert :
+> tu ne récupérerais rien tant que le processus vit, et tu perdrais la journalisation
+> en cours. C'est exactement le sujet de BF2.1.
 
-::: check
-Critère de succès : `/var/log/factura` est repassé sous 50 %, `factura.log` existe
-toujours avec le même inode mais pèse moins de 1 Mio, il ne reste que deux archives
-`.gz`, `/var/cache/factura/thumbs` est vide, la limite `SystemMaxUse` est posée, et
-le rapport existe.
-
-```bash
-bash check_M02_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `/var/log/factura` est repassé sous 50 %, `factura.log` existe
+> toujours avec le même inode mais pèse moins de 1 Mio, il ne reste que deux archives
+> `.gz`, `/var/cache/factura/thumbs` est vide, la limite `SystemMaxUse` est posée, et
+> le rapport existe.
+>
+> ```bash
+> bash check_M02_02.sh
+> ```
 
 ---
 
-### **L2.3** — Audit d'arborescence avant migration
+### <a id="l2-3"></a>**[L2.3](corrige.md#l2-3)** — Audit d'arborescence avant migration
 
-::: contexte
-L'équipe applicative veut migrer `~/lab02/arbo` vers un nouveau stockage. Avant de
-copier 40 Go inutiles, on te demande un inventaire : ce qui est gros, ce qui est
-mort, ce qui ne doit pas être migré, et le ménage des fichiers temporaires. Les
-noms de fichiers viennent d'un import Windows, certains contiennent des espaces.
-:::
+> **Contexte**
+>
+> L'équipe applicative veut migrer `~/lab02/arbo` vers un nouveau stockage. Avant de
+> copier 40 Go inutiles, on te demande un inventaire : ce qui est gros, ce qui est
+> mort, ce qui ne doit pas être migré, et le ménage des fichiers temporaires. Les
+> noms de fichiers viennent d'un import Windows, certains contiennent des espaces.
 
 Tous les livrables vont dans `~/lab02/inventaire/`.
 
@@ -701,28 +722,29 @@ Tous les livrables vont dans `~/lab02/inventaire/`.
    une espace : ouvre `sommes.txt` et regarde la ligne de `audit ancien.log`,
    puis `anciens.txt` et celle de `audit ancien.log` également.
 
-::: check
-Critère de succès : les six fichiers d'inventaire existent et sont cohérents, les
-`.tmp` anciens ont disparu, `.git` et `node_modules` sont intacts, et les noms à
-espaces apparaissent entiers.
-
-```bash
-bash check_M02_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : les six fichiers d'inventaire existent et sont cohérents, les
+> `.tmp` anciens ont disparu, `.git` et `node_modules` sont intacts, et les noms à
+> espaces apparaissent entiers.
+>
+> ```bash
+> bash check_M02_03.sh
+> ```
 
 ---
 
-### **L2.4** — Dédoublonner sans casser : liens physiques et symboliques
+### <a id="l2-4"></a>**[L2.4](corrige.md#l2-4)** — Dédoublonner sans casser : liens physiques et symboliques
 
-::: contexte
-L'équipe média a copié trois fois le même jeu de photos sur `lab-web` : une fois
-dans le répertoire de travail, une fois dans un « backup » et une fois dans le
-répertoire servi par nginx. Deux de ces emplacements sont sur le système de
-fichiers racine, le troisième est sur `/srv/appdata`, un montage distinct. On te
-demande de ne garder qu'une seule copie physique par fichier, sans qu'aucun chemin
-existant ne cesse de fonctionner.
-:::
+> **Contexte**
+>
+> L'équipe média a copié trois fois le même jeu de photos sur `lab-web` : une fois
+> dans le répertoire de travail, une fois dans un « backup » et une fois dans le
+> répertoire servi par nginx. Deux de ces emplacements sont sur le système de
+> fichiers racine, le troisième est sur `/srv/appdata`, un montage distinct. On te
+> demande de ne garder qu'une seule copie physique par fichier, sans qu'aucun chemin
+> existant ne cesse de fonctionner.
 
 1. Prépare le terrain : copie `~/lab02/arbo/uploads/photo1.jpg` et `photo2.jpg`
    dans `~/lab02/liens/copie/` et dans `/srv/appdata/incoming/`. Note l'occupation
@@ -748,29 +770,31 @@ existant ne cesse de fonctionner.
 8. Écris dans `~/lab02/rapports/liens.md` une règle de décision en trois lignes :
    quand physique, quand symbolique, quand ni l'un ni l'autre (copie).
 
-::: check
-Critère de succès : `photo1.jpg` et `photo2.jpg` de `uploads` ont un compteur de
-liens supérieur à 1 avec le même inode que leurs doublons locaux, le lien de
-`/srv/appdata/incoming` est un symbolique absolu qui résout, et aucun lien cassé ne
-subsiste sous `~/lab02`.
-
-```bash
-bash check_M02_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `photo1.jpg` et `photo2.jpg` de `uploads` ont un compteur de
+> liens supérieur à 1 avec le même inode que leurs doublons locaux, le lien de
+> `/srv/appdata/incoming` est un symbolique absolu qui résout, et aucun lien cassé ne
+> subsiste sous `~/lab02`.
+>
+> ```bash
+> bash check_M02_04.sh
+> ```
 
 ---
 
 ## 2.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf02`. Le snapshot de secours
-reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec de
-l'exercice : l'objectif est de réparer, pas de rembobiner.
-Ces trois pannes supposent que `setup_M02.sh` a été passé.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9002 avant-bf02`. Le snapshot de secours
+> reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec de
+> l'exercice : l'objectif est de réparer, pas de rembobiner.
+> Ces trois pannes supposent que `setup_M02.sh` a été passé.
 
-### **BF2.1** — « Le disque est plein, mais il n'y a rien dessus »
+### <a id="bf2-1"></a>**[BF2.1](corrige.md#bf2-1)** — « Le disque est plein, mais il n'y a rien dessus »
 
 ```bash
 sudo bash break_M02_01.sh
@@ -788,11 +812,9 @@ agrandir le système de fichiers.
 fichier concerné (nom d'origine, taille), expliquer le mécanisme en une phrase, et
 proposer deux corrections durables — une côté application, une côté exploitation.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF2.2** — « `No space left on device` alors qu'il reste 40 % »
+### <a id="bf2-2"></a>**[BF2.2](corrige.md#bf2-2)** — « `No space left on device` alors qu'il reste 40 % »
 
 ```bash
 sudo bash break_M02_02.sh
@@ -811,11 +833,9 @@ système de fichiers est en cause, remettre le service en état, expliquer pourq
 le problème n'apparaît pas dans `df -h`, et dire ce qu'il aurait fallu faire au
 formatage pour l'éviter.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF2.3** — « Le site sert la mauvaise version depuis la livraison »
+### <a id="bf2-3"></a>**[BF2.3](corrige.md#bf2-3)** — « Le site sert la mauvaise version depuis la livraison »
 
 ```bash
 sudo bash break_M02_03.sh
@@ -837,22 +857,20 @@ sur la release la plus récente, et corriger la procédure de livraison pour que
 panne ne puisse plus se reproduire (dis explicitement quel type de lien tu poses
 et pourquoi).
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 2.8 Défi du module ★★★
 
-**D2 — `audit-fs.sh` : l'outil d'audit de systèmes de fichiers**
+<a id="d2"></a>**[D2](corrige.md#d2) — `audit-fs.sh` : l'outil d'audit de systèmes de fichiers**
 
-::: contexte
-Tu prends l'astreinte. Tu veux un script unique, déposable sur n'importe quelle VM
-du lab, qui répond en moins d'une minute à la question « où est passé l'espace, et
-qu'est-ce qui cloche sur ce stockage ? ». Livrable : le script plus un rapport
-généré sur `lab-ops`.
-:::
+> **Contexte**
+>
+> Tu prends l'astreinte. Tu veux un script unique, déposable sur n'importe quelle VM
+> du lab, qui répond en moins d'une minute à la question « où est passé l'espace, et
+> qu'est-ce qui cloche sur ce stockage ? ». Livrable : le script plus un rapport
+> généré sur `lab-ops`.
 
 Cahier des charges :
 
@@ -890,11 +908,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M02_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M02_05.sh
+> ```
 
 ---
 
@@ -927,3 +946,9 @@ Pour aller plus loin :
   toutes la peine.
 * Regarde `filefrag -v` sur le fichier creux du lab : tu verras concrètement les
   extents alloués et les trous.
+
+<!-- nav:début -->
+---
+
+[← Module 01](../01-shell-bases/README.md) · [Corrigé](corrige.md) · [Module 03 →](../03-permissions/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

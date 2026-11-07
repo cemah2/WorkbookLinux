@@ -1,472 +1,506 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 13** · corrigé  
+[← Module 12](../12-reseau/corrige.md) · [Énoncé](README.md) · [Module 14 →](../14-ssh/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 13 — Corrigé
 
 ## 13.3 Quiz — QCM
 
-**Q13.1** — *`ip netns add c1` puis `ping 127.0.0.1` dans `c1` : « Network is
+<a id="q13-1"></a>**[Q13.1](README.md#q13-1)** — *`ip netns add c1` puis `ping 127.0.0.1` dans `c1` : « Network is
 unreachable ».*
 
 **Réponse : b)** `lo` existe mais est `DOWN`.
 
-::: pourquoi
-Un namespace réseau neuf ne contient qu'une seule interface, `lo`, et le noyau
-la crée à l'état administratif `DOWN`. Tant qu'elle n'est pas montée, aucune
-route n'existe dans le namespace (la route `127.0.0.0/8 dev lo` de la table
-`local` n'est posée par le noyau qu'au moment où l'interface passe `UP`).
-`ping` cherche une route vers `127.0.0.1`, n'en trouve pas, et `connect()`
-échoue avec `ENETUNREACH` : c'est le message affiché.
+> [!NOTE]
+> **Pourquoi**
+>
+> Un namespace réseau neuf ne contient qu'une seule interface, `lo`, et le noyau
+> la crée à l'état administratif `DOWN`. Tant qu'elle n'est pas montée, aucune
+> route n'existe dans le namespace (la route `127.0.0.0/8 dev lo` de la table
+> `local` n'est posée par le noyau qu'au moment où l'interface passe `UP`).
+> `ping` cherche une route vers `127.0.0.1`, n'en trouve pas, et `connect()`
+> échoue avec `ENETUNREACH` : c'est le message affiché.
+>
+> `ip -n c1 link set lo up` règle le problème. C'est la première chose que fait
+> `docker run` (ou plutôt le runtime `runc`) dans le namespace d'un conteneur,
+> et la première chose qu'oublie tout le monde à la main.
 
-`ip -n c1 link set lo up` règle le problème. C'est la première chose que fait
-`docker run` (ou plutôt le runtime `runc`) dans le namespace d'un conteneur,
-et la première chose qu'oublie tout le monde à la main.
-:::
-
-::: piege
-a) est presque vrai (il n'y a pas de route) mais inverse la cause et l'effet :
-la route manque **parce que** `lo` est down. c) : aucun filtrage n'existe par
-défaut dans un netns, le jeu de règles nftables y est vide. d) : `nsenter` et
-`ip netns exec` font strictement la même chose (`setns()` sur
-`/run/netns/c1`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) est presque vrai (il n'y a pas de route) mais inverse la cause et l'effet :
+> la route manque **parce que** `lo` est down. c) : aucun filtrage n'existe par
+> défaut dans un netns, le jeu de règles nftables y est vide. d) : `nsenter` et
+> `ip netns exec` font strictement la même chose (`setns()` sur
+> `/run/netns/c1`).
 
 ---
 
-**Q13.2** — *`eth0@if6` dans `ip -n c1 link`.*
+<a id="q13-2"></a>**[Q13.2](README.md#q13-2)** — *`eth0@if6` dans `ip -n c1 link`.*
 
 **Réponse : b)** un bout de veth dont le pair a l'index 6 dans un autre namespace.
 
-::: pourquoi
-Les interfaces ont un index par namespace. Une paire veth est deux interfaces
-liées ; quand l'une est déplacée dans un autre netns, `ip link` affiche
-`nom@ifN` où `N` est l'index du pair **dans son namespace à
-lui** (namespace désigné, lui, par `link-netnsid`). `ip -d link show eth0` dans `c1` ajoute `link-netnsid 0` (le namespace
-du pair, vu depuis `c1`), et `ip link | grep '@if'` dans le netns racine montre
-l'autre bout, `veth-c1@if5` : les deux indices se répondent.
-
-C'est ainsi qu'on retrouve, sur un hôte Docker, quel `vethXXXX` du bridge
-appartient à quel conteneur : `docker exec c1 cat /sys/class/net/eth0/iflink`
-donne l'index du pair côté hôte, `ip link | grep '^6:'` donne son nom.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les interfaces ont un index par namespace. Une paire veth est deux interfaces
+> liées ; quand l'une est déplacée dans un autre netns, `ip link` affiche
+> `nom@ifN` où `N` est l'index du pair **dans son namespace à
+> lui** (namespace désigné, lui, par `link-netnsid`). `ip -d link show eth0` dans `c1` ajoute `link-netnsid 0` (le namespace
+> du pair, vu depuis `c1`), et `ip link | grep '@if'` dans le netns racine montre
+> l'autre bout, `veth-c1@if5` : les deux indices se répondent.
+>
+> C'est ainsi qu'on retrouve, sur un hôte Docker, quel `vethXXXX` du bridge
+> appartient à quel conteneur : `docker exec c1 cat /sys/class/net/eth0/iflink`
+> donne l'index du pair côté hôte, `ip link | grep '^6:'` donne son nom.
 
 ---
 
-**Q13.3** — *Depuis `c1` : `ping 172.20.0.12` OK, `ping 10.10.10.11` OK,
+<a id="q13-3"></a>**[Q13.3](README.md#q13-3)** — *Depuis `c1` : `ping 172.20.0.12` OK, `ping 10.10.10.11` OK,
 `ping 172.20.0.1` muet.*
 
 **Réponse : b)** le trafic vers l'adresse du bridge est du trafic `input` du
 netns racine.
 
-::: pourquoi
-Il faut distinguer trois chemins pour un paquet qui sort de `c1` :
+> [!NOTE]
+> **Pourquoi**
+>
+> Il faut distinguer trois chemins pour un paquet qui sort de `c1` :
+>
+> * vers `172.20.0.12` : commutation L2 par le bridge, port à port. Le netns
+>   racine ne voit ce paquet qu'en tant que commutateur (sauf si `br_netfilter`
+>   est chargé). Aucune règle IP ne s'applique.
+> * vers `10.10.10.11` : le paquet arrive sur le bridge, dont l'adresse
+>   `172.20.0.1` est la passerelle ; le netns racine prend une décision de
+>   routage, ce n'est pas pour lui → chaîne **`forward`**, puis `postrouting`
+>   (masquerade), puis `ens18`.
+> * vers `172.20.0.1` : la destination **est** une adresse locale du netns
+>   racine → chaîne **`input`**, pas `forward`.
+>
+> Un jeu de règles typique (module 18, ou celui de E13.11 privé de sa règle ICMP) a une chaîne `input`
+> en `policy drop` qui n'autorise pas ICMP depuis `172.20.0.0/24`, alors que la
+> chaîne `forward` accepte tout ce qui part de `br-lab`. Résultat : le bridge
+> relaie, mais ne répond pas lui-même. `nft list chain inet filter input` et un
+> `counter` sur la règle de `drop` finale le prouvent en dix secondes.
 
-* vers `172.20.0.12` : commutation L2 par le bridge, port à port. Le netns
-  racine ne voit ce paquet qu'en tant que commutateur (sauf si `br_netfilter`
-  est chargé). Aucune règle IP ne s'applique.
-* vers `10.10.10.11` : le paquet arrive sur le bridge, dont l'adresse
-  `172.20.0.1` est la passerelle ; le netns racine prend une décision de
-  routage, ce n'est pas pour lui → chaîne **`forward`**, puis `postrouting`
-  (masquerade), puis `ens18`.
-* vers `172.20.0.1` : la destination **est** une adresse locale du netns
-  racine → chaîne **`input`**, pas `forward`.
-
-Un jeu de règles typique (module 18, ou celui de E13.11 privé de sa règle ICMP) a une chaîne `input`
-en `policy drop` qui n'autorise pas ICMP depuis `172.20.0.0/24`, alors que la
-chaîne `forward` accepte tout ce qui part de `br-lab`. Résultat : le bridge
-relaie, mais ne répond pas lui-même. `nft list chain inet filter input` et un
-`counter` sur la règle de `drop` finale le prouvent en dix secondes.
-:::
-
-::: piege
-a) : bridge `DOWN`, rien ne passerait, même pas `c1` ↔ `c2`. c) :
-`masquerade` ne s'applique qu'en `postrouting` sur les paquets **sortant** par
-l'interface indiquée (`oifname "ens18"`), jamais à du trafic `input`.
-b) : `172.20.0.1` est dans `172.20.0.0/24`, la route connectée suffit.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) : bridge `DOWN`, rien ne passerait, même pas `c1` ↔ `c2`. c) :
+> `masquerade` ne s'applique qu'en `postrouting` sur les paquets **sortant** par
+> l'interface indiquée (`oifname "ens18"`), jamais à du trafic `input`.
+> b) : `172.20.0.1` est dans `172.20.0.0/24`, la route connectée suffit.
 
 ---
 
-**Q13.4** — *Règle `from 10.10.12.2 lookup gw2`, table `gw2` = `default via
+<a id="q13-4"></a>**[Q13.4](README.md#q13-4)** — *Règle `from 10.10.12.2 lookup gw2`, table `gw2` = `default via
 10.10.12.1 dev eth2`, destination `10.10.12.50` sur le segment direct.*
 
 **Réponse : a)** via `10.10.12.1`.
 
-::: pourquoi
-L'algorithme du noyau : parcourir les règles par priorité croissante ; à la
-première qui matche, faire la recherche dans la table désignée ; **si la table
-contient une route qui matche la destination, la décision est prise**, on
-n'examine plus les règles suivantes. La règle `100` matche (source
-`10.10.12.2`), la table `gw2` contient une route par défaut, qui matche tout,
-y compris `10.10.12.50`. Le paquet part donc vers la passerelle, qui le
-renverra sur le même segment (avec un ICMP redirect si `send_redirects` est
-actif chez elle). Ça fonctionne, mais c'est un détour idiot, et sur un vrai
-routeur ça peut être jeté par une politique anti-spoofing.
+> [!NOTE]
+> **Pourquoi**
+>
+> L'algorithme du noyau : parcourir les règles par priorité croissante ; à la
+> première qui matche, faire la recherche dans la table désignée ; **si la table
+> contient une route qui matche la destination, la décision est prise**, on
+> n'examine plus les règles suivantes. La règle `100` matche (source
+> `10.10.12.2`), la table `gw2` contient une route par défaut, qui matche tout,
+> y compris `10.10.12.50`. Le paquet part donc vers la passerelle, qui le
+> renverra sur le même segment (avec un ICMP redirect si `send_redirects` est
+> actif chez elle). Ça fonctionne, mais c'est un détour idiot, et sur un vrai
+> routeur ça peut être jeté par une politique anti-spoofing.
+>
+> On ne retombe sur `main` **que** si la table ne contient aucune route pour la
+> destination (`lookup` échoue → règle suivante). D'où la règle d'or du policy
+> routing : une table dédiée doit contenir **aussi les routes connectées** de
+> l'interface concernée :
+>
+> ```bash
+> ip route add 10.10.12.0/24 dev eth2 src 10.10.12.2 table gw2
+> ip route add default via 10.10.12.1 dev eth2 table gw2
+> ```
+>
+> Ou, plus simple, une règle `to 10.10.12.0/24 lookup main` de priorité
+> inférieure à 100.
 
-On ne retombe sur `main` **que** si la table ne contient aucune route pour la
-destination (`lookup` échoue → règle suivante). D'où la règle d'or du policy
-routing : une table dédiée doit contenir **aussi les routes connectées** de
-l'interface concernée :
-
-```bash
-ip route add 10.10.12.0/24 dev eth2 src 10.10.12.2 table gw2
-ip route add default via 10.10.12.1 dev eth2 table gw2
-```
-
-Ou, plus simple, une règle `to 10.10.12.0/24 lookup main` de priorité
-inférieure à 100.
-:::
-
-::: piege
-b) décrit ce qu'on aimerait et ce que beaucoup croient : ce n'est pas le
-comportement. c) : « unreachable » ne se produit que si **aucune** table
-consultée n'a de route, ce qui n'est pas le cas ici. d) : `rp_filter` s'applique
-aux paquets **reçus**, pas émis.
-:::
+> [!WARNING]
+> **Piège**
+>
+> b) décrit ce qu'on aimerait et ce que beaucoup croient : ce n'est pas le
+> comportement. c) : « unreachable » ne se produit que si **aucune** table
+> consultée n'a de route, ce qui n'est pas le cas ici. d) : `rp_filter` s'applique
+> aux paquets **reçus**, pas émis.
 
 ---
 
-**Q13.5** — *Chaîne de base vs chaîne régulière.*
+<a id="q13-5"></a>**[Q13.5](README.md#q13-5)** — *Chaîne de base vs chaîne régulière.*
 
 **Réponse : a) et b).**
 
-::: pourquoi
-Une chaîne de base est déclarée avec `type <filter|nat|route> hook <hook>
-priority <n>` (et éventuellement `policy`) : le noyau l'enregistre sur le hook
-netfilter correspondant et lui donne chaque paquet qui y passe. Plusieurs
-chaînes de base peuvent partager un hook (Docker, ufw et toi) ; elles sont
-alors parcourues par priorité croissante, et un `drop` dans l'une est
-définitif tandis qu'un `accept` ne fait que passer à la chaîne de base
-suivante du même hook.
-
-Une chaîne régulière (`nft add chain inet filter mes_services` sans `type`)
-n'est rattachée à rien : elle ne s'exécute que quand une règle fait `jump
-mes_services` (avec retour) ou `goto mes_services` (sans retour). Elle sert à
-organiser : une chaîne par service, par zone, par locataire. Elle accepte
-tous les verdicts, dans toute table.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une chaîne de base est déclarée avec `type <filter|nat|route> hook <hook>
+> priority <n>` (et éventuellement `policy`) : le noyau l'enregistre sur le hook
+> netfilter correspondant et lui donne chaque paquet qui y passe. Plusieurs
+> chaînes de base peuvent partager un hook (Docker, ufw et toi) ; elles sont
+> alors parcourues par priorité croissante, et un `drop` dans l'une est
+> définitif tandis qu'un `accept` ne fait que passer à la chaîne de base
+> suivante du même hook.
+>
+> Une chaîne régulière (`nft add chain inet filter mes_services` sans `type`)
+> n'est rattachée à rien : elle ne s'exécute que quand une règle fait `jump
+> mes_services` (avec retour) ou `goto mes_services` (sans retour). Elle sert à
+> organiser : une chaîne par service, par zone, par locataire. Elle accepte
+> tous les verdicts, dans toute table.
 
 ---
 
-**Q13.6** — *`forward` en `policy drop` avec seulement `iifname "br-lab"
+<a id="q13-6"></a>**[Q13.6](README.md#q13-6)** — *`forward` en `policy drop` avec seulement `iifname "br-lab"
 oifname "ens18" accept` ; le SYN part, le SYN-ACK arrive sur `ens18`, `curl`
 expire.*
 
 **Réponse : b)** il manque `ct state established,related accept`.
 
-::: pourquoi
-Le SYN va de `br-lab` vers `ens18` : la règle l'accepte. Le SYN-ACK revient
-par `ens18` et doit être relayé vers `br-lab` : aucune règle ne matche
-(`iifname` est `ens18`), la politique `drop` s'applique. Le client réémet son
-SYN toutes les 1, 2, 4… secondes, sans jamais voir de réponse : timeout.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le SYN va de `br-lab` vers `ens18` : la règle l'accepte. Le SYN-ACK revient
+> par `ens18` et doit être relayé vers `br-lab` : aucune règle ne matche
+> (`iifname` est `ens18`), la politique `drop` s'applique. Le client réémet son
+> SYN toutes les 1, 2, 4… secondes, sans jamais voir de réponse : timeout.
+>
+> `tcpdump -i ens18` voit le SYN-ACK parce que la capture se fait **avant**
+> netfilter (au niveau du pilote, via AF_PACKET). Voir un paquet dans
+> `tcpdump` ne prouve jamais qu'il a traversé le pare-feu ; un `counter` sur la
+> règle de `drop`, ou `nft monitor trace`, le prouve.
+>
+> `ct state established,related accept` en première règle laisse passer tout
+> paquet appartenant à un flux déjà vu **dans l'autre sens** : le SYN-ACK est
+> `established` (conntrack a vu le SYN sortir, le flux existe ; dès qu'un paquet
+> revient, il est `established`). C'est la règle qui rend un pare-feu stateful.
 
-`tcpdump -i ens18` voit le SYN-ACK parce que la capture se fait **avant**
-netfilter (au niveau du pilote, via AF_PACKET). Voir un paquet dans
-`tcpdump` ne prouve jamais qu'il a traversé le pare-feu ; un `counter` sur la
-règle de `drop`, ou `nft monitor trace`, le prouve.
-
-`ct state established,related accept` en première règle laisse passer tout
-paquet appartenant à un flux déjà vu **dans l'autre sens** : le SYN-ACK est
-`established` (conntrack a vu le SYN sortir, le flux existe ; dès qu'un paquet
-revient, il est `established`). C'est la règle qui rend un pare-feu stateful.
-:::
-
-::: piege
-a) : sans masquerade, le SYN partirait avec la source `172.20.0.x`, `lab-web`
-répondrait vers cette adresse qu'il ne sait pas router — mais alors on ne
-verrait **pas** de SYN-ACK arriver sur `ens18`. d) : sans `ip_forward`, le SYN
-ne sortirait même pas.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) : sans masquerade, le SYN partirait avec la source `172.20.0.x`, `lab-web`
+> répondrait vers cette adresse qu'il ne sait pas router — mais alors on ne
+> verrait **pas** de SYN-ACK arriver sur `ens18`. d) : sans `ip_forward`, le SYN
+> ne sortirait même pas.
 
 ---
 
-**Q13.7** — *Ligne `conntrack -L` avec deux tuples différents.*
+<a id="q13-7"></a>**[Q13.7](README.md#q13-7)** — *Ligne `conntrack -L` avec deux tuples différents.*
 
 **Réponse : a) et b).**
 
-::: pourquoi
-Une entrée conntrack contient deux tuples : le tuple **original** (tel que vu
-au premier paquet : `172.20.0.11:40312 → 10.10.10.11:80`) et le tuple de
-**réponse** (ce que le pare-feu attend dans l'autre sens :
-`10.10.10.11:80 → 10.10.10.10:40312`). Quand ils ne sont pas symétriques, il y
-a une traduction : ici la source a été réécrite en `10.10.10.10`, c'est un
-SNAT/masquerade. C'est exactement ce que le NAT « mémorise » pour réécrire les
-retours sans relire les règles.
+> [!NOTE]
+> **Pourquoi**
+>
+> Une entrée conntrack contient deux tuples : le tuple **original** (tel que vu
+> au premier paquet : `172.20.0.11:40312 → 10.10.10.11:80`) et le tuple de
+> **réponse** (ce que le pare-feu attend dans l'autre sens :
+> `10.10.10.11:80 → 10.10.10.10:40312`). Quand ils ne sont pas symétriques, il y
+> a une traduction : ici la source a été réécrite en `10.10.10.10`, c'est un
+> SNAT/masquerade. C'est exactement ce que le NAT « mémorise » pour réécrire les
+> retours sans relire les règles.
+>
+> `431999` est le temps restant en secondes avant expiration si aucun paquet ne
+> passe : `nf_conntrack_tcp_timeout_established` vaut 432 000 s = 5 jours par
+> défaut. `[ASSURED]` signifie que le flux a été vu dans les deux sens avec des
+> données : ces entrées ne sont jamais victimes de l'« early drop » quand la table
+> est pleine, contrairement aux entrées non assurées.
 
-`431999` est le temps restant en secondes avant expiration si aucun paquet ne
-passe : `nf_conntrack_tcp_timeout_established` vaut 432 000 s = 5 jours par
-défaut. `[ASSURED]` signifie que le flux a été vu dans les deux sens avec des
-données : ces entrées ne sont jamais victimes de l'« early drop » quand la table
-est pleine, contrairement aux entrées non assurées.
-:::
-
-::: piege
-c) : l'état conntrack est `ESTABLISHED`, pas `TIME_WAIT` — conntrack a sa
-propre machine à états, distincte de celle du socket TCP. d) : conntrack ne
-sait rien des verdicts ; un flux tracé peut très bien finir en `drop`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : l'état conntrack est `ESTABLISHED`, pas `TIME_WAIT` — conntrack a sa
+> propre machine à états, distincte de celle du socket TCP. d) : conntrack ne
+> sait rien des verdicts ; un flux tracé peut très bien finir en `drop`.
 
 ---
 
-**Q13.8** — *`nf_conntrack: table full, dropping packet`.*
+<a id="q13-8"></a>**[Q13.8](README.md#q13-8)** — *`nf_conntrack: table full, dropping packet`.*
 
 **Réponse : b)** augmenter `nf_conntrack_max` (et les buckets), puis chercher
 ce qui remplit.
 
-::: pourquoi
-Quand la table atteint `nf_conntrack_max`, le noyau tente d'abord un « early
-drop » d'une entrée non assurée ; s'il n'en trouve pas, il jette le paquet qui
-créerait une nouvelle entrée. Les flux existants ont leur entrée : ils
-continuent. C'est le motif « les sessions ouvertes marchent, les nouvelles
-échouent » — à mémoriser, il pointe directement vers conntrack.
+> [!NOTE]
+> **Pourquoi**
+>
+> Quand la table atteint `nf_conntrack_max`, le noyau tente d'abord un « early
+> drop » d'une entrée non assurée ; s'il n'en trouve pas, il jette le paquet qui
+> créerait une nouvelle entrée. Les flux existants ont leur entrée : ils
+> continuent. C'est le motif « les sessions ouvertes marchent, les nouvelles
+> échouent » — à mémoriser, il pointe directement vers conntrack.
+>
+> Correctif immédiat : `sysctl -w net.netfilter.nf_conntrack_max=262144` (et
+> `nf_conntrack_buckets` à `max/4` via `/sys/module/nf_conntrack/parameters/
+> hashsize`, sinon les listes chaînées s'allongent). Puis chercher la cause :
+> `conntrack -L | awk '{for(i=1;i<=NF;i++) if($i~/^src=/){print $i; next}}' | sort | uniq -c | sort -rn | head` (par
+> source), ou par état (`conntrack -L | grep -c UNREPLIED`). Beaucoup d'UDP non
+> répondus = scan ou DNS en boucle ; beaucoup de `TIME_WAIT` = serveur web très
+> sollicité, on peut abaisser `nf_conntrack_tcp_timeout_time_wait`.
 
-Correctif immédiat : `sysctl -w net.netfilter.nf_conntrack_max=262144` (et
-`nf_conntrack_buckets` à `max/4` via `/sys/module/nf_conntrack/parameters/
-hashsize`, sinon les listes chaînées s'allongent). Puis chercher la cause :
-`conntrack -L | awk '{for(i=1;i<=NF;i++) if($i~/^src=/){print $i; next}}' | sort | uniq -c | sort -rn | head` (par
-source), ou par état (`conntrack -L | grep -c UNREPLIED`). Beaucoup d'UDP non
-répondus = scan ou DNS en boucle ; beaucoup de `TIME_WAIT` = serveur web très
-sollicité, on peut abaisser `nf_conntrack_tcp_timeout_time_wait`.
-:::
-
-::: piege
-a) `conntrack -F` vide aussi les entrées des sessions NATées en cours : leurs
-paquets suivants n'ont plus de traduction, ils partent avec la mauvaise adresse
-et les sessions **meurent**. Sur un pare-feu stateful, ils deviennent
-`invalid`. C'est le geste qui transforme un incident partiel en incident
-total. d) : sans conntrack, plus de NAT du tout.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) `conntrack -F` vide aussi les entrées des sessions NATées en cours : leurs
+> paquets suivants n'ont plus de traduction, ils partent avec la mauvaise adresse
+> et les sessions **meurent**. Sur un pare-feu stateful, ils deviennent
+> `invalid`. C'est le geste qui transforme un incident partiel en incident
+> total. d) : sans conntrack, plus de NAT du tout.
 
 ---
 
-**Q13.9** — *DNAT en `prerouting` : marche depuis `lab-web`, `Connection
+<a id="q13-9"></a>**[Q13.9](README.md#q13-9)** — *DNAT en `prerouting` : marche depuis `lab-web`, `Connection
 refused` depuis `lab-adm` lui-même.*
 
 **Réponse : b)** les paquets locaux passent par `output`, pas `prerouting`.
 
-::: pourquoi
-Le hook `prerouting` n'est traversé que par les paquets **reçus** sur une
-interface. Un paquet généré par un processus local part de la couche socket,
-passe par la décision de routage puis par `output`, puis `postrouting`. Il ne
-touche jamais `prerouting`. Le `curl` local vers `10.10.10.10:8080` arrive donc
-tel quel sur la pile locale, où rien n'écoute sur 8080 : `RST`, « Connection
-refused ».
-
-Correctif :
-
-```bash
-nft add chain ip nat output '{ type nat hook output priority -100; }'
-nft add rule ip nat output ip daddr 10.10.10.10 tcp dport 8080 \
-    dnat to 172.20.0.11:8000
-```
-
-Docker fait exactement ça : sa chaîne `DOCKER` de la table `nat` est appelée
-depuis `PREROUTING` **et** depuis `OUTPUT` (avec `! --dst 127.0.0.0/8`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le hook `prerouting` n'est traversé que par les paquets **reçus** sur une
+> interface. Un paquet généré par un processus local part de la couche socket,
+> passe par la décision de routage puis par `output`, puis `postrouting`. Il ne
+> touche jamais `prerouting`. Le `curl` local vers `10.10.10.10:8080` arrive donc
+> tel quel sur la pile locale, où rien n'écoute sur 8080 : `RST`, « Connection
+> refused ».
+>
+> Correctif :
+>
+> ```bash
+> nft add chain ip nat output '{ type nat hook output priority -100; }'
+> nft add rule ip nat output ip daddr 10.10.10.10 tcp dport 8080 \
+>     dnat to 172.20.0.11:8000
+> ```
+>
+> Docker fait exactement ça : sa chaîne `DOCKER` de la table `nat` est appelée
+> depuis `PREROUTING` **et** depuis `OUTPUT` (avec `! --dst 127.0.0.0/8`).
 
 ---
 
-**Q13.10** — *`vxlan0` laissé en MTU 1500 au-dessus d'`ens18` en 1500.*
+<a id="q13-10"></a>**[Q13.10](README.md#q13-10)** — *`vxlan0` laissé en MTU 1500 au-dessus d'`ens18` en 1500.*
 
 **Réponse : b)** ça marche pour les petits paquets, ça gèle sur les gros.
 
-::: pourquoi
-VXLAN ajoute 50 octets (14 Ethernet externe + 20 IP + 8 UDP + 8 VXLAN) devant
-la trame interne. Une trame interne de 1500 octets de charge IP devient un
-paquet externe de 1550 octets, plus grand que le MTU d'`ens18`. Deux issues
-possibles : fragmentation IP de l'externe (par défaut, `df unset`), qui
-fonctionne tant que rien ne jette les fragments mais coûte cher et casse au
-premier pare-feu qui les filtre ; ou perte pure si le DF externe est posé et
-que l'ICMP « fragmentation needed » n'est pas relayé au flux interne.
-
-Les petits paquets (`ping` à 56 octets, poignée de main SSH, requêtes HTTP)
-tiennent sous 1450 : tout paraît normal. Le premier segment TCP plein (MSS
-1460 → 1500 octets) déclenche le problème. Le noyau **calcule** bien un MTU de
-1450 quand on crée `vxlan0` avec `dev ens18`, mais un `ip link set mtu 1500` ou
-une configuration Netplan avec `mtu: 1500` l'écrase.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> VXLAN ajoute 50 octets (14 Ethernet externe + 20 IP + 8 UDP + 8 VXLAN) devant
+> la trame interne. Une trame interne de 1500 octets de charge IP devient un
+> paquet externe de 1550 octets, plus grand que le MTU d'`ens18`. Deux issues
+> possibles : fragmentation IP de l'externe (par défaut, `df unset`), qui
+> fonctionne tant que rien ne jette les fragments mais coûte cher et casse au
+> premier pare-feu qui les filtre ; ou perte pure si le DF externe est posé et
+> que l'ICMP « fragmentation needed » n'est pas relayé au flux interne.
+>
+> Les petits paquets (`ping` à 56 octets, poignée de main SSH, requêtes HTTP)
+> tiennent sous 1450 : tout paraît normal. Le premier segment TCP plein (MSS
+> 1460 → 1500 octets) déclenche le problème. Le noyau **calcule** bien un MTU de
+> 1450 quand on crée `vxlan0` avec `dev ens18`, mais un `ip link set mtu 1500` ou
+> une configuration Netplan avec `mtu: 1500` l'écrase.
 
 ---
 
-**Q13.11** — *`AllowedIPs` dans WireGuard.*
+<a id="q13-11"></a>**[Q13.11](README.md#q13-11)** — *`AllowedIPs` dans WireGuard.*
 
 **Réponse : a) et b).**
 
-::: pourquoi
-WireGuard n'a pas de notion de « client » ou de « serveur », seulement des
-pairs identifiés par clé publique. `AllowedIPs` est la clé de voûte du
-*cryptokey routing* : en **émission**, un paquet est envoyé au pair dont
-`AllowedIPs` contient la destination (c'est une table de routage interne, et
-`wg-quick` pose aussi les routes noyau correspondantes) ; en **réception**, un
-paquet déchiffré n'est accepté que si sa source est dans les `AllowedIPs` du
-pair qui l'a envoyé, sinon il est jeté silencieusement.
+> [!NOTE]
+> **Pourquoi**
+>
+> WireGuard n'a pas de notion de « client » ou de « serveur », seulement des
+> pairs identifiés par clé publique. `AllowedIPs` est la clé de voûte du
+> *cryptokey routing* : en **émission**, un paquet est envoyé au pair dont
+> `AllowedIPs` contient la destination (c'est une table de routage interne, et
+> `wg-quick` pose aussi les routes noyau correspondantes) ; en **réception**, un
+> paquet déchiffré n'est accepté que si sa source est dans les `AllowedIPs` du
+> pair qui l'a envoyé, sinon il est jeté silencieusement.
+>
+> `AllowedIPs = 0.0.0.0/0` côté client = « tout passe par ce pair » (VPN
+> complet). `AllowedIPs = 10.99.0.2/32` = seul ce pair est joignable par ce
+> pair. Deux pairs ne peuvent pas avoir des `AllowedIPs` qui se chevauchent sur
+> une même interface.
 
-`AllowedIPs = 0.0.0.0/0` côté client = « tout passe par ce pair » (VPN
-complet). `AllowedIPs = 10.99.0.2/32` = seul ce pair est joignable par ce
-pair. Deux pairs ne peuvent pas avoir des `AllowedIPs` qui se chevauchent sur
-une même interface.
-:::
-
-::: piege
-c) : l'adresse locale est `Address` dans `[Interface]`. d) : `DNS =` existe,
-mais dans `[Interface]`, et c'est `wg-quick` qui l'applique via `resolvconf`,
-pas le protocole.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : l'adresse locale est `Address` dans `[Interface]`. d) : `DNS =` existe,
+> mais dans `[Interface]`, et c'est `wg-quick` qui l'applique via `resolvconf`,
+> pas le protocole.
 
 ---
 
-**Q13.12** — *`/proc/net/bonding/bond0` : actif `ens20`, `ens19` `down`,
+<a id="q13-12"></a>**[Q13.12](README.md#q13-12)** — *`/proc/net/bonding/bond0` : actif `ens20`, `ens19` `down`,
 `Link Failure Count: 1`.*
 
 **Réponse : b)** `ens19` a perdu sa porteuse une fois, le bond a basculé.
 
-::: pourquoi
-En `active-backup`, un seul esclave transmet. `miimon` (100 ms) interroge la
-porteuse de chaque esclave ; à la première perte, `Link Failure Count` de
-l'esclave s'incrémente et le bond promeut un autre esclave `up`. La MAC du bond
-est reprogrammée sur le nouvel actif (`fail_over_mac=none` par défaut) et un
-ARP gratuit est envoyé pour que les commutateurs apprennent le nouveau port :
-le trafic reprend en moins d'une seconde.
-
-Quand `ens19` revient, le bond y retourne **si** `primary ens19` est défini et
-`primary_reselect=always` (défaut) ; sinon il reste sur `ens20`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> En `active-backup`, un seul esclave transmet. `miimon` (100 ms) interroge la
+> porteuse de chaque esclave ; à la première perte, `Link Failure Count` de
+> l'esclave s'incrémente et le bond promeut un autre esclave `up`. La MAC du bond
+> est reprogrammée sur le nouvel actif (`fail_over_mac=none` par défaut) et un
+> ARP gratuit est envoyé pour que les commutateurs apprennent le nouveau port :
+> le trafic reprend en moins d'une seconde.
+>
+> Quand `ens19` revient, le bond y retourne **si** `primary ens19` est défini et
+> `primary_reselect=always` (défaut) ; sinon il reste sur `ens20`.
 
 ---
 
-**Q13.13** — *Sous-interface VLAN 10 créée, mais rien ne revient : `tcpdump`* `-e vlan 10` *ne montre que les ARP sortants.*
+<a id="q13-13"></a>**[Q13.13](README.md#q13-13)** — *Sous-interface VLAN 10 créée, mais rien ne revient : `tcpdump`* `-e vlan 10` *ne montre que les ARP sortants.*
 
 **Réponse : b)** vérifier que `vmbr1` est VLAN-aware et que le port n'est pas
 en mode access.
 
-::: pourquoi
-Un bridge Linux **non** VLAN-aware laisse passer les trames taguées telles
-quelles… en principe ; mais Proxmox, sur un `vmbr` non VLAN-aware, filtre ou
-retague selon la configuration du port. Avec `bridge-vlan-aware yes`, le
-bridge maintient une table de VLAN par port (`bridge vlan show` sur l'hôte) :
-par défaut un port n'a que le VLAN 1 non tagué (PVID) et **jette** tout tag
-non autorisé. Il faut soit `bridge-vids 2-4094` sur `vmbr1` (trunk vers la
-VM, elle tague elle-même), soit `tag=10` sur le port de la VM (mode access :
-le bridge tague/détague, la VM ne doit **pas** créer de sous-interface).
-
-Les deux à la fois (`tag=10` **et** `ens18.10` dans la VM) donnent du double
-tag : la trame sort de la VM avec le tag 10, le bridge ajoute un second tag 10
-(QinQ), et rien ne répond. C'est l'erreur classique.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un bridge Linux **non** VLAN-aware laisse passer les trames taguées telles
+> quelles… en principe ; mais Proxmox, sur un `vmbr` non VLAN-aware, filtre ou
+> retague selon la configuration du port. Avec `bridge-vlan-aware yes`, le
+> bridge maintient une table de VLAN par port (`bridge vlan show` sur l'hôte) :
+> par défaut un port n'a que le VLAN 1 non tagué (PVID) et **jette** tout tag
+> non autorisé. Il faut soit `bridge-vids 2-4094` sur `vmbr1` (trunk vers la
+> VM, elle tague elle-même), soit `tag=10` sur le port de la VM (mode access :
+> le bridge tague/détague, la VM ne doit **pas** créer de sous-interface).
+>
+> Les deux à la fois (`tag=10` **et** `ens18.10` dans la VM) donnent du double
+> tag : la trame sort de la VM avec le tag 10, le bridge ajoute un second tag 10
+> (QinQ), et rien ne répond. C'est l'erreur classique.
 
 ---
 
-**Q13.14** — *`aa` sur `lab.local`, `REFUSED` sur un nom public.*
+<a id="q13-14"></a>**[Q13.14](README.md#q13-14)** — *`aa` sur `lab.local`, `REFUSED` sur un nom public.*
 
 **Réponse : b)** un serveur faisant autorité, `recursion no`.
 
-::: pourquoi
-Le flag `aa` (authoritative answer) n'est posé que par un serveur qui sert la
-zone depuis ses propres fichiers. `REFUSED` sur un nom hors zone est la réponse
-correcte d'un autoritaire configuré avec `recursion no` (BIND) : il ne va pas
-chercher ailleurs et le dit. Un récursif aurait répondu `NOERROR` avec le flag
-`ra` et sans `aa` ; un forwarder avec un amont mort aurait répondu `SERVFAIL`
-après un délai.
-
-C'est la bonne pratique : un autoritaire exposé ne doit jamais faire de
-récursion (amplification DDoS, empoisonnement de cache). Unbound et BIND
-récursif restent derrière un `access-control`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le flag `aa` (authoritative answer) n'est posé que par un serveur qui sert la
+> zone depuis ses propres fichiers. `REFUSED` sur un nom hors zone est la réponse
+> correcte d'un autoritaire configuré avec `recursion no` (BIND) : il ne va pas
+> chercher ailleurs et le dit. Un récursif aurait répondu `NOERROR` avec le flag
+> `ra` et sans `aa` ; un forwarder avec un amont mort aurait répondu `SERVFAIL`
+> après un délai.
+>
+> C'est la bonne pratique : un autoritaire exposé ne doit jamais faire de
+> récursion (amplification DDoS, empoisonnement de cache). Unbound et BIND
+> récursif restent derrière un `access-control`.
 
 ---
 
-**Q13.15** — *Enregistrement ajouté et rechargé sur le primaire, invisible sur
+<a id="q13-15"></a>**[Q13.15](README.md#q13-15)** — *Enregistrement ajouté et rechargé sur le primaire, invisible sur
 le secondaire trente minutes après, sans erreur.*
 
 **Réponse : b)** serial non incrémenté.
 
-::: pourquoi
-Le secondaire n'a qu'un seul critère pour décider de transférer : le serial du
-`SOA` du primaire est-il **strictement supérieur** au sien (arithmétique
-modulo 2^32) ? Après un `NOTIFY` ou à chaque `refresh`, il interroge `SOA
-lab.local`, compare, et s'il est égal conclut « je suis à jour » — ce n'est pas
-une erreur, donc rien dans les journaux. Le primaire, lui, sert immédiatement
-le nouveau fichier.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le secondaire n'a qu'un seul critère pour décider de transférer : le serial du
+> `SOA` du primaire est-il **strictement supérieur** au sien (arithmétique
+> modulo 2^32) ? Après un `NOTIFY` ou à chaque `refresh`, il interroge `SOA
+> lab.local`, compare, et s'il est égal conclut « je suis à jour » — ce n'est pas
+> une erreur, donc rien dans les journaux. Le primaire, lui, sert immédiatement
+> le nouveau fichier.
+>
+> `dig +short SOA lab.local @10.10.10.14` et `@10.10.10.10` : deux serials
+> identiques avec des contenus différents = diagnostic fait. Correctif :
+> incrémenter le serial, `rndc reload`, le secondaire reçoit un NOTIFY, compare,
+> transfère. Prévention : format `AAAAMMJJnn`, ou `rndc` avec des zones
+> dynamiques où BIND gère le serial lui-même.
 
-`dig +short SOA lab.local @10.10.10.14` et `@10.10.10.10` : deux serials
-identiques avec des contenus différents = diagnostic fait. Correctif :
-incrémenter le serial, `rndc reload`, le secondaire reçoit un NOTIFY, compare,
-transfère. Prévention : format `AAAAMMJJnn`, ou `rndc` avec des zones
-dynamiques où BIND gère le serial lui-même.
-:::
-
-::: piege
-a) : `allow-transfer` se configure sur le **primaire** ; mal réglé, le
-secondaire journalise `transfer ... failed: REFUSED`, ce serait visible.
-b) : AXFR passe en **TCP** ; et un filtrage donnerait aussi une erreur.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) : `allow-transfer` se configure sur le **primaire** ; mal réglé, le
+> secondaire journalise `transfer ... failed: REFUSED`, ce serait visible.
+> b) : AXFR passe en **TCP** ; et un filtrage donnerait aussi une erreur.
 
 ---
 
-**Q13.16** — *Trois serveurs DNS sur le port 53 de la même machine.*
+<a id="q13-16"></a>**[Q13.16](README.md#q13-16)** — *Trois serveurs DNS sur le port 53 de la même machine.*
 
 **Réponse : b)** chacun est lié à une adresse précise.
 
-::: pourquoi
-Un socket est identifié par (protocole, adresse, port). `127.0.0.53:53`,
-`10.10.10.53:53` et `10.10.10.14:53` sont trois sockets distincts ; le noyau
-route chaque datagramme vers celui dont l'adresse correspond à la destination.
-Le conflit n'apparaît que si l'un d'eux demande `0.0.0.0:53` (`INADDR_ANY`),
-qui « recouvre » toutes les adresses : `bind()` échoue alors avec
-`EADDRINUSE` (Unbound : `can't bind socket: Address already in use`, BIND :
-`could not listen on UDP socket`).
-
-D'où les directives `interface:` (Unbound) et `listen-on { ...; }` (BIND)
-explicites dans le lab, et le piège classique : installer `bind9` sur une
-machine avec `systemd-resolved` sans toucher `listen-on` — BIND démarre
-malgré tout (il se lie adresse par adresse, et `127.0.0.53` n'est l'adresse d'aucune interface), mais il prend alors aussi `10.10.10.53:53` avant Unbound; et `dnsmasq` **sans**
-`bind-interfaces` (socket joker) échoue.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un socket est identifié par (protocole, adresse, port). `127.0.0.53:53`,
+> `10.10.10.53:53` et `10.10.10.14:53` sont trois sockets distincts ; le noyau
+> route chaque datagramme vers celui dont l'adresse correspond à la destination.
+> Le conflit n'apparaît que si l'un d'eux demande `0.0.0.0:53` (`INADDR_ANY`),
+> qui « recouvre » toutes les adresses : `bind()` échoue alors avec
+> `EADDRINUSE` (Unbound : `can't bind socket: Address already in use`, BIND :
+> `could not listen on UDP socket`).
+>
+> D'où les directives `interface:` (Unbound) et `listen-on { ...; }` (BIND)
+> explicites dans le lab, et le piège classique : installer `bind9` sur une
+> machine avec `systemd-resolved` sans toucher `listen-on` — BIND démarre
+> malgré tout (il se lie adresse par adresse, et `127.0.0.53` n'est l'adresse d'aucune interface), mais il prend alors aussi `10.10.10.53:53` avant Unbound; et `dnsmasq` **sans**
+> `bind-interfaces` (socket joker) échoue.
 
 ---
 
-**Q13.17** — *`ip -6 neigh` : `STALE`.*
+<a id="q13-17"></a>**[Q13.17](README.md#q13-17)** — *`ip -6 neigh` : `STALE`.*
 
 **Réponse : b)** connue mais non confirmée récemment.
 
-::: pourquoi
-Neighbor Discovery (ND, RFC 4861) remplace ARP et ajoute une machine à états
-par voisin : `INCOMPLETE` (résolution en cours), `REACHABLE` (confirmé il y a
-moins de `base_reachable_time`, 30 s), `STALE` (l'entrée existe, on l'utilisera
-mais on la re-vérifiera au prochain envoi), `DELAY`/`PROBE` (vérification en
-cours), `FAILED`. IPv4 utilise la même machine (`ip neigh` montre aussi
-`STALE`), simplement on la remarque moins.
-
-`STALE` est l'état **normal** d'un voisin qu'on n'a pas contacté depuis
-30 secondes. Ce n'est pas une panne ; `FAILED` en est une.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Neighbor Discovery (ND, RFC 4861) remplace ARP et ajoute une machine à états
+> par voisin : `INCOMPLETE` (résolution en cours), `REACHABLE` (confirmé il y a
+> moins de `base_reachable_time`, 30 s), `STALE` (l'entrée existe, on l'utilisera
+> mais on la re-vérifiera au prochain envoi), `DELAY`/`PROBE` (vérification en
+> cours), `FAILED`. IPv4 utilise la même machine (`ip neigh` montre aussi
+> `STALE`), simplement on la remarque moins.
+>
+> `STALE` est l'état **normal** d'un voisin qu'on n'a pas contacté depuis
+> 30 secondes. Ce n'est pas une panne ; `FAILED` en est une.
 
 ---
 
-**Q13.18** — *Interdire à `10.10.10.0/24` d'atteindre les ports publiés par
+<a id="q13-18"></a>**[Q13.18](README.md#q13-18)** — *Interdire à `10.10.10.0/24` d'atteindre les ports publiés par
 Docker, de façon durable.*
 
 **Réponse : b)** dans `DOCKER-USER`.
 
-::: pourquoi
-Docker crée et **réécrit** ses chaînes (`DOCKER`, `DOCKER-ISOLATION-STAGE-*`)
-à chaque démarrage et à chaque création de conteneur ; ce que tu y ajoutes
-disparaît. `DOCKER-USER` est appelée en tête de `FORWARD`, avant tout le
-reste, et Docker s'engage à ne jamais la modifier : c'est l'endroit prévu pour
-les règles de l'administrateur.
-
-```bash
-iptables -I DOCKER-USER -s 10.10.10.0/24 -i ens18 -m conntrack \
-  --ctstate NEW -j DROP
-```
-
-Les ports publiés sont du trafic **relayé** (DNAT vers l'IP du conteneur, puis
-`FORWARD`), pas du trafic `INPUT` : c'est pour cela qu'`ufw`, qui ne filtre
-qu'`INPUT`, ne les protège pas — sujet du module 22.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Docker crée et **réécrit** ses chaînes (`DOCKER`, `DOCKER-ISOLATION-STAGE-*`)
+> à chaque démarrage et à chaque création de conteneur ; ce que tu y ajoutes
+> disparaît. `DOCKER-USER` est appelée en tête de `FORWARD`, avant tout le
+> reste, et Docker s'engage à ne jamais la modifier : c'est l'endroit prévu pour
+> les règles de l'administrateur.
+>
+> ```bash
+> iptables -I DOCKER-USER -s 10.10.10.0/24 -i ens18 -m conntrack \
+>   --ctstate NEW -j DROP
+> ```
+>
+> Les ports publiés sont du trafic **relayé** (DNAT vers l'IP du conteneur, puis
+> `FORWARD`), pas du trafic `INPUT` : c'est pour cela qu'`ufw`, qui ne filtre
+> qu'`INPUT`, ne les protège pas — sujet du module 22.
 
 ---
 
 ## 13.4 Quiz — questions ouvertes
 
-**QO13.1** — *Ce que fait `docker run -p 8080:80 nginx` côté réseau, sans
+<a id="qo13-1"></a>**[QO13.1](README.md#qo13-1)** — *Ce que fait `docker run -p 8080:80 nginx` côté réseau, sans
 parler de Docker.*
 
 **Réponse.** Au démarrage du démon, puis à chaque `run` :
@@ -499,19 +533,20 @@ parler de Docker.*
    tcp dport 80`). Et `docker-proxy` écoute sur `0.0.0.0:8080` en secours
    (pour `localhost` en IPv6 et les cas sans NAT).
 
-::: pourquoi
-Rien de tout cela n'est spécifique à Docker : ce sont les primitives du noyau
-que ce module manipule. La valeur ajoutée de Docker est de faire tout ça de
-façon cohérente, idempotente et de le défaire au `stop`. Savoir le rejouer à
-la main, c'est savoir lire `docker network inspect` et `nft list ruleset`
-quand un port publié ne répond pas, et c'est exactement ce qu'un CNI
-Kubernetes (bridge, flannel) fait aussi, avec en plus un overlay pour joindre
-les autres nœuds.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Rien de tout cela n'est spécifique à Docker : ce sont les primitives du noyau
+> que ce module manipule. La valeur ajoutée de Docker est de faire tout ça de
+> façon cohérente, idempotente et de le défaire au `stop`. Savoir le rejouer à
+> la main, c'est savoir lire `docker network inspect` et `nft list ruleset`
+> quand un port publié ne répond pas, et c'est exactement ce qu'un CNI
+> Kubernetes (bridge, flannel) fait aussi, avec en plus un overlay pour joindre
+> les autres nœuds.
 
 ---
 
-**QO13.2** — *Chemin d'un paquet TCP entrant sur `ens18` vers un netns via
+<a id="qo13-2"></a>**[QO13.2](README.md#qo13-2)** — *Chemin d'un paquet TCP entrant sur `ens18` vers un netns via
 DNAT.*
 
 **Réponse.**
@@ -542,18 +577,19 @@ DNAT.*
    seul : les règles `nat` ne sont plus lues. `nft monitor trace` le montre :
    pour le deuxième paquet, la chaîne `nat prerouting` n'apparaît pas.
 
-::: pourquoi
-Deux idées à retenir : le **DNAT se fait avant le routage** (sinon le noyau
-déciderait « c'est pour moi » et enverrait le paquet en `input`), le **SNAT
-après** (sinon on ne connaîtrait pas l'interface de sortie) ; et le NAT est
-une **propriété du flux** stockée dans conntrack, pas une règle appliquée à
-chaque paquet. C'est pourquoi `conntrack -F` casse le NAT, et pourquoi une
-règle `nat` modifiée n'affecte pas les flux en cours.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux idées à retenir : le **DNAT se fait avant le routage** (sinon le noyau
+> déciderait « c'est pour moi » et enverrait le paquet en `input`), le **SNAT
+> après** (sinon on ne connaîtrait pas l'interface de sortie) ; et le NAT est
+> une **propriété du flux** stockée dans conntrack, pas une règle appliquée à
+> chaque paquet. C'est pourquoi `conntrack -F` casse le NAT, et pourquoi une
+> règle `nat` modifiée n'affecte pas les flux en cours.
 
 ---
 
-**QO13.3** — *Deux interfaces, deux passerelles : ping OK, TCP échoue.*
+<a id="qo13-3"></a>**[QO13.3](README.md#qo13-3)** — *Deux interfaces, deux passerelles : ping OK, TCP échoue.*
 
 **Réponse.** Mécanisme : un client de B envoie un SYN à l'adresse de
 l'interface B du serveur. Le serveur répond, et pour choisir la sortie il
@@ -584,17 +620,18 @@ Preuve sans paquet : `ip route get 192.168.2.10 from 10.10.12.2`
 doit répondre `via 10.10.12.1 dev eth2`, alors que `ip route
 get 192.168.2.10` (source par défaut) répond `via 10.10.11.1 dev eth1`. Pas de `iif` ici : la réponse est émise **localement**; `from <adresse locale> iif eth2` simulerait un paquet **reçu** portant l'adresse de la machine en source, que le noyau refuse (erreur `RTNETLINK answers: ...`).
 
-::: pourquoi
-La règle `from` fait le lien entre l'adresse **source** du paquet de réponse
-(qui est l'adresse de l'interface par laquelle la requête est arrivée, puisque
-le socket répond avec l'adresse à laquelle on lui a parlé) et la table qui
-mène à la passerelle de ce côté. Persistant sous Netplan : `routes:` avec
-`table: 200` et `routing-policy: - from: 10.10.12.2 / table: 200`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La règle `from` fait le lien entre l'adresse **source** du paquet de réponse
+> (qui est l'adresse de l'interface par laquelle la requête est arrivée, puisque
+> le socket répond avec l'adresse à laquelle on lui a parlé) et la table qui
+> mène à la passerelle de ce côté. Persistant sous Netplan : `routes:` avec
+> `table: 200` et `routing-policy: - from: 10.10.12.2 / table: 200`.
 
 ---
 
-**QO13.4** — *`established,related accept` vs règle sans état, `related`,
+<a id="qo13-4"></a>**[QO13.4](README.md#qo13-4)** — *`established,related accept` vs règle sans état, `related`,
 `invalid`, perte de la table conntrack.*
 
 **Réponse.** Une règle sans état `tcp sport 80 accept` laisse entrer **tout**
@@ -625,17 +662,18 @@ pare-feu stateful est jeté comme `invalid` jusqu'à ce que TCP réémette… ma
 en cours à partir d'un ACK, donc il reprend. Un flux non NATé sur une machine
 sans pare-feu ne remarque rien.
 
-::: pourquoi
-Le pare-feu stateful transforme un problème de « quels ports autoriser dans
-chaque sens » en « qui a le droit d'initier ». C'est la seule façon d'écrire
-une politique lisible avec des ports éphémères. Le prix : une table en mémoire
-(`nf_conntrack_max`), des timeouts à connaître, et une sensibilité aux chemins
-asymétriques (QO13.3).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le pare-feu stateful transforme un problème de « quels ports autoriser dans
+> chaque sens » en « qui a le droit d'initier ». C'est la seule façon d'écrire
+> une politique lisible avec des ports éphémères. Le prix : une table en mémoire
+> (`nf_conntrack_max`), des timeouts à connaître, et une sensibilité aux chemins
+> asymétriques (QO13.3).
 
 ---
 
-**QO13.5** — *DNAT qui marche de l'extérieur, pas depuis le LAN interne :
+<a id="qo13-5"></a>**[QO13.5](README.md#qo13-5)** — *DNAT qui marche de l'extérieur, pas depuis le LAN interne :
 hairpin.*
 
 **Réponse.** Situation : client `172.20.0.12` (même segment que le serveur
@@ -665,17 +703,18 @@ Solutions :
    Pas de NAT en boucle, adresses réelles conservées ; c'est la solution propre
    quand on contrôle le DNS.
 
-::: pourquoi
-Le DNAT ne réécrit que la destination ; il suppose que le retour repassera par
-le routeur, ce qui n'est vrai que si le serveur ne peut pas joindre le client
-directement. Docker ajoute la règle de hairpin systématiquement (`MASQUERADE`
-avec `-s 172.17.0.2 -d 172.17.0.2`), Kubernetes l'expose sous le nom
-`hairpinMode` dans le CNI bridge.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le DNAT ne réécrit que la destination ; il suppose que le retour repassera par
+> le routeur, ce qui n'est vrai que si le serveur ne peut pas joindre le client
+> directement. Docker ajoute la règle de hairpin systématiquement (`MASQUERADE`
+> avec `-s 172.17.0.2 -d 172.17.0.2`), Kubernetes l'expose sous le nom
+> `hairpinMode` dans le CNI bridge.
 
 ---
 
-**QO13.6** — *VXLAN, GRE, IPIP, WireGuard : comparaison et lien avec
+<a id="qo13-6"></a>**[QO13.6](README.md#qo13-6)** — *VXLAN, GRE, IPIP, WireGuard : comparaison et lien avec
 Kubernetes.*
 
 **Réponse.**
@@ -704,15 +743,16 @@ parce que le MTU du nœud est 1500 et que VXLAN prend 50 octets ; un pod qui
 envoie 1500 fabriquerait des paquets externes de 1550, fragmentés ou jetés —
 c'est le lab L13.3 en plus grand.
 
-::: pourquoi
-Comprendre qu'un CNI n'est qu'un script qui crée ces objets (et un agent qui
-maintient les tables) désacralise Kubernetes : `ip -d link show flannel.1`,
-`bridge fdb show dev flannel.1` et `ip route` sur un nœud racontent tout.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Comprendre qu'un CNI n'est qu'un script qui crée ces objets (et un agent qui
+> maintient les tables) désacralise Kubernetes : `ip -d link show flannel.1`,
+> `bridge fdb show dev flannel.1` et `ip route` sur un nœud racontent tout.
 
 ---
 
-**QO13.7** — *Autoritaire, récursif, forwarder, cache ; qui répond à quoi dans
+<a id="qo13-7"></a>**[QO13.7](README.md#qo13-7)** — *Autoritaire, récursif, forwarder, cache ; qui répond à quoi dans
 le lab.*
 
 **Réponse.**
@@ -742,17 +782,18 @@ côté de BIND, relayée sans `aa` par Unbound (`dig @10.10.10.14` montre `aa`,
 `dig @10.10.10.53` non). `dig +trace lab-db.lab.local` **échoue** : la racine
 ne connaît pas `local`, ce nom n'existe que dans notre îlot.
 
-::: pourquoi
-CoreDNS reproduit cette architecture dans un seul processus : plugin `kubernetes`
-= autoritaire pour `cluster.local`, plugin `forward` = forwarder vers
-`/etc/resolv.conf` du nœud (donc vers Unbound ici), plugin `cache`. Quand un
-pod ne résout pas un nom externe, la question est « qui est l'amont de CoreDNS
-et répond-il » — exactement BF13.6.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> CoreDNS reproduit cette architecture dans un seul processus : plugin `kubernetes`
+> = autoritaire pour `cluster.local`, plugin `forward` = forwarder vers
+> `/etc/resolv.conf` du nœud (donc vers Unbound ici), plugin `cache`. Quand un
+> pod ne résout pas un nom externe, la question est « qui est l'amont de CoreDNS
+> et répond-il » — exactement BF13.6.
 
 ---
 
-**QO13.8** — *Transfert de zone : mécanisme, expiration, erreurs silencieuses.*
+<a id="qo13-8"></a>**[QO13.8](README.md#qo13-8)** — *Transfert de zone : mécanisme, expiration, erreurs silencieuses.*
 
 **Réponse.** Mécanisme :
 
@@ -786,15 +827,16 @@ Bonus : répertoire de destination non inscriptible pour l'utilisateur `bind`
 (`/etc/bind/` au lieu de `/var/cache/bind/`) — AppArmor refuse, le transfert
 est reçu puis perdu, `journalctl -u named` le dit.
 
-::: pourquoi
-Un secondaire n'est pas une copie « temps réel » : c'est un cache avec un
-protocole de rafraîchissement dont les paramètres sont **dans la zone
-elle-même** (le SOA). Lire un SOA, c'est lire le contrat de réplication.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un secondaire n'est pas une copie « temps réel » : c'est un cache avec un
+> protocole de rafraîchissement dont les paramètres sont **dans la zone
+> elle-même** (le SOA). Lire un SOA, c'est lire le contrat de réplication.
 
 ---
 
-**QO13.9** — *« Désactiver IPv6 partout ».*
+<a id="qo13-9"></a>**[QO13.9](README.md#qo13-9)** — *« Désactiver IPv6 partout ».*
 
 **Réponse.** Sans aucune configuration, un hôte Linux : fabrique une adresse
 link-local `fe80::/64` sur chaque interface (dérivée de la MAC ou aléatoire),
@@ -820,15 +862,16 @@ routes de n'importe quel RA) et un pare-feu `inet` qui traite v4 et v6 dans
 les mêmes règles — c'est précisément l'intérêt de la famille `inet` dans
 nftables.
 
-::: pourquoi
-« On ne s'en sert pas » est presque toujours faux : le système s'en sert.
-Désactiver une pile entière pour ne pas la comprendre remplace un risque
-maîtrisable (filtrer v6 comme v4) par des pannes surprenantes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> « On ne s'en sert pas » est presque toujours faux : le système s'en sert.
+> Désactiver une pile entière pour ne pas la comprendre remplace un risque
+> maîtrisable (filtrer v6 comme v4) par des pannes surprenantes.
 
 ---
 
-**QO13.10** — *9,4 Gbit/s direct, 5,1 en VXLAN, 1,8 en WireGuard : d'où
+<a id="qo13-10"></a>**[QO13.10](README.md#qo13-10)** — *9,4 Gbit/s direct, 5,1 en VXLAN, 1,8 en WireGuard : d'où
 viennent les écarts.*
 
 **Réponse.**
@@ -861,18 +904,19 @@ Réglages sans changer de technologie : jumbo frames sur l'underlay,
 plus de vCPU, RSS/multiqueue virtio (`ethtool -l ens18`), et pour WireGuard
 accepter le coût ou ne chiffrer que ce qui en a besoin.
 
-::: pourquoi
-Le débit d'un tunnel n'est pas limité par le « réseau » mais par le nombre de
-paquets par seconde que le CPU peut encapsuler ou chiffrer. C'est pour cela
-que les CNI proposent des modes sans overlay (Calico BGP, Cilium native
-routing) quand l'infrastructure le permet.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le débit d'un tunnel n'est pas limité par le « réseau » mais par le nombre de
+> paquets par seconde que le CPU peut encapsuler ou chiffrer. C'est pour cela
+> que les CNI proposent des modes sans overlay (Calico BGP, Cilium native
+> routing) quand l'infrastructure le permet.
 
 ---
 
 ## 13.5 Exercices guidés
 
-**E13.1** — *Compteurs détaillés, offloads, anneaux, files d'`ens18`.*
+<a id="e13-1"></a>**[E13.1](README.md#e13-1)** — *Compteurs détaillés, offloads, anneaux, files d'`ens18`.*
 
 ```bash
 ip -s -s link show ens18        # deux -s : sous-compteurs RX errors
@@ -888,19 +932,20 @@ Sur virtio : `ethtool ens18` répond `Speed: Unknown!` et `Duplex: Unknown!`
 par file (`rx_queue_0_packets`…), pas de `rx_missed`. `ethtool -g` et `-l`
 fonctionnent (anneaux de 256, `combined` égal au nombre de vCPU au mieux).
 
-::: pourquoi
-`ip -s -s link` distingue `errors` (trame corrompue), `dropped` (jetée par le
-noyau faute de buffer), `missed` (jetée par la carte, anneau plein) et
-`overrun`. Un `rx_missed` qui grimpe = anneau trop petit ou CPU qui ne vide
-pas assez vite les softirq : `ethtool -G ens18 rx 1024` et/ou plus de files.
-Les offloads expliquent des captures étranges : avec TSO, `tcpdump` sur
-l'émetteur montre des segments de 64 ko et des sommes de contrôle
-« incorrect » (calculées plus tard par la carte). Ce n'est pas une panne.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ip -s -s link` distingue `errors` (trame corrompue), `dropped` (jetée par le
+> noyau faute de buffer), `missed` (jetée par la carte, anneau plein) et
+> `overrun`. Un `rx_missed` qui grimpe = anneau trop petit ou CPU qui ne vide
+> pas assez vite les softirq : `ethtool -G ens18 rx 1024` et/ou plus de files.
+> Les offloads expliquent des captures étranges : avec TSO, `tcpdump` sur
+> l'émetteur montre des segments de 64 ko et des sommes de contrôle
+> « incorrect » (calculées plus tard par la carte). Ce n'est pas une panne.
 
 ---
 
-**E13.2** — *200 ms et 10 % de perte sur `lo`, prouver, retirer.*
+<a id="e13-2"></a>**[E13.2](README.md#e13-2)** — *200 ms et 10 % de perte sur `lo`, prouver, retirer.*
 
 ```bash
 sudo tc qdisc add dev lo root netem delay 200ms loss 10%
@@ -910,23 +955,24 @@ sudo tc qdisc del dev lo root
 ping -c 3 127.0.0.1           # rtt ~0.03 ms
 ```
 
-::: pourquoi
-`netem` est une discipline de file d'attente (qdisc) posée à la **sortie**
-d'une interface. Sur `lo`, l'aller et le retour sortent tous deux par `lo` :
-chaque sens prend 200 ms, le RTT observé est 400 ms, et la perte de 10 % par
-sens donne environ 19 % de pertes au total (`1 - 0,9²`). C'est le piège de
-tout test sur `lo` ou sur une paire veth dont on dégrade les deux bouts.
-
-`tc qdisc del dev lo root` remet la qdisc par défaut (`noqueue` sur `lo`,
-`fq_codel` sur une carte). `netem` sait aussi faire `delay 100ms 20ms
-distribution normal`, `reorder 25%`, `corrupt 1%`, `rate 10mbit` : c'est
-l'outil pour reproduire en lab un lien WAN pourri et voir comment
-l'application réagit avant que la prod ne le fasse à ta place.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `netem` est une discipline de file d'attente (qdisc) posée à la **sortie**
+> d'une interface. Sur `lo`, l'aller et le retour sortent tous deux par `lo` :
+> chaque sens prend 200 ms, le RTT observé est 400 ms, et la perte de 10 % par
+> sens donne environ 19 % de pertes au total (`1 - 0,9²`). C'est le piège de
+> tout test sur `lo` ou sur une paire veth dont on dégrade les deux bouts.
+>
+> `tc qdisc del dev lo root` remet la qdisc par défaut (`noqueue` sur `lo`,
+> `fq_codel` sur une carte). `netem` sait aussi faire `delay 100ms 20ms
+> distribution normal`, `reorder 25%`, `corrupt 1%`, `rate 10mbit` : c'est
+> l'outil pour reproduire en lab un lien WAN pourri et voir comment
+> l'application réagit avant que la prod ne le fasse à ta place.
 
 ---
 
-**E13.3** — *Deux netns reliés par veth, et preuve d'isolation.*
+<a id="e13-3"></a>**[E13.3](README.md#e13-3)** — *Deux netns reliés par veth, et preuve d'isolation.*
 
 ```bash
 sudo ip netns add bleu; sudo ip netns add rouge
@@ -944,24 +990,25 @@ sudo ip netns exec bleu nft list ruleset    # vide, même si l'hôte en a
 sudo ip netns exec bleu ss -tlnp            # vide, pas de sshd
 ```
 
-::: pourquoi
-Un netns est une copie vierge de toute la pile réseau : la liste
-d'interfaces, la table de routage, les règles `ip rule`, netfilter et
-conntrack, la table de voisinage, les sockets, et même `/proc/sys/net`
-(`ip netns exec bleu sysctl net.ipv4.ip_forward` est indépendant). Ce qui
-n'est **pas** isolé : les processus (tu vois le `ping` dans `ps` de l'hôte),
-les fichiers, les utilisateurs. `ip netns exec` fait un `setns()` puis
-monte un `/etc/netns/bleu/` éventuel par-dessus `/etc/` (utile pour un
-`resolv.conf` différent par namespace).
-
-Une veth transmet une trame d'un bout à l'autre sans passer par aucun
-bridge : c'est un câble. L'état `LOWER_UP` d'un bout dépend de l'autre :
-tant que `v-rouge` est down, `v-bleu` affiche `NO-CARRIER`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un netns est une copie vierge de toute la pile réseau : la liste
+> d'interfaces, la table de routage, les règles `ip rule`, netfilter et
+> conntrack, la table de voisinage, les sockets, et même `/proc/sys/net`
+> (`ip netns exec bleu sysctl net.ipv4.ip_forward` est indépendant). Ce qui
+> n'est **pas** isolé : les processus (tu vois le `ping` dans `ps` de l'hôte),
+> les fichiers, les utilisateurs. `ip netns exec` fait un `setns()` puis
+> monte un `/etc/netns/bleu/` éventuel par-dessus `/etc/` (utile pour un
+> `resolv.conf` différent par namespace).
+>
+> Une veth transmet une trame d'un bout à l'autre sans passer par aucun
+> bridge : c'est un câble. L'état `LOWER_UP` d'un bout dépend de l'autre :
+> tant que `v-rouge` est down, `v-bleu` affiche `NO-CARRIER`.
 
 ---
 
-**E13.4** — *`nsenter`, serveur HTTP dans `bleu`, retrouver son namespace.*
+<a id="e13-4"></a>**[E13.4](README.md#e13-4)** — *`nsenter`, serveur HTTP dans `bleu`, retrouver son namespace.*
 
 ```bash
 sudo nsenter --net=/run/netns/bleu \
@@ -975,21 +1022,22 @@ sudo ip netns identify $PID                 # bleu
 sudo ip netns pids bleu                     # liste des PID dedans
 ```
 
-::: pourquoi
-`/run/netns/bleu` est un **bind mount** du fichier `/proc/<pid>/ns/net` du
-processus qui a créé le namespace ; il garde le namespace vivant même sans
-processus dedans. `nsenter --net=<fichier>` et `ip netns exec` appellent tous
-deux `setns()` sur ce descripteur. Un netns Docker n'est pas dans
-`/run/netns/` (Docker le garde dans `/var/run/docker/netns/`), d'où
-`nsenter -t <pid du conteneur> -n` pour y entrer.
-
-Comparer les inodes (`stat -L -c %i`) est la preuve formelle qu'un processus
-est dans tel namespace ; `lsns -t net` fait la synthèse.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `/run/netns/bleu` est un **bind mount** du fichier `/proc/<pid>/ns/net` du
+> processus qui a créé le namespace ; il garde le namespace vivant même sans
+> processus dedans. `nsenter --net=<fichier>` et `ip netns exec` appellent tous
+> deux `setns()` sur ce descripteur. Un netns Docker n'est pas dans
+> `/run/netns/` (Docker le garde dans `/var/run/docker/netns/`), d'où
+> `nsenter -t <pid du conteneur> -n` pour y entrer.
+>
+> Comparer les inodes (`stat -L -c %i`) est la preuve formelle qu'un processus
+> est dans tel namespace ; `lsns -t net` fait la synthèse.
 
 ---
 
-**E13.5** — *Bridge `br-lab`, trois netns, table de transfert.*
+<a id="e13-5"></a>**[E13.5](README.md#e13-5)** — *Bridge `br-lab`, trois netns, table de transfert.*
 
 ```bash
 sudo ip link add br-lab type bridge
@@ -1013,24 +1061,25 @@ Sortie typique de la `fdb` : `xx:xx:xx:xx:xx:xx dev veth-c1 master br-lab`
 un `ageing` (délai avant oubli, 300 s). Les entrées `permanent` sont les MAC
 propres des ports et du bridge.
 
-::: pourquoi
-Le bridge Linux est un commutateur apprenant : à chaque trame reçue sur un
-port, il note « cette MAC source est derrière ce port » (`fdb`, *forwarding
-database*), et pour une destination inconnue il inonde tous les ports
-(*flooding*). `bridge link show` donne l'état STP de chaque port
-(`forwarding`) ; STP est désactivé par défaut (`stp_state 0`) : sur un bridge
-sans boucle physique il ne sert à rien, et l'activer ajoute 30 s de
-convergence à chaque nouveau port (c'est pourquoi Proxmox le laisse à `off`
-et pourquoi Docker aussi).
-
-`peer name eth0 netns c1` crée le second bout directement dans `c1` : on
-évite l'étape `ip link set ... netns` et la collision de noms (`eth0` existe
-dans chaque netns, jamais dans le racine).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le bridge Linux est un commutateur apprenant : à chaque trame reçue sur un
+> port, il note « cette MAC source est derrière ce port » (`fdb`, *forwarding
+> database*), et pour une destination inconnue il inonde tous les ports
+> (*flooding*). `bridge link show` donne l'état STP de chaque port
+> (`forwarding`) ; STP est désactivé par défaut (`stp_state 0`) : sur un bridge
+> sans boucle physique il ne sert à rien, et l'activer ajoute 30 s de
+> convergence à chaque nouveau port (c'est pourquoi Proxmox le laisse à `off`
+> et pourquoi Docker aussi).
+>
+> `peer name eth0 netns c1` crée le second bout directement dans `c1` : on
+> évite l'étape `ip link set ... netns` et la collision de noms (`eth0` existe
+> dans chaque netns, jamais dans le racine).
 
 ---
 
-**E13.6** — *Depuis `c1`, joindre `lab-web` : forwarding, NAT, capture,
+<a id="e13-6"></a>**[E13.6](README.md#e13-6)** — *Depuis `c1`, joindre `lab-web` : forwarding, NAT, capture,
 conntrack.*
 
 Symptôme 1 : `ip netns exec c1 ping 10.10.10.11` est muet. Sur `lab-adm`,
@@ -1061,20 +1110,21 @@ id=1234 src=10.10.10.11 dst=10.10.10.10 type=0 code=0 id=1234`. Premier
 tuple : le paquet original ; second : la réponse attendue, adressée à
 `10.10.10.10` — la preuve du NAT.
 
-::: pourquoi
-Deux conditions indépendantes pour qu'un Linux serve de routeur NAT :
-**relayer** (`ip_forward`, décision noyau, sinon le paquet est jeté en
-silence après `prerouting`) et **traduire** (`masquerade`, sinon le retour
-n'a pas de chemin). L'ordre des symptômes est toujours le même : d'abord
-« rien ne sort », puis « ça sort, rien ne revient ». `masquerade` choisit
-comme nouvelle source l'adresse de l'interface de sortie au moment du
-paquet (utile en DHCP) ; `snat to 10.10.10.10` fait pareil avec une adresse
-fixe et coûte un peu moins.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux conditions indépendantes pour qu'un Linux serve de routeur NAT :
+> **relayer** (`ip_forward`, décision noyau, sinon le paquet est jeté en
+> silence après `prerouting`) et **traduire** (`masquerade`, sinon le retour
+> n'a pas de chemin). L'ordre des symptômes est toujours le même : d'abord
+> « rien ne sort », puis « ça sort, rien ne revient ». `masquerade` choisit
+> comme nouvelle source l'adresse de l'interface de sortie au moment du
+> paquet (utile en DHCP) ; `snat to 10.10.10.10` fait pareil avec une adresse
+> fixe et coûte un peu moins.
 
 ---
 
-**E13.7** — *Toutes les tables, la table `local`, routes `onlink`.*
+<a id="e13-7"></a>**[E13.7](README.md#e13-7)** — *Toutes les tables, la table `local`, routes `onlink`.*
 
 ```bash
 ip route show table all
@@ -1101,20 +1151,21 @@ ip route get 10.10.30.5      # via 10.10.10.99 ; l'ARP échouera plus tard
 sudo ip route del 10.10.30.0/24; sudo ip route del 10.10.31.0/24
 ```
 
-::: pourquoi
-Le noyau ne vérifie **pas** qu'une passerelle répond, seulement qu'elle est
-joignable en L2, c'est-à-dire qu'une route connectée (`scope link`) la
-couvre. `onlink` désactive cette vérification : indispensable quand la
-passerelle est sur le lien mais hors du préfixe (liaisons `/32` chez certains
-hébergeurs, routes de flannel `via 10.244.2.0 dev flannel.1 onlink`). La table
-`local` est gérée par le noyau seul ; c'est elle qui explique pourquoi une
-adresse ajoutée par `ip addr add` est immédiatement « locale » sans que `ip
-route` (table `main`) ne change de façon visible.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le noyau ne vérifie **pas** qu'une passerelle répond, seulement qu'elle est
+> joignable en L2, c'est-à-dire qu'une route connectée (`scope link`) la
+> couvre. `onlink` désactive cette vérification : indispensable quand la
+> passerelle est sur le lien mais hors du préfixe (liaisons `/32` chez certains
+> hébergeurs, routes de flannel `via 10.244.2.0 dev flannel.1 onlink`). La table
+> `local` est gérée par le noyau seul ; c'est elle qui explique pourquoi une
+> adresse ajoutée par `ip addr add` est immédiatement « locale » sans que `ip
+> route` (table `main`) ne change de façon visible.
 
 ---
 
-**E13.8** — *Table `secours`, marque `0x5`, routage par marque.*
+<a id="e13-8"></a>**[E13.8](README.md#e13-8)** — *Table `secours`, marque `0x5`, routage par marque.*
 
 ```bash
 sudo mkdir -p /etc/iproute2/rt_tables.d
@@ -1138,20 +1189,21 @@ sudo ip route flush table secours
 sudo rm /etc/iproute2/rt_tables.d/secours.conf
 ```
 
-::: pourquoi
-`ip route get` accepte `mark` pour simuler un paquet marqué : c'est la seule
-façon de tester une politique par marque sans trafic. La chaîne est de type
-**`route`** sur le hook `output` : après un changement de marque, le noyau
-refait la décision de routage (sinon la marque posée après le routage
-initial n'aurait aucun effet sur le trafic local). Pour du trafic **relayé**,
-on marque en `prerouting` (type `filter` suffit, le routage vient après).
-`ip route get 9.9.9.9 mark 0x5` rappelle que la règle `fwmark` est aveugle :
-c'est la règle nftables qui porte la sélectivité, pas `ip rule`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ip route get` accepte `mark` pour simuler un paquet marqué : c'est la seule
+> façon de tester une politique par marque sans trafic. La chaîne est de type
+> **`route`** sur le hook `output` : après un changement de marque, le noyau
+> refait la décision de routage (sinon la marque posée après le routage
+> initial n'aurait aucun effet sur le trafic local). Pour du trafic **relayé**,
+> on marque en `prerouting` (type `filter` suffit, le routage vient après).
+> `ip route get 9.9.9.9 mark 0x5` rappelle que la règle `fwmark` est aveugle :
+> c'est la règle nftables qui porte la sélectivité, pas `ip rule`.
 
 ---
 
-**E13.9** — *VLAN 20 sur `ens18`, tag visible au `tcpdump`, Netplan.*
+<a id="e13-9"></a>**[E13.9](README.md#e13-9)** — *VLAN 20 sur `ens18`, tag visible au `tcpdump`, Netplan.*
 
 ```bash
 sudo ip link add link ens18 name ens18.20 type vlan id 20
@@ -1181,21 +1233,22 @@ network:
 sudo ip link del ens18.20
 ```
 
-::: pourquoi
-La sous-interface insère un en-tête 802.1Q (4 octets : TPID `0x8100`, PCP,
-VID) entre l'adresse source et l'ethertype : `-e` le rend visible, et le
-filtre `vlan 20` ne matche que les trames taguées 20. Capturer sur `ens18`
-(parent) montre le tag ; capturer sur `ens18.20` montre la trame déjà
-détaguée. Attention avec un offload `rx-vlan-offload on` : la carte retire
-le tag avant le noyau, et `tcpdump -i ens18` ne le montre plus (il apparaît
-dans les métadonnées, `tcpdump -e` le reconstruit) — virtio ne le fait pas.
-Sans réponse du côté Proxmox (`vmbr1` non VLAN-aware ou port en `tag=`), les
-trames partent mais rien ne revient : voir Q13.13.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La sous-interface insère un en-tête 802.1Q (4 octets : TPID `0x8100`, PCP,
+> VID) entre l'adresse source et l'ethertype : `-e` le rend visible, et le
+> filtre `vlan 20` ne matche que les trames taguées 20. Capturer sur `ens18`
+> (parent) montre le tag ; capturer sur `ens18.20` montre la trame déjà
+> détaguée. Attention avec un offload `rx-vlan-offload on` : la carte retire
+> le tag avant le noyau, et `tcpdump -i ens18` ne le montre plus (il apparaît
+> dans les métadonnées, `tcpdump -e` le reconstruit) — virtio ne le fait pas.
+> Sans réponse du côté Proxmox (`vmbr1` non VLAN-aware ou port en `tag=`), les
+> trames partent mais rien ne revient : voir Q13.13.
 
 ---
 
-**E13.10** — *VXLAN point à point, `fdb`, capture, MTU.*
+<a id="e13-10"></a>**[E13.10](README.md#e13-10)** — *VXLAN point à point, `fdb`, capture, MTU.*
 
 ```bash
 # lab-web
@@ -1219,19 +1272,20 @@ ping -M do -s 1422 -c 1 192.168.42.12     # 1422 + 8 + 20 = 1450 : passe
 ping -M do -s 1423 -c 1 192.168.42.12     # "message too long, mtu=1450"
 ```
 
-::: pourquoi
-Créé avec `dev ens18`, le VXLAN hérite du MTU du porteur moins 50 : 1450, sans
-rien préciser. L'entrée `fdb` `00:00:00:00:00:00 dst 10.10.10.12` est la
-« route par défaut L2 » du tunnel : toute MAC inconnue est envoyée à ce VTEP
-(*VXLAN Tunnel EndPoint*). Avec plusieurs pairs on ajoute des entrées
-`bridge fdb append 00:00:00:00:00:00 dev vxlan0 dst <ip>` (réplication
-unicast, ce que fait flannel) ou on utilise un groupe multicast. Le VNI (24
-bits, 16 M de valeurs) sépare les locataires sur un même port UDP.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Créé avec `dev ens18`, le VXLAN hérite du MTU du porteur moins 50 : 1450, sans
+> rien préciser. L'entrée `fdb` `00:00:00:00:00:00 dst 10.10.10.12` est la
+> « route par défaut L2 » du tunnel : toute MAC inconnue est envoyée à ce VTEP
+> (*VXLAN Tunnel EndPoint*). Avec plusieurs pairs on ajoute des entrées
+> `bridge fdb append 00:00:00:00:00:00 dev vxlan0 dst <ip>` (réplication
+> unicast, ce que fait flannel) ou on utilise un groupe multicast. Le VNI (24
+> bits, 16 M de valeurs) sépare les locataires sur un même port UDP.
 
 ---
 
-**E13.11** — *Jeu de règles stateful minimal, chargé sans perdre SSH.*
+<a id="e13-11"></a>**[E13.11](README.md#e13-11)** — *Jeu de règles stateful minimal, chargé sans perdre SSH.*
 
 ```text
 # ~/lab13/nft/input.nft
@@ -1264,19 +1318,20 @@ sudo nft list ruleset | grep counter
 sudo nft flush ruleset
 ```
 
-::: pourquoi
-La session SSH en cours survit parce que son flux est `established` et que
-la règle qui l'accepte précède la politique `drop`. Le `limit rate` sur `log`
-évite qu'un scan remplisse le journal (et `dmesg`). `flags interval` permet
-des préfixes dans un set. La règle ICMPv6 ND est le rappel que la famille
-`inet` filtre aussi IPv6 : sans elle, la machine perd ses voisins v6 dès que
-la politique est `drop`. `nft -c` (check) est le `netplan try` de nftables :
-toujours avant `-f` sur une machine distante.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La session SSH en cours survit parce que son flux est `established` et que
+> la règle qui l'accepte précède la politique `drop`. Le `limit rate` sur `log`
+> évite qu'un scan remplisse le journal (et `dmesg`). `flags interval` permet
+> des préfixes dans un set. La règle ICMPv6 ND est le rappel que la famille
+> `inet` filtre aussi IPv6 : sans elle, la machine perd ses voisins v6 dès que
+> la politique est `drop`. `nft -c` (check) est le `netplan try` de nftables :
+> toujours avant `-f` sur une machine distante.
 
 ---
 
-**E13.12** — *`iptables-translate` sur trois règles.*
+<a id="e13-12"></a>**[E13.12](README.md#e13-12)** — *`iptables-translate` sur trois règles.*
 
 ```bash
 iptables-translate -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED \
@@ -1297,20 +1352,21 @@ IPv4 ; `ip6tables` donne `ip6`), et les noms de chaînes en majuscules dans
 une table `filter`/`nat` de la famille `ip` — celles que crée `iptables-nft`,
 distinctes de tes tables `inet filter`.
 
-::: pourquoi
-Sur Ubuntu 24.04 comme sur Rocky 9, `iptables` est `iptables-nft` : il
-écrit dans nftables, dans des tables `ip filter`, `ip nat`… avec des chaînes
-de base aux priorités classiques. Tes propres tables `inet` s'accrochent aux
-**mêmes hooks** : pour un même paquet, les deux jeux sont parcourus par
-priorité, et un `drop` dans l'un l'emporte sur un `accept` de l'autre. Deux
-administrateurs, deux outils, une contradiction invisible depuis chacun des
-deux : seul `nft list ruleset` montre l'ensemble. `iptables-restore-translate
--f regles.v4` convertit un fichier complet (`/etc/iptables/rules.v4`) d'un coup.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sur Ubuntu 24.04 comme sur Rocky 9, `iptables` est `iptables-nft` : il
+> écrit dans nftables, dans des tables `ip filter`, `ip nat`… avec des chaînes
+> de base aux priorités classiques. Tes propres tables `inet` s'accrochent aux
+> **mêmes hooks** : pour un même paquet, les deux jeux sont parcourus par
+> priorité, et un `drop` dans l'un l'emporte sur un `accept` de l'autre. Deux
+> administrateurs, deux outils, une contradiction invisible depuis chacun des
+> deux : seul `nft list ruleset` montre l'ensemble. `iptables-restore-translate
+> -f regles.v4` convertit un fichier complet (`/etc/iptables/rules.v4`) d'un coup.
 
 ---
 
-**E13.13** — *`nftrace` et `nft monitor trace` sur le port 8080.*
+<a id="e13-13"></a>**[E13.13](README.md#e13-13)** — *`nftrace` et `nft monitor trace` sur le port 8080.*
 
 ```bash
 # insert, pas add : un dnat qui matche termine la chaîne nat, une règle
@@ -1340,20 +1396,21 @@ sudo nft -a list chain ip nat prerouting   # repérer le handle
 sudo nft delete rule ip nat prerouting handle <N>
 ```
 
-::: pourquoi
-La marque `nftrace` est posée sur le **paquet** (pas le flux) par la première
-règle qui matche ; ensuite chaque chaîne de base, chaque règle qui matche et
-chaque verdict sont envoyés en netlink à `nft monitor trace`. On voit donc
-l'ordre réel de traversée, la destination avant/après DNAT, et l'endroit
-exact d'un `drop`. C'est l'équivalent d'un `strace` pour netfilter : plus
-fiable que d'empiler des `log`, et sans rien changer aux verdicts. Les
-paquets suivants du flux ne passent plus par `nat prerouting` (le NAT est
-mémorisé) : la trace ne les montre qu'à partir de `forward`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La marque `nftrace` est posée sur le **paquet** (pas le flux) par la première
+> règle qui matche ; ensuite chaque chaîne de base, chaque règle qui matche et
+> chaque verdict sont envoyés en netlink à `nft monitor trace`. On voit donc
+> l'ordre réel de traversée, la destination avant/après DNAT, et l'endroit
+> exact d'un `drop`. C'est l'équivalent d'un `strace` pour netfilter : plus
+> fiable que d'empiler des `log`, et sans rien changer aux verdicts. Les
+> paquets suivants du flux ne passent plus par `nat prerouting` (le NAT est
+> mémorisé) : la trace ne les montre qu'à partir de `forward`.
 
 ---
 
-**E13.14** — *Unbound : récursion complète, cache, purge ciblée.*
+<a id="e13-14"></a>**[E13.14](README.md#e13-14)** — *Unbound : récursion complète, cache, purge ciblée.*
 
 ```bash
 sudo unbound-control list_forwards        # vide : aucun forwarder
@@ -1367,20 +1424,21 @@ sudo unbound-control stats_noreset | grep -E 'total.num.(cachehits|cachemiss)'
 sudo unbound-control flush_zone debian.org
 ```
 
-::: pourquoi
-Un forwarder n'émettrait des requêtes que vers son amont, un seul serveur ;
-un récursif parle à des dizaines de serveurs différents, en commençant par
-la racine (`unbound-control dump_infra` montre les serveurs contactés et
-leurs RTT). `stats` remet les compteurs à zéro à chaque appel ;
-`stats_noreset` non. `flush_zone` supprime tout ce qui est sous un nom ;
-`flush` un seul nom ; `flush_negative` les réponses `NXDOMAIN` en cache —
-le bon geste quand on vient de créer un enregistrement que le résolveur a
-déjà mémorisé comme inexistant (TTL négatif du SOA, 300 s dans notre zone).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un forwarder n'émettrait des requêtes que vers son amont, un seul serveur ;
+> un récursif parle à des dizaines de serveurs différents, en commençant par
+> la racine (`unbound-control dump_infra` montre les serveurs contactés et
+> leurs RTT). `stats` remet les compteurs à zéro à chaque appel ;
+> `stats_noreset` non. `flush_zone` supprime tout ce qui est sous un nom ;
+> `flush` un seul nom ; `flush_negative` les réponses `NXDOMAIN` en cache —
+> le bon geste quand on vient de créer un enregistrement que le résolveur a
+> déjà mémorisé comme inexistant (TTL négatif du SOA, 300 s dans notre zone).
 
 ---
 
-**E13.15** — *SRV, TXT, validation, rechargement, propagation.*
+<a id="e13-15"></a>**[E13.15](README.md#e13-15)** — *SRV, TXT, validation, rechargement, propagation.*
 
 Dans `/etc/bind/zones/db.lab.local` (serial `2026091901` → `2026091902`) :
 
@@ -1403,20 +1461,21 @@ serial 2026091902` puis `transfer of 'lab.local/IN' from 10.10.10.14#53:
 Transfer completed: 1 messages, 20 records`. Délai : une à deux secondes
 (NOTIFY immédiat).
 
-::: pourquoi
-`named-checkzone` charge la zone comme le ferait `named` : il attrape les
-erreurs de syntaxe, un `CNAME` à l'apex, un `MX` vers un `CNAME`, mais pas un
-serial oublié ni un point final manquant (syntaxiquement valides). `rndc
-reload <zone>` ne recharge que cette zone, envoie le NOTIFY, et le
-secondaire, voyant un serial supérieur, transfère (AXFR ici : sans journal
-IXFR, la zone entière, 20 enregistrements, ce n'est rien). Le format `SRV` :
-priorité (plus bas préféré), poids (répartition à priorité égale), port,
-cible (jamais une adresse, jamais un CNAME).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `named-checkzone` charge la zone comme le ferait `named` : il attrape les
+> erreurs de syntaxe, un `CNAME` à l'apex, un `MX` vers un `CNAME`, mais pas un
+> serial oublié ni un point final manquant (syntaxiquement valides). `rndc
+> reload <zone>` ne recharge que cette zone, envoie le NOTIFY, et le
+> secondaire, voyant un serial supérieur, transfère (AXFR ici : sans journal
+> IXFR, la zone entière, 20 enregistrements, ce n'est rien). Le format `SRV` :
+> priorité (plus bas préféré), poids (répartition à priorité égale), port,
+> cible (jamais une adresse, jamais un CNAME).
 
 ---
 
-**E13.16** — *ULA sur `lab-adm` et `lab-web`, voisinage v6, serveur v6 only.*
+<a id="e13-16"></a>**[E13.16](README.md#e13-16)** — *ULA sur `lab-adm` et `lab-web`, voisinage v6, serveur v6 only.*
 
 ```bash
 # lab-adm
@@ -1438,23 +1497,24 @@ ss -6 -tlnp                    # sur lab-web : [fd00:10:10:10::11]:8000
       addresses: [10.10.10.10/24, "fd00:10:10:10::10/64"]
 ```
 
-::: pourquoi
-La table `ip -6 neigh` contient deux entrées pour le même voisin : son ULA et
-sa link-local `fe80::` (dérivée de la MAC, motif `ff:fe`), parce que ND
-utilise la link-local pour ses propres échanges. Les états sont les mêmes
-qu'en v4 (`REACHABLE`, `STALE`), et le noyau utilise en fait la même
-machine à états pour ARP. Une adresse v6 littérale dans une URL va entre
-crochets. Sans routeur v6 sur `vmbr1`, pas de RA, donc pas de SLAAC ni de
-route par défaut v6 : les ULA posés à la main suffisent pour un `/64`
-connecté, et c'est exactement ce que `radvd` ou un routeur ajouterait avec
-un RA (préfixe + `default via fe80::1`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La table `ip -6 neigh` contient deux entrées pour le même voisin : son ULA et
+> sa link-local `fe80::` (dérivée de la MAC, motif `ff:fe`), parce que ND
+> utilise la link-local pour ses propres échanges. Les états sont les mêmes
+> qu'en v4 (`REACHABLE`, `STALE`), et le noyau utilise en fait la même
+> machine à états pour ARP. Une adresse v6 littérale dans une URL va entre
+> crochets. Sans routeur v6 sur `vmbr1`, pas de RA, donc pas de SLAAC ni de
+> route par défaut v6 : les ULA posés à la main suffisent pour un `/64`
+> connecté, et c'est exactement ce que `radvd` ou un routeur ajouterait avec
+> un RA (préfixe + `default via fe80::1`).
 
 ---
 
 ## 13.6 Labs
 
-### **L13.1** — Mini-Docker à la main
+### <a id="l13-1"></a>**[L13.1](README.md#l13-1)** — Mini-Docker à la main
 
 *Trois netns sur un bridge, NAT de sortie, publication d'un port, hairpin,
 trace, comparaison avec Docker.*
@@ -1614,36 +1674,38 @@ name": "docker0"` = `br-lab` ; chaque `"IPv4Address": "172.17.0.2/16"` dans
 `Containers` = ton `ip -n c1 addr add`. `"com.docker.network.bridge.enable_
 ip_masquerade": "true"` = ta règle `masquerade`.
 
-::: pourquoi
-Le point délicat est le **hairpin** (étape 5). Depuis `lab-adm` : le paquet
-local ne passe pas par `prerouting`, il faut le DNAT en `output`. Depuis
-`c2` : le DNAT en `prerouting` fonctionne (`c2` → bridge → netns racine),
-mais le serveur `c1` verrait une source `172.20.0.12` sur son propre segment
-et répondrait **directement** par le bridge, sans repasser par le routeur :
-`c2` recevrait un SYN-ACK de `172.20.0.11:8000` pour une connexion ouverte
-vers `10.10.10.10:8080` et enverrait un `RST`. Le `masquerade` conditionné à
-`ct status dnat` force la réponse à revenir vers `172.20.0.1`, où conntrack
-détraduit les deux adresses. Docker pose exactement ces deux règles
-(`DOCKER` en `OUTPUT`, `MASQUERADE` avec `-s X -d X`).
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point délicat est le **hairpin** (étape 5). Depuis `lab-adm` : le paquet
+> local ne passe pas par `prerouting`, il faut le DNAT en `output`. Depuis
+> `c2` : le DNAT en `prerouting` fonctionne (`c2` → bridge → netns racine),
+> mais le serveur `c1` verrait une source `172.20.0.12` sur son propre segment
+> et répondrait **directement** par le bridge, sans repasser par le routeur :
+> `c2` recevrait un SYN-ACK de `172.20.0.11:8000` pour une connexion ouverte
+> vers `10.10.10.10:8080` et enverrait un `RST`. Le `masquerade` conditionné à
+> `ct status dnat` force la réponse à revenir vers `172.20.0.1`, où conntrack
+> détraduit les deux adresses. Docker pose exactement ces deux règles
+> (`DOCKER` en `OUTPUT`, `MASQUERADE` avec `-s X -d X`).
+>
+> La règle `forward` `br-lab → br-lab` couvre le trafic **routé** qui ressort
+> par le bridge d'où il vient (le hairpin : `c2` parle à l'adresse du bridge,
+> qui relaie vers `c1`). Le trafic **commuté** `c1 ↔ c2` ne passe pas par
+> `forward`… sauf si `br_netfilter` est chargé (Docker le charge) : cette même
+> règle le couvre alors aussi, sans quoi installer Docker plus tard casserait
+> la communication entre tes netns.
 
-La règle `forward` `br-lab → br-lab` couvre le trafic **routé** qui ressort
-par le bridge d'où il vient (le hairpin : `c2` parle à l'adresse du bridge,
-qui relaie vers `c1`). Le trafic **commuté** `c1 ↔ c2` ne passe pas par
-`forward`… sauf si `br_netfilter` est chargé (Docker le charge) : cette même
-règle le couvre alors aussi, sans quoi installer Docker plus tard casserait
-la communication entre tes netns.
-:::
-
-::: piege
-`ip netns del` détruit les veth dont un bout est dans le netns, mais pas le
-bridge ni les règles : `down` doit tout faire, sinon le `check` échoue sur des
-restes. Et un `nft flush ruleset` global dans `down` effacerait aussi les
-règles d'un autre outil (ufw…) : on supprime **ses** tables par leur nom.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `ip netns del` détruit les veth dont un bout est dans le netns, mais pas le
+> bridge ni les règles : `down` doit tout faire, sinon le `check` échoue sur des
+> restes. Et un `nft flush ruleset` global dans `down` effacerait aussi les
+> règles d'un autre outil (ufw…) : on supprime **ses** tables par leur nom.
 
 ---
 
-### **L13.2** — Policy routing, deux passerelles
+### <a id="l13-2"></a>**[L13.2](README.md#l13-2)** — Policy routing, deux passerelles
 
 *Maquette netns, reproduction de la panne, correction par source puis par
 marque, `rp_filter`, Netplan.*
@@ -1799,26 +1861,28 @@ network:
           table: 200
 ```
 
-::: pourquoi
-Le fond du problème : la table de routage classique ne regarde que la
-**destination**. Un hôte à deux pattes doit répondre « par où le paquet est
-entré », information qui n'existe que dans la **source** de la réponse (ou
-dans une marque de connexion). `ip rule` ajoute cette dimension. Trois
-règles d'or : une table par interface secondaire, avec ses routes connectées
-**et** sa passerelle ; une règle `from <adresse de l'interface>` ; et
-`rp_filter=2`. Tout ce que `ip route get ... from ...` ne valide pas ne
-marchera pas en production.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le fond du problème : la table de routage classique ne regarde que la
+> **destination**. Un hôte à deux pattes doit répondre « par où le paquet est
+> entré », information qui n'existe que dans la **source** de la réponse (ou
+> dans une marque de connexion). `ip rule` ajoute cette dimension. Trois
+> règles d'or : une table par interface secondaire, avec ses routes connectées
+> **et** sa passerelle ; une règle `from <adresse de l'interface>` ; et
+> `rp_filter=2`. Tout ce que `ip route get ... from ...` ne valide pas ne
+> marchera pas en production.
 
-::: piege
-Oublier la route connectée dans la table dédiée (Q13.4) envoie le trafic
-local du segment à la passerelle. Et une règle `from` sans `priority` reçoit la plus petite priorité existante moins un : elle passe **devant** `main` (32766) et devant les règles ajoutées avant elle. L'ordre
-d'ajout compte : des numéros explicites évitent les surprises.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Oublier la route connectée dans la table dédiée (Q13.4) envoie le trafic
+> local du segment à la passerelle. Et une règle `from` sans `priority` reçoit la plus petite priorité existante moins un : elle passe **devant** `main` (32766) et devant les règles ajoutées avant elle. L'ordre
+> d'ajout compte : des numéros explicites évitent les surprises.
 
 ---
 
-### **L13.3** — VXLAN, WireGuard, mesures
+### <a id="l13-3"></a>**[L13.3](README.md#l13-3)** — VXLAN, WireGuard, mesures
 
 **Étape 1 — VXLAN.** Voir E13.10 pour la création. MTU : `ens18` = 1500,
 moins 14 (Ethernet interne) + 20 (IP) + 8 (UDP) + 8 (VXLAN) = 50 → 1450. Le
@@ -1938,18 +2002,19 @@ préfixes des pods. Recommandation : native routing quand on contrôle le
 réseau, VXLAN sinon, WireGuard seulement pour ce qui traverse une zone non
 fiable, et des jumbo frames sur l'underlay dès que possible.
 
-::: pourquoi
-Les deux tunnels résument les deux familles d'overlay : VXLAN transporte des
-**trames** et se comporte comme un commutateur distribué (apprentissage de
-MAC, multicast ou réplication unicast), WireGuard transporte des **paquets**
-et se comporte comme un routeur chiffrant (cryptokey routing). Le MTU est la
-seule chose qu'ils ont en commun à ne jamais négliger, et `iperf3` est le
-seul juge de paix pour choisir.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les deux tunnels résument les deux familles d'overlay : VXLAN transporte des
+> **trames** et se comporte comme un commutateur distribué (apprentissage de
+> MAC, multicast ou réplication unicast), WireGuard transporte des **paquets**
+> et se comporte comme un routeur chiffrant (cryptokey routing). Le MTU est la
+> seule chose qu'ils ont en commun à ne jamais négliger, et `iperf3` est le
+> seul juge de paix pour choisir.
 
 ---
 
-### **L13.4** — Le DNS du lab
+### <a id="l13-4"></a>**[L13.4](README.md#l13-4)** — Le DNS du lab
 
 **Étape 1 — adresse de service** (`lab-ops`, `/etc/netplan/01-lab.yaml`) :
 
@@ -2165,12 +2230,13 @@ sudo sed -i '/lab\.local/{/'"$(hostname -s)"'/!d}' /etc/hosts
 getent hosts lab-db ; dig +short lab-db.lab.local
 ```
 
-::: rhel
-`sudo nmcli con mod ens18 ipv4.dns 10.10.10.53 ipv4.dns-search lab.local
-ipv4.ignore-auto-dns yes && sudo nmcli con up ens18`. Rocky n'a pas de stub
-`systemd-resolved` par défaut : `/etc/resolv.conf` est écrit directement par
-NetworkManager.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> `sudo nmcli con mod ens18 ipv4.dns 10.10.10.53 ipv4.dns-search lab.local
+> ipv4.ignore-auto-dns yes && sudo nmcli con up ens18`. Rocky n'a pas de stub
+> `systemd-resolved` par défaut : `/etc/resolv.conf` est écrit directement par
+> NetworkManager.
 
 **Étape 8 — journalisation.** BIND, dans `named.conf.options` (ou un fichier
 `named.conf.logging` inclus) :
@@ -2221,31 +2287,33 @@ forward-tls-upstream: yes` avec `tls-cert-bundle:
 (plus de récursion, plus de contact avec la racine ; les requêtes ne sont
 plus lisibles par le FAI, mais Quad9 voit tout).
 
-::: pourquoi
-Trois rôles, trois adresses, trois comportements observables avec `dig` :
-`aa` sur l'autoritaire, `ra` + `ad` sur le récursif, `REFUSED` de l'un sur
-ce qui est le métier de l'autre. La stub-zone est le pont : elle dit au
-récursif « pour ce nom, ne cherche pas dans l'Internet, demande à ces
-serveurs ». `domain-insecure` est indispensable parce que le récursif,
-validant, essaierait sinon de prouver que `lab.local` est signé ou
-qu'il est délégué de façon non signée depuis `local.` — ce qui est impossible,
-`local.` n'existant pas dans la racine — et répondrait `SERVFAIL`.
-`local-zone: "10.in-addr.arpa." nodefault` retire le blocage par défaut des
-zones inverses privées (Unbound répond `NXDOMAIN` localement pour toutes les
-plages RFC 1918, par hygiène).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois rôles, trois adresses, trois comportements observables avec `dig` :
+> `aa` sur l'autoritaire, `ra` + `ad` sur le récursif, `REFUSED` de l'un sur
+> ce qui est le métier de l'autre. La stub-zone est le pont : elle dit au
+> récursif « pour ce nom, ne cherche pas dans l'Internet, demande à ces
+> serveurs ». `domain-insecure` est indispensable parce que le récursif,
+> validant, essaierait sinon de prouver que `lab.local` est signé ou
+> qu'il est délégué de façon non signée depuis `local.` — ce qui est impossible,
+> `local.` n'existant pas dans la racine — et répondrait `SERVFAIL`.
+> `local-zone: "10.in-addr.arpa." nodefault` retire le blocage par défaut des
+> zones inverses privées (Unbound répond `NXDOMAIN` localement pour toutes les
+> plages RFC 1918, par hygiène).
 
-::: piege
-`.local` est réservé à mDNS (RFC 6762). `systemd-resolved` envoie
-`*.local` en multicast et **pas** au DNS unicast, sauf si `local` (ou
-`lab.local`) est un domaine de recherche/routage du lien — c'est le rôle de
-`search: [lab.local]` ici. Pour un vrai réseau, préfère `lab.internal` ou
-`home.arpa`. Deuxième piège : `listen-on` de BIND par défaut est `any` : il se lie à toutes les adresses de la VM, dont `10.10.10.53`, et Unbound ne peut plus démarrer sur la même VM.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `.local` est réservé à mDNS (RFC 6762). `systemd-resolved` envoie
+> `*.local` en multicast et **pas** au DNS unicast, sauf si `local` (ou
+> `lab.local`) est un domaine de recherche/routage du lien — c'est le rôle de
+> `search: [lab.local]` ici. Pour un vrai réseau, préfère `lab.internal` ou
+> `home.arpa`. Deuxième piège : `listen-on` de BIND par défaut est `any` : il se lie à toutes les adresses de la VM, dont `10.10.10.53`, et Unbound ne peut plus démarrer sur la même VM.
 
 ---
 
-### **L13.5** — Bonding actif/passif
+### <a id="l13-5"></a>**[L13.5](README.md#l13-5)** — Bonding actif/passif
 
 **Étapes 1 et 2.**
 
@@ -2352,23 +2420,24 @@ saurait le faire).
 **Étape 8.** `qm set 9003 --delete net1 --delete net2`, `qm set 9002 --delete
 net1`, supprimer `60-bond.yaml` et l'adresse sur `lab-web`.
 
-::: pourquoi
-`active-backup` est le mode qu'on déploie quand on ne contrôle pas les
-commutateurs (ou qu'ils sont deux, sans MLAG) : aucune coopération requise,
-un seul chemin actif, bascule en une fraction de seconde. Le prix : la
-bande passante d'un seul lien. LACP agrège **et** tolère, mais un flux donné
-(un couple IP/port) reste sur un seul lien — `transmit-hash-policy` décide
-comment les flux se répartissent ; un `iperf3` mono-flux ne dépassera jamais
-le débit d'une carte. `miimon` surveille la porteuse : il ne détecte pas un
-commutateur dont le port est up mais qui ne relaie plus (`arp_interval` /
-`arp_ip_target` pour ça).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `active-backup` est le mode qu'on déploie quand on ne contrôle pas les
+> commutateurs (ou qu'ils sont deux, sans MLAG) : aucune coopération requise,
+> un seul chemin actif, bascule en une fraction de seconde. Le prix : la
+> bande passante d'un seul lien. LACP agrège **et** tolère, mais un flux donné
+> (un couple IP/port) reste sur un seul lien — `transmit-hash-policy` décide
+> comment les flux se répartissent ; un `iperf3` mono-flux ne dépassera jamais
+> le débit d'une carte. `miimon` surveille la porteuse : il ne détecte pas un
+> commutateur dont le port est up mais qui ne relaie plus (`arp_interval` /
+> `arp_ip_target` pour ça).
 
 ---
 
 ## 13.7 Break & Fix
 
-### **BF13.1** — « Les conteneurs ne sortent plus, mais ils se parlent »
+### <a id="bf13-1"></a>**[BF13.1](README.md#bf13-1)** — « Les conteneurs ne sortent plus, mais ils se parlent »
 
 *`c1` joint `c2` et le bridge, plus rien au-delà ; le port publié expire ;
 les règles sont intactes ; « durcissement sysctl standard ».*
@@ -2414,20 +2483,21 @@ profil générique à une machine qui route (Docker, K8s, VPN) — c'est la
 première ligne que Docker remet à 1 à son démarrage, et la première chose
 qui casse quand on l'arrête.
 
-::: pourquoi
-Le chemin §13.2 : `prerouting` → **décision de routage** → `forward`. Le
-flag `ip_forward` est testé au moment de la décision de routage : « pas pour
-moi » et « forwarding interdit » = destruction immédiate, sans ICMP, sans
-compteur netfilter. C'est pourquoi le pare-feu paraît innocent : il l'est.
-Le réflexe à installer : quand un routeur Linux ne relaie plus **rien** et
-que les règles n'ont pas bougé, `sysctl net.ipv4.ip_forward` avant toute
-autre commande. Par netns : `ip netns exec rtr sysctl net.ipv4.ip_forward`,
-chaque namespace a le sien.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le chemin §13.2 : `prerouting` → **décision de routage** → `forward`. Le
+> flag `ip_forward` est testé au moment de la décision de routage : « pas pour
+> moi » et « forwarding interdit » = destruction immédiate, sans ICMP, sans
+> compteur netfilter. C'est pourquoi le pare-feu paraît innocent : il l'est.
+> Le réflexe à installer : quand un routeur Linux ne relaie plus **rien** et
+> que les règles n'ont pas bougé, `sysctl net.ipv4.ip_forward` avant toute
+> autre commande. Par netns : `ip netns exec rtr sysctl net.ipv4.ip_forward`,
+> chaque namespace a le sien.
 
 ---
 
-### **BF13.2** — « Le routeur accepte une connexion sur trois »
+### <a id="bf13-2"></a>**[BF13.2](README.md#bf13-2)** — « Le routeur accepte une connexion sur trois »
 
 *Nouvelles connexions échouent aléatoirement, sessions existantes intactes,
 CPU nul.*
@@ -2472,19 +2542,20 @@ nf_conntrack_max = 262144` sur un routeur NAT chargé (~300 o par entrée :
 exporter l'expose : `node_nf_conntrack_entries`), alerter à 80 %. Ne jamais
 allonger les timeouts UDP « pour aider les applications » sans mesurer.
 
-::: pourquoi
-Les sessions existantes ne souffrent pas parce que leur entrée existe déjà :
-le noyau ne refuse que la **création** d'entrées. `conntrack -F` aurait
-« réparé » en trente secondes... et coupé toutes les sessions NATées (le
-port publié, les sorties des conteneurs) : `-D` avec un filtre est le geste
-précis. `nf_conntrack_max` par défaut est calculé sur la RAM
-(un multiple fixe de `nf_conntrack_buckets`, de l'ordre de 65 536 à 131 072 sur 2 Go selon le noyau) ; Docker et Kubernetes
-le montent eux-mêmes (kube-proxy : 131 072 par cœur).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les sessions existantes ne souffrent pas parce que leur entrée existe déjà :
+> le noyau ne refuse que la **création** d'entrées. `conntrack -F` aurait
+> « réparé » en trente secondes... et coupé toutes les sessions NATées (le
+> port publié, les sorties des conteneurs) : `-D` avec un filtre est le geste
+> précis. `nf_conntrack_max` par défaut est calculé sur la RAM
+> (un multiple fixe de `nf_conntrack_buckets`, de l'ordre de 65 536 à 131 072 sur 2 Go selon le noyau) ; Docker et Kubernetes
+> le montent eux-mêmes (kube-proxy : 131 072 par cœur).
 
 ---
 
-### **BF13.3** — « Le SYN part, la réponse ne revient jamais »
+### <a id="bf13-3"></a>**[BF13.3](README.md#bf13-3)** — « Le SYN part, la réponse ne revient jamais »
 
 *SYN-ACK visible sur `ens18`, `ping` OK, DNAT : le SYN entre dans `c1`
 mais rien ne ressort.*
@@ -2543,23 +2614,24 @@ commentaire dans le fichier : `# NE PAS SUPPRIMER : rend le pare-feu
 stateful`. Et un test de non-régression : `curl` à travers le NAT après
 chaque changement de règles.
 
-::: pourquoi
-Un pare-feu où seul le sens « initiateur » est autorisé laisse partir le
-SYN et bloque le SYN-ACK : la connexion reste en `SYN-SENT` côté client, qui
-réémet 6 fois (1, 2, 4, 8, 16, 32 s) puis abandonne — 2 minutes d'attente.
-Le paquet est bien reçu par la machine (`tcpdump` le voit), et pour le
-flux masqueradé la destination est bien retraduite par conntrack avant
-`forward` (le journal montre `DST=172.20.0.11` : la traduction inverse d'un
-SNAT se fait en `prerouting`, celle d'un DNAT en `postrouting`), puis jeté
-en `forward`. Les compteurs `counter` et le `log` désignent la règle fautive
-sans avoir à raisonner : c'est pour cela qu'un jeu de règles sérieux se
-termine toujours par une règle de `drop` **explicite et comptée**, jamais
-par la seule politique de chaîne, invisible.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un pare-feu où seul le sens « initiateur » est autorisé laisse partir le
+> SYN et bloque le SYN-ACK : la connexion reste en `SYN-SENT` côté client, qui
+> réémet 6 fois (1, 2, 4, 8, 16, 32 s) puis abandonne — 2 minutes d'attente.
+> Le paquet est bien reçu par la machine (`tcpdump` le voit), et pour le
+> flux masqueradé la destination est bien retraduite par conntrack avant
+> `forward` (le journal montre `DST=172.20.0.11` : la traduction inverse d'un
+> SNAT se fait en `prerouting`, celle d'un DNAT en `postrouting`), puis jeté
+> en `forward`. Les compteurs `counter` et le `log` désignent la règle fautive
+> sans avoir à raisonner : c'est pour cela qu'un jeu de règles sérieux se
+> termine toujours par une règle de `drop` **explicite et comptée**, jamais
+> par la seule politique de chaîne, invisible.
 
 ---
 
-### **BF13.4** — « Le tunnel marche, sauf pour les vrais fichiers »
+### <a id="bf13-4"></a>**[BF13.4](README.md#bf13-4)** — « Le tunnel marche, sauf pour les vrais fichiers »
 
 *`ping` et `ssh` par le VXLAN OK, `scp`/`iperf3` de `lab-web` vers `lab-db`
 gelés, l'autre sens fonctionne.*
@@ -2617,17 +2689,18 @@ un test `ping -M do -s 1422` dans la procédure de mise en service d'un
 tunnel ; et pour les CNI, `--iface-mtu`/`mtu:` dans la configuration plutôt
 que l'auto-détection quand l'underlay a des tunnels imbriqués.
 
-::: pourquoi
-L'asymétrie est la signature : un MTU incohérent ne touche que le sens où
-l'émetteur croit disposer de plus de place que le chemin n'en offre. C'est
-aussi la raison pour laquelle les tests unidirectionnels (« j'ai fait un
-`iperf3` depuis le serveur, ça marche ») ne prouvent rien : toujours tester
-`-R` (reverse) ou depuis les deux côtés.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'asymétrie est la signature : un MTU incohérent ne touche que le sens où
+> l'émetteur croit disposer de plus de place que le chemin n'en offre. C'est
+> aussi la raison pour laquelle les tests unidirectionnels (« j'ai fait un
+> `iperf3` depuis le serveur, ça marche ») ne prouvent rien : toujours tester
+> `-R` (reverse) ou depuis les deux côtés.
 
 ---
 
-### **BF13.5** — « Le secondaire DNS vit dans le passé »
+### <a id="bf13-5"></a>**[BF13.5](README.md#bf13-5)** — « Le secondaire DNS vit dans le passé »
 
 *`monitoring.lab.local` connu du primaire, `NXDOMAIN` sur le secondaire,
 réponse aléatoire du résolveur.*
@@ -2687,18 +2760,19 @@ un test dans la CI qui compare le serial du fichier à celui servi. Beaucoup
 d'équipes ajoutent un `pre-commit` : si `db.*` change, le serial doit
 changer.
 
-::: pourquoi
-Le serial est le **seul** signal de réplication du DNS : ni horodatage de
-fichier, ni somme de contrôle, ni contenu. « Serial identique = données
-identiques » est le contrat que le primaire vient de violer. Le protocole
-n'a aucun moyen de le détecter, donc aucune erreur nulle part : c'est la
-panne DNS la plus fréquente et la plus longue à voir si on ne sait pas
-comparer deux `dig +short SOA`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le serial est le **seul** signal de réplication du DNS : ni horodatage de
+> fichier, ni somme de contrôle, ni contenu. « Serial identique = données
+> identiques » est le contrat que le primaire vient de violer. Le protocole
+> n'a aucun moyen de le détecter, donc aucune erreur nulle part : c'est la
+> panne DNS la plus fréquente et la plus longue à voir si on ne sait pas
+> comparer deux `dig +short SOA`.
 
 ---
 
-### **BF13.6** — « Le DNS ne marche plus, sauf pour le lab »
+### <a id="bf13-6"></a>**[BF13.6](README.md#bf13-6)** — « Le DNS ne marche plus, sauf pour le lab »
 
 *`lab.local` résout, tout le reste `SERVFAIL` en 2-3 s, Unbound en bonne
 santé apparente.*
@@ -2752,21 +2826,22 @@ supervision, et une revue des fichiers `unbound.conf.d/` dans la
 configuration gérée (Ansible, module 23) : tout fichier inconnu est une
 dérive.
 
-::: pourquoi
-Récursif et forwarder se ressemblent de l'extérieur (`rd`, `ra`, cache)
-jusqu'au jour où l'amont tombe. Le forwarder hérite de la disponibilité de
-son amont ; le récursif ne dépend que de la racine et des autoritaires de
-chaque zone, qui sont redondants par construction. C'est pour cela que
-CoreDNS dans Kubernetes n'est jamais récursif (il *forwarde* au résolveur
-du nœud) et que ce résolveur-là, lui, doit être solide : c'est le
-`10.10.10.53` de ton lab.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Récursif et forwarder se ressemblent de l'extérieur (`rd`, `ra`, cache)
+> jusqu'au jour où l'amont tombe. Le forwarder hérite de la disponibilité de
+> son amont ; le récursif ne dépend que de la racine et des autoritaires de
+> chaque zone, qui sont redondants par construction. C'est pour cela que
+> CoreDNS dans Kubernetes n'est jamais récursif (il *forwarde* au résolveur
+> du nœud) et que ce résolveur-là, lui, doit être solide : c'est le
+> `10.10.10.53` de ton lab.
 
 ---
 
 ## 13.8 Défi du module
 
-**D13 — `minicloud.sh`**
+<a id="d13"></a>**[D13](README.md#d13) — `minicloud.sh`**
 
 *Deux locataires sur deux bridges, un routeur en namespace, double NAT,
 publication par map, DNS, isolation, tests.*
@@ -2949,13 +3024,20 @@ Service NodePort = une règle DNAT sur tous les nœuds, et les NetworkPolicies
 = les règles `forward` d'isolation. Ce que tu viens d'écrire à la main, un
 CNI l'écrit avec une map par Service.
 
-::: pourquoi
-Le défi force à raisonner **par namespace** : chaque netns a ses routes,
-son conntrack, ses règles. Le DNAT est fait à l'entrée du netns racine ; le
-NAT de sortie des locataires est fait dans `rtr` ; les deux tables conntrack
-ne se parlent pas. Un paquet publié subit donc un DNAT (racine) à l'aller et
-aucune traduction dans `rtr` ; un paquet sortant subit un SNAT dans `rtr`
-puis un second SNAT dans le racine. Savoir dessiner ces deux étages, c'est
-savoir lire n'importe quel « ça marche depuis le nœud mais pas depuis
-l'extérieur » dans un cluster.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le défi force à raisonner **par namespace** : chaque netns a ses routes,
+> son conntrack, ses règles. Le DNAT est fait à l'entrée du netns racine ; le
+> NAT de sortie des locataires est fait dans `rtr` ; les deux tables conntrack
+> ne se parlent pas. Un paquet publié subit donc un DNAT (racine) à l'aller et
+> aucune traduction dans `rtr` ; un paquet sortant subit un SNAT dans `rtr`
+> puis un second SNAT dans le racine. Savoir dessiner ces deux étages, c'est
+> savoir lire n'importe quel « ça marche depuis le nœud mais pas depuis
+> l'extérieur » dans un cluster.
+
+<!-- nav:début -->
+---
+
+[← Module 12](../12-reseau/corrige.md) · [Énoncé](README.md) · [Module 14 →](../14-ssh/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

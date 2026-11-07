@@ -1,46 +1,75 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie III — Exploitation, sécurité et incidents › **Module 15**  
+[← Module 14](../14-ssh/README.md) · [Corrigé](corrige.md) · [Module 16 →](../16-logs-monitoring/README.md)
+
+<details><summary>Scripts du module (13)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M15.sh`](../../scripts/setup/setup_M15.sh) | prépare le module |
+| [`check_M15_01.sh`](../../scripts/check/check_M15_01.sh) | vérification |
+| [`check_M15_02.sh`](../../scripts/check/check_M15_02.sh) | vérification |
+| [`check_M15_03.sh`](../../scripts/check/check_M15_03.sh) | vérification |
+| [`check_M15_04.sh`](../../scripts/check/check_M15_04.sh) | vérification |
+| [`check_M15_05.sh`](../../scripts/check/check_M15_05.sh) | vérification |
+| [`check_M15_06.sh`](../../scripts/check/check_M15_06.sh) | vérification |
+| [`break_M15_01.sh`](../../scripts/break/break_M15_01.sh) | installe une panne |
+| [`break_M15_02.sh`](../../scripts/break/break_M15_02.sh) | installe une panne |
+| [`break_M15_03.sh`](../../scripts/break/break_M15_03.sh) | installe une panne |
+| [`break_M15_04.sh`](../../scripts/break/break_M15_04.sh) | installe une panne |
+| [`break_M15_05.sh`](../../scripts/break/break_M15_05.sh) | installe une panne |
+| [`break_M15_06.sh`](../../scripts/break/break_M15_06.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 15 — Services applicatifs : nginx, PostgreSQL, Redis
 
 ## 15.0 Objectifs et compétences
 
-::: objectif
-Ce module ouvre la partie « Exploitation ». Les trois briques qu'on te confie
-le plus souvent sans formation sont un frontal web, une base relationnelle et
-un cache. Le projet P1 (Factura) les fait travailler ensemble ; ici tu apprends à tenir
-chacune séparément. À la fin de ce module, je sais :
-
-* lire un échange HTTP en exploitant (`curl -v`), nommer les en-têtes qui
-  comptent derrière un reverse proxy (`Host`, `X-Forwarded-For`,
-  `X-Forwarded-Proto`), et expliquer ce que change HTTP/2 et la terminaison
-  TLS ;
-* écrire un vhost nginx complet — statique, reverse proxy vers plusieurs
-  backends, TLS, limitation, authentification, journal avec temps de réponse —
-  et énoncer sans hésiter **l'ordre de priorité des blocs `location`** ;
-* diagnostiquer en moins de cinq minutes un 502, un 504, un 413, un 403 et une
-  boucle de redirection, à partir de `error.log` et de deux commandes `curl` ;
-* installer PostgreSQL 16 sur Ubuntu et Rocky, régler les douze paramètres qui
-  comptent dans `postgresql.conf`, et écrire un `pg_hba.conf` minimal qui
-  n'ouvre que ce qu'il faut, avec la bonne méthode ;
-* créer un rôle applicatif sans superuser, utiliser `psql` au quotidien sans
-  taper de mot de passe, et lire `\du`, `\l`, `\d+` ;
-* mettre en place une sauvegarde `pg_dump` nocturne **restaurée et
-  vérifiée**, et expliquer ce que `pg_basebackup` + archivage WAL apportent en
-  plus (PITR) ;
-* trouver une requête lente, une transaction qui bloque tout le monde et une
-  table gonflée avec `pg_stat_activity`, `pg_locks`, `pg_stat_user_tables` et
-  `EXPLAIN ANALYZE`, et savoir quoi faire de `VACUUM` ;
-* configurer Redis pour la production (bind, ACL, `maxmemory` et politique
-  d'éviction, persistance) et diagnostiquer une mémoire pleine, une latence ou
-  un swap avec `redis-cli` ;
-* dire, pour chacun des trois composants, quel compte de service l'exécute,
-  quelle socket Unix il ouvre et qui peut l'utiliser, dans quel ordre ils
-  démarrent, et ce qu'on doit en savoir en entretien.
-
-Temps estimé : 9 h (nginx 3 h 30, PostgreSQL 3 h 30, Redis 2 h)
-Prérequis : modules 08 (unités systemd, `systemctl cat`, drop-ins),
-12 (`ss`, `curl`, `/etc/hosts`), 14 (SSH entre les VM). Les certificats sont
-fabriqués au module 18 (L18.4) : ici on les **configure** dans nginx. Les
-timers de sauvegarde sont détaillés au module 17, les journaux au module 16.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> Ce module ouvre la partie « Exploitation ». Les trois briques qu'on te confie
+> le plus souvent sans formation sont un frontal web, une base relationnelle et
+> un cache. Le projet P1 (Factura) les fait travailler ensemble ; ici tu apprends à tenir
+> chacune séparément. À la fin de ce module, je sais :
+>
+> * lire un échange HTTP en exploitant (`curl -v`), nommer les en-têtes qui
+>   comptent derrière un reverse proxy (`Host`, `X-Forwarded-For`,
+>   `X-Forwarded-Proto`), et expliquer ce que change HTTP/2 et la terminaison
+>   TLS ;
+> * écrire un vhost nginx complet — statique, reverse proxy vers plusieurs
+>   backends, TLS, limitation, authentification, journal avec temps de réponse —
+>   et énoncer sans hésiter **l'ordre de priorité des blocs `location`** ;
+> * diagnostiquer en moins de cinq minutes un 502, un 504, un 413, un 403 et une
+>   boucle de redirection, à partir de `error.log` et de deux commandes `curl` ;
+> * installer PostgreSQL 16 sur Ubuntu et Rocky, régler les douze paramètres qui
+>   comptent dans `postgresql.conf`, et écrire un `pg_hba.conf` minimal qui
+>   n'ouvre que ce qu'il faut, avec la bonne méthode ;
+> * créer un rôle applicatif sans superuser, utiliser `psql` au quotidien sans
+>   taper de mot de passe, et lire `\du`, `\l`, `\d+` ;
+> * mettre en place une sauvegarde `pg_dump` nocturne **restaurée et
+>   vérifiée**, et expliquer ce que `pg_basebackup` + archivage WAL apportent en
+>   plus (PITR) ;
+> * trouver une requête lente, une transaction qui bloque tout le monde et une
+>   table gonflée avec `pg_stat_activity`, `pg_locks`, `pg_stat_user_tables` et
+>   `EXPLAIN ANALYZE`, et savoir quoi faire de `VACUUM` ;
+> * configurer Redis pour la production (bind, ACL, `maxmemory` et politique
+>   d'éviction, persistance) et diagnostiquer une mémoire pleine, une latence ou
+>   un swap avec `redis-cli` ;
+> * dire, pour chacun des trois composants, quel compte de service l'exécute,
+>   quelle socket Unix il ouvre et qui peut l'utiliser, dans quel ordre ils
+>   démarrent, et ce qu'on doit en savoir en entretien.
+>
+> **Temps estimé** : 9 h (nginx 3 h 30, PostgreSQL 3 h 30, Redis 2 h)
+>
+> **Prérequis** : modules 08 (unités systemd, `systemctl cat`, drop-ins),
+> 12 (`ss`, `curl`, `/etc/hosts`), 14 (SSH entre les VM). Les certificats sont
+> fabriqués au module 18 (L18.4) : ici on les **configure** dans nginx. Les
+> timers de sauvegarde sont détaillés au module 17, les journaux au module 16.
 
 ---
 
@@ -83,20 +112,22 @@ reconnecte-toi). Outils fournis dans `/opt/factura/bin/` :
 | `verrou-demo.sh [N]` | une transaction qui verrouille une facture N secondes |
 | `redis-app.py [--url] [--loop]` | simule l'application côté Redis (sessions, compteurs, file) |
 
-::: rhel
-Ce module se joue sur Ubuntu. Les écarts Rocky 9 sont donnés en encadrés :
-`dnf install nginx` (pas de `sites-enabled`, tout dans `conf.d/`), module
-`postgresql:16` et `postgresql-setup --initdb`, SELinux qui bloque
-`proxy_pass` tant que `httpd_can_network_connect` est à `off`. Si tu veux les
-rejouer, `lab-rhel` (10.10.10.13) suffit pour la partie nginx.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Ce module se joue sur Ubuntu. Les écarts Rocky 9 sont donnés en encadrés :
+> `dnf install nginx` (pas de `sites-enabled`, tout dans `conf.d/`), module
+> `postgresql:16` et `postgresql-setup --initdb`, SELinux qui bloque
+> `proxy_pass` tant que `httpd_can_network_connect` est à `off`. Si tu veux les
+> rejouer, `lab-rhel` (10.10.10.13) suffit pour la partie nginx.
 
-::: attention
-Les labs de la partie PostgreSQL redémarrent le cluster et modifient
-`pg_hba.conf` ; L15.4 active l'archivage WAL et joue une restauration à un
-instant donné. Le Break & Fix BF15.4 sature les connexions et t'interdit de
-redémarrer la base. Les snapshots ne sont pas optionnels.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Les labs de la partie PostgreSQL redémarrent le cluster et modifient
+> `pg_hba.conf` ; L15.4 active l'archivage WAL et joue une restauration à un
+> instant donné. Le Break & Fix BF15.4 sature les connexions et t'interdit de
+> redémarrer la base. Les snapshots ne sont pas optionnels.
 
 ---
 
@@ -196,7 +227,9 @@ correspondant à la location (les deux barres finales comptent).
 `proxy_pass http://b;` transmet l'URI telle quelle ; `proxy_pass http://b/;`
 remplace le préfixe de la location par `/` (interdit dans une location regex).
 
-@fig(nginx-upstream): Client HTTPS → nginx (TLS, `location`, statique) → `upstream factura_api` (deux instances) → PostgreSQL et Redis sur lab-db ; le 502 naît quand nginx ne peut pas parler au backend, le 504 quand le backend ne répond pas à temps.
+<p align="center"><img src="../../assets/figures/nginx-upstream.svg" alt="Schéma : nginx-upstream"></p>
+
+*Figure — Client HTTPS → nginx (TLS, `location`, statique) → `upstream factura_api` (deux instances) → PostgreSQL et Redis sur lab-db ; le 502 naît quand nginx ne peut pas parler au backend, le 504 quand le backend ne répond pas à temps.*
 
 | Directive | Rôle |
 |---|---|
@@ -243,15 +276,16 @@ connecting to upstream` → socket Unix ou SELinux ; `upstream timed out (110)`
 → 404, mauvais `root`/`alias`. Boucle de redirection : `return 301 https://`
 dans un `server` qui écoute aussi en 443, ou proto ignoré derrière un LB.
 
-::: rhel
-Rocky 9 : `dnf install nginx`, user `nginx`, tout dans `/etc/nginx/conf.d/`.
-SELinux : `setsebool -P httpd_can_network_connect 1` pour `proxy_pass`, et
-`semanage port -a -t http_port_t -p tcp 8081` pour un port non standard.
-`firewall-cmd --add-service={http,https} --permanent`. Apache : `a2ensite`,
-`a2enmod`, `apachectl configtest`, `.htaccess` par répertoire (nginx n'en a
-pas, par conception : tout est central). Caddy : `Caddyfile` de trois lignes,
-HTTPS automatique. Traefik : reverse proxy piloté par labels Docker (module 22).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky 9 : `dnf install nginx`, user `nginx`, tout dans `/etc/nginx/conf.d/`.
+> SELinux : `setsebool -P httpd_can_network_connect 1` pour `proxy_pass`, et
+> `semanage port -a -t http_port_t -p tcp 8081` pour un port non standard.
+> `firewall-cmd --add-service={http,https} --permanent`. Apache : `a2ensite`,
+> `a2enmod`, `apachectl configtest`, `.htaccess` par répertoire (nginx n'en a
+> pas, par conception : tout est central). Caddy : `Caddyfile` de trois lignes,
+> HTTPS automatique. Traefik : reverse proxy piloté par labels Docker (module 22).
 
 ### B — PostgreSQL 16
 
@@ -431,7 +465,7 @@ est `postgresql@16-main.service`.
 
 ## 15.3 Quiz — QCM
 
-**Q15.1** — Le vhost de `lab-web` contient, dans cet ordre :
+<a id="q15-1"></a>**[Q15.1](corrige.md#q15-1)** — Le vhost de `lab-web` contient, dans cet ordre :
 
 ```nginx
 location /api/ { proxy_pass http://factura_api; }
@@ -448,7 +482,7 @@ c) la regex : elle est testée après le meilleur préfixe et gagne dès qu'elle
    répond 404
 d) nginx refuse la configuration : deux locations se recouvrent
 
-**Q15.2** — `location /api/ { proxy_pass http://127.0.0.1:8001/; }` reçoit
+<a id="q15-2"></a>**[Q15.2](corrige.md#q15-2)** — `location /api/ { proxy_pass http://127.0.0.1:8001/; }` reçoit
 `GET /api/health?x=1`. Que reçoit le backend ?
 
 a) `GET /api/health?x=1`
@@ -457,7 +491,7 @@ b) `GET /health?x=1` : la barre finale de `proxy_pass` remplace le préfixe
 c) `GET /health` : les paramètres sont perdus
 d) `GET //api/health?x=1`
 
-**Q15.3** — `location /static/ { root /srv/www/factura-demo/static/; }` puis
+<a id="q15-3"></a>**[Q15.3](corrige.md#q15-3)** — `location /static/ { root /srv/www/factura-demo/static/; }` puis
 `GET /static/app.js`. Quel fichier nginx ouvre-t-il ?
 
 a) `/srv/www/factura-demo/static/app.js`
@@ -466,7 +500,7 @@ b) `/srv/www/factura-demo/static/static/app.js` : `root` concatène l'URI
 c) `/srv/www/factura-demo/app.js`
 d) nginx répond 403 : `root` est interdit dans une location
 
-**Q15.4** — Tu modifies un vhost et tapes `sudo systemctl reload nginx` sans
+<a id="q15-4"></a>**[Q15.4](corrige.md#q15-4)** — Tu modifies un vhost et tapes `sudo systemctl reload nginx` sans
 `nginx -t`. La conf contient une erreur. Que se passe-t-il ?
 
 a) nginx s'arrête, le site est coupé
@@ -475,7 +509,7 @@ b) le processus maître relit la conf, la refuse, journalise l'erreur et
 c) nginx charge la conf partiellement, jusqu'à la ligne fautive
 d) le reload attend la fin des requêtes en cours puis échoue
 
-**Q15.5** — `error.log` : `connect() failed (111: Connection refused) while
+<a id="q15-5"></a>**[Q15.5](corrige.md#q15-5)** — `error.log` : `connect() failed (111: Connection refused) while
 connecting to upstream, client: 10.10.10.10, upstream: "http://127.0.0.1:8003/api/health"`.
 Le navigateur voit :
 
@@ -485,7 +519,7 @@ b) `502 Bad Gateway` : rien n'écoute sur 127.0.0.1:8003 (backend mort ou
 c) `503 Service Unavailable` à cause de `limit_req`
 d) `403 Forbidden`, SELinux bloque la connexion
 
-**Q15.6** — `curl -sIL http://factura-demo.lab.local/` affiche vingt fois de
+<a id="q15-6"></a>**[Q15.6](corrige.md#q15-6)** — `curl -sIL http://factura-demo.lab.local/` affiche vingt fois de
 suite `HTTP/1.1 301 Moved Permanently` puis `curl` abandonne. Cause probable ?
 
 a) le backend renvoie 301 sur `/`
@@ -495,7 +529,7 @@ b) un `return 301 https://$host$request_uri;` est placé dans un `server`
 c) `try_files` boucle sur `$uri/`
 d) le cache de `curl` rejoue l'ancienne redirection
 
-**Q15.7** — Le bloc `server` contient `add_header Strict-Transport-Security
+<a id="q15-7"></a>**[Q15.7](corrige.md#q15-7)** — Le bloc `server` contient `add_header Strict-Transport-Security
 "max-age=31536000" always;`. La location `/api/` contient
 `add_header X-Request-Id $request_id;`. Sur `/api/health`, l'en-tête HSTS
 est :
@@ -507,7 +541,7 @@ b) **absent** : dès qu'un niveau définit son propre `add_header`, il n'hérite
 c) présent seulement si la réponse est un 200
 d) absent parce que `always` ne s'applique pas aux locations
 
-**Q15.8** — `limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;`
+<a id="q15-8"></a>**[Q15.8](corrige.md#q15-8)** — `limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;`
 et, dans `location /api/login`, `limit_req zone=login burst=5 nodelay;`. Une
 IP envoie 12 requêtes en une seconde. Combien passent, et quel code reçoivent
 les autres ?
@@ -519,7 +553,7 @@ b) 6 passent (1 au débit + 5 de rafale, servies sans délai grâce à
 c) toutes passent, mais ralenties à une toutes les 12 secondes
 d) 10 passent, les 2 autres sont mises en attente
 
-**Q15.9** — Sur `lab-db`, tu passes `listen_addresses` de `localhost` à
+<a id="q15-9"></a>**[Q15.9](corrige.md#q15-9)** — Sur `lab-db`, tu passes `listen_addresses` de `localhost` à
 `localhost,10.10.10.12` et tu ajoutes une ligne à `pg_hba.conf`. Quelle
 séquence minimale rend les deux effectifs ?
 
@@ -530,7 +564,7 @@ b) `sudo systemctl restart postgresql@16-main` : `listen_addresses` a le
 c) `sudo systemctl reload postgresql` puis `pg_ctlcluster 16 main reload`
 d) rien, PostgreSQL surveille ses fichiers
 
-**Q15.10** — `pg_hba.conf` contient dans cet ordre :
+<a id="q15-10"></a>**[Q15.10](corrige.md#q15-10)** — `pg_hba.conf` contient dans cet ordre :
 
 ```text
 host    all           all           10.10.10.0/24     reject
@@ -546,7 +580,7 @@ b) refusé, `pg_hba.conf rejects connection for host "10.10.10.11"` : la
 c) accepté après un second essai
 d) refusé pour `no pg_hba.conf entry`
 
-**Q15.11** — L'API loggue `FATAL: remaining connection slots are reserved for
+<a id="q15-11"></a>**[Q15.11](corrige.md#q15-11)** — L'API loggue `FATAL: remaining connection slots are reserved for
 roles with the SUPERUSER attribute`. **Deux réponses correctes.**
 
 a) `max_connections` moins les slots réservés est atteint ; il faut regarder
@@ -558,7 +592,7 @@ c) `ALTER SYSTEM SET max_connections = 500` puis `pg_reload_conf()` corrige
    sans redémarrer
 d) le message signifie que le mot de passe de `factura_app` est expiré
 
-**Q15.12** — Quel avantage réel a `pg_dump -Fc` sur `pg_dump` en SQL brut ?
+<a id="q15-12"></a>**[Q15.12](corrige.md#q15-12)** — Quel avantage réel a `pg_dump -Fc` sur `pg_dump` en SQL brut ?
 
 a) il est plus fidèle : le format plain perd les index
 b) il permet une restauration **sélective** (`pg_restore -t table`, `-l` /
@@ -567,7 +601,7 @@ b) il permet une restauration **sélective** (`pg_restore -t table`, `-l` /
 c) il inclut les rôles et les mots de passe
 d) il est incrémental
 
-**Q15.13** — `EXPLAIN (ANALYZE, BUFFERS)` sur la requête de l'écran client :
+<a id="q15-13"></a>**[Q15.13](corrige.md#q15-13)** — `EXPLAIN (ANALYZE, BUFFERS)` sur la requête de l'écran client :
 
 ```text
 Seq Scan on invoices  (cost=0.00..3073.00 rows=20 width=0)
@@ -585,7 +619,7 @@ b) la table est parcourue entièrement pour garder 18 lignes sur 100 000 :
 c) `work_mem` est trop bas
 d) la requête est déjà optimale : 6 ms
 
-**Q15.14** — `pg_stat_activity` montre une session `idle in transaction` depuis
+<a id="q15-14"></a>**[Q15.14](corrige.md#q15-14)** — `pg_stat_activity` montre une session `idle in transaction` depuis
 3 heures, et quatre sessions `active` en `wait_event_type = Lock` sur la
 même table. Que fais-tu ?
 
@@ -597,7 +631,7 @@ b) `pg_terminate_backend` sur la session `idle in transaction` (elle tient
 c) `VACUUM FULL` de la table pour libérer les verrous
 d) redémarrer PostgreSQL, c'est plus sûr
 
-**Q15.15** — Le journal contient `PANIC: could not write to file
+<a id="q15-15"></a>**[Q15.15](corrige.md#q15-15)** — Le journal contient `PANIC: could not write to file
 "pg_wal/xlogtemp.1234": No space left on device` et PostgreSQL s'est arrêté.
 **Deux réponses correctes.**
 
@@ -610,7 +644,7 @@ c) `pg_wal` qui grossit sans limite est presque toujours le symptôme d'un
    active
 d) passer `wal_level = minimal` règle définitivement le problème
 
-**Q15.16** — Redis sert à la fois de cache de sessions (clés avec TTL) et de
+<a id="q15-16"></a>**[Q15.16](corrige.md#q15-16)** — Redis sert à la fois de cache de sessions (clés avec TTL) et de
 file de travaux (`LPUSH factura:jobs`, sans TTL). `maxmemory` est atteint.
 Quelle politique est la moins mauvaise ?
 
@@ -621,7 +655,7 @@ c) `volatile-lru` : seules les clés qui ont un TTL (les sessions) sont
    écritures échoueraient avec `OOM command not allowed`
 d) `volatile-ttl` sans `maxmemory`
 
-**Q15.17** — Un collègue lance `redis-cli KEYS 'sess:*' | wc -l` sur la
+<a id="q15-17"></a>**[Q15.17](corrige.md#q15-17)** — Un collègue lance `redis-cli KEYS 'sess:*' | wc -l` sur la
 production pour « compter les sessions ». Pourquoi est-ce interdit ?
 
 a) `KEYS` n'existe plus en Redis 7
@@ -631,7 +665,7 @@ b) Redis est mono-thread : `KEYS` parcourt **tout** l'espace de clés en
 c) `KEYS` renvoie aussi les clés expirées
 d) c'est autorisé si `protected-mode` est actif
 
-**Q15.18** — `INFO memory` sur `lab-db` :
+<a id="q15-18"></a>**[Q15.18](corrige.md#q15-18)** — `INFO memory` sur `lab-db` :
 
 ```text
 used_memory:1258291200
@@ -652,7 +686,7 @@ d) `FLUSHALL` est la réponse standard
 
 ## 15.4 Quiz — questions ouvertes
 
-**QO15.1** — *On te demande en entretien* : « Un navigateur demande
+<a id="qo15-1"></a>**[QO15.1](corrige.md#qo15-1)** — *On te demande en entretien* : « Un navigateur demande
 `https://factura.lab.local/api/invoices`. Raconte-moi ce qui se passe entre
 l'arrivée du paquet sur `lab-web` et la réponse de Gunicorn. » Couvre : la
 terminaison TLS, le choix du `server` (par quoi ?), le choix de la
@@ -660,73 +694,59 @@ terminaison TLS, le choix du `server` (par quoi ?), le choix de la
 besoin, ce que change `keepalive` vers l'upstream, et ce que le backend voit
 comme adresse source.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO15.2** — Énonce la règle complète de sélection d'un bloc `location`
+<a id="qo15-2"></a>**[QO15.2](corrige.md#qo15-2)** — Énonce la règle complète de sélection d'un bloc `location`
 (exact, préfixe, `^~`, regex, ordre du fichier). Donne trois configurations
 où « le bloc évident » n'est pas celui qui sert la requête, et pour chacune
 la correction. Explique enfin la différence entre `root` et `alias` avec un
 exemple de chemin résolu.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO15.3** — Décris ta méthode de diagnostic pour chacun de ces codes renvoyés
+<a id="qo15-3"></a>**[QO15.3](corrige.md#qo15-3)** — Décris ta méthode de diagnostic pour chacun de ces codes renvoyés
 par nginx : 502, 504, 413, 403, 404 et une boucle de 301. Pour chaque cas :
 la commande `curl` qui le confirme, la ligne que tu cherches dans
 `error.log`, les deux ou trois causes racines classiques, et le correctif.
 
-::: repondre
-lignes: 14
-:::
+<!-- repondre: 14 -->
 
-**QO15.4** — *On te demande en entretien* : « Explique-moi comment PostgreSQL
+<a id="qo15-4"></a>**[QO15.4](corrige.md#qo15-4)** — *On te demande en entretien* : « Explique-moi comment PostgreSQL
 décide d'accepter une connexion. » Traite : le rôle de `pg_hba.conf` et son
 ordre d'évaluation, `local` vs `host` vs `hostssl`, les méthodes `peer`,
 `scram-sha-256`, `md5` et `trust` (et pourquoi `trust` même sur `localhost`
 est un problème), ce que `listen_addresses` fait *avant* `pg_hba.conf`, et
 les trois messages d'erreur qui te disent à quelle étape ça bloque.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO15.5** — Compare `pg_dump` et `pg_basebackup` + archivage WAL : ce que
+<a id="qo15-5"></a>**[QO15.5](corrige.md#qo15-5)** — Compare `pg_dump` et `pg_basebackup` + archivage WAL : ce que
 chacun capture, le RPO qu'il permet, le temps de restauration, la place, les
 cas d'usage. Décris ensuite ce que veut dire « une sauvegarde testée » avec
 la procédure exacte et une métrique de succès. Termine par ce que
 `pg_dumpall --globals-only` apporte et pourquoi on l'oublie.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO15.6** — « La base est lente depuis ce matin. » Donne, dans l'ordre, les
+<a id="qo15-6"></a>**[QO15.6](corrige.md#qo15-6)** — « La base est lente depuis ce matin. » Donne, dans l'ordre, les
 cinq premières requêtes SQL que tu exécutes (sur quelles vues) et ce que tu
 cherches dans chacune. Explique ensuite ce qu'est le *bloat*, ce que fait
 `VACUUM` (et ce qu'il ne fait pas), pourquoi `VACUUM FULL` est dangereux en
 journée, et comment tu vérifies qu'`autovacuum` fait son travail sur une
 table.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO15.7** — *On te demande en entretien* : « Redis, c'est un cache ou une
+<a id="qo15-7"></a>**[QO15.7](corrige.md#qo15-7)** — *On te demande en entretien* : « Redis, c'est un cache ou une
 base de données ? » Réponds en expliquant ce qui se passe quand la mémoire
 atteint `maxmemory` selon la politique, la différence RDB / AOF et ce que
 chacune perd en cas de coupure, pourquoi `appendfsync always` est rarement
 choisi, pourquoi un Redis qui swappe est une panne et non un ralentissement,
 et comment tu le détectes.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO15.8** — Sur `lab-db`, PostgreSQL et Redis exposent chacun une socket
+<a id="qo15-8"></a>**[QO15.8](corrige.md#qo15-8)** — Sur `lab-db`, PostgreSQL et Redis exposent chacun une socket
 Unix. Explique qui peut s'y connecter et par quel mécanisme la sécurité est
 assurée dans chaque cas (mode de la socket, groupe, `pg_hba`, ACL Redis), et
 pourquoi les deux projets ont fait des choix différents. Décris ensuite
@@ -734,107 +754,103 @@ l'ordre de démarrage correct d'une application locale qui dépend des deux
 (`After=`, `Wants=`, `Requires=`) et ce qui change quand la base est sur une
 autre machine.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO15.9** — Prépare ta fiche d'entretien : pour chacun des trois composants,
+<a id="qo15-9"></a>**[QO15.9](corrige.md#qo15-9)** — Prépare ta fiche d'entretien : pour chacun des trois composants,
 les cinq choses qu'un DevOps doit savoir dire en deux minutes (rôle, fichiers
 de configuration, commande de validation, la panne classique et son
 diagnostic, ce qu'on supervise). Sois concret : noms de fichiers, de
 commandes, de vues, de métriques.
 
-::: repondre
-lignes: 15
-:::
+<!-- repondre: 15 -->
 
 ---
 
 ## 15.5 Exercices guidés ★
 
-**E15.1** — Sur `lab-web`, sans passer par nginx : affiche uniquement les
+<a id="e15-1"></a>**[E15.1](corrige.md#e15-1)** — Sur `lab-web`, sans passer par nginx : affiche uniquement les
 en-têtes de réponse de `http://127.0.0.1:8001/api/health`, puis le code HTTP et
 le temps total (en secondes) de cinq requêtes successives sur
 `/api/slow?s=1`, sans afficher les corps. Repère l'en-tête qui identifie
 l'instance.
 
-**E15.2** — Affiche la configuration **effective** de nginx (includes
+<a id="e15-2"></a>**[E15.2](corrige.md#e15-2)** — Affiche la configuration **effective** de nginx (includes
 résolus), compte les blocs `server` actifs, et trouve la ligne de
 `nginx.conf` qui explique pourquoi un fichier déposé dans `sites-available/`
 n'est pas pris en compte tant qu'on ne fait rien d'autre.
 
-**E15.3** — Crée un vhost `factura-demo.lab.local` qui sert
+<a id="e15-3"></a>**[E15.3](corrige.md#e15-3)** — Crée un vhost `factura-demo.lab.local` qui sert
 `/srv/www/factura-demo` sur le port 80, active-le, désactive le site
 `default`, valide, recharge. Prouve depuis `lab-adm` que la page d'accueil
 est servie en forçant l'en-tête `Host` (sans toucher à `/etc/hosts`), puis
 ajoute l'entrée dans `/etc/hosts` de `lab-adm`. Que renvoie nginx si tu
 demandes un `Host` inconnu, et pourquoi ?
 
-**E15.4** — Ajoute au vhost trois locations : `/` (fichiers statiques avec
+<a id="e15-4"></a>**[E15.4](corrige.md#e15-4)** — Ajoute au vhost trois locations : `/` (fichiers statiques avec
 `try_files`), `/docs/` (servie depuis `/srv/www/factura-demo/docs/` avec
 `alias`) et `/api/` (proxy vers `127.0.0.1:8001`). Ajoute dans chacune un
 en-tête `X-Location` distinct, puis prouve avec `curl -sI` quel bloc sert
 `/`, `/docs/`, `/docs/index.html`, `/api/health` et `/static/app.js`.
 Remplace ensuite `alias` par `root` sur `/docs/` et explique le 404.
 
-**E15.5** — Compare `proxy_pass http://127.0.0.1:8001;` et
+<a id="e15-5"></a>**[E15.5](corrige.md#e15-5)** — Compare `proxy_pass http://127.0.0.1:8001;` et
 `proxy_pass http://127.0.0.1:8001/;` dans `location /api/` : pour chacun,
 affiche ce que le backend reçoit comme chemin (`/api/whoami` te le dit) et
 ses en-têtes `Host` et `X-Forwarded-For`. Ajoute ensuite les `proxy_set_header`
 qui rendent `Host` et `X-Forwarded-For` corrects, et vérifie.
 
-**E15.6** — Déclare un `upstream` avec les deux instances, un `log_format`
+<a id="e15-6"></a>**[E15.6](corrige.md#e15-6)** — Déclare un `upstream` avec les deux instances, un `log_format`
 qui inclut `$upstream_addr`, `$upstream_response_time` et `$request_time`, et
 un `access_log` dédié au vhost. Envoie 10 requêtes sur `/api/whoami` et
 compte les réponses par instance dans le journal. Arrête `mini-api@8002`,
 renvoie 10 requêtes : que voit l'utilisateur, que dit `error.log` ?
 Redémarre l'instance.
 
-**E15.7** — Mets le vhost en HTTPS : réutilise le certificat de L18.4 s'il
+<a id="e15-7"></a>**[E15.7](corrige.md#e15-7)** — Mets le vhost en HTTPS : réutilise le certificat de L18.4 s'il
 existe, sinon fabrique un auto-signé pour `factura-demo.lab.local` avec
 `openssl req -x509` (une commande). `listen 443 ssl http2`, TLS 1.2 et 1.3
 seulement, HSTS, et un second `server` sur 80 qui redirige en 301. Vérifie
 avec `curl -vk` (version TLS négociée, protocole HTTP, en-tête HSTS) et avec
 `openssl s_client`.
 
-**E15.8** — Protège trois chemins : `/api/login` limité à 5 requêtes par
+<a id="e15-8"></a>**[E15.8](corrige.md#e15-8)** — Protège trois chemins : `/api/login` limité à 5 requêtes par
 minute et par IP (rafale de 5, réponse 429 au-delà), `/docs/` protégé par
 un mot de passe (`htpasswd`, utilisateur `ops`), `/api/metrics` accessible
 depuis `10.10.10.14` seulement. Prouve chaque règle avec `tir.sh`, `curl -u`
 et un `curl` depuis `lab-adm` (attendu : 403).
 
-**E15.9** — Sur `lab-db`, en tant que `postgres` par la socket : liste les
+<a id="e15-9"></a>**[E15.9](corrige.md#e15-9)** — Sur `lab-db`, en tant que `postgres` par la socket : liste les
 bases avec leur taille, les rôles avec leurs attributs, les tables de
 `factura_demo` avec leur taille, la description complète de `invoices`
 (colonnes, index, contraintes). Active l'affichage étendu et le chronomètre,
 puis exécute `/opt/factura/bin/requete-lente.sql` et note le temps.
 
-**E15.10** — Explique le plan de la requête lente avec `EXPLAIN (ANALYZE,
+<a id="e15-10"></a>**[E15.10](corrige.md#e15-10)** — Explique le plan de la requête lente avec `EXPLAIN (ANALYZE,
 BUFFERS)` : repère les parcours séquentiels et les `Rows Removed by Filter`.
 Crée les index qui manquent **sans verrouiller la table**, rejoue la
 requête, compare les temps et les plans. Vérifie ensuite dans
 `pg_stat_user_tables` que les index sont utilisés.
 
-**E15.11** — Lance `/opt/factura/bin/charge-sql.sh 3 120` en arrière-plan.
+<a id="e15-11"></a>**[E15.11](corrige.md#e15-11)** — Lance `/opt/factura/bin/charge-sql.sh 3 120` en arrière-plan.
 Liste les requêtes actives avec leur durée et leur état, annule la plus
 ancienne **sans** fermer sa session. Lance ensuite
 `/opt/factura/bin/verrou-demo.sh 300` dans un second terminal, puis tente
 `UPDATE invoices SET status='paid' WHERE id=42;` dans un troisième : trouve
 le PID qui bloque, ce qu'il fait, depuis combien de temps, et débloque.
 
-**E15.12** — Mesure la taille de `invoice_lines` (table seule, puis avec ses
+<a id="e15-12"></a>**[E15.12](corrige.md#e15-12)** — Mesure la taille de `invoice_lines` (table seule, puis avec ses
 index), supprime 20 % des lignes dans une copie de la table (`CREATE TABLE
 ... AS`), observe `n_dead_tup` avant et après un `VACUUM (VERBOSE)`, et note
 si la taille sur disque a diminué. Explique en une ligne ce qu'il faudrait
 pour qu'elle diminue.
 
-**E15.13** — Depuis `lab-web`, connecte-toi à `factura_demo` sur `lab-db` en
+<a id="e15-13"></a>**[E15.13](corrige.md#e15-13)** — Depuis `lab-web`, connecte-toi à `factura_demo` sur `lab-db` en
 tant que `factura_app` sans taper de mot de passe, de deux façons
 (variable, puis `~/.pgpass`). Mets volontairement `~/.pgpass` en `0644` et
 montre le message obtenu. Quelle façon laisse une trace dans `ps` ?
 (Suppose L15.3 fait ; sinon travaille sur `lab-db` en `-h 127.0.0.1`.)
 
-**E15.14** — Sur `lab-db`, avec `redis-cli` : vérifie que Redis répond,
+<a id="e15-14"></a>**[E15.14](corrige.md#e15-14)** — Sur `lab-db`, avec `redis-cli` : vérifie que Redis répond,
 affiche la version et le temps de fonctionnement, crée une session
 `sess:abc` avec 60 s de durée de vie et lis le temps restant, stocke un
 profil `user:1` (nom, ville) et relis-le, simule une file de travaux (pousse
@@ -842,13 +858,13 @@ trois jobs, consomme-en un en attente bloquante), lance 200 tours de
 `redis-app.py`, compte les clés `sess:*` **sans `KEYS`**, puis liste les
 plus grosses clés.
 
-**E15.15** — Déclenche une sauvegarde RDB en arrière-plan, prouve qu'elle est
+<a id="e15-15"></a>**[E15.15](corrige.md#e15-15)** — Déclenche une sauvegarde RDB en arrière-plan, prouve qu'elle est
 terminée et à quelle heure, copie le fichier dans `~/lab15/backups/` avec un
 horodatage. Active ensuite l'AOF **à chaud** et persiste le changement dans
 `redis.conf` sans l'éditer à la main. Montre les fichiers créés dans
 `/var/lib/redis/`.
 
-**E15.16** — Sur `lab-db`, affiche les unités réellement chargées pour
+<a id="e15-16"></a>**[E15.16](corrige.md#e15-16)** — Sur `lab-db`, affiche les unités réellement chargées pour
 PostgreSQL et Redis (avec drop-ins), leur `User=`, et l'état des sockets
 Unix `/run/postgresql/.s.PGSQL.5432` et `/run/redis/` (propriétaire, mode).
 Dis qui peut se connecter par chaque socket et grâce à quoi. Écris ensuite
@@ -858,15 +874,15 @@ la section `[Unit]` d'une application locale qui a besoin des deux.
 
 ## 15.6 Labs ★★
 
-### **L15.1** — Ticket WEB-412 : « Mettre Factura-demo derrière nginx, proprement »
+### <a id="l15-1"></a>**[L15.1](corrige.md#l15-1)** — Ticket WEB-412 : « Mettre Factura-demo derrière nginx, proprement »
 
-::: contexte
-L'équipe de développement livre un front statique et une API qui tourne en
-deux instances sur `127.0.0.1:8001` et `8002`. Elle demande « un nginx
-devant ». Le responsable d'exploitation ajoute : « avec des journaux
-exploitables, une page de maintenance, et sans que le premier script venu
-puisse brute-forcer le login ». Tu fais le vhost complet, sur `lab-web`.
-:::
+> **Contexte**
+>
+> L'équipe de développement livre un front statique et une API qui tourne en
+> deux instances sur `127.0.0.1:8001` et `8002`. Elle demande « un nginx
+> devant ». Le responsable d'exploitation ajoute : « avec des journaux
+> exploitables, une page de maintenance, et sans que le premier script venu
+> puisse brute-forcer le login ». Tu fais le vhost complet, sur `lab-web`.
 
 Écris `/etc/nginx/sites-available/factura-demo` (copie de travail dans
 `~/lab15/conf/`), activé, site `default` désactivé, `server_tokens off`.
@@ -900,35 +916,37 @@ puisse brute-forcer le login ». Tu fais le vhost complet, sur `lab-web`.
 11. `~/lab15/rapports/web-412.md` : la conf commentée bloc par bloc et le
     résultat des dix vérifications (`curl` + code attendu / obtenu).
 
-::: astuce
-Construis par étapes : `nginx -t` puis `systemctl reload nginx` après
-**chaque** location. Une erreur de conf ne coupe rien (Q15.4), mais une
-location qui n'a pas l'effet attendu se voit tout de suite avec un
-`add_header X-Loc "api"` temporaire.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Construis par étapes : `nginx -t` puis `systemctl reload nginx` après
+> **chaque** location. Une erreur de conf ne coupe rien (Q15.4), mais une
+> location qui n'a pas l'effet attendu se voit tout de suite avec un
+> `add_header X-Loc "api"` temporaire.
 
-::: check
-Critère de succès : la page d'accueil répond 200, `/api/health` alterne entre
-les deux instances, `/docs/` répond 401 sans mot de passe, `/api/metrics` 403
-depuis `lab-adm`, un POST de 3 Mo répond 413, 12 requêtes rapides sur
-`/api/login` produisent des 429, et le fichier de maintenance bascule le site
-en 503.
-
-```bash
-bash check_M15_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : la page d'accueil répond 200, `/api/health` alterne entre
+> les deux instances, `/docs/` répond 401 sans mot de passe, `/api/metrics` 403
+> depuis `lab-adm`, un POST de 3 Mo répond 413, 12 requêtes rapides sur
+> `/api/login` produisent des 429, et le fichier de maintenance bascule le site
+> en 503.
+>
+> ```bash
+> bash check_M15_01.sh
+> ```
 
 ---
 
-### **L15.2** — HTTPS et exercice de diagnostic : six pannes, six preuves
+### <a id="l15-2"></a>**[L15.2](corrige.md#l15-2)** — HTTPS et exercice de diagnostic : six pannes, six preuves
 
-::: contexte
-Le site passe en HTTPS. Avant la mise en production, ton responsable veut que
-tu **provoques** toi-même chaque panne classique du frontal et que tu
-consignes, pour chacune, le symptôme exact, la ligne de journal et le
-correctif — pour le runbook. Sur `lab-web`, en partant du vhost de L15.1.
-:::
+> **Contexte**
+>
+> Le site passe en HTTPS. Avant la mise en production, ton responsable veut que
+> tu **provoques** toi-même chaque panne classique du frontal et que tu
+> consignes, pour chacune, le symptôme exact, la ligne de journal et le
+> correctif — pour le runbook. Sur `lab-web`, en partant du vhost de L15.1.
 
 Partie 1 — TLS :
 
@@ -963,29 +981,30 @@ cause, correctif.
     au vhost et demande `/api/invoices.json`. Explique pourquoi ta location
     `/api/` de L15.1 résiste (ou pas) et corrige si besoin.
 
-::: check
-Critère de succès : `curl -sI https://factura-demo.lab.local/` depuis
-`lab-adm` (avec `--cacert` ou `-k`) renvoie 200 avec HSTS, `http://` renvoie
-301, `/api/health` en HTTPS porte aussi HSTS, et le rapport contient les six
-cas avec une ligne d'`error.log` chacun.
-
-```bash
-bash check_M15_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl -sI https://factura-demo.lab.local/` depuis
+> `lab-adm` (avec `--cacert` ou `-k`) renvoie 200 avec HSTS, `http://` renvoie
+> 301, `/api/health` en HTTPS porte aussi HSTS, et le rapport contient les six
+> cas avec une ligne d'`error.log` chacun.
+>
+> ```bash
+> bash check_M15_02.sh
+> ```
 
 ---
 
-### **L15.3** — Ouvrir la base à `lab-web`, et seulement à lui
+### <a id="l15-3"></a>**[L15.3](corrige.md#l15-3)** — Ouvrir la base à `lab-web`, et seulement à lui
 
-::: contexte
-`factura_demo` n'est joignable que par la socket locale de `lab-db`. L'API de
-`lab-web` doit s'y connecter avec le rôle `factura_app`, un outil de
-reporting en lecture seule avec `factura_ro`. Le RSSI a un mot : « rien en
-`trust`, rien en `md5`, rien en `0.0.0.0` ». Et le responsable d'exploitation
-veut que la base soit **réglée** pour une VM de 2 Go, pas laissée aux valeurs
-d'usine, avec les requêtes lentes journalisées.
-:::
+> **Contexte**
+>
+> `factura_demo` n'est joignable que par la socket locale de `lab-db`. L'API de
+> `lab-web` doit s'y connecter avec le rôle `factura_app`, un outil de
+> reporting en lecture seule avec `factura_ro`. Le RSSI a un mot : « rien en
+> `trust`, rien en `md5`, rien en `0.0.0.0` ». Et le responsable d'exploitation
+> veut que la base soit **réglée** pour une VM de 2 Go, pas laissée aux valeurs
+> d'usine, avec les requêtes lentes journalisées.
 
 Sur `lab-db` :
 
@@ -1021,36 +1040,38 @@ Sur `lab-web` :
    `~/lab15/rapports/pg-ouverture.md` (paramètres choisis et pourquoi, les
    trois messages d'erreur observés, la commande `ss` finale).
 
-::: attention
-`listen_addresses = '*'` avec `pg_hba.conf` restrictif est **acceptable**,
-mais `listen_addresses = '*'` avec `host all all 0.0.0.0/0 md5` et pas de
-pare-feu est la configuration la plus scannée d'Internet. Ne l'écris jamais,
-même « pour tester ».
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `listen_addresses = '*'` avec `pg_hba.conf` restrictif est **acceptable**,
+> mais `listen_addresses = '*'` avec `host all all 0.0.0.0/0 md5` et pas de
+> pare-feu est la configuration la plus scannée d'Internet. Ne l'écris jamais,
+> même « pour tester ».
 
-::: check
-Critère de succès : PostgreSQL écoute sur `10.10.10.12:5432` et pas sur
-`0.0.0.0`, `pg_hba` ne contient ni `trust` ni `md5`, `factura_app` se
-connecte depuis `lab-web`, `pg_stat_statements` est chargé,
-`log_min_duration_statement` vaut 500 ms, et le rapport existe.
-
-```bash
-bash check_M15_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : PostgreSQL écoute sur `10.10.10.12:5432` et pas sur
+> `0.0.0.0`, `pg_hba` ne contient ni `trust` ni `md5`, `factura_app` se
+> connecte depuis `lab-web`, `pg_stat_statements` est chargé,
+> `log_min_duration_statement` vaut 500 ms, et le rapport existe.
+>
+> ```bash
+> bash check_M15_03.sh
+> ```
 
 ---
 
-### **L15.4** — Sauvegarde nocturne restaurée, puis retour dans le temps (PITR)
+### <a id="l15-4"></a>**[L15.4](corrige.md#l15-4)** — Sauvegarde nocturne restaurée, puis retour dans le temps (PITR)
 
-::: contexte
-« On a une sauvegarde » n'est pas une phrase acceptable. On te demande une
-sauvegarde logique par nuit, vérifiée par une restauration réelle, puis —
-parce qu'une facture supprimée à 10 h 15 ne se retrouve pas dans le dump de
-2 h 30 — une sauvegarde physique avec archivage des WAL, et la preuve que tu
-sais revenir à 10 h 14. Sur `lab-db`. C'est la mécanique que tu remettras en
-place au projet P1 (Factura).
-:::
+> **Contexte**
+>
+> « On a une sauvegarde » n'est pas une phrase acceptable. On te demande une
+> sauvegarde logique par nuit, vérifiée par une restauration réelle, puis —
+> parce qu'une facture supprimée à 10 h 15 ne se retrouve pas dans le dump de
+> 2 h 30 — une sauvegarde physique avec archivage des WAL, et la preuve que tu
+> sais revenir à 10 h 14. Sur `lab-db`. C'est la mécanique que tu remettras en
+> place au projet P1 (Factura).
 
 Partie 1 — logique :
 
@@ -1099,36 +1120,38 @@ Partie 3 (facultative) — réplication streaming vers `lab-ops` :
    `pg_is_in_recovery()` côté secondaire, insère une ligne d'un côté,
    lis-la de l'autre.
 
-::: attention
-Partie 2 étape 7 : si tu choisis de restaurer **dans** le cluster `main`, tu
-détruis les données courantes. Prends `qm snapshot 9003 avant-pitr`. La
-variante « second cluster sur 5433 » est plus longue mais c'est celle qu'on
-fait en production.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Partie 2 étape 7 : si tu choisis de restaurer **dans** le cluster `main`, tu
+> détruis les données courantes. Prends `qm snapshot 9003 avant-pitr`. La
+> variante « second cluster sur 5433 » est plus longue mais c'est celle qu'on
+> fait en production.
 
-::: check
-Critère de succès : le timer est actif, un répertoire de sauvegarde du jour
-contient `globals.sql`, `factura_demo.dump` et leurs sommes SHA-256 valides,
-`factura_restore` a autant de factures que `factura_demo`, `archive_mode` est
-`on` avec au moins un segment archivé et `pg_stat_archiver.failed_count = 0`,
-et `restauration.md` contient un temps mesuré.
-
-```bash
-bash check_M15_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le timer est actif, un répertoire de sauvegarde du jour
+> contient `globals.sql`, `factura_demo.dump` et leurs sommes SHA-256 valides,
+> `factura_restore` a autant de factures que `factura_demo`, `archive_mode` est
+> `on` avec au moins un segment archivé et `pg_stat_archiver.failed_count = 0`,
+> et `restauration.md` contient un temps mesuré.
+>
+> ```bash
+> bash check_M15_04.sh
+> ```
 
 ---
 
-### **L15.5** — Redis : sécuriser, dimensionner, observer
+### <a id="l15-5"></a>**[L15.5](corrige.md#l15-5)** — Redis : sécuriser, dimensionner, observer
 
-::: contexte
-Redis a été installé « par défaut » sur `lab-db`. Un audit rapide : pas de
-mot de passe, `maxmemory` à zéro (illimité), aucune persistance journalisée,
-et l'application de `lab-web` ne peut même pas s'y connecter. On te demande
-une configuration de production **justifiée**, puis une session
-d'observation sous charge.
-:::
+> **Contexte**
+>
+> Redis a été installé « par défaut » sur `lab-db`. Un audit rapide : pas de
+> mot de passe, `maxmemory` à zéro (illimité), aucune persistance journalisée,
+> et l'application de `lab-web` ne peut même pas s'y connecter. On te demande
+> une configuration de production **justifiée**, puis une session
+> d'observation sous charge.
 
 1. État des lieux : `redis-cli INFO server`, `CONFIG GET bind`,
    `CONFIG GET maxmemory*`, `CONFIG GET appendonly`, `ss -tlnp`. Note tout
@@ -1162,30 +1185,32 @@ d'observation sous charge.
 8. `~/lab15/rapports/redis.md` : la configuration justifiée ligne par ligne,
    les mesures, et trois seuils d'alerte que tu proposerais au module 26.
 
-::: check
-Critère de succès : Redis écoute sur `10.10.10.12` et `127.0.0.1`, `PING`
-sans authentification est refusé, l'utilisateur `factura` existe avec des
-restrictions, `maxmemory` vaut 128 Mo avec une politique différente de
-`noeviction`, l'AOF est activé, une copie de `dump.rdb` existe et le rapport
-est rédigé.
-
-```bash
-bash check_M15_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : Redis écoute sur `10.10.10.12` et `127.0.0.1`, `PING`
+> sans authentification est refusé, l'utilisateur `factura` existe avec des
+> restrictions, `maxmemory` vaut 128 Mo avec une politique différente de
+> `noeviction`, l'AOF est activé, une copie de `dump.rdb` existe et le rapport
+> est rédigé.
+>
+> ```bash
+> bash check_M15_05.sh
+> ```
 
 ---
 
 ## 15.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf15` (BF15.1, BF15.2) ou
-`qm snapshot 9003 avant-bf15` (BF15.3 à BF15.6). Les scripts sauvegardent ce
-qu'ils cassent dans `/root/.breakfix-backup/`, mais le snapshot reste la
-sortie de secours — et l'utiliser vaut échec de l'exercice.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9002 avant-bf15` (BF15.1, BF15.2) ou
+> `qm snapshot 9003 avant-bf15` (BF15.3 à BF15.6). Les scripts sauvegardent ce
+> qu'ils cassent dans `/root/.breakfix-backup/`, mais le snapshot reste la
+> sortie de secours — et l'utiliser vaut échec de l'exercice.
 
-### **BF15.1** — « La page charge mais dit ERREUR, et l'API répond pourtant »
+### <a id="bf15-1"></a>**[BF15.1](corrige.md#bf15-1)** — « La page charge mais dit ERREUR, et l'API répond pourtant »
 
 ```bash
 # sur lab-web, après L15.1
@@ -1206,11 +1231,9 @@ commande `curl` et une ligne d'`error.log` suffisent), rétablir l'API sans
 retirer la fonctionnalité du collègue, et expliquer la règle de priorité qui
 a joué.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF15.2** — « 502 sur tout /api/, le statique marche »
+### <a id="bf15-2"></a>**[BF15.2](corrige.md#bf15-2)** — « 502 sur tout /api/, le statique marche »
 
 ```bash
 # sur lab-web, après L15.1
@@ -1229,11 +1252,9 @@ ports de l'application.
 connecter et pourquoi ça échoue, corriger, et proposer une vérification qui
 aurait empêché la mise en production de ce changement.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF15.3** — « L'application ne se connecte plus à la base depuis la migration »
+### <a id="bf15-3"></a>**[BF15.3](corrige.md#bf15-3)** — « L'application ne se connecte plus à la base depuis la migration »
 
 ```bash
 # sur lab-db, après L15.3
@@ -1257,11 +1278,9 @@ seconde dans le journal du serveur (`DETAIL:`) et dans `pg_authid`, corrige
 avec le **même** mot de passe, et explique pourquoi la seconde ne se voit pas
 tant que la première n'est pas réglée.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF15.4** — « Plus aucune connexion possible, mais la base ne fait rien »
+### <a id="bf15-4"></a>**[BF15.4](corrige.md#bf15-4)** — « Plus aucune connexion possible, mais la base ne fait rien »
 
 ```bash
 # sur lab-db, après L15.3
@@ -1281,11 +1300,9 @@ identifier qui occupe les connexions et depuis combien de temps, trouver la
 modification du collègue et dire ce qu'elle a changé, puis proposer deux
 mesures durables (une côté base, une côté architecture).
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF15.5** — « L'application plante en écriture Redis, mais Redis répond »
+### <a id="bf15-5"></a>**[BF15.5](corrige.md#bf15-5)** — « L'application plante en écriture Redis, mais Redis répond »
 
 ```bash
 # sur lab-db, après L15.5
@@ -1305,11 +1322,9 @@ configuration en cause et la raison pour laquelle leur combinaison bloque
 l'application, corriger **à chaud** et durablement, et dire quelle politique
 tu aurais choisie pour cette application.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF15.6** — « Les exports de nuit font 0 octet »
+### <a id="bf15-6"></a>**[BF15.6](corrige.md#bf15-6)** — « Les exports de nuit font 0 octet »
 
 ```bash
 # sur lab-db, après L15.3
@@ -1329,23 +1344,21 @@ compte dédié), mettre le mot de passe dans la ligne cron.
 les deux erreurs (une de droits, une de conception du script), corriger,
 et faire en sorte qu'un fichier vide ne puisse plus jamais passer inaperçu.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 15.8 Défi du module ★★★
 
-**D15 — Le dossier d'exploitation des trois briques**
+<a id="d15"></a>**[D15](corrige.md#d15) — Le dossier d'exploitation des trois briques**
 
-::: contexte
-Tu pars en congés dans trois jours. Le collègue qui te remplace n'a jamais
-touché ni nginx, ni PostgreSQL, ni Redis. Tu lui laisses un dossier complet :
-les configurations, un script qui dit en trente secondes si tout va bien, et
-un runbook qui répond aux questions de 3 h du matin. C'est aussi ce que tu
-présenteras en entretien.
-:::
+> **Contexte**
+>
+> Tu pars en congés dans trois jours. Le collègue qui te remplace n'a jamais
+> touché ni nginx, ni PostgreSQL, ni Redis. Tu lui laisses un dossier complet :
+> les configurations, un script qui dit en trente secondes si tout va bien, et
+> un runbook qui répond aux questions de 3 h du matin. C'est aussi ce que tu
+> présenteras en entretien.
 
 Cahier des charges :
 
@@ -1391,11 +1404,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M15_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M15_06.sh
+> ```
 
 ---
 
@@ -1428,3 +1442,9 @@ Pour aller plus loin :
 * Lis `redis.conf` d'origine en entier (il est commenté ligne par ligne) et
   note chaque directive dont tu ne peux pas expliquer l'effet ; puis
   `LATENCY DOCTOR` et `MEMORY DOCTOR` sur ton instance.
+
+<!-- nav:début -->
+---
+
+[← Module 14](../14-ssh/README.md) · [Corrigé](corrige.md) · [Module 16 →](../16-logs-monitoring/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

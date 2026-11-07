@@ -1,707 +1,751 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie III — Exploitation, sécurité et incidents › **Module 15** · corrigé  
+[← Module 14](../14-ssh/corrige.md) · [Énoncé](README.md) · [Module 16 →](../16-logs-monitoring/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 15 — Corrigé
 
 ## 15.3 Quiz — QCM
 
-**Q15.1** — *`location /api/` puis `location ~* \.(json|js|css)$` ; requête `GET /api/invoices.json`.*
+<a id="q15-1"></a>**[Q15.1](README.md#q15-1)** — *`location /api/` puis `location ~* \.(json|js|css)$` ; requête `GET /api/invoices.json`.*
 
 **Réponse : c)** la regex gagne, nginx cherche un fichier sur disque et
 répond 404.
 
-::: pourquoi
-L'algorithme de sélection ne lit pas le fichier de haut en bas en s'arrêtant
-au premier bloc qui « ressemble ». Il se déroule en deux temps :
+> [!NOTE]
+> **Pourquoi**
+>
+> L'algorithme de sélection ne lit pas le fichier de haut en bas en s'arrêtant
+> au premier bloc qui « ressemble ». Il se déroule en deux temps :
+>
+> 1. nginx compare l'URI à **tous les préfixes** (`location /api/`, `location
+>    /`, etc.) et retient le plus long : ici `/api/`. Si ce préfixe était
+>    marqué `=` (exact) ou `^~`, la recherche s'arrêterait là.
+> 2. Comme ce n'est pas le cas, nginx teste ensuite **toutes les regex dans
+>    l'ordre du fichier**, et la première qui correspond l'emporte sur le
+>    préfixe retenu. `\.(json|js|css)$` correspond à `/api/invoices.json`.
+>
+> Le bloc regex n'a pas de `proxy_pass` : il sert des fichiers depuis `root`,
+> donc nginx tente d'ouvrir `/srv/www/factura-demo/api/invoices.json`, qui
+> n'existe pas, et journalise `open() "..." failed (2: No such file or
+> directory)`. La position de la regex dans le fichier (avant ou après
+> `/api/`) ne change rien : une regex bat toujours un préfixe simple.
+>
+> Deux corrections propres : marquer la location API `^~ /api/` (le préfixe
+> gagne et les regex ne sont plus consultées), ou exclure `/api/` de la regex
+> avec une assertion négative `~* ^(?!/api/).*\.(json|js|css)$`. La première
+> est plus lisible et plus robuste : elle protège aussi contre la prochaine
+> regex qu'un collègue ajoutera.
 
-1. nginx compare l'URI à **tous les préfixes** (`location /api/`, `location
-   /`, etc.) et retient le plus long : ici `/api/`. Si ce préfixe était
-   marqué `=` (exact) ou `^~`, la recherche s'arrêterait là.
-2. Comme ce n'est pas le cas, nginx teste ensuite **toutes les regex dans
-   l'ordre du fichier**, et la première qui correspond l'emporte sur le
-   préfixe retenu. `\.(json|js|css)$` correspond à `/api/invoices.json`.
-
-Le bloc regex n'a pas de `proxy_pass` : il sert des fichiers depuis `root`,
-donc nginx tente d'ouvrir `/srv/www/factura-demo/api/invoices.json`, qui
-n'existe pas, et journalise `open() "..." failed (2: No such file or
-directory)`. La position de la regex dans le fichier (avant ou après
-`/api/`) ne change rien : une regex bat toujours un préfixe simple.
-
-Deux corrections propres : marquer la location API `^~ /api/` (le préfixe
-gagne et les regex ne sont plus consultées), ou exclure `/api/` de la regex
-avec une assertion négative `~* ^(?!/api/).*\.(json|js|css)$`. La première
-est plus lisible et plus robuste : elle protège aussi contre la prochaine
-regex qu'un collègue ajoutera.
-:::
-
-::: piege
-a) et b) reposent sur l'idée qu'un préfixe plus long ou placé en premier
-gagne : c'est vrai **entre préfixes**, faux face à une regex. d) nginx ne
-détecte jamais de recouvrement : des locations qui se chevauchent sont la
-norme. Le piège de production associé : `/api/health` continue de répondre
-200 (pas de suffixe `.json`), donc la supervision reste verte pendant que
-l'application est cassée. C'est BF15.1.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) et b) reposent sur l'idée qu'un préfixe plus long ou placé en premier
+> gagne : c'est vrai **entre préfixes**, faux face à une regex. d) nginx ne
+> détecte jamais de recouvrement : des locations qui se chevauchent sont la
+> norme. Le piège de production associé : `/api/health` continue de répondre
+> 200 (pas de suffixe `.json`), donc la supervision reste verte pendant que
+> l'application est cassée. C'est BF15.1.
 
 ---
 
-**Q15.2** — *`proxy_pass http://127.0.0.1:8001/;` dans `location /api/`, requête `/api/health?x=1`.*
+<a id="q15-2"></a>**[Q15.2](README.md#q15-2)** — *`proxy_pass http://127.0.0.1:8001/;` dans `location /api/`, requête `/api/health?x=1`.*
 
 **Réponse : b)** le backend reçoit `GET /health?x=1`.
 
-::: pourquoi
-La règle tient en une phrase : si `proxy_pass` contient une URI (ne serait-ce
-que `/`), nginx **remplace la partie de l'URI qui a correspondu à la
-location** par cette URI. La location est `/api/`, l'URI de `proxy_pass` est
-`/`, donc `/api/health` devient `/health`. La chaîne de requête (`?x=1`) est
-toujours conservée, elle n'entre pas dans le calcul.
+> [!NOTE]
+> **Pourquoi**
+>
+> La règle tient en une phrase : si `proxy_pass` contient une URI (ne serait-ce
+> que `/`), nginx **remplace la partie de l'URI qui a correspondu à la
+> location** par cette URI. La location est `/api/`, l'URI de `proxy_pass` est
+> `/`, donc `/api/health` devient `/health`. La chaîne de requête (`?x=1`) est
+> toujours conservée, elle n'entre pas dans le calcul.
+>
+> Sans URI (`proxy_pass http://127.0.0.1:8001;`), l'URI cliente est transmise
+> telle quelle : le backend reçoit `/api/health?x=1`. C'est ce qu'il faut
+> quand l'application connaît son préfixe (Flask avec un blueprint `/api`),
+> et l'autre forme quand elle ne le connaît pas (elle expose `/health` à la
+> racine et nginx la « monte » sous `/api/`).
+>
+> Deux limites à connaître : dans une location **regex**, `proxy_pass` avec
+> URI est refusé (`"proxy_pass" cannot have URI part in location given by
+> regular expression`), parce que nginx ne saurait pas quelle partie
+> remplacer ; et si `proxy_pass` utilise des variables, aucune substitution
+> n'est faite du tout.
 
-Sans URI (`proxy_pass http://127.0.0.1:8001;`), l'URI cliente est transmise
-telle quelle : le backend reçoit `/api/health?x=1`. C'est ce qu'il faut
-quand l'application connaît son préfixe (Flask avec un blueprint `/api`),
-et l'autre forme quand elle ne le connaît pas (elle expose `/health` à la
-racine et nginx la « monte » sous `/api/`).
-
-Deux limites à connaître : dans une location **regex**, `proxy_pass` avec
-URI est refusé (`"proxy_pass" cannot have URI part in location given by
-regular expression`), parce que nginx ne saurait pas quelle partie
-remplacer ; et si `proxy_pass` utilise des variables, aucune substitution
-n'est faite du tout.
-:::
-
-::: piege
-c) : les paramètres ne sont jamais perdus par `proxy_pass`. d) : nginx ne
-produit pas de double barre ici ; il en produirait avec `location /api` (sans
-barre finale) et `proxy_pass .../` : la partie `/api` est remplacée par `/` et
-`/api/health` devient `//health`. La cohérence des barres finales entre `location`
-et `proxy_pass` est le premier réflexe quand un backend reçoit un chemin
-inattendu : `/api/whoami` du setup te montre exactement ce qu'il reçoit.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : les paramètres ne sont jamais perdus par `proxy_pass`. d) : nginx ne
+> produit pas de double barre ici ; il en produirait avec `location /api` (sans
+> barre finale) et `proxy_pass .../` : la partie `/api` est remplacée par `/` et
+> `/api/health` devient `//health`. La cohérence des barres finales entre `location`
+> et `proxy_pass` est le premier réflexe quand un backend reçoit un chemin
+> inattendu : `/api/whoami` du setup te montre exactement ce qu'il reçoit.
 
 ---
 
-**Q15.3** — *`location /static/ { root /srv/www/factura-demo/static/; }` et `GET /static/app.js`.*
+<a id="q15-3"></a>**[Q15.3](README.md#q15-3)** — *`location /static/ { root /srv/www/factura-demo/static/; }` et `GET /static/app.js`.*
 
 **Réponse : b)** `/srv/www/factura-demo/static/static/app.js`.
 
-::: pourquoi
-`root` définit un répertoire de base et nginx y **concatène l'URI
-complète** : chemin = `root` + URI. C'est la bonne directive quand
-l'arborescence disque reflète l'arborescence des URI (`/static/app.js` se
-trouve dans `<root>/static/app.js`).
+> [!NOTE]
+> **Pourquoi**
+>
+> `root` définit un répertoire de base et nginx y **concatène l'URI
+> complète** : chemin = `root` + URI. C'est la bonne directive quand
+> l'arborescence disque reflète l'arborescence des URI (`/static/app.js` se
+> trouve dans `<root>/static/app.js`).
+>
+> `alias` remplace la partie de l'URI qui correspond à la location par le
+> chemin donné : avec `location /static/ { alias /srv/www/factura-demo/static/; }`,
+> `/static/app.js` devient `/srv/www/factura-demo/static/` + `app.js`. C'est la
+> directive à utiliser quand l'URI et le disque ne coïncident pas (`/docs/`
+> servi depuis `/srv/www/factura-demo/docs/` en E15.4, ou `/media/` servi
+> depuis `/var/lib/app/uploads/`).
+>
+> Deux règles pratiques : la barre finale doit être présente des deux côtés
+> (`location /static/` et `alias .../static/`), sinon nginx colle les chaînes
+> sans séparateur ; et `alias` dans une location regex utilise les captures
+> (`alias /srv/$1;`). Dans 90 % des cas, un `root` posé **au niveau du
+> server** suffit et aucune location statique n'a besoin de le répéter.
 
-`alias` remplace la partie de l'URI qui correspond à la location par le
-chemin donné : avec `location /static/ { alias /srv/www/factura-demo/static/; }`,
-`/static/app.js` devient `/srv/www/factura-demo/static/` + `app.js`. C'est la
-directive à utiliser quand l'URI et le disque ne coïncident pas (`/docs/`
-servi depuis `/srv/www/factura-demo/docs/` en E15.4, ou `/media/` servi
-depuis `/var/lib/app/uploads/`).
-
-Deux règles pratiques : la barre finale doit être présente des deux côtés
-(`location /static/` et `alias .../static/`), sinon nginx colle les chaînes
-sans séparateur ; et `alias` dans une location regex utilise les captures
-(`alias /srv/$1;`). Dans 90 % des cas, un `root` posé **au niveau du
-server** suffit et aucune location statique n'a besoin de le répéter.
-:::
-
-::: piege
-Le 404 obtenu avec `root` mal placé est silencieux dans `access.log` ; c'est
-`error.log` qui donne le chemin réellement tenté : `open()
-"/srv/www/factura-demo/static/static/app.js" failed (2: No such file or
-directory)`. Lire ce chemin tel quel résout la quasi-totalité des 404
-statiques.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le 404 obtenu avec `root` mal placé est silencieux dans `access.log` ; c'est
+> `error.log` qui donne le chemin réellement tenté : `open()
+> "/srv/www/factura-demo/static/static/app.js" failed (2: No such file or
+> directory)`. Lire ce chemin tel quel résout la quasi-totalité des 404
+> statiques.
 
 ---
 
-**Q15.4** — *`systemctl reload nginx` avec une configuration invalide.*
+<a id="q15-4"></a>**[Q15.4](README.md#q15-4)** — *`systemctl reload nginx` avec une configuration invalide.*
 
 **Réponse : b)** le maître refuse la nouvelle conf, garde l'ancienne, les
 workers continuent.
 
-::: pourquoi
-`systemctl reload nginx` envoie `SIGHUP` au processus maître (`ExecReload=
-/usr/sbin/nginx -g 'daemon on; master_process on;' -s reload` dans l'unité
-Ubuntu). Le maître **relit et valide** la configuration complète en mémoire.
-Si elle est valide : il ouvre les nouvelles sockets d'écoute si nécessaire,
-lance de nouveaux workers avec la nouvelle conf, puis demande aux anciens
-de s'arrêter **gracieusement** — ils cessent d'accepter des connexions et
-terminent les requêtes en cours. Aucune requête n'est perdue.
+> [!NOTE]
+> **Pourquoi**
+>
+> `systemctl reload nginx` envoie `SIGHUP` au processus maître (`ExecReload=
+> /usr/sbin/nginx -g 'daemon on; master_process on;' -s reload` dans l'unité
+> Ubuntu). Le maître **relit et valide** la configuration complète en mémoire.
+> Si elle est valide : il ouvre les nouvelles sockets d'écoute si nécessaire,
+> lance de nouveaux workers avec la nouvelle conf, puis demande aux anciens
+> de s'arrêter **gracieusement** — ils cessent d'accepter des connexions et
+> terminent les requêtes en cours. Aucune requête n'est perdue.
+>
+> Si elle est invalide : le maître journalise l'erreur dans `error.log`
+> (`[emerg] ... in /etc/nginx/sites-enabled/factura-demo:42`), et **continue
+> avec l'ancienne configuration**. Les workers ne sont pas touchés. Le site
+> reste servi, mais avec la conf d'avant : c'est le piège — tu crois avoir
+> appliqué ton changement.
+>
+> D'où l'enchaînement obligatoire `sudo nginx -t && sudo systemctl reload
+> nginx` : `-t` fait exactement la même validation, mais **te** l'affiche.
+> `restart` n'est nécessaire que pour ce que le reload ne sait pas changer :
+> `user`, modules dynamiques, changement de binaire (qui se fait
+> à chaud par le signal `USR2`, hors périmètre).
 
-Si elle est invalide : le maître journalise l'erreur dans `error.log`
-(`[emerg] ... in /etc/nginx/sites-enabled/factura-demo:42`), et **continue
-avec l'ancienne configuration**. Les workers ne sont pas touchés. Le site
-reste servi, mais avec la conf d'avant : c'est le piège — tu crois avoir
-appliqué ton changement.
-
-D'où l'enchaînement obligatoire `sudo nginx -t && sudo systemctl reload
-nginx` : `-t` fait exactement la même validation, mais **te** l'affiche.
-`restart` n'est nécessaire que pour ce que le reload ne sait pas changer :
-`user`, modules dynamiques, changement de binaire (qui se fait
-à chaud par le signal `USR2`, hors périmètre).
-:::
-
-::: piege
-Le vrai danger n'est pas le reload raté, c'est le **restart** raté : `systemctl
-restart nginx` avec une conf invalide arrête l'ancien nginx et n'en démarre
-pas de nouveau — site coupé. Et au prochain reboot, un nginx dont la conf
-est invalide ne démarre pas non plus. Règle : `nginx -t` avant toute
-action, et `reload` par défaut.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le vrai danger n'est pas le reload raté, c'est le **restart** raté : `systemctl
+> restart nginx` avec une conf invalide arrête l'ancien nginx et n'en démarre
+> pas de nouveau — site coupé. Et au prochain reboot, un nginx dont la conf
+> est invalide ne démarre pas non plus. Règle : `nginx -t` avant toute
+> action, et `reload` par défaut.
 
 ---
 
-**Q15.5** — *`connect() failed (111: Connection refused) while connecting to upstream ... :8003`.*
+<a id="q15-5"></a>**[Q15.5](README.md#q15-5)** — *`connect() failed (111: Connection refused) while connecting to upstream ... :8003`.*
 
 **Réponse : b)** 502 Bad Gateway, rien n'écoute sur 8003.
 
-::: pourquoi
-Le couple « code HTTP côté client / ligne dans `error.log` » est la grille de
-lecture du reverse proxy :
+> [!NOTE]
+> **Pourquoi**
+>
+> Le couple « code HTTP côté client / ligne dans `error.log` » est la grille de
+> lecture du reverse proxy :
+>
+> * `502 Bad Gateway` : nginx **n'a pas obtenu de réponse valide** du backend.
+>   Les lignes associées : `connect() failed (111: Connection refused)` (rien
+>   n'écoute : backend arrêté, mauvais port, mauvaise IP), `connect() failed
+>   (113: No route to host)` (pare-feu, réseau), `(13: Permission denied)`
+>   (socket Unix sans droits, ou SELinux sur Rocky avec
+>   `httpd_can_network_connect` à off), `upstream prematurely closed
+>   connection` (le backend a planté **pendant** la requête), `upstream sent
+>   too big header` (buffers).
+> * `504 Gateway Time-out` : la connexion a réussi mais le backend n'a pas
+>   répondu dans `proxy_read_timeout` (60 s par défaut) : `upstream timed out
+>   (110: Connection timed out) while reading response header`.
+> * `503` : nginx lui-même refuse (`limit_req`, `limit_conn`, page de
+>   maintenance) — aucun backend n'est contacté.
+>
+> Ici `111` = `ECONNREFUSED` : le noyau de `lab-web` a répondu par un RST
+> parce qu'aucun processus n'écoute sur `127.0.0.1:8003`. Le diagnostic tient
+> en une commande : `ss -tlnp | grep 800` pour voir qui écoute réellement.
 
-* `502 Bad Gateway` : nginx **n'a pas obtenu de réponse valide** du backend.
-  Les lignes associées : `connect() failed (111: Connection refused)` (rien
-  n'écoute : backend arrêté, mauvais port, mauvaise IP), `connect() failed
-  (113: No route to host)` (pare-feu, réseau), `(13: Permission denied)`
-  (socket Unix sans droits, ou SELinux sur Rocky avec
-  `httpd_can_network_connect` à off), `upstream prematurely closed
-  connection` (le backend a planté **pendant** la requête), `upstream sent
-  too big header` (buffers).
-* `504 Gateway Time-out` : la connexion a réussi mais le backend n'a pas
-  répondu dans `proxy_read_timeout` (60 s par défaut) : `upstream timed out
-  (110: Connection timed out) while reading response header`.
-* `503` : nginx lui-même refuse (`limit_req`, `limit_conn`, page de
-  maintenance) — aucun backend n'est contacté.
-
-Ici `111` = `ECONNREFUSED` : le noyau de `lab-web` a répondu par un RST
-parce qu'aucun processus n'écoute sur `127.0.0.1:8003`. Le diagnostic tient
-en une commande : `ss -tlnp | grep 800` pour voir qui écoute réellement.
-:::
-
-::: piege
-d) : SELinux donne `13: Permission denied`, pas `111`. Et un 502 n'apparaît
-que si **tous** les serveurs de l'`upstream` échouent : avec deux backends
-dont un seul est mort, nginx bascule sur l'autre (`proxy_next_upstream`
-inclut `error` et `timeout` par défaut) et l'utilisateur ne voit rien — seul
-`error.log` s'agite. C'est l'étape 6 de L15.2.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) : SELinux donne `13: Permission denied`, pas `111`. Et un 502 n'apparaît
+> que si **tous** les serveurs de l'`upstream` échouent : avec deux backends
+> dont un seul est mort, nginx bascule sur l'autre (`proxy_next_upstream`
+> inclut `error` et `timeout` par défaut) et l'utilisateur ne voit rien — seul
+> `error.log` s'agite. C'est l'étape 6 de L15.2.
 
 ---
 
-**Q15.6** — *Boucle de `301` sur `http://factura-demo.lab.local/`.*
+<a id="q15-6"></a>**[Q15.6](README.md#q15-6)** — *Boucle de `301` sur `http://factura-demo.lab.local/`.*
 
 **Réponse : b)** redirection HTTPS dans un `server` qui reçoit aussi le
 trafic HTTPS, ou proto ignoré derrière un équilibreur.
 
-::: pourquoi
-Une boucle de redirection, c'est une réponse `301 Location: X` renvoyée
-**pour la requête X elle-même**. Deux configurations la produisent :
+> [!NOTE]
+> **Pourquoi**
+>
+> Une boucle de redirection, c'est une réponse `301 Location: X` renvoyée
+> **pour la requête X elle-même**. Deux configurations la produisent :
+>
+> 1. Un seul bloc `server` avec `listen 80;` et `listen 443 ssl;`, et
+>    `return 301 https://$host$request_uri;` sans condition. La requête HTTP
+>    est redirigée vers HTTPS ; la requête HTTPS arrive dans le **même**
+>    bloc et est redirigée vers elle-même. Correction : deux blocs `server`
+>    (un 80 qui ne fait que rediriger, un 443 qui sert), ou `if ($scheme =
+>    http) { return 301 ... }` si on tient au bloc unique.
+> 2. nginx est derrière un équilibreur ou un CDN qui termine le TLS et lui
+>    parle en HTTP clair sur le port 80. Toute requête arrive en HTTP, la
+>    règle redirige vers HTTPS, le client revient en HTTPS, l'équilibreur
+>    re-transmet en HTTP... La bonne information est dans l'en-tête
+>    `X-Forwarded-Proto` : il faut rediriger si `$http_x_forwarded_proto != "https"`, pas si `$scheme = http`.
+>
+> `curl -sIL --max-redirs 5` montre la boucle : chaque `Location:` répète
+> l'URL demandée. Un navigateur affiche « ERR_TOO_MANY_REDIRECTS ».
 
-1. Un seul bloc `server` avec `listen 80;` et `listen 443 ssl;`, et
-   `return 301 https://$host$request_uri;` sans condition. La requête HTTP
-   est redirigée vers HTTPS ; la requête HTTPS arrive dans le **même**
-   bloc et est redirigée vers elle-même. Correction : deux blocs `server`
-   (un 80 qui ne fait que rediriger, un 443 qui sert), ou `if ($scheme =
-   http) { return 301 ... }` si on tient au bloc unique.
-2. nginx est derrière un équilibreur ou un CDN qui termine le TLS et lui
-   parle en HTTP clair sur le port 80. Toute requête arrive en HTTP, la
-   règle redirige vers HTTPS, le client revient en HTTPS, l'équilibreur
-   re-transmet en HTTP... La bonne information est dans l'en-tête
-   `X-Forwarded-Proto` : il faut rediriger si `$http_x_forwarded_proto != "https"`, pas si `$scheme = http`.
-
-`curl -sIL --max-redirs 5` montre la boucle : chaque `Location:` répète
-l'URL demandée. Un navigateur affiche « ERR_TOO_MANY_REDIRECTS ».
-:::
-
-::: piege
-Le `301` est **mis en cache** par les navigateurs, sans date d'expiration
-explicite. Une boucle corrigée côté serveur peut continuer à être vue par
-un utilisateur pendant des jours. C'est une raison de tester les
-redirections avec un `302` (temporaire) puis de passer en `301`, et de
-toujours tester avec `curl`, qui ne cache rien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le `301` est **mis en cache** par les navigateurs, sans date d'expiration
+> explicite. Une boucle corrigée côté serveur peut continuer à être vue par
+> un utilisateur pendant des jours. C'est une raison de tester les
+> redirections avec un `302` (temporaire) puis de passer en `301`, et de
+> toujours tester avec `curl`, qui ne cache rien.
 
 ---
 
-**Q15.7** — *`add_header` HSTS dans `server`, un autre `add_header` dans `location /api/`.*
+<a id="q15-7"></a>**[Q15.7](README.md#q15-7)** — *`add_header` HSTS dans `server`, un autre `add_header` dans `location /api/`.*
 
 **Réponse : b)** HSTS absent sur `/api/` : l'héritage est tout ou rien.
 
-::: pourquoi
-La documentation nginx le dit en une ligne qu'on ne lit jamais : « These
-directives are inherited from the previous configuration level if and only
-if there are no `add_header` directives defined on the current level. »
-L'héritage d'`add_header` (comme `proxy_set_header`, `fastcgi_param`,
-`expires`...) n'est pas additif : dès qu'un niveau en définit **un**, il
-repart de zéro et n'hérite **d'aucun** de ceux du niveau supérieur.
+> [!NOTE]
+> **Pourquoi**
+>
+> La documentation nginx le dit en une ligne qu'on ne lit jamais : « These
+> directives are inherited from the previous configuration level if and only
+> if there are no `add_header` directives defined on the current level. »
+> L'héritage d'`add_header` (comme `proxy_set_header`, `fastcgi_param`,
+> `expires`...) n'est pas additif : dès qu'un niveau en définit **un**, il
+> repart de zéro et n'hérite **d'aucun** de ceux du niveau supérieur.
+>
+> Conséquence : une location qui ajoute `X-Request-Id` perd HSTS,
+> `X-Frame-Options`, `X-Content-Type-Options` définis dans le `server`. Les
+> scanners de sécurité voient les en-têtes sur `/` et pas sur `/api/`, et le
+> rapport dit « configuration incohérente ».
+>
+> Solutions : regrouper tous les en-têtes de sécurité dans
+> `/etc/nginx/snippets/securite.conf` et l'`include` dans **chaque** location
+> qui définit ses propres `add_header` ; ou ne définir aucun `add_header` dans
+> les locations (mettre `X-Request-Id` au niveau server aussi). Le paramètre
+> `always` est indépendant de ce mécanisme : il fait ajouter l'en-tête aussi
+> sur les réponses d'erreur (4xx, 5xx), sans lui HSTS est absent d'un 404.
 
-Conséquence : une location qui ajoute `X-Request-Id` perd HSTS,
-`X-Frame-Options`, `X-Content-Type-Options` définis dans le `server`. Les
-scanners de sécurité voient les en-têtes sur `/` et pas sur `/api/`, et le
-rapport dit « configuration incohérente ».
-
-Solutions : regrouper tous les en-têtes de sécurité dans
-`/etc/nginx/snippets/securite.conf` et l'`include` dans **chaque** location
-qui définit ses propres `add_header` ; ou ne définir aucun `add_header` dans
-les locations (mettre `X-Request-Id` au niveau server aussi). Le paramètre
-`always` est indépendant de ce mécanisme : il fait ajouter l'en-tête aussi
-sur les réponses d'erreur (4xx, 5xx), sans lui HSTS est absent d'un 404.
-:::
-
-::: piege
-Le même mécanisme s'applique à `proxy_set_header` : une location qui ajoute
-`proxy_set_header X-Truc 1;` perd les `Host`, `X-Forwarded-For` définis au
-niveau `server`, et le backend se met à voir `Host: factura_api` (le nom de
-l'upstream) sans que personne ne comprenne pourquoi. `nginx -T` ne le
-montre pas : il faut interroger le backend (`/api/whoami`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le même mécanisme s'applique à `proxy_set_header` : une location qui ajoute
+> `proxy_set_header X-Truc 1;` perd les `Host`, `X-Forwarded-For` définis au
+> niveau `server`, et le backend se met à voir `Host: factura_api` (le nom de
+> l'upstream) sans que personne ne comprenne pourquoi. `nginx -T` ne le
+> montre pas : il faut interroger le backend (`/api/whoami`).
 
 ---
 
-**Q15.8** — *`rate=5r/m`, `burst=5 nodelay`, 12 requêtes en une seconde.*
+<a id="q15-8"></a>**[Q15.8](README.md#q15-8)** — *`rate=5r/m`, `burst=5 nodelay`, 12 requêtes en une seconde.*
 
 **Réponse : b)** 6 passent, 6 reçoivent 503 (429 seulement avec
 `limit_req_status 429`).
 
-::: pourquoi
-`limit_req` implémente un **seau percé** (*leaky bucket*). `rate=5r/m`
-signifie qu'en régime permanent une requête est acceptée toutes les 12
-secondes ; nginx tient pour chaque clé (`$binary_remote_addr`) un compteur
-d'« excès » qui augmente de 1 à chaque requête et diminue au rythme du
-débit. Une requête est acceptée tant que l'excès ne dépasse pas `burst`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `limit_req` implémente un **seau percé** (*leaky bucket*). `rate=5r/m`
+> signifie qu'en régime permanent une requête est acceptée toutes les 12
+> secondes ; nginx tient pour chaque clé (`$binary_remote_addr`) un compteur
+> d'« excès » qui augmente de 1 à chaque requête et diminue au rythme du
+> débit. Une requête est acceptée tant que l'excès ne dépasse pas `burst`.
+>
+> Déroulé sur 12 requêtes instantanées : la première trouve un compteur à
+> zéro et passe ; les cinq suivantes font monter l'excès à 1, 2, 3, 4, 5 —
+> toutes acceptées puisque `burst=5` ; la septième porterait l'excès à 6 :
+> rejetée, comme les cinq suivantes. **Six** requêtes passent, six sont
+> rejetées. Le compteur redescend ensuite d'une unité toutes les 12 s.
+>
+> Le rôle de `nodelay` : sans lui, les cinq requêtes de la rafale sont
+> acceptées mais **retardées** pour respecter le débit (la deuxième attend
+> 12 s, la troisième 24 s...) — l'utilisateur voit des réponses très lentes.
+> Avec `nodelay`, elles sont servies immédiatement, et l'excès consommé se
+> résorbe au fil du temps. `delay=N` (nginx ≥ 1.15.7) est l'intermédiaire :
+> N requêtes de rafale sans délai, les autres retardées.
+>
+> Le code de rejet par défaut est **503**, trompeur pour la supervision (un
+> 503 ressemble à une panne). `limit_req_status 429;` donne le code
+> sémantiquement juste, *Too Many Requests*. Chaque rejet est journalisé
+> dans `error.log` au niveau `error` : `limiting requests, excess: 5.xxx by
+> zone "login"`.
 
-Déroulé sur 12 requêtes instantanées : la première trouve un compteur à
-zéro et passe ; les cinq suivantes font monter l'excès à 1, 2, 3, 4, 5 —
-toutes acceptées puisque `burst=5` ; la septième porterait l'excès à 6 :
-rejetée, comme les cinq suivantes. **Six** requêtes passent, six sont
-rejetées. Le compteur redescend ensuite d'une unité toutes les 12 s.
-
-Le rôle de `nodelay` : sans lui, les cinq requêtes de la rafale sont
-acceptées mais **retardées** pour respecter le débit (la deuxième attend
-12 s, la troisième 24 s...) — l'utilisateur voit des réponses très lentes.
-Avec `nodelay`, elles sont servies immédiatement, et l'excès consommé se
-résorbe au fil du temps. `delay=N` (nginx ≥ 1.15.7) est l'intermédiaire :
-N requêtes de rafale sans délai, les autres retardées.
-
-Le code de rejet par défaut est **503**, trompeur pour la supervision (un
-503 ressemble à une panne). `limit_req_status 429;` donne le code
-sémantiquement juste, *Too Many Requests*. Chaque rejet est journalisé
-dans `error.log` au niveau `error` : `limiting requests, excess: 5.xxx by
-zone "login"`.
-:::
-
-::: piege
-La zone est indexée sur `$binary_remote_addr` : derrière un équilibreur,
-toutes les requêtes ont la même adresse source et **tous les utilisateurs
-partagent le même seau**. Il faut alors `set_real_ip_from` + `real_ip_header
-X-Forwarded-For` (module `ngx_http_realip_module`) pour que
-`$binary_remote_addr` vaille l'IP réelle. Et `10m` de zone stockent environ
-160 000 adresses : au-delà, nginx évince les états les moins récents, et seulement s'il n'y parvient pas renvoie une erreur.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La zone est indexée sur `$binary_remote_addr` : derrière un équilibreur,
+> toutes les requêtes ont la même adresse source et **tous les utilisateurs
+> partagent le même seau**. Il faut alors `set_real_ip_from` + `real_ip_header
+> X-Forwarded-For` (module `ngx_http_realip_module`) pour que
+> `$binary_remote_addr` vaille l'IP réelle. Et `10m` de zone stockent environ
+> 160 000 adresses : au-delà, nginx évince les états les moins récents, et seulement s'il n'y parvient pas renvoie une erreur.
 
 ---
 
-**Q15.9** — *Changer `listen_addresses` et `pg_hba.conf`.*
+<a id="q15-9"></a>**[Q15.9](README.md#q15-9)** — *Changer `listen_addresses` et `pg_hba.conf`.*
 
 **Réponse : b)** `systemctl restart postgresql@16-main` (le restart relit
 aussi `pg_hba.conf`).
 
-::: pourquoi
-Chaque paramètre de `postgresql.conf` a un **contexte** visible dans
-`pg_settings.context` :
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque paramètre de `postgresql.conf` a un **contexte** visible dans
+> `pg_settings.context` :
+>
+> * `postmaster` : lu une seule fois au démarrage du processus principal ;
+>   changement = **restart**. C'est le cas de tout ce qui touche à la mémoire
+>   partagée ou aux sockets d'écoute : `listen_addresses`, `port`,
+>   `max_connections`, `shared_buffers`, `wal_level`,
+>   `shared_preload_libraries`, `archive_mode`.
+> * `sighup` : rechargé par `pg_reload_conf()` ou `systemctl reload` :
+>   `work_mem`, `log_*`, `archive_command`, `timezone`, `effective_cache_size`.
+> * `user` / `superuser` : modifiable par session (`SET work_mem = '64MB'`).
+>
+> Après une modification, `SELECT name, pending_restart FROM pg_settings WHERE
+> pending_restart;` liste ce qui attend un restart — la colonne est mise à
+> jour au reload. `pg_hba.conf` et `pg_ident.conf` sont relus au reload (et
+> donc aussi au restart). Un reload dont `pg_hba.conf` contient une erreur de
+> syntaxe **garde les anciennes règles** et journalise `pg_hba.conf was not
+> reloaded` — comme nginx. La surprise vient au prochain restart, où le
+> serveur refuse alors de démarrer.
 
-* `postmaster` : lu une seule fois au démarrage du processus principal ;
-  changement = **restart**. C'est le cas de tout ce qui touche à la mémoire
-  partagée ou aux sockets d'écoute : `listen_addresses`, `port`,
-  `max_connections`, `shared_buffers`, `wal_level`,
-  `shared_preload_libraries`, `archive_mode`.
-* `sighup` : rechargé par `pg_reload_conf()` ou `systemctl reload` :
-  `work_mem`, `log_*`, `archive_command`, `timezone`, `effective_cache_size`.
-* `user` / `superuser` : modifiable par session (`SET work_mem = '64MB'`).
-
-Après une modification, `SELECT name, pending_restart FROM pg_settings WHERE
-pending_restart;` liste ce qui attend un restart — la colonne est mise à
-jour au reload. `pg_hba.conf` et `pg_ident.conf` sont relus au reload (et
-donc aussi au restart). Un reload dont `pg_hba.conf` contient une erreur de
-syntaxe **garde les anciennes règles** et journalise `pg_hba.conf was not
-reloaded` — comme nginx. La surprise vient au prochain restart, où le
-serveur refuse alors de démarrer.
-:::
-
-::: piege
-c) : `systemctl reload postgresql` (l'unité parapluie) déclenche bien un
-reload des clusters, mais un reload ne suffit pas pour `listen_addresses`.
-d) : PostgreSQL ne surveille pas ses fichiers. Et un piège d'exploitation :
-le restart est une coupure — toutes les sessions sont fermées. On le
-programme, on prévient, et on regroupe les changements `postmaster`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : `systemctl reload postgresql` (l'unité parapluie) déclenche bien un
+> reload des clusters, mais un reload ne suffit pas pour `listen_addresses`.
+> d) : PostgreSQL ne surveille pas ses fichiers. Et un piège d'exploitation :
+> le restart est une coupure — toutes les sessions sont fermées. On le
+> programme, on prévient, et on regroupe les changements `postmaster`.
 
 ---
 
-**Q15.10** — *`host all all 10.10.10.0/24 reject` avant la ligne de `factura_app`.*
+<a id="q15-10"></a>**[Q15.10](README.md#q15-10)** — *`host all all 10.10.10.0/24 reject` avant la ligne de `factura_app`.*
 
 **Réponse : b)** refusé, `pg_hba.conf rejects connection`.
 
-::: pourquoi
-`pg_hba.conf` est évalué **séquentiellement, première correspondance
-gagnante**. Pour chaque ligne, PostgreSQL vérifie si le type de connexion
-(`local`/`host`/`hostssl`/`hostnossl`), la base, le rôle et l'adresse
-correspondent. Dès qu'une ligne correspond, sa méthode s'applique et **la
-recherche s'arrête** : si la méthode est `reject`, la connexion est
-refusée ; si c'est `scram-sha-256` et que le mot de passe est faux, la
-connexion est refusée aussi — on ne « retente » jamais avec la ligne
-suivante.
+> [!NOTE]
+> **Pourquoi**
+>
+> `pg_hba.conf` est évalué **séquentiellement, première correspondance
+> gagnante**. Pour chaque ligne, PostgreSQL vérifie si le type de connexion
+> (`local`/`host`/`hostssl`/`hostnossl`), la base, le rôle et l'adresse
+> correspondent. Dès qu'une ligne correspond, sa méthode s'applique et **la
+> recherche s'arrête** : si la méthode est `reject`, la connexion est
+> refusée ; si c'est `scram-sha-256` et que le mot de passe est faux, la
+> connexion est refusée aussi — on ne « retente » jamais avec la ligne
+> suivante.
+>
+> La ligne `10.10.10.0/24` couvre `10.10.10.11`, `all` couvre `factura_demo`
+> et `factura_app` : elle correspond, elle est la première, elle rejette. La
+> spécificité de la seconde ligne ne compte pas — PostgreSQL n'a pas de
+> notion de « ligne la plus précise », contrairement à une table de routage.
+>
+> L'ordre canonique : les lignes les plus spécifiques en haut, les plus
+> générales en bas, et un `reject` explicite en dernier si l'on veut un
+> journal clair (par défaut, l'absence de ligne donne `no pg_hba.conf entry`).
+> `SELECT line_number, type, database, user_name, address, auth_method FROM
+> pg_hba_file_rules;` affiche les règles **dans l'ordre chargé** et signale
+> dans `error` une ligne invalide.
 
-La ligne `10.10.10.0/24` couvre `10.10.10.11`, `all` couvre `factura_demo`
-et `factura_app` : elle correspond, elle est la première, elle rejette. La
-spécificité de la seconde ligne ne compte pas — PostgreSQL n'a pas de
-notion de « ligne la plus précise », contrairement à une table de routage.
-
-L'ordre canonique : les lignes les plus spécifiques en haut, les plus
-générales en bas, et un `reject` explicite en dernier si l'on veut un
-journal clair (par défaut, l'absence de ligne donne `no pg_hba.conf entry`).
-`SELECT line_number, type, database, user_name, address, auth_method FROM
-pg_hba_file_rules;` affiche les règles **dans l'ordre chargé** et signale
-dans `error` une ligne invalide.
-:::
-
-::: piege
-d) confond deux messages : `no pg_hba.conf entry for host ...` = aucune
-ligne ne correspond ; `pg_hba.conf rejects connection for host ...` = une
-ligne `reject` a été atteinte. Le premier te dit d'ajouter une ligne, le
-second de regarder **laquelle** rejette et **avant** quoi. Depuis PG 16, le
-serveur ajoute `DETAIL: Connection matched file ... line N` dans son
-journal : le numéro de ligne coupable est donné.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) confond deux messages : `no pg_hba.conf entry for host ...` = aucune
+> ligne ne correspond ; `pg_hba.conf rejects connection for host ...` = une
+> ligne `reject` a été atteinte. Le premier te dit d'ajouter une ligne, le
+> second de regarder **laquelle** rejette et **avant** quoi. Depuis PG 16, le
+> serveur ajoute `DETAIL: Connection matched file ... line N` dans son
+> journal : le numéro de ligne coupable est donné.
 
 ---
 
-**Q15.11** — *`remaining connection slots are reserved for roles with the SUPERUSER attribute` (deux réponses).*
+<a id="q15-11"></a>**[Q15.11](README.md#q15-11)** — *`remaining connection slots are reserved for roles with the SUPERUSER attribute` (deux réponses).*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-PostgreSQL crée **un processus par connexion**. `max_connections` (100 par
-défaut) plafonne leur nombre ; `superuser_reserved_connections` (3) en
-garde pour les superusers, et PG 16 ajoute `reserved_connections` (0 par
-défaut) pour les rôles membres de `pg_use_reserved_connections`. Quand
-97 connexions non-superuser sont ouvertes, la 98e reçoit ce message. Quand
-les 100 sont prises, même le superuser reçoit `sorry, too many clients
-already`.
+> [!NOTE]
+> **Pourquoi**
+>
+> PostgreSQL crée **un processus par connexion**. `max_connections` (100 par
+> défaut) plafonne leur nombre ; `superuser_reserved_connections` (3) en
+> garde pour les superusers, et PG 16 ajoute `reserved_connections` (0 par
+> défaut) pour les rôles membres de `pg_use_reserved_connections`. Quand
+> 97 connexions non-superuser sont ouvertes, la 98e reçoit ce message. Quand
+> les 100 sont prises, même le superuser reçoit `sorry, too many clients
+> already`.
+>
+> La cause n'est presque jamais une charge réelle : c'est une application
+> qui ouvre des connexions sans les fermer (pas de pool, pool mal
+> dimensionné, workers × threads × instances), ou des sessions `idle` qui
+> survivent à un crash du client. `pg_stat_activity` le montre : `SELECT
+> state, count(*) FROM pg_stat_activity GROUP BY 1;` avec 90 lignes en
+> `idle`, et `now() - state_change` pour l'ancienneté.
+>
+> Réponse immédiate (b) : se connecter en `postgres` par la socket (les slots
+> réservés sont là pour ça) et `SELECT pg_terminate_backend(pid) FROM
+> pg_stat_activity WHERE state = 'idle' AND usename = 'factura_app' AND
+> state_change < now() - interval '10 min';`. Réponse durable : un pooler
+> (pgbouncer en mode `transaction`), `idle_session_timeout` /
+> `idle_in_transaction_session_timeout` côté serveur, et `CONNECTION LIMIT`
+> par rôle pour qu'une application ne puisse pas assécher les autres.
 
-La cause n'est presque jamais une charge réelle : c'est une application
-qui ouvre des connexions sans les fermer (pas de pool, pool mal
-dimensionné, workers × threads × instances), ou des sessions `idle` qui
-survivent à un crash du client. `pg_stat_activity` le montre : `SELECT
-state, count(*) FROM pg_stat_activity GROUP BY 1;` avec 90 lignes en
-`idle`, et `now() - state_change` pour l'ancienneté.
-
-Réponse immédiate (b) : se connecter en `postgres` par la socket (les slots
-réservés sont là pour ça) et `SELECT pg_terminate_backend(pid) FROM
-pg_stat_activity WHERE state = 'idle' AND usename = 'factura_app' AND
-state_change < now() - interval '10 min';`. Réponse durable : un pooler
-(pgbouncer en mode `transaction`), `idle_session_timeout` /
-`idle_in_transaction_session_timeout` côté serveur, et `CONNECTION LIMIT`
-par rôle pour qu'une application ne puisse pas assécher les autres.
-:::
-
-::: piege
-c) : `max_connections` a le contexte `postmaster`, `pg_reload_conf()` ne
-l'applique pas — et monter à 500 sans pooler ne fait que repousser le mur
-en consommant de la RAM (chaque backend coûte quelques Mo, plus `work_mem`
-par tri). d) : un mot de passe faux donne `password authentication failed`.
-Le piège de BF15.4 : le collègue a **baissé** `max_connections`, et la panne
-n'est apparue qu'au restart suivant.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : `max_connections` a le contexte `postmaster`, `pg_reload_conf()` ne
+> l'applique pas — et monter à 500 sans pooler ne fait que repousser le mur
+> en consommant de la RAM (chaque backend coûte quelques Mo, plus `work_mem`
+> par tri). d) : un mot de passe faux donne `password authentication failed`.
+> Le piège de BF15.4 : le collègue a **baissé** `max_connections`, et la panne
+> n'est apparue qu'au restart suivant.
 
 ---
 
-**Q15.12** — *Avantage de `pg_dump -Fc` sur le SQL brut.*
+<a id="q15-12"></a>**[Q15.12](README.md#q15-12)** — *Avantage de `pg_dump -Fc` sur le SQL brut.*
 
 **Réponse : b)** restauration sélective, parallèle, compressée, via
 `pg_restore`.
 
-::: pourquoi
-`pg_dump` produit toujours le même contenu logique (schéma + données), mais
-le **format** change ce qu'on peut en faire :
+> [!NOTE]
+> **Pourquoi**
+>
+> `pg_dump` produit toujours le même contenu logique (schéma + données), mais
+> le **format** change ce qu'on peut en faire :
+>
+> * `-Fp` (plain, défaut) : un script SQL. Lisible, `grep`-able, restaurable
+>   avec `psql -f`. Mais tout ou rien, séquentiel, non compressé (sauf `| gzip`).
+> * `-Fc` (custom) : une archive binaire avec une table des matières (TOC).
+>   `pg_restore -l` la liste ; `-L` restaure une sélection ; `-t table` ou
+>   `-n schema` filtrent ; `-j N` restaure en parallèle (indexes et tables
+>   en même temps) ; la compression est intégrée (gzip par défaut, `-Z`
+>   pour le niveau, `--compress=zstd` depuis PG 16). `--no-owner`
+>   `--no-privileges` s'appliquent **à la restauration**, sans refaire le
+>   dump.
+> * `-Fd` (directory) : un fichier par table, seul format qui permet aussi
+>   le **dump** parallèle (`pg_dump -Fd -j 4`).
+> * `-Ft` (tar) : comme custom sans compression, rarement utile.
+>
+> Le format custom est le choix par défaut en production : on ne perd rien
+> (on peut toujours en extraire du SQL avec `pg_restore -f dump.sql`), et on
+> gagne la restauration partielle — le cas réel est « restaure-moi juste la
+> table `invoices` d'hier ».
 
-* `-Fp` (plain, défaut) : un script SQL. Lisible, `grep`-able, restaurable
-  avec `psql -f`. Mais tout ou rien, séquentiel, non compressé (sauf `| gzip`).
-* `-Fc` (custom) : une archive binaire avec une table des matières (TOC).
-  `pg_restore -l` la liste ; `-L` restaure une sélection ; `-t table` ou
-  `-n schema` filtrent ; `-j N` restaure en parallèle (indexes et tables
-  en même temps) ; la compression est intégrée (gzip par défaut, `-Z`
-  pour le niveau, `--compress=zstd` depuis PG 16). `--no-owner`
-  `--no-privileges` s'appliquent **à la restauration**, sans refaire le
-  dump.
-* `-Fd` (directory) : un fichier par table, seul format qui permet aussi
-  le **dump** parallèle (`pg_dump -Fd -j 4`).
-* `-Ft` (tar) : comme custom sans compression, rarement utile.
-
-Le format custom est le choix par défaut en production : on ne perd rien
-(on peut toujours en extraire du SQL avec `pg_restore -f dump.sql`), et on
-gagne la restauration partielle — le cas réel est « restaure-moi juste la
-table `invoices` d'hier ».
-:::
-
-::: piege
-c) : aucun format de `pg_dump` n'inclut les rôles, les mots de passe ni les
-tablespaces : ce sont des objets du **cluster**, pas de la base. D'où
-`pg_dumpall --globals-only`, à sauvegarder à côté, sans quoi la
-restauration sur une machine neuve échoue sur `role "factura_app" does not
-exist`. d) : `pg_dump` n'est jamais incrémental — c'est le rôle des WAL.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : aucun format de `pg_dump` n'inclut les rôles, les mots de passe ni les
+> tablespaces : ce sont des objets du **cluster**, pas de la base. D'où
+> `pg_dumpall --globals-only`, à sauvegarder à côté, sans quoi la
+> restauration sur une machine neuve échoue sur `role "factura_app" does not
+> exist`. d) : `pg_dump` n'est jamais incrémental — c'est le rôle des WAL.
 
 ---
 
-**Q15.13** — *`Seq Scan on invoices`, `rows=20` estimées, `rows=18` réelles, `Rows Removed by Filter: 99982`.*
+<a id="q15-13"></a>**[Q15.13](README.md#q15-13)** — *`Seq Scan on invoices`, `rows=20` estimées, `rows=18` réelles, `Rows Removed by Filter: 99982`.*
 
 **Réponse : b)** il manque un index sur `invoices(customer_id)`.
 
-::: pourquoi
-Lire un plan `EXPLAIN ANALYZE`, c'est comparer trois choses par nœud :
+> [!NOTE]
+> **Pourquoi**
+>
+> Lire un plan `EXPLAIN ANALYZE`, c'est comparer trois choses par nœud :
+>
+> * le **type de nœud** : `Seq Scan` lit toute la table ; `Index Scan` /
+>   `Index Only Scan` / `Bitmap Heap Scan` passent par un index ;
+> * `rows=` estimé (cost) contre `rows=` réel (actual) : ici 20 contre 18,
+>   l'estimation est **bonne** — les statistiques sont à jour, `ANALYZE` ne
+>   changerait rien ;
+> * `Rows Removed by Filter` : le nombre de lignes lues pour rien. 99 982
+>   lignes lues pour en garder 18, c'est un taux de sélectivité de 0,02 % —
+>   le cas d'école de l'index manquant.
+>
+> Le planificateur a choisi un `Seq Scan` **parce qu'il n'a pas le choix** :
+> il n'existe aucun index sur `customer_id`. Après `CREATE INDEX
+> CONCURRENTLY invoices_customer_id_idx ON invoices (customer_id);`, le plan
+> devient `Index Scan using invoices_customer_id_idx` avec `actual rows=18`
+> et un temps de l'ordre de 0,05 ms au lieu de 6 ms. Sur la requête complète
+> du setup (sous-requête corrélée sur `invoice_lines`, 18 fois un parcours de
+> 300 000 lignes), l'effet est de 3 s à 2 ms.
+>
+> `CONCURRENTLY` construit l'index sans verrou exclusif : la table reste
+> lisible et modifiable pendant la construction (plus lente, deux passes).
+> Sans lui, `CREATE INDEX` pose un `SHARE` lock qui bloque les écritures
+> jusqu'à la fin — sur une grosse table en production, c'est un incident.
 
-* le **type de nœud** : `Seq Scan` lit toute la table ; `Index Scan` /
-  `Index Only Scan` / `Bitmap Heap Scan` passent par un index ;
-* `rows=` estimé (cost) contre `rows=` réel (actual) : ici 20 contre 18,
-  l'estimation est **bonne** — les statistiques sont à jour, `ANALYZE` ne
-  changerait rien ;
-* `Rows Removed by Filter` : le nombre de lignes lues pour rien. 99 982
-  lignes lues pour en garder 18, c'est un taux de sélectivité de 0,02 % —
-  le cas d'école de l'index manquant.
-
-Le planificateur a choisi un `Seq Scan` **parce qu'il n'a pas le choix** :
-il n'existe aucun index sur `customer_id`. Après `CREATE INDEX
-CONCURRENTLY invoices_customer_id_idx ON invoices (customer_id);`, le plan
-devient `Index Scan using invoices_customer_id_idx` avec `actual rows=18`
-et un temps de l'ordre de 0,05 ms au lieu de 6 ms. Sur la requête complète
-du setup (sous-requête corrélée sur `invoice_lines`, 18 fois un parcours de
-300 000 lignes), l'effet est de 3 s à 2 ms.
-
-`CONCURRENTLY` construit l'index sans verrou exclusif : la table reste
-lisible et modifiable pendant la construction (plus lente, deux passes).
-Sans lui, `CREATE INDEX` pose un `SHARE` lock qui bloque les écritures
-jusqu'à la fin — sur une grosse table en production, c'est un incident.
-:::
-
-::: piege
-« 6 ms, c'est rapide » (d) est le raisonnement qui tue : la requête est
-appelée 200 fois par seconde, et surtout elle **lit 1 823 blocs**
-(`Buffers: shared hit=1823`) qui occupent le cache au détriment des autres.
-c) : `work_mem` joue sur les tris et les hachages, pas sur un `Seq Scan`
-avec filtre. L'option `BUFFERS` est celle qu'on oublie : `shared read`
-élevé = lecture disque, `shared hit` = cache ; c'est elle qui explique
-pourquoi la même requête prend 2 s la première fois et 50 ms ensuite.
-:::
+> [!WARNING]
+> **Piège**
+>
+> « 6 ms, c'est rapide » (d) est le raisonnement qui tue : la requête est
+> appelée 200 fois par seconde, et surtout elle **lit 1 823 blocs**
+> (`Buffers: shared hit=1823`) qui occupent le cache au détriment des autres.
+> c) : `work_mem` joue sur les tris et les hachages, pas sur un `Seq Scan`
+> avec filtre. L'option `BUFFERS` est celle qu'on oublie : `shared read`
+> élevé = lecture disque, `shared hit` = cache ; c'est elle qui explique
+> pourquoi la même requête prend 2 s la première fois et 50 ms ensuite.
 
 ---
 
-**Q15.14** — *Session `idle in transaction` depuis 3 h, quatre sessions en attente de verrou.*
+<a id="q15-14"></a>**[Q15.14](README.md#q15-14)** — *Session `idle in transaction` depuis 3 h, quatre sessions en attente de verrou.*
 
 **Réponse : b)** terminer la session `idle in transaction`, puis corriger
 l'application et poser un timeout.
 
-::: pourquoi
-`idle in transaction` est l'état le plus dangereux de `pg_stat_activity` :
-la session a exécuté `BEGIN` puis au moins une requête, et **attend** — elle
-n'exécute rien, mais la transaction est ouverte, donc tous ses verrous sont
-tenus (un `UPDATE` pose un `RowExclusiveLock` sur la table et un verrou de
-ligne), et son instantané empêche `VACUUM` de nettoyer les lignes mortes
-plus récentes que lui (bloat garanti au bout de trois heures).
+> [!NOTE]
+> **Pourquoi**
+>
+> `idle in transaction` est l'état le plus dangereux de `pg_stat_activity` :
+> la session a exécuté `BEGIN` puis au moins une requête, et **attend** — elle
+> n'exécute rien, mais la transaction est ouverte, donc tous ses verrous sont
+> tenus (un `UPDATE` pose un `RowExclusiveLock` sur la table et un verrou de
+> ligne), et son instantané empêche `VACUUM` de nettoyer les lignes mortes
+> plus récentes que lui (bloat garanti au bout de trois heures).
+>
+> Les quatre sessions `active` avec `wait_event_type = Lock` attendent ce
+> verrou : `SELECT pid, pg_blocking_pids(pid) FROM pg_stat_activity WHERE
+> cardinality(pg_blocking_pids(pid)) > 0;` renvoie pour chacune le PID du
+> bloqueur — le même. `pg_cancel_backend` (SIGINT, annule la requête en
+> cours) ne fait rien sur une session qui n'exécute rien ; il faut
+> `pg_terminate_backend(pid)` (SIGTERM, ferme la session, ce qui provoque un
+> `ROLLBACK`).
+>
+> La cause est toujours dans l'application : une transaction ouverte et
+> jamais validée (exception non gérée après `BEGIN`, ORM en mode autocommit
+> désactivé, connexion rendue au pool sans `COMMIT`). Le filet de sécurité
+> côté serveur : `idle_in_transaction_session_timeout = '5min'` (contexte
+> `user`, donc posable par rôle : `ALTER ROLE factura_app SET
+> idle_in_transaction_session_timeout = '5min';`), qui tue automatiquement ce
+> type de session, et `log_lock_waits = on` pour voir les attentes de plus
+> de `deadlock_timeout` (1 s) dans le journal.
 
-Les quatre sessions `active` avec `wait_event_type = Lock` attendent ce
-verrou : `SELECT pid, pg_blocking_pids(pid) FROM pg_stat_activity WHERE
-cardinality(pg_blocking_pids(pid)) > 0;` renvoie pour chacune le PID du
-bloqueur — le même. `pg_cancel_backend` (SIGINT, annule la requête en
-cours) ne fait rien sur une session qui n'exécute rien ; il faut
-`pg_terminate_backend(pid)` (SIGTERM, ferme la session, ce qui provoque un
-`ROLLBACK`).
-
-La cause est toujours dans l'application : une transaction ouverte et
-jamais validée (exception non gérée après `BEGIN`, ORM en mode autocommit
-désactivé, connexion rendue au pool sans `COMMIT`). Le filet de sécurité
-côté serveur : `idle_in_transaction_session_timeout = '5min'` (contexte
-`user`, donc posable par rôle : `ALTER ROLE factura_app SET
-idle_in_transaction_session_timeout = '5min';`), qui tue automatiquement ce
-type de session, et `log_lock_waits = on` pour voir les attentes de plus
-de `deadlock_timeout` (1 s) dans le journal.
-:::
-
-::: piege
-a) annule les victimes, pas le coupable : elles reviendront. c) `VACUUM
-FULL` a besoin d'un verrou `ACCESS EXCLUSIVE` : il se mettrait **lui-même**
-en file d'attente derrière le bloqueur, et bloquerait à son tour toutes
-les lectures. d) redémarrer résout le symptôme à coup sûr et perd toutes
-les autres sessions — c'est ce qu'on fait quand on n'a pas lu
-`pg_stat_activity`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) annule les victimes, pas le coupable : elles reviendront. c) `VACUUM
+> FULL` a besoin d'un verrou `ACCESS EXCLUSIVE` : il se mettrait **lui-même**
+> en file d'attente derrière le bloqueur, et bloquerait à son tour toutes
+> les lectures. d) redémarrer résout le symptôme à coup sûr et perd toutes
+> les autres sessions — c'est ce qu'on fait quand on n'a pas lu
+> `pg_stat_activity`.
 
 ---
 
-**Q15.15** — *`PANIC: could not write to file "pg_wal/..."`, disque plein (deux réponses).*
+<a id="q15-15"></a>**[Q15.15](README.md#q15-15)** — *`PANIC: could not write to file "pg_wal/..."`, disque plein (deux réponses).*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Le WAL (*write-ahead log*) est le journal de toutes les modifications,
-écrit **avant** les fichiers de données ; c'est lui qui garantit la
-durabilité. Quand PostgreSQL ne peut plus l'écrire, il ne peut plus rien
-garantir : il s'arrête volontairement (`PANIC`) plutôt que de corrompre.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le WAL (*write-ahead log*) est le journal de toutes les modifications,
+> écrit **avant** les fichiers de données ; c'est lui qui garantit la
+> durabilité. Quand PostgreSQL ne peut plus l'écrire, il ne peut plus rien
+> garantir : il s'arrête volontairement (`PANIC`) plutôt que de corrompre.
+>
+> Les segments de `pg_wal/` (16 Mo chacun) sont recyclés automatiquement
+> après chaque checkpoint, dans la limite de `max_wal_size` (1 Go). S'ils
+> s'accumulent bien au-delà, c'est qu'**on lui a interdit de les recycler** :
+>
+> * `archive_mode = on` et `archive_command` qui échoue (destination pleine,
+>   droits, SSH cassé) : PostgreSQL garde chaque segment tant qu'il n'est pas
+>   archivé. `SELECT * FROM pg_stat_archiver;` montre `failed_count` qui
+>   monte et `last_failed_wal`.
+> * un **slot de réplication** dont le consommateur (réplica, outil CDC) est
+>   arrêté : `SELECT slot_name, active, pg_size_pretty(pg_wal_lsn_diff(
+>   pg_current_wal_lsn(), restart_lsn)) FROM pg_replication_slots;` — un slot
+>   inactif retient tout le WAL depuis sa dernière lecture. PG 13+ a
+>   `max_slot_wal_keep_size` pour plafonner.
+>
+> La remise en service : libérer de l'espace **ailleurs** (vieux dumps,
+> journaux, `apt clean`), redémarrer, corriger la cause, et laisser le
+> checkpoint suivant recycler. Sur un vrai disque plein, on peut aussi
+> étendre le LV (module 11) — c'est l'argument pour un LV dédié à `PGDATA`.
 
-Les segments de `pg_wal/` (16 Mo chacun) sont recyclés automatiquement
-après chaque checkpoint, dans la limite de `max_wal_size` (1 Go). S'ils
-s'accumulent bien au-delà, c'est qu'**on lui a interdit de les recycler** :
-
-* `archive_mode = on` et `archive_command` qui échoue (destination pleine,
-  droits, SSH cassé) : PostgreSQL garde chaque segment tant qu'il n'est pas
-  archivé. `SELECT * FROM pg_stat_archiver;` montre `failed_count` qui
-  monte et `last_failed_wal`.
-* un **slot de réplication** dont le consommateur (réplica, outil CDC) est
-  arrêté : `SELECT slot_name, active, pg_size_pretty(pg_wal_lsn_diff(
-  pg_current_wal_lsn(), restart_lsn)) FROM pg_replication_slots;` — un slot
-  inactif retient tout le WAL depuis sa dernière lecture. PG 13+ a
-  `max_slot_wal_keep_size` pour plafonner.
-
-La remise en service : libérer de l'espace **ailleurs** (vieux dumps,
-journaux, `apt clean`), redémarrer, corriger la cause, et laisser le
-checkpoint suivant recycler. Sur un vrai disque plein, on peut aussi
-étendre le LV (module 11) — c'est l'argument pour un LV dédié à `PGDATA`.
-:::
-
-::: piege
-a) est l'erreur irréversible : supprimer des segments de `pg_wal` à la
-main, c'est retirer des pages du journal comptable. Le serveur peut ne plus
-démarrer (`could not open file "pg_wal/000000010000000000000042"`) et le
-cluster est perdu — restauration depuis sauvegarde. `pg_archivecleanup` et
-`pg_resetwal` existent pour des cas précis, pas pour « faire de la place ».
-b) : `wal_level = minimal` désactive l'archivage et la réplication ; ce
-n'est pas un correctif, c'est une régression.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) est l'erreur irréversible : supprimer des segments de `pg_wal` à la
+> main, c'est retirer des pages du journal comptable. Le serveur peut ne plus
+> démarrer (`could not open file "pg_wal/000000010000000000000042"`) et le
+> cluster est perdu — restauration depuis sauvegarde. `pg_archivecleanup` et
+> `pg_resetwal` existent pour des cas précis, pas pour « faire de la place ».
+> b) : `wal_level = minimal` désactive l'archivage et la réplication ; ce
+> n'est pas un correctif, c'est une régression.
 
 ---
 
-**Q15.16** — *Sessions avec TTL + file sans TTL, `maxmemory` atteint.*
+<a id="q15-16"></a>**[Q15.16](README.md#q15-16)** — *Sessions avec TTL + file sans TTL, `maxmemory` atteint.*
 
 **Réponse : c)** `volatile-lru`.
 
-::: pourquoi
-Quand `used_memory` atteint `maxmemory`, chaque commande qui écrit
-déclenche la politique `maxmemory-policy` :
+> [!NOTE]
+> **Pourquoi**
+>
+> Quand `used_memory` atteint `maxmemory`, chaque commande qui écrit
+> déclenche la politique `maxmemory-policy` :
+>
+> * `noeviction` : la commande est refusée avec `OOM command not allowed when
+>   used memory > 'maxmemory'`. Les lectures continuent. Aucune donnée n'est
+>   perdue, mais l'application qui écrit **plante** (c'est BF15.5). C'est la
+>   bonne politique pour une **file** ou une base de données, quand perdre
+>   une écriture est pire qu'échouer.
+> * `allkeys-lru` / `allkeys-lfu` / `allkeys-random` : Redis supprime des
+>   clés parmi **toutes** pour faire de la place. Parfait pour un cache pur
+>   (tout est reconstructible), catastrophique pour une file : `factura:jobs`
+>   peut être évincée avec ses travaux dedans.
+> * `volatile-lru` / `volatile-lfu` / `volatile-ttl` / `volatile-random` :
+>   Redis n'évince que les clés **qui ont un TTL**. Les sessions (`SETEX`)
+>   sont candidates, la file (sans TTL) ne l'est jamais. Si toutes les clés
+>   volatiles sont déjà évincées et que la mémoire est encore pleine, Redis
+>   se comporte comme `noeviction` — la file reste protégée, l'écriture
+>   échoue.
+>
+> C'est donc `volatile-lru` (ou `volatile-lfu`) qui correspond à un usage
+> mixte : les sessions se sacrifient d'abord, la file jamais. La vraie bonne
+> réponse d'architecture est cependant **deux instances Redis** (pas deux
+> `db` numérotées : la politique est globale à l'instance), une par usage, chacune
+> avec sa politique. C'est ce que tu proposeras au projet P1.
 
-* `noeviction` : la commande est refusée avec `OOM command not allowed when
-  used memory > 'maxmemory'`. Les lectures continuent. Aucune donnée n'est
-  perdue, mais l'application qui écrit **plante** (c'est BF15.5). C'est la
-  bonne politique pour une **file** ou une base de données, quand perdre
-  une écriture est pire qu'échouer.
-* `allkeys-lru` / `allkeys-lfu` / `allkeys-random` : Redis supprime des
-  clés parmi **toutes** pour faire de la place. Parfait pour un cache pur
-  (tout est reconstructible), catastrophique pour une file : `factura:jobs`
-  peut être évincée avec ses travaux dedans.
-* `volatile-lru` / `volatile-lfu` / `volatile-ttl` / `volatile-random` :
-  Redis n'évince que les clés **qui ont un TTL**. Les sessions (`SETEX`)
-  sont candidates, la file (sans TTL) ne l'est jamais. Si toutes les clés
-  volatiles sont déjà évincées et que la mémoire est encore pleine, Redis
-  se comporte comme `noeviction` — la file reste protégée, l'écriture
-  échoue.
-
-C'est donc `volatile-lru` (ou `volatile-lfu`) qui correspond à un usage
-mixte : les sessions se sacrifient d'abord, la file jamais. La vraie bonne
-réponse d'architecture est cependant **deux instances Redis** (pas deux
-`db` numérotées : la politique est globale à l'instance), une par usage, chacune
-avec sa politique. C'est ce que tu proposeras au projet P1.
-:::
-
-::: piege
-Redis ne mesure pas exactement `maxmemory` : `used_memory` inclut la
-structure interne (~1 Mo à vide) et les buffers clients. Un `maxmemory` de
-quelques Mo est atteint avant la première clé. Et l'éviction ne rend pas
-forcément de la mémoire au système (fragmentation) : `used_memory` baisse,
-`used_memory_rss` non. `INFO stats` → `evicted_keys` est la métrique à
-grapher : si elle monte en continu, le cache est sous-dimensionné.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Redis ne mesure pas exactement `maxmemory` : `used_memory` inclut la
+> structure interne (~1 Mo à vide) et les buffers clients. Un `maxmemory` de
+> quelques Mo est atteint avant la première clé. Et l'éviction ne rend pas
+> forcément de la mémoire au système (fragmentation) : `used_memory` baisse,
+> `used_memory_rss` non. `INFO stats` → `evicted_keys` est la métrique à
+> grapher : si elle monte en continu, le cache est sous-dimensionné.
 
 ---
 
-**Q15.17** — *`redis-cli KEYS 'sess:*' | wc -l` en production.*
+<a id="q15-17"></a>**[Q15.17](README.md#q15-17)** — *`redis-cli KEYS 'sess:*' | wc -l` en production.*
 
 **Réponse : b)** Redis est mono-thread, `KEYS` bloque tout.
 
-::: pourquoi
-Redis exécute les commandes **une par une sur un seul thread**. C'est ce
-qui le rend simple et prévisible (pas de verrou, atomicité gratuite), et
-c'est ce qui rend toute commande en O(N) dangereuse : pendant que `KEYS`
-parcourt 10 millions de clés (plusieurs centaines de millisecondes à
-quelques secondes), **aucune autre commande n'est traitée**. Toutes les
-requêtes de l'application s'empilent, les timeouts côté client se
-déclenchent, la supervision voit une latence de 2 s, et le tout ressemble
-à une panne réseau.
+> [!NOTE]
+> **Pourquoi**
+>
+> Redis exécute les commandes **une par une sur un seul thread**. C'est ce
+> qui le rend simple et prévisible (pas de verrou, atomicité gratuite), et
+> c'est ce qui rend toute commande en O(N) dangereuse : pendant que `KEYS`
+> parcourt 10 millions de clés (plusieurs centaines de millisecondes à
+> quelques secondes), **aucune autre commande n'est traitée**. Toutes les
+> requêtes de l'application s'empilent, les timeouts côté client se
+> déclenchent, la supervision voit une latence de 2 s, et le tout ressemble
+> à une panne réseau.
+>
+> `SCAN cursor MATCH pattern COUNT n` fait la même chose par lots : chaque
+> appel renvoie une poignée de clés et un curseur, entre deux appels les
+> autres commandes passent. `redis-cli --scan --pattern 'sess:*'` enchaîne
+> les appels pour toi. Le résultat n'est pas un instantané exact (une clé
+> modifiée pendant le parcours peut apparaître deux fois ou pas du tout),
+> ce qui est acceptable pour compter des sessions. Pour compter **sans
+> lister**, `DBSIZE` donne le total de clés, et un compteur maintenu par
+> l'application (`INCR`/`DECR`) donne le total par type en O(1).
+>
+> Les autres commandes de la même famille : `FLUSHALL`, `FLUSHDB`, `SMEMBERS`
+> sur un gros set, `HGETALL` sur un gros hash, `LRANGE 0 -1`, `DEBUG`, et
+> `MONITOR` qui ralentit chaque commande. L'ACL `-@dangerous` les retire aux
+> utilisateurs applicatifs (`KEYS`, `FLUSH*`, `CONFIG`, `SHUTDOWN`,
+> `MONITOR`, `DEBUG`...).
 
-`SCAN cursor MATCH pattern COUNT n` fait la même chose par lots : chaque
-appel renvoie une poignée de clés et un curseur, entre deux appels les
-autres commandes passent. `redis-cli --scan --pattern 'sess:*'` enchaîne
-les appels pour toi. Le résultat n'est pas un instantané exact (une clé
-modifiée pendant le parcours peut apparaître deux fois ou pas du tout),
-ce qui est acceptable pour compter des sessions. Pour compter **sans
-lister**, `DBSIZE` donne le total de clés, et un compteur maintenu par
-l'application (`INCR`/`DECR`) donne le total par type en O(1).
-
-Les autres commandes de la même famille : `FLUSHALL`, `FLUSHDB`, `SMEMBERS`
-sur un gros set, `HGETALL` sur un gros hash, `LRANGE 0 -1`, `DEBUG`, et
-`MONITOR` qui ralentit chaque commande. L'ACL `-@dangerous` les retire aux
-utilisateurs applicatifs (`KEYS`, `FLUSH*`, `CONFIG`, `SHUTDOWN`,
-`MONITOR`, `DEBUG`...).
-:::
-
-::: piege
-`SLOWLOG GET` te dira après coup qu'un `KEYS` a pris 1,8 s ; `LATENCY
-DOCTOR` te dira qu'un pic de latence a eu lieu. Le collègue dira « mais
-sur mon poste c'est instantané » : avec 200 clés, oui. Le test de
-performance qui compte se fait avec le volume de la production.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `SLOWLOG GET` te dira après coup qu'un `KEYS` a pris 1,8 s ; `LATENCY
+> DOCTOR` te dira qu'un pic de latence a eu lieu. Le collègue dira « mais
+> sur mon poste c'est instantané » : avec 200 clés, oui. Le test de
+> performance qui compte se fait avec le volume de la production.
 
 ---
 
-**Q15.18** — *`used_memory` 1,2 Go, `used_memory_rss` 3,9 Go, ratio 3,17 (deux réponses).*
+<a id="q15-18"></a>**[Q15.18](README.md#q15-18)** — *`used_memory` 1,2 Go, `used_memory_rss` 3,9 Go, ratio 3,17 (deux réponses).*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-* `used_memory` : ce que l'allocateur de Redis (jemalloc) a alloué pour les
-  données et ses structures — la vue « logique ».
-* `used_memory_rss` : le *Resident Set Size* vu par le noyau — les pages
-  physiques réellement attribuées au processus.
-* `mem_fragmentation_ratio` = RSS / `used_memory`.
+> [!NOTE]
+> **Pourquoi**
+>
+> * `used_memory` : ce que l'allocateur de Redis (jemalloc) a alloué pour les
+>   données et ses structures — la vue « logique ».
+> * `used_memory_rss` : le *Resident Set Size* vu par le noyau — les pages
+>   physiques réellement attribuées au processus.
+> * `mem_fragmentation_ratio` = RSS / `used_memory`.
+>
+> Un ratio entre 1,0 et 1,5 est normal (l'allocateur garde un peu de marge).
+> Au-dessus, c'est de la **fragmentation** : Redis a libéré des clés (TTL
+> expirés, `DEL` massifs, évictions), jemalloc a des pages à moitié vides
+> qu'il ne peut pas rendre au noyau, et le RSS reste haut. La mémoire est
+> « perdue » pour le système jusqu'à un redémarrage — ou jusqu'à ce que
+> `activedefrag yes` (défragmentation en ligne, jemalloc requis) compacte
+> progressivement. `MEMORY DOCTOR` le dit en clair.
+>
+> Un ratio **inférieur à 1** signifie l'inverse : le noyau a donné à Redis
+> moins de pages physiques qu'il n'en a allouées — le reste est **en swap**.
+> Redis est conçu pour la RAM : chaque accès à une page swappée coûte des
+> millisecondes de disque, et comme il est mono-thread, une commande
+> ralentie ralentit toutes les suivantes. Un Redis qui swappe est une panne,
+> pas une dégradation. Vérification : `INFO memory` (`used_memory_rss` <
+> `used_memory`), `free -m`, `vmstat 1` (colonnes `si`/`so` non nulles), `grep VmSwap`
+> `/proc/$(pidof redis-server)/status`. Parade : `maxmemory`
+> **strictement inférieur** à la RAM disponible, `vm.swappiness` bas, ou pas
+> de swap du tout sur un serveur Redis dédié.
 
-Un ratio entre 1,0 et 1,5 est normal (l'allocateur garde un peu de marge).
-Au-dessus, c'est de la **fragmentation** : Redis a libéré des clés (TTL
-expirés, `DEL` massifs, évictions), jemalloc a des pages à moitié vides
-qu'il ne peut pas rendre au noyau, et le RSS reste haut. La mémoire est
-« perdue » pour le système jusqu'à un redémarrage — ou jusqu'à ce que
-`activedefrag yes` (défragmentation en ligne, jemalloc requis) compacte
-progressivement. `MEMORY DOCTOR` le dit en clair.
-
-Un ratio **inférieur à 1** signifie l'inverse : le noyau a donné à Redis
-moins de pages physiques qu'il n'en a allouées — le reste est **en swap**.
-Redis est conçu pour la RAM : chaque accès à une page swappée coûte des
-millisecondes de disque, et comme il est mono-thread, une commande
-ralentie ralentit toutes les suivantes. Un Redis qui swappe est une panne,
-pas une dégradation. Vérification : `INFO memory` (`used_memory_rss` <
-`used_memory`), `free -m`, `vmstat 1` (colonnes `si`/`so` non nulles), `grep VmSwap`
-`/proc/$(pidof redis-server)/status`. Parade : `maxmemory`
-**strictement inférieur** à la RAM disponible, `vm.swappiness` bas, ou pas
-de swap du tout sur un serveur Redis dédié.
-:::
-
-::: piege
-c) : `maxmemory` limite `used_memory`, pas le RSS ; le monter n'aide en
-rien. d) : `FLUSHALL` vide les données — le RSS ne redescend même pas
-forcément (fragmentation). Le seul « reset » propre est un redémarrage avec
-persistance à jour (`BGSAVE` puis `systemctl restart redis-server`), pendant
-une fenêtre où l'application tolère une reconnexion.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : `maxmemory` limite `used_memory`, pas le RSS ; le monter n'aide en
+> rien. d) : `FLUSHALL` vide les données — le RSS ne redescend même pas
+> forcément (fragmentation). Le seul « reset » propre est un redémarrage avec
+> persistance à jour (`BGSAVE` puis `systemctl restart redis-server`), pendant
+> une fenêtre où l'application tolère une reconnexion.
 
 ---
 
 ## 15.4 Quiz — questions ouvertes
 
-**QO15.1** — *En entretien : le trajet d'une requête `https://factura.lab.local/api/invoices` jusqu'à Gunicorn.*
+<a id="qo15-1"></a>**[QO15.1](README.md#qo15-1)** — *En entretien : le trajet d'une requête `https://factura.lab.local/api/invoices` jusqu'à Gunicorn.*
 
 **Réponse attendue** (l'ordre compte) :
 
@@ -748,19 +792,20 @@ main TCP vers Gunicorn (et le port éphémère qui va avec, `TIME_WAIT`) ;
 avec, les connexions vers l'upstream sont réutilisées. HTTP/2 côté client
 ne change rien côté upstream : nginx parle HTTP/1.1 au backend.
 
-::: pourquoi
-Ce récit est une question d'entretien classique parce qu'il traverse cinq
-couches et montre si le candidat sait **où regarder** quand ça casse : le
-certificat présenté dépend du SNI (donc `openssl s_client -servername`),
-le vhost choisi dépend de `Host` (donc `curl -H Host:`), la location de la
-règle de priorité, le 502/504 de la connexion upstream, et l'IP dans les
-journaux applicatifs de `X-Forwarded-For`. Chaque étape a sa commande de
-test.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce récit est une question d'entretien classique parce qu'il traverse cinq
+> couches et montre si le candidat sait **où regarder** quand ça casse : le
+> certificat présenté dépend du SNI (donc `openssl s_client -servername`),
+> le vhost choisi dépend de `Host` (donc `curl -H Host:`), la location de la
+> règle de priorité, le 502/504 de la connexion upstream, et l'IP dans les
+> journaux applicatifs de `X-Forwarded-For`. Chaque étape a sa commande de
+> test.
 
 ---
 
-**QO15.2** — *Règle complète de sélection des `location`, trois pièges, `root` vs `alias`.*
+<a id="qo15-2"></a>**[QO15.2](README.md#qo15-2)** — *Règle complète de sélection des `location`, trois pièges, `root` vs `alias`.*
 
 **La règle** :
 
@@ -801,20 +846,21 @@ leur parent.
 seul `root` au niveau `server` et on n'utilise `alias` que lorsque l'URI ne
 reflète pas le disque.
 
-::: pourquoi
-La raison d'être de ce mécanisme : les préfixes sont rangés dans un arbre
-et la recherche du plus long est en O(longueur de l'URI), indépendante du
-nombre de locations ; les regex sont coûteuses et doivent être testées
-une par une, d'où l'ordre du fichier. `^~` existe précisément pour dire
-« ce préfixe est assez précis, ne dépense pas de temps en regex » — et
-c'est l'arme contre le premier piège. En entretien, l'énoncé de la règle
-en quatre étapes avec le cas `^~` distingue immédiatement quelqu'un qui a
-lu la documentation de quelqu'un qui copie des configurations.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La raison d'être de ce mécanisme : les préfixes sont rangés dans un arbre
+> et la recherche du plus long est en O(longueur de l'URI), indépendante du
+> nombre de locations ; les regex sont coûteuses et doivent être testées
+> une par une, d'où l'ordre du fichier. `^~` existe précisément pour dire
+> « ce préfixe est assez précis, ne dépense pas de temps en regex » — et
+> c'est l'arme contre le premier piège. En entretien, l'énoncé de la règle
+> en quatre étapes avec le cas `^~` distingue immédiatement quelqu'un qui a
+> lu la documentation de quelqu'un qui copie des configurations.
 
 ---
 
-**QO15.3** — *Méthode de diagnostic pour 502, 504, 413, 403, 404 et boucle 301.*
+<a id="qo15-3"></a>**[QO15.3](README.md#qo15-3)** — *Méthode de diagnostic pour 502, 504, 413, 403, 404 et boucle 301.*
 
 Le préambule commun : `sudo tail -f /var/log/nginx/factura.error.log` dans
 un terminal, la commande `curl` dans l'autre. `access.log` donne le code et
@@ -829,21 +875,22 @@ un terminal, la commande `curl` dans l'autre. `access.log` donne le code et
 | **404** | `curl -sI URL` → 404 ; `open() "/chemin/réellement/tenté" failed (2: No such file or directory)` | le chemin tenté révèle l'erreur : `root` dupliqué (voulait `alias`), mauvaise location (regex), `try_files` sans repli ; côté proxy : `upstream_status 404` dans `access.log` = c'est le backend qui répond 404, pas nginx |
 | **301 en boucle** | `curl -sIL --max-redirs 3 URL` → même `Location:` répété | `return 301 https://` dans un server qui écoute aussi 443 ; derrière un LB, tester `$http_x_forwarded_proto` ; `301` mis en cache par le navigateur : tester avec `curl` |
 
-::: pourquoi
-Le principe : nginx **sait toujours pourquoi** il a renvoyé un code, et il
-l'écrit dans `error.log` avec le chemin ou l'adresse exacts qu'il a tentés.
-La méthode n'est donc pas de deviner mais de lire cette ligne, puis de
-vérifier l'hypothèse avec la commande système correspondante (`ss`,
-`namei`, `stat`, `curl` direct sur le backend en sautant nginx :
-`curl http://127.0.0.1:8001/api/health`). Si le backend répond directement
-mais pas via nginx, le problème est dans nginx ; s'il ne répond pas
-directement, nginx est innocent. Ce test « avec et sans le proxy » est le
-premier à faire, avant même de lire la conf.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le principe : nginx **sait toujours pourquoi** il a renvoyé un code, et il
+> l'écrit dans `error.log` avec le chemin ou l'adresse exacts qu'il a tentés.
+> La méthode n'est donc pas de deviner mais de lire cette ligne, puis de
+> vérifier l'hypothèse avec la commande système correspondante (`ss`,
+> `namei`, `stat`, `curl` direct sur le backend en sautant nginx :
+> `curl http://127.0.0.1:8001/api/health`). Si le backend répond directement
+> mais pas via nginx, le problème est dans nginx ; s'il ne répond pas
+> directement, nginx est innocent. Ce test « avec et sans le proxy » est le
+> premier à faire, avant même de lire la conf.
 
 ---
 
-**QO15.4** — *En entretien : comment PostgreSQL décide d'accepter une connexion.*
+<a id="qo15-4"></a>**[QO15.4](README.md#qo15-4)** — *En entretien : comment PostgreSQL décide d'accepter une connexion.*
 
 **Réponse attendue** :
 
@@ -907,21 +954,22 @@ in`), `CONNECTION LIMIT` non atteint (`too many connections for role`),
 `VALID UNTIL` non dépassé, et le privilège `CONNECT` sur la base
 (`permission denied for database`).
 
-::: pourquoi
-Les trois messages — `Connection refused`, `no pg_hba.conf entry`,
-`password authentication failed` — situent l'échec dans l'ordre : réseau,
-règle, secret. C'est ce qui permet en entretien de dérouler un diagnostic
-sans hésiter : « refused → `listen_addresses`/pare-feu ; no entry → j'ajoute
-ou je réordonne une ligne ; auth failed → mot de passe, ou incompatibilité
-md5/scram, je regarde le `DETAIL` du journal serveur ». Et la question
-piège qui suit : « pourquoi `trust` sur localhost est-il dangereux ? » —
-parce que l'authentification n'a lieu **qu'à** cette étape ; sans elle,
-l'identité est celle que le client déclare.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois messages — `Connection refused`, `no pg_hba.conf entry`,
+> `password authentication failed` — situent l'échec dans l'ordre : réseau,
+> règle, secret. C'est ce qui permet en entretien de dérouler un diagnostic
+> sans hésiter : « refused → `listen_addresses`/pare-feu ; no entry → j'ajoute
+> ou je réordonne une ligne ; auth failed → mot de passe, ou incompatibilité
+> md5/scram, je regarde le `DETAIL` du journal serveur ». Et la question
+> piège qui suit : « pourquoi `trust` sur localhost est-il dangereux ? » —
+> parce que l'authentification n'a lieu **qu'à** cette étape ; sans elle,
+> l'identité est celle que le client déclare.
 
 ---
 
-**QO15.5** — *`pg_dump` vs `pg_basebackup` + WAL ; sauvegarde testée ; `--globals-only`.*
+<a id="qo15-5"></a>**[QO15.5](README.md#qo15-5)** — *`pg_dump` vs `pg_basebackup` + WAL ; sauvegarde testée ; `--globals-only`.*
 
 **`pg_dump`** produit une copie **logique** : des instructions SQL (ou leur
 équivalent binaire) qui recréent le schéma et rechargent les données. Ce
@@ -975,20 +1023,21 @@ où les rôles existent déjà. Sur une machine neuve, `pg_restore` échoue sur
 `role "factura_app" does not exist` — ou pire, restaure sans propriétaire
 avec `--no-owner` et l'application ne peut plus écrire.
 
-::: pourquoi
-Les deux méthodes ne sont pas concurrentes : la logique protège contre les
-erreurs (une table supprimée, une migration ratée, une montée de version)
-et permet l'archivage long terme lisible ; la physique protège contre la
-perte du serveur et donne un RPO fin. Une production sérieuse a les deux,
-et un test de restauration périodique pour chacune. L'argument d'entretien
-qui compte : « le RPO de mon `pg_dump` nocturne est de 24 h ; si le métier
-n'accepte pas de perdre une journée, il me faut l'archivage WAL, et je
-sais le mettre en place ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les deux méthodes ne sont pas concurrentes : la logique protège contre les
+> erreurs (une table supprimée, une migration ratée, une montée de version)
+> et permet l'archivage long terme lisible ; la physique protège contre la
+> perte du serveur et donne un RPO fin. Une production sérieuse a les deux,
+> et un test de restauration périodique pour chacune. L'argument d'entretien
+> qui compte : « le RPO de mon `pg_dump` nocturne est de 24 h ; si le métier
+> n'accepte pas de perdre une journée, il me faut l'archivage WAL, et je
+> sais le mettre en place ».
 
 ---
 
-**QO15.6** — *« La base est lente depuis ce matin » : cinq requêtes ; bloat, `VACUUM`, `autovacuum`.*
+<a id="qo15-6"></a>**[QO15.6](README.md#qo15-6)** — *« La base est lente depuis ce matin » : cinq requêtes ; bloat, `VACUUM`, `autovacuum`.*
 
 **Les cinq requêtes, dans l'ordre** :
 
@@ -1079,19 +1128,20 @@ facteur par table (`ALTER TABLE invoices SET (autovacuum_vacuum_scale_factor
 = 0.02);`). `SELECT * FROM pg_stat_progress_vacuum;` montre les `VACUUM` en
 cours ; `log_autovacuum_min_duration = 0` les journalise.
 
-::: pourquoi
-L'ordre des requêtes va du plus urgent (une session qui bloque tout le
-monde se règle en une commande) au plus structurel (le cache, le disque).
-Le bloat est la notion que les entretiens testent parce qu'elle est propre
-à PostgreSQL : un candidat qui sait dire « MVCC, versions mortes, `VACUUM`
-recycle sans rendre, `VACUUM FULL` verrouille » a compris pourquoi une
-table « vide » peut peser des gigaoctets et pourquoi `autovacuum` ne se
-désactive jamais.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre des requêtes va du plus urgent (une session qui bloque tout le
+> monde se règle en une commande) au plus structurel (le cache, le disque).
+> Le bloat est la notion que les entretiens testent parce qu'elle est propre
+> à PostgreSQL : un candidat qui sait dire « MVCC, versions mortes, `VACUUM`
+> recycle sans rendre, `VACUUM FULL` verrouille » a compris pourquoi une
+> table « vide » peut peser des gigaoctets et pourquoi `autovacuum` ne se
+> désactive jamais.
 
 ---
 
-**QO15.7** — *En entretien : « Redis, cache ou base ? » ; `maxmemory`, RDB/AOF, swap.*
+<a id="qo15-7"></a>**[QO15.7](README.md#qo15-7)** — *En entretien : « Redis, cache ou base ? » ; `maxmemory`, RDB/AOF, swap.*
 
 **Réponse attendue** : « Les deux, et c'est la configuration qui décide. »
 Redis est un serveur de structures de données **en mémoire** : par défaut
@@ -1142,19 +1192,20 @@ Détection : `INFO memory` avec `used_memory_rss < used_memory` (ratio
 d'autre gros consommateur sur la machine, `vm.overcommit_memory = 1` (sinon
 le `fork()` échoue), `swapoff` ou `vm.swappiness = 1`.
 
-::: pourquoi
-La question est posée pour voir si le candidat sait que Redis **ne protège
-pas les données par défaut** : sans `maxmemory` il grossit sans limite,
-avec `maxmemory` et une politique `allkeys` il jette des données sans
-prévenir, avec RDB seul il peut perdre une heure. Les projets qui mettent
-une file de travaux dans un Redis « configuré comme un cache » perdent des
-travaux, et ne s'en aperçoivent que lorsqu'un client réclame. La réponse
-attendue relie chaque réglage à ce qu'il **perd** en cas de problème.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question est posée pour voir si le candidat sait que Redis **ne protège
+> pas les données par défaut** : sans `maxmemory` il grossit sans limite,
+> avec `maxmemory` et une politique `allkeys` il jette des données sans
+> prévenir, avec RDB seul il peut perdre une heure. Les projets qui mettent
+> une file de travaux dans un Redis « configuré comme un cache » perdent des
+> travaux, et ne s'en aperçoivent que lorsqu'un client réclame. La réponse
+> attendue relie chaque réglage à ce qu'il **perd** en cas de problème.
 
 ---
 
-**QO15.8** — *Sockets Unix de PostgreSQL et Redis ; ordre de démarrage.*
+<a id="qo15-8"></a>**[QO15.8](README.md#qo15-8)** — *Sockets Unix de PostgreSQL et Redis ; ordre de démarrage.*
 
 **PostgreSQL** ouvre `/run/postgresql/.s.PGSQL.5432` avec le mode **`0777`**
 (`unix_socket_permissions`, défaut `0777`) dans un répertoire `postgres:
@@ -1207,19 +1258,20 @@ des **machines** n'est pas maîtrisé ; c'est l'application qui doit
 prête. Un `ExecStartPre=` qui attend le port (`pg_isready -h 10.10.10.12
 -t 3` en boucle) est un compromis courant.
 
-::: pourquoi
-Les deux sockets illustrent deux philosophies de sécurité : PostgreSQL
-authentifie l'identité (le transport est ouvert, `pg_hba` décide), Redis
-protège le transport (la socket est fermée, celui qui y accède est de
-confiance). Confondre les deux mène à des erreurs symétriques : mettre
-`unix_socket_permissions = 0700` sur PostgreSQL casse toutes les
-applications locales sans rien sécuriser de plus ; laisser la socket Redis
-en `777` donne l'administration de Redis à tout processus de la machine.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les deux sockets illustrent deux philosophies de sécurité : PostgreSQL
+> authentifie l'identité (le transport est ouvert, `pg_hba` décide), Redis
+> protège le transport (la socket est fermée, celui qui y accède est de
+> confiance). Confondre les deux mène à des erreurs symétriques : mettre
+> `unix_socket_permissions = 0700` sur PostgreSQL casse toutes les
+> applications locales sans rien sécuriser de plus ; laisser la socket Redis
+> en `777` donne l'administration de Redis à tout processus de la machine.
 
 ---
 
-**QO15.9** — *Fiche d'entretien : cinq choses par composant.*
+<a id="qo15-9"></a>**[QO15.9](README.md#qo15-9)** — *Fiche d'entretien : cinq choses par composant.*
 
 **nginx**
 
@@ -1293,21 +1345,22 @@ en `777` donne l'administration de Redis à tout processus de la machine.
    copier `dump.rdb` après `BGSAVE`. Haute disponibilité : réplication +
    Sentinel ; partitionnement : Cluster.
 
-::: pourquoi
-Une bonne fiche d'entretien n'est pas un résumé de documentation : elle
-donne pour chaque composant **un fichier, une commande, une panne, une
-métrique**. L'interlocuteur cherche des signes de pratique : quelqu'un qui
-dit « `pg_stat_activity` et `idle in transaction` », « `nginx -t` avant
-`reload` », « `evicted_keys` et `noeviction` », a exploité ces services.
-Quelqu'un qui dit « très performant » et « facile à configurer » ne les a
-pas exploités.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une bonne fiche d'entretien n'est pas un résumé de documentation : elle
+> donne pour chaque composant **un fichier, une commande, une panne, une
+> métrique**. L'interlocuteur cherche des signes de pratique : quelqu'un qui
+> dit « `pg_stat_activity` et `idle in transaction` », « `nginx -t` avant
+> `reload` », « `evicted_keys` et `noeviction` », a exploité ces services.
+> Quelqu'un qui dit « très performant » et « facile à configurer » ne les a
+> pas exploités.
 
 ---
 
 ## 15.5 Exercices guidés
 
-**E15.1** — *En-têtes seuls de `/api/health` sur 8001 ; code + temps de cinq requêtes `/api/slow?s=1`.*
+<a id="e15-1"></a>**[E15.1](README.md#e15-1)** — *En-têtes seuls de `/api/health` sur 8001 ; code + temps de cinq requêtes `/api/slow?s=1`.*
 
 ```bash
 curl -sI http://127.0.0.1:8001/api/health
@@ -1318,23 +1371,24 @@ for i in 1 2 3 4 5; do
 done
 ```
 
-::: pourquoi
-`-I` envoie une requête `HEAD` : le serveur renvoie les en-têtes sans le
-corps. Attention, certains backends ne gèrent pas `HEAD` et répondent 501
-ou 405 (la mini-API le gère) ; dans ce cas `-s -D - -o /dev/null` fait un
-`GET` en affichant les en-têtes (`-D -` = *dump headers* sur la sortie
-standard) et jette le corps. `-w` formate des variables après la
-requête : `%{http_code}`, `%{time_total}`, `%{time_connect}`,
-`%{time_starttransfer}` (temps jusqu'au premier octet — c'est le temps
-backend), `%{size_download}`, `%{remote_ip}`. C'est le plus petit outil de
-mesure de latence qui existe, et il suffit dans 80 % des diagnostics.
-`X-Backend-Instance` est ajouté par la mini-API : derrière nginx, il te dira
-quelle instance a répondu sans ouvrir les journaux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-I` envoie une requête `HEAD` : le serveur renvoie les en-têtes sans le
+> corps. Attention, certains backends ne gèrent pas `HEAD` et répondent 501
+> ou 405 (la mini-API le gère) ; dans ce cas `-s -D - -o /dev/null` fait un
+> `GET` en affichant les en-têtes (`-D -` = *dump headers* sur la sortie
+> standard) et jette le corps. `-w` formate des variables après la
+> requête : `%{http_code}`, `%{time_total}`, `%{time_connect}`,
+> `%{time_starttransfer}` (temps jusqu'au premier octet — c'est le temps
+> backend), `%{size_download}`, `%{remote_ip}`. C'est le plus petit outil de
+> mesure de latence qui existe, et il suffit dans 80 % des diagnostics.
+> `X-Backend-Instance` est ajouté par la mini-API : derrière nginx, il te dira
+> quelle instance a répondu sans ouvrir les journaux.
 
 ---
 
-**E15.2** — *Conf effective, nombre de `server`, et la ligne qui explique `sites-available`.*
+<a id="e15-2"></a>**[E15.2](README.md#e15-2)** — *Conf effective, nombre de `server`, et la ligne qui explique `sites-available`.*
 
 ```bash
 sudo nginx -T 2>/dev/null | grep -c '^\s*server\s*{'
@@ -1344,27 +1398,28 @@ grep -n 'sites-enabled' /etc/nginx/nginx.conf
 #   include /etc/nginx/sites-enabled/*;
 ```
 
-::: pourquoi
-`nginx -T` (majuscule) valide **et** affiche la configuration telle que le
-maître la lit : chaque `include` résolu, chaque fichier précédé de
-`# configuration file /etc/nginx/...:`. C'est la seule vue fiable quand la
-configuration est éclatée en dix fichiers : on y voit les doublons de
-`server_name`, les `add_header` qui s'annulent, les `upstream` définis deux
-fois. Le `2>/dev/null` masque les deux lignes de `-t` (`syntax is ok`, `test
-is successful`) qui partent sur stderr.
-
-`nginx.conf` n'inclut que `sites-enabled/*` : `sites-available/` est une
-convention Debian, un simple dépôt de fichiers que nginx ignore. Le lien
-symbolique dans `sites-enabled/` **est** l'activation. Cette séparation
-permet de désactiver un site sans le supprimer (`rm` du lien) et de
-préparer un site sans le servir. Sur Rocky, cette convention n'existe pas :
-tout ce qui est dans `conf.d/*.conf` est chargé, et on désactive en
-renommant en `.conf.disabled`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `nginx -T` (majuscule) valide **et** affiche la configuration telle que le
+> maître la lit : chaque `include` résolu, chaque fichier précédé de
+> `# configuration file /etc/nginx/...:`. C'est la seule vue fiable quand la
+> configuration est éclatée en dix fichiers : on y voit les doublons de
+> `server_name`, les `add_header` qui s'annulent, les `upstream` définis deux
+> fois. Le `2>/dev/null` masque les deux lignes de `-t` (`syntax is ok`, `test
+> is successful`) qui partent sur stderr.
+>
+> `nginx.conf` n'inclut que `sites-enabled/*` : `sites-available/` est une
+> convention Debian, un simple dépôt de fichiers que nginx ignore. Le lien
+> symbolique dans `sites-enabled/` **est** l'activation. Cette séparation
+> permet de désactiver un site sans le supprimer (`rm` du lien) et de
+> préparer un site sans le servir. Sur Rocky, cette convention n'existe pas :
+> tout ce qui est dans `conf.d/*.conf` est chargé, et on désactive en
+> renommant en `.conf.disabled`.
 
 ---
 
-**E15.3** — *Vhost `factura-demo.lab.local` sur 80, `default` désactivé, test par `Host`, `Host` inconnu.*
+<a id="e15-3"></a>**[E15.3](README.md#e15-3)** — *Vhost `factura-demo.lab.local` sur 80, `default` désactivé, test par `Host`, `Host` inconnu.*
 
 ```nginx
 # /etc/nginx/sites-available/factura-demo
@@ -1392,28 +1447,29 @@ curl -sI http://factura-demo.lab.local/
 Avec un `Host` inconnu, nginx sert **quand même** ce vhost : c'est le seul
 sur `listen 80`, donc il est `default_server` implicite.
 
-::: pourquoi
-nginx choisit le `server` en deux temps : d'abord par `listen` (adresse et
-port), puis, parmi les candidats, par `server_name` comparé à l'en-tête
-`Host`. Si aucun `server_name` ne correspond, il prend le serveur marqué
-`default_server` sur ce `listen`, ou **le premier déclaré** en son absence.
-Avant ta modification, le site `default` du paquet (marqué
-`default_server`) répondait aux requêtes sans `Host` connu ; après, c'est
-ton vhost. En production, on garde un serveur par défaut explicite qui
-répond `444` (fermeture sans réponse) ou `404` : `server { listen 80
-default_server; server_name _; return 444; }` — sinon le premier client
-qui tape l'IP tombe sur le vhost qui se trouve être premier par ordre
-alphabétique, et un scanner voit ton application sous un mauvais nom.
-
-`-H 'Host: ...'` est la façon de tester un vhost **avant** de toucher au
-DNS ou à `/etc/hosts` — et de vérifier après une migration que le nouveau
-serveur répond bien pour ce nom. `--resolve nom:port:ip` fait la même chose
-en HTTPS, où `Host` seul ne suffit pas (le SNI doit aussi correspondre).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> nginx choisit le `server` en deux temps : d'abord par `listen` (adresse et
+> port), puis, parmi les candidats, par `server_name` comparé à l'en-tête
+> `Host`. Si aucun `server_name` ne correspond, il prend le serveur marqué
+> `default_server` sur ce `listen`, ou **le premier déclaré** en son absence.
+> Avant ta modification, le site `default` du paquet (marqué
+> `default_server`) répondait aux requêtes sans `Host` connu ; après, c'est
+> ton vhost. En production, on garde un serveur par défaut explicite qui
+> répond `444` (fermeture sans réponse) ou `404` : `server { listen 80
+> default_server; server_name _; return 444; }` — sinon le premier client
+> qui tape l'IP tombe sur le vhost qui se trouve être premier par ordre
+> alphabétique, et un scanner voit ton application sous un mauvais nom.
+>
+> `-H 'Host: ...'` est la façon de tester un vhost **avant** de toucher au
+> DNS ou à `/etc/hosts` — et de vérifier après une migration que le nouveau
+> serveur répond bien pour ce nom. `--resolve nom:port:ip` fait la même chose
+> en HTTPS, où `Host` seul ne suffit pas (le SNI doit aussi correspondre).
 
 ---
 
-**E15.4** — *Trois locations avec `X-Location`, preuve par `curl -sI`, puis `alias` → `root`.*
+<a id="e15-4"></a>**[E15.4](README.md#e15-4)** — *Trois locations avec `X-Location`, preuve par `curl -sI`, puis `alias` → `root`.*
 
 ```nginx
     location / {
@@ -1445,32 +1501,34 @@ répond 404 et `error.log` montre : `open()
 "/srv/www/factura-demo/docs/docs/index.html" failed (2: No such file or
 directory)`.
 
-::: pourquoi
-Le tag `X-Location` est la méthode de preuve la plus rapide : elle montre
-quel bloc a **réellement** traité chaque URI, sans interpréter la règle de
-tête. `/static/app.js` tombe dans `/` parce qu'aucune location `/static/`
-n'existe — le préfixe le plus long qui correspond est `/`. `/docs/index.html`
-tombe dans `/docs/` et non dans `/` : entre deux préfixes qui
-correspondent, le plus long gagne, quel que soit l'ordre dans le fichier.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le tag `X-Location` est la méthode de preuve la plus rapide : elle montre
+> quel bloc a **réellement** traité chaque URI, sans interpréter la règle de
+> tête. `/static/app.js` tombe dans `/` parce qu'aucune location `/static/`
+> n'existe — le préfixe le plus long qui correspond est `/`. `/docs/index.html`
+> tombe dans `/docs/` et non dans `/` : entre deux préfixes qui
+> correspondent, le plus long gagne, quel que soit l'ordre dans le fichier.
+>
+> Le passage `alias` → `root` illustre la concaténation : `root` + URI
+> complète = `/srv/www/factura-demo/docs/` + `/docs/index.html`. Le chemin
+> tenté est écrit tel quel dans `error.log` : lire ce chemin suffit, on n'a
+> pas besoin de « comprendre » la conf pour trouver la faute. Note que
+> `index index.html` hérité du `server` fait que `/docs/` cherche
+> `index.html` dans le répertoire résolu.
 
-Le passage `alias` → `root` illustre la concaténation : `root` + URI
-complète = `/srv/www/factura-demo/docs/` + `/docs/index.html`. Le chemin
-tenté est écrit tel quel dans `error.log` : lire ce chemin suffit, on n'a
-pas besoin de « comprendre » la conf pour trouver la faute. Note que
-`index index.html` hérité du `server` fait que `/docs/` cherche
-`index.html` dans le répertoire résolu.
-:::
-
-::: piege
-Le `add_header` posé dans `location /api/` désactive l'héritage des
-`add_header` du `server` (Q15.7). Ici il n'y en a pas encore ; quand tu
-ajouteras HSTS en L15.2, pense à retirer ces tags de diagnostic ou à
-utiliser un `include` commun.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le `add_header` posé dans `location /api/` désactive l'héritage des
+> `add_header` du `server` (Q15.7). Ici il n'y en a pas encore ; quand tu
+> ajouteras HSTS en L15.2, pense à retirer ces tags de diagnostic ou à
+> utiliser un `include` commun.
 
 ---
 
-**E15.5** — *`proxy_pass` avec et sans URI finale ; `Host` et `X-Forwarded-For` reçus.*
+<a id="e15-5"></a>**[E15.5](README.md#e15-5)** — *`proxy_pass` avec et sans URI finale ; `Host` et `X-Forwarded-For` reçus.*
 
 ```bash
 curl -s http://factura-demo.lab.local/api/whoami | jq '{path, headers}'
@@ -1506,29 +1564,30 @@ Correction des en-têtes :
                "X-Forwarded-Proto": "http", "X-Real-IP": "10.10.10.10" } }
 ```
 
-::: pourquoi
-Par défaut, nginx réécrit deux en-têtes en les envoyant à l'upstream :
-`Host` devient `$proxy_host` (l'hôte de `proxy_pass`, ici `127.0.0.1:8001`)
-et `Connection` devient `close` (une connexion par requête). Tout le reste
-est transmis tel quel. Le backend ne voit donc **ni le nom demandé par le
-client, ni son adresse** — il voit `127.0.0.1` comme source TCP et
-`127.0.0.1:8001` comme `Host`. Une application qui construit des URL
-absolues (redirections après login, liens dans un e-mail) les construit
-alors avec `127.0.0.1:8001`.
-
-`$proxy_add_x_forwarded_for` = la valeur reçue de `X-Forwarded-For` (si le
-client ou un proxy amont en avait mis une), virgule, `$remote_addr`. C'est
-une **liste** : le dernier élément est celui qu'on peut croire (posé par
-nous), les précédents sont déclaratifs. `$remote_addr` dans `X-Real-IP` est
-la version simple, une seule valeur, celle que nginx a vue. Le backend ne
-doit faire confiance à ces en-têtes que s'il n'est joignable que par ce
-nginx (d'où le `bind 127.0.0.1` de la mini-API et de Gunicorn) : un client
-qui parle directement au backend peut y écrire ce qu'il veut.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Par défaut, nginx réécrit deux en-têtes en les envoyant à l'upstream :
+> `Host` devient `$proxy_host` (l'hôte de `proxy_pass`, ici `127.0.0.1:8001`)
+> et `Connection` devient `close` (une connexion par requête). Tout le reste
+> est transmis tel quel. Le backend ne voit donc **ni le nom demandé par le
+> client, ni son adresse** — il voit `127.0.0.1` comme source TCP et
+> `127.0.0.1:8001` comme `Host`. Une application qui construit des URL
+> absolues (redirections après login, liens dans un e-mail) les construit
+> alors avec `127.0.0.1:8001`.
+>
+> `$proxy_add_x_forwarded_for` = la valeur reçue de `X-Forwarded-For` (si le
+> client ou un proxy amont en avait mis une), virgule, `$remote_addr`. C'est
+> une **liste** : le dernier élément est celui qu'on peut croire (posé par
+> nous), les précédents sont déclaratifs. `$remote_addr` dans `X-Real-IP` est
+> la version simple, une seule valeur, celle que nginx a vue. Le backend ne
+> doit faire confiance à ces en-têtes que s'il n'est joignable que par ce
+> nginx (d'où le `bind 127.0.0.1` de la mini-API et de Gunicorn) : un client
+> qui parle directement au backend peut y écrire ce qu'il veut.
 
 ---
 
-**E15.6** — *`upstream` à deux instances, `log_format` avec temps, 10 requêtes, instance arrêtée.*
+<a id="e15-6"></a>**[E15.6](README.md#e15-6)** — *`upstream` à deux instances, `log_format` avec temps, 10 requêtes, instance arrêtée.*
 
 ```nginx
 # /etc/nginx/conf.d/factura-upstream.conf
@@ -1572,35 +1631,36 @@ sudo grep -oE 'ua=[^ ]+(, [^ ]+)*' /var/log/nginx/factura.access.log | tail -3
 sudo systemctl start mini-api@8002
 ```
 
-::: pourquoi
-Un `upstream` sans directive d'équilibrage fait du **round-robin pondéré**
-(poids 1 par défaut) : les requêtes alternent. `$upstream_addr` dans le
-journal est la preuve — et quand nginx a dû essayer plusieurs serveurs pour
-une même requête, la variable contient **toutes** les adresses tentées,
-séparées par des virgules, dans l'ordre ; `$upstream_status` et
-`$upstream_response_time` sont des listes parallèles.
-
-Quand 8002 refuse la connexion, `proxy_next_upstream` (par défaut `error
-timeout`) fait retenter la requête sur le serveur suivant : l'utilisateur
-reçoit un 200, seul `error.log` trahit la panne. Après `max_fails` échecs
-(1 par défaut) en `fail_timeout` (10 s), nginx marque le serveur
-indisponible pendant 10 s et ne l'essaie plus, puis le retente. Ce
-comportement est excellent pour la disponibilité et terrible pour la
-supervision si on ne regarde que les codes HTTP : la métrique à surveiller
-est le nombre de lignes `connect() failed` dans `error.log` ou, avec
-l'exporter, `nginx_upstream_server_health`. C'est pourquoi le défi D15
-demande de vérifier que **les deux** instances ont servi du trafic.
-
-`keepalive 16` garde jusqu'à 16 connexions inactives ouvertes vers
-l'upstream par worker ; il n'a d'effet que si `proxy_http_version 1.1` et
-`proxy_set_header Connection ""` sont posés (sinon nginx envoie
-`Connection: close` et le backend ferme). Le gain : pas de poignée de main
-TCP par requête, et moins de ports en `TIME_WAIT`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un `upstream` sans directive d'équilibrage fait du **round-robin pondéré**
+> (poids 1 par défaut) : les requêtes alternent. `$upstream_addr` dans le
+> journal est la preuve — et quand nginx a dû essayer plusieurs serveurs pour
+> une même requête, la variable contient **toutes** les adresses tentées,
+> séparées par des virgules, dans l'ordre ; `$upstream_status` et
+> `$upstream_response_time` sont des listes parallèles.
+>
+> Quand 8002 refuse la connexion, `proxy_next_upstream` (par défaut `error
+> timeout`) fait retenter la requête sur le serveur suivant : l'utilisateur
+> reçoit un 200, seul `error.log` trahit la panne. Après `max_fails` échecs
+> (1 par défaut) en `fail_timeout` (10 s), nginx marque le serveur
+> indisponible pendant 10 s et ne l'essaie plus, puis le retente. Ce
+> comportement est excellent pour la disponibilité et terrible pour la
+> supervision si on ne regarde que les codes HTTP : la métrique à surveiller
+> est le nombre de lignes `connect() failed` dans `error.log` ou, avec
+> l'exporter, `nginx_upstream_server_health`. C'est pourquoi le défi D15
+> demande de vérifier que **les deux** instances ont servi du trafic.
+>
+> `keepalive 16` garde jusqu'à 16 connexions inactives ouvertes vers
+> l'upstream par worker ; il n'a d'effet que si `proxy_http_version 1.1` et
+> `proxy_set_header Connection ""` sont posés (sinon nginx envoie
+> `Connection: close` et le backend ferme). Le gain : pas de poignée de main
+> TCP par requête, et moins de ports en `TIME_WAIT`.
 
 ---
 
-**E15.7** — *HTTPS : certificat, `listen 443 ssl http2`, TLS 1.2/1.3, HSTS, 301 depuis 80, vérification.*
+<a id="e15-7"></a>**[E15.7](README.md#e15-7)** — *HTTPS : certificat, `listen 443 ssl http2`, TLS 1.2/1.3, HSTS, 301 depuis 80, vérification.*
 
 ```bash
 sudo install -d -m 0750 -o root -g root /etc/nginx/ssl
@@ -1651,45 +1711,47 @@ openssl s_client -connect 10.10.10.11:443 -servername factura-demo.lab.local \
   | openssl x509 -noout -subject -dates -ext subjectAltName
 ```
 
-::: pourquoi
-Deux blocs `server` : le port 80 ne fait **que** rediriger (aucun `root`,
-aucune location — c'est ce qui rend la boucle de Q15.6 impossible), le 443
-sert. `$host` plutôt que `$server_name` dans la redirection : si le vhost
-répond à plusieurs noms, on redirige vers celui que le client a demandé.
-`$request_uri` (l'URI brute avec la chaîne de requête) plutôt que `$uri`
-(normalisée, sans paramètres) pour ne rien perdre.
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux blocs `server` : le port 80 ne fait **que** rediriger (aucun `root`,
+> aucune location — c'est ce qui rend la boucle de Q15.6 impossible), le 443
+> sert. `$host` plutôt que `$server_name` dans la redirection : si le vhost
+> répond à plusieurs noms, on redirige vers celui que le client a demandé.
+> `$request_uri` (l'URI brute avec la chaîne de requête) plutôt que `$uri`
+> (normalisée, sans paramètres) pour ne rien perdre.
+>
+> `http2` sur `listen` (syntaxe nginx ≤ 1.24 ; `http2 on;` séparé depuis
+> 1.25.1) : nginx annonce `h2` par ALPN pendant la poignée de main TLS ; le
+> client qui le supporte l'utilise, les autres restent en HTTP/1.1 sur la
+> même socket. Côté backend rien ne change. `ssl_prefer_server_ciphers off`
+> est la recommandation actuelle : laisser le client choisir parmi des suites
+> toutes sûres (en TLS 1.3 la question ne se pose plus). `ssl_session_cache`
+> évite une poignée de main complète à chaque reconnexion ; `ssl_session_tickets
+> off` parce que les tickets, chiffrés avec une clé que nginx ne fait pas
+> tourner seul, affaiblissent la *forward secrecy*.
+>
+> HSTS (`max-age` en secondes ; 15 768 000 = six mois, un an minimum pour la
+> liste de préchargement) dit au navigateur : « pendant ce temps, ne me
+> contacte plus jamais en HTTP ». `always` l'ajoute aussi aux erreurs. Le
+> piège : une fois HSTS reçu, un certificat invalide n'est **plus
+> contournable** par l'utilisateur (« continuer quand même » disparaît). On
+> ne pose HSTS qu'une fois le certificat en ordre, et on commence avec un
+> `max-age` court.
 
-`http2` sur `listen` (syntaxe nginx ≤ 1.24 ; `http2 on;` séparé depuis
-1.25.1) : nginx annonce `h2` par ALPN pendant la poignée de main TLS ; le
-client qui le supporte l'utilise, les autres restent en HTTP/1.1 sur la
-même socket. Côté backend rien ne change. `ssl_prefer_server_ciphers off`
-est la recommandation actuelle : laisser le client choisir parmi des suites
-toutes sûres (en TLS 1.3 la question ne se pose plus). `ssl_session_cache`
-évite une poignée de main complète à chaque reconnexion ; `ssl_session_tickets
-off` parce que les tickets, chiffrés avec une clé que nginx ne fait pas
-tourner seul, affaiblissent la *forward secrecy*.
-
-HSTS (`max-age` en secondes ; 15 768 000 = six mois, un an minimum pour la
-liste de préchargement) dit au navigateur : « pendant ce temps, ne me
-contacte plus jamais en HTTP ». `always` l'ajoute aussi aux erreurs. Le
-piège : une fois HSTS reçu, un certificat invalide n'est **plus
-contournable** par l'utilisateur (« continuer quand même » disparaît). On
-ne pose HSTS qu'une fois le certificat en ordre, et on commence avec un
-`max-age` court.
-:::
-
-::: piege
-`-addext subjectAltName` est indispensable depuis 2017 : Chrome, Firefox et
-`curl` ignorent le `CN` et n'acceptent que les SAN. Un certificat sans SAN
-donne `curl: (60) SSL: no alternative certificate subject name matches`
-même si le `CN` est bon. Et la clé en `0600 root` : nginx lit les
-certificats **en root** au démarrage avant de passer à `www-data`, la clé
-n'a donc jamais besoin d'être lisible par `www-data`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `-addext subjectAltName` est indispensable depuis 2017 : Chrome, Firefox et
+> `curl` ignorent le `CN` et n'acceptent que les SAN. Un certificat sans SAN
+> donne `curl: (60) SSL: no alternative certificate subject name matches`
+> même si le `CN` est bon. Et la clé en `0600 root` : nginx lit les
+> certificats **en root** au démarrage avant de passer à `www-data`, la clé
+> n'a donc jamais besoin d'être lisible par `www-data`.
 
 ---
 
-**E15.8** — *`limit_req` sur `/api/login`, `auth_basic` sur `/docs/`, `allow/deny` sur `/api/metrics`.*
+<a id="e15-8"></a>**[E15.8](README.md#e15-8)** — *`limit_req` sur `/api/login`, `auth_basic` sur `/docs/`, `allow/deny` sur `/api/metrics`.*
 
 ```nginx
 # conf.d/factura-upstream.conf (contexte http)
@@ -1727,35 +1789,36 @@ curl -sI -u ops:secret http://factura-demo.lab.local/docs/ | head -1   # 200
 curl -sI http://factura-demo.lab.local/api/metrics | head -1   # lab-adm : 403
 ```
 
-::: pourquoi
-Les trois mécanismes agissent à des phases différentes du traitement :
-
-* `limit_req` : phase *preaccess*, avant toute autre chose. La zone est un
-  segment de mémoire partagée entre workers (`10m` ≈ 160 000 adresses en
-  IPv4) indexé sur la clé — `$binary_remote_addr` (4 octets) plutôt que
-  `$remote_addr` (chaîne, 15 octets) pour économiser la zone. Le rejet
-  ne touche jamais le backend.
-* `auth_basic` : phase *access*. nginx exige `Authorization: Basic
-  base64(user:mdp)`, compare au fichier (bcrypt, `-B`, résiste aux attaques
-  hors ligne contrairement au MD5 historique). Le fichier est lu par les
-  workers, donc lisible par `www-data` mais pas par tous (`0640
-  root:www-data`), et **hors** de `root` — sinon il est téléchargeable.
-  Sans TLS, Basic transmet le mot de passe en clair : c'est un complément
-  de L15.2, pas un substitut.
-* `allow`/`deny` : phase *access* aussi, évalués **dans l'ordre**, premier
-  qui correspond gagne — `deny all` doit donc être en dernier. Le
-  `X-Forwarded-For` n'entre pas en jeu : c'est l'adresse source TCP
-  (`$remote_addr`) qui est testée, sauf avec le module `realip`.
-
-`location = /api/login` en exact : la requête ne parcourt pas les regex,
-et `/api/login/autre` n'est pas concerné. C'est une location **sœur** de `/api/`, pas une location imbriquée : elle n'hérite de rien de
-`/api/`, et ses propres `proxy_set_header` annulent ceux d'un éventuel niveau `server` (même règle que `add_header`) : soit on les répète, soit on les
-place dans un `snippets/proxy-factura.conf` inclus partout.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois mécanismes agissent à des phases différentes du traitement :
+>
+> * `limit_req` : phase *preaccess*, avant toute autre chose. La zone est un
+>   segment de mémoire partagée entre workers (`10m` ≈ 160 000 adresses en
+>   IPv4) indexé sur la clé — `$binary_remote_addr` (4 octets) plutôt que
+>   `$remote_addr` (chaîne, 15 octets) pour économiser la zone. Le rejet
+>   ne touche jamais le backend.
+> * `auth_basic` : phase *access*. nginx exige `Authorization: Basic
+>   base64(user:mdp)`, compare au fichier (bcrypt, `-B`, résiste aux attaques
+>   hors ligne contrairement au MD5 historique). Le fichier est lu par les
+>   workers, donc lisible par `www-data` mais pas par tous (`0640
+>   root:www-data`), et **hors** de `root` — sinon il est téléchargeable.
+>   Sans TLS, Basic transmet le mot de passe en clair : c'est un complément
+>   de L15.2, pas un substitut.
+> * `allow`/`deny` : phase *access* aussi, évalués **dans l'ordre**, premier
+>   qui correspond gagne — `deny all` doit donc être en dernier. Le
+>   `X-Forwarded-For` n'entre pas en jeu : c'est l'adresse source TCP
+>   (`$remote_addr`) qui est testée, sauf avec le module `realip`.
+>
+> `location = /api/login` en exact : la requête ne parcourt pas les regex,
+> et `/api/login/autre` n'est pas concerné. C'est une location **sœur** de `/api/`, pas une location imbriquée : elle n'hérite de rien de
+> `/api/`, et ses propres `proxy_set_header` annulent ceux d'un éventuel niveau `server` (même règle que `add_header`) : soit on les répète, soit on les
+> place dans un `snippets/proxy-factura.conf` inclus partout.
 
 ---
 
-**E15.9** — *`psql` : bases et tailles, rôles, tables, `\d+ invoices`, `\x`, `\timing`, requête lente.*
+<a id="e15-9"></a>**[E15.9](README.md#e15-9)** — *`psql` : bases et tailles, rôles, tables, `\d+ invoices`, `\x`, `\timing`, requête lente.*
 
 ```bash
 sudo -u postgres psql
@@ -1777,27 +1840,28 @@ sudo -u postgres psql
 En une ligne, pour un script :
 `sudo -u postgres psql -d factura_demo -Atc "SELECT pg_size_pretty(pg_database_size('factura_demo'))"`.
 
-::: pourquoi
-Les méta-commandes `\` sont exécutées par `psql` **côté client** : elles se
-traduisent en requêtes sur le catalogue (`pg_database`, `pg_roles`,
-`pg_class`, `pg_attribute`, `pg_index`) ; `psql -E` affiche ces requêtes
-sous-jacentes, ce qui est la meilleure façon d'apprendre le catalogue.
-Le `+` demande les colonnes supplémentaires (taille, description). `\d+
-invoices` révèle ce qu'un `SELECT` ne dit pas : il n'existe **aucun index**
-sur `customer_id` — seule la clé primaire `invoices_pkey` est indexée, et
-la contrainte `FOREIGN KEY (customer_id)` n'en crée pas un automatiquement
-(contrairement à MySQL).
-
-`\x` bascule en affichage vertical, indispensable sur `pg_stat_activity`
-ou `\d+` d'une table large ; `\x auto` ne le fait que si la ligne est trop
-large. `\timing` mesure côté client (aller-retour inclus), ce qui est ce
-que l'application subit. `-A` (non aligné) `-t` (sans en-tête) `-c` sont
-la combinaison pour les scripts : une valeur, rien d'autre.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les méta-commandes `\` sont exécutées par `psql` **côté client** : elles se
+> traduisent en requêtes sur le catalogue (`pg_database`, `pg_roles`,
+> `pg_class`, `pg_attribute`, `pg_index`) ; `psql -E` affiche ces requêtes
+> sous-jacentes, ce qui est la meilleure façon d'apprendre le catalogue.
+> Le `+` demande les colonnes supplémentaires (taille, description). `\d+
+> invoices` révèle ce qu'un `SELECT` ne dit pas : il n'existe **aucun index**
+> sur `customer_id` — seule la clé primaire `invoices_pkey` est indexée, et
+> la contrainte `FOREIGN KEY (customer_id)` n'en crée pas un automatiquement
+> (contrairement à MySQL).
+>
+> `\x` bascule en affichage vertical, indispensable sur `pg_stat_activity`
+> ou `\d+` d'une table large ; `\x auto` ne le fait que si la ligne est trop
+> large. `\timing` mesure côté client (aller-retour inclus), ce qui est ce
+> que l'application subit. `-A` (non aligné) `-t` (sans en-tête) `-c` sont
+> la combinaison pour les scripts : une valeur, rien d'autre.
 
 ---
 
-**E15.10** — *`EXPLAIN (ANALYZE, BUFFERS)`, index `CONCURRENTLY`, comparaison, `pg_stat_user_tables`.*
+<a id="e15-10"></a>**[E15.10](README.md#e15-10)** — *`EXPLAIN (ANALYZE, BUFFERS)`, index `CONCURRENTLY`, comparaison, `pg_stat_user_tables`.*
 
 ```sql
 EXPLAIN (ANALYZE, BUFFERS)
@@ -1855,34 +1919,35 @@ SELECT indexrelname, idx_scan FROM pg_stat_user_indexes
  WHERE relname = 'invoice_lines';
 ```
 
-::: pourquoi
-La lecture d'un plan se fait **de l'intérieur vers l'extérieur** et en
-suivant `loops` : un nœud à 159 ms exécuté 18 fois coûte 2,9 s. Les
-colonnes `actual time` sont cumulées par nœud parent, `rows` est par
-boucle. `Rows Removed by Filter` est l'indicateur d'index manquant ; sur
-le nœud `customers` c'est 4 999 lignes pour en garder une — un index sur
-`email` est justifié aussi, même si son gain absolu est faible ici.
-
-`CREATE INDEX CONCURRENTLY` fait deux passes sur la table et attend la fin
-des transactions en cours, sans jamais bloquer les écritures ; il ne peut
-pas s'exécuter dans une transaction, et s'il échoue il laisse un index
-`INVALID` (visible dans `\d`, à supprimer et refaire). Sans `CONCURRENTLY`,
-le verrou `SHARE` bloque `INSERT`/`UPDATE`/`DELETE` pendant la
-construction — quelques secondes ici, des minutes sur des dizaines de
-millions de lignes.
-
-Pourquoi le planificateur ne trouvait-il pas mieux ? Il choisit le meilleur
-plan **parmi les possibles** : sans index, le seul accès à `invoice_lines`
-par `invoice_id` est le parcours complet. Les statistiques étaient bonnes
-(estimations proches du réel) : ce n'est pas un problème d'`ANALYZE`, c'est
-un problème de structure. C'est la distinction à faire en entretien entre
-« mauvais plan » (statistiques, `work_mem`, paramètres du planificateur) et
-« pas de bon plan possible » (schéma, index).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La lecture d'un plan se fait **de l'intérieur vers l'extérieur** et en
+> suivant `loops` : un nœud à 159 ms exécuté 18 fois coûte 2,9 s. Les
+> colonnes `actual time` sont cumulées par nœud parent, `rows` est par
+> boucle. `Rows Removed by Filter` est l'indicateur d'index manquant ; sur
+> le nœud `customers` c'est 4 999 lignes pour en garder une — un index sur
+> `email` est justifié aussi, même si son gain absolu est faible ici.
+>
+> `CREATE INDEX CONCURRENTLY` fait deux passes sur la table et attend la fin
+> des transactions en cours, sans jamais bloquer les écritures ; il ne peut
+> pas s'exécuter dans une transaction, et s'il échoue il laisse un index
+> `INVALID` (visible dans `\d`, à supprimer et refaire). Sans `CONCURRENTLY`,
+> le verrou `SHARE` bloque `INSERT`/`UPDATE`/`DELETE` pendant la
+> construction — quelques secondes ici, des minutes sur des dizaines de
+> millions de lignes.
+>
+> Pourquoi le planificateur ne trouvait-il pas mieux ? Il choisit le meilleur
+> plan **parmi les possibles** : sans index, le seul accès à `invoice_lines`
+> par `invoice_id` est le parcours complet. Les statistiques étaient bonnes
+> (estimations proches du réel) : ce n'est pas un problème d'`ANALYZE`, c'est
+> un problème de structure. C'est la distinction à faire en entretien entre
+> « mauvais plan » (statistiques, `work_mem`, paramètres du planificateur) et
+> « pas de bon plan possible » (schéma, index).
 
 ---
 
-**E15.11** — *Requêtes actives et durée, annuler la plus ancienne ; bloqueur de `verrou-demo.sh`.*
+<a id="e15-11"></a>**[E15.11](README.md#e15-11)** — *Requêtes actives et durée, annuler la plus ancienne ; bloqueur de `verrou-demo.sh`.*
 
 ```bash
 /opt/factura/bin/charge-sql.sh 3 120 &
@@ -1918,34 +1983,35 @@ SELECT pg_terminate_backend(6118);
 -- le terminal 3 obtient UPDATE 1 immédiatement
 ```
 
-::: pourquoi
-`pg_cancel_backend(pid)` envoie `SIGINT` au processus serveur : la requête
-en cours est annulée (`ERROR: canceling statement due to user request`),
-la session survit et, si elle était dans une transaction, celle-ci est
-annulée. `pg_terminate_backend(pid)` envoie `SIGTERM` : la session est
-fermée, le client reçoit `FATAL: terminating connection due to
-administrator command`. Le premier est la réponse à « cette requête est
-trop longue », le second à « cette session ne devrait pas exister ». Les
-deux exigent d'être superuser ou membre de `pg_signal_backend` (ou de
-posséder la session).
-
-Dans l'exemple du verrou, le bloqueur est `active` (il exécute
-`pg_sleep`), ce qui est artificiel : dans la vraie vie il est `idle in
-transaction` — un `UPDATE` fait, puis plus rien, la transaction jamais
-validée. C'est ce que `pg_blocking_pids()` (PG 9.6+) rend trivial à
-trouver ; avant, il fallait la fameuse jointure `pg_locks` ⋈ `pg_locks`
-sur `granted = false`. `pg_locks` reste utile pour voir **quel** verrou :
-`RowExclusiveLock` sur `invoices` pour les deux (compatibles entre eux),
-et un verrou `transactionid` — le vrai conflit est sur la **ligne** 42,
-matérialisé par l'attente sur l'identifiant de transaction du bloqueur.
-`log_lock_waits = on` journalise toute attente de plus de `deadlock_timeout`
-(1 s) avec les deux PID : c'est le réglage à avoir en production pour
-retrouver ces situations après coup.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `pg_cancel_backend(pid)` envoie `SIGINT` au processus serveur : la requête
+> en cours est annulée (`ERROR: canceling statement due to user request`),
+> la session survit et, si elle était dans une transaction, celle-ci est
+> annulée. `pg_terminate_backend(pid)` envoie `SIGTERM` : la session est
+> fermée, le client reçoit `FATAL: terminating connection due to
+> administrator command`. Le premier est la réponse à « cette requête est
+> trop longue », le second à « cette session ne devrait pas exister ». Les
+> deux exigent d'être superuser ou membre de `pg_signal_backend` (ou de
+> posséder la session).
+>
+> Dans l'exemple du verrou, le bloqueur est `active` (il exécute
+> `pg_sleep`), ce qui est artificiel : dans la vraie vie il est `idle in
+> transaction` — un `UPDATE` fait, puis plus rien, la transaction jamais
+> validée. C'est ce que `pg_blocking_pids()` (PG 9.6+) rend trivial à
+> trouver ; avant, il fallait la fameuse jointure `pg_locks` ⋈ `pg_locks`
+> sur `granted = false`. `pg_locks` reste utile pour voir **quel** verrou :
+> `RowExclusiveLock` sur `invoices` pour les deux (compatibles entre eux),
+> et un verrou `transactionid` — le vrai conflit est sur la **ligne** 42,
+> matérialisé par l'attente sur l'identifiant de transaction du bloqueur.
+> `log_lock_waits = on` journalise toute attente de plus de `deadlock_timeout`
+> (1 s) avec les deux PID : c'est le réglage à avoir en production pour
+> retrouver ces situations après coup.
 
 ---
 
-**E15.12** — *Taille avec et sans index, copie, `DELETE` 20 %, `n_dead_tup`, `VACUUM`, taille.*
+<a id="e15-12"></a>**[E15.12](README.md#e15-12)** — *Taille avec et sans index, copie, `DELETE` 20 %, `n_dead_tup`, `VACUUM`, taille.*
 
 ```sql
 SELECT pg_size_pretty(pg_relation_size('invoice_lines')) AS table_seule,
@@ -1968,37 +2034,38 @@ DROP TABLE lignes_copie;
 Pour que la taille diminue : `VACUUM FULL lignes_copie` (réécriture
 complète, verrou exclusif) ou `pg_repack`.
 
-::: pourquoi
-Les trois fonctions de taille répondent à trois questions :
-`pg_relation_size` = le *heap* de la table (sans index ni TOAST),
-`pg_indexes_size` = tous ses index, `pg_total_relation_size` = tout, TOAST
-compris (les valeurs longues stockées à part). Une table dont les index
-pèsent plus que les données n'est pas anormale (beaucoup d'index, ou
-colonnes courtes) ; une table dont le `total` est dix fois `n_live_tup ×
-largeur moyenne` est gonflée.
-
-Le `DELETE` ne libère rien : il pose un marqueur `xmax` sur chaque version
-de ligne. `n_dead_tup` (estimation entretenue par le collecteur de
-statistiques) passe à 60 000. `VACUUM` les trouve, vérifie qu'aucune
-transaction ne peut encore les voir, et inscrit l'espace dans la *free
-space map* : les prochains `INSERT` le réutiliseront. Mais les pages
-restent allouées au fichier — il ne tronque que les pages **vides en fin
-de fichier**. Comme les lignes supprimées (`id % 5`) sont réparties
-partout, aucune page n'est vide : la taille ne bouge pas. C'est le
-comportement voulu : rendre l'espace au système de fichiers impose une
-réécriture, donc un verrou, donc une décision humaine (`VACUUM FULL` la
-nuit, ou `pg_repack`).
-
-`last_autovacuum` est `null` sur la copie : l'autovacuum ne s'est pas
-encore déclenché (seuil : 50 + 20 % de 300 000 = 60 050 lignes mortes ; on
-est juste en dessous). Sur une table de production active, il passe
-régulièrement et `n_dead_tup` oscille — c'est ce qu'il faut vérifier, pas
-qu'il soit à zéro.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois fonctions de taille répondent à trois questions :
+> `pg_relation_size` = le *heap* de la table (sans index ni TOAST),
+> `pg_indexes_size` = tous ses index, `pg_total_relation_size` = tout, TOAST
+> compris (les valeurs longues stockées à part). Une table dont les index
+> pèsent plus que les données n'est pas anormale (beaucoup d'index, ou
+> colonnes courtes) ; une table dont le `total` est dix fois `n_live_tup ×
+> largeur moyenne` est gonflée.
+>
+> Le `DELETE` ne libère rien : il pose un marqueur `xmax` sur chaque version
+> de ligne. `n_dead_tup` (estimation entretenue par le collecteur de
+> statistiques) passe à 60 000. `VACUUM` les trouve, vérifie qu'aucune
+> transaction ne peut encore les voir, et inscrit l'espace dans la *free
+> space map* : les prochains `INSERT` le réutiliseront. Mais les pages
+> restent allouées au fichier — il ne tronque que les pages **vides en fin
+> de fichier**. Comme les lignes supprimées (`id % 5`) sont réparties
+> partout, aucune page n'est vide : la taille ne bouge pas. C'est le
+> comportement voulu : rendre l'espace au système de fichiers impose une
+> réécriture, donc un verrou, donc une décision humaine (`VACUUM FULL` la
+> nuit, ou `pg_repack`).
+>
+> `last_autovacuum` est `null` sur la copie : l'autovacuum ne s'est pas
+> encore déclenché (seuil : 50 + 20 % de 300 000 = 60 050 lignes mortes ; on
+> est juste en dessous). Sur une table de production active, il passe
+> régulièrement et `n_dead_tup` oscille — c'est ce qu'il faut vérifier, pas
+> qu'il soit à zéro.
 
 ---
 
-**E15.13** — *Connexion sans mot de passe depuis `lab-web` : variable, `.pgpass`, `0644`, trace dans `ps`.*
+<a id="e15-13"></a>**[E15.13](README.md#e15-13)** — *Connexion sans mot de passe depuis `lab-web` : variable, `.pgpass`, `0644`, trace dans `ps`.*
 
 ```bash
 # 1. variable d'environnement (visible dans /proc/PID/environ du processus)
@@ -2026,29 +2093,30 @@ il fuit dans tout sous-processus et dans les journaux qui capturent
 l'environnement (`systemctl show`, `journalctl` avec certaines unités,
 scripts qui font `env`).
 
-::: pourquoi
-`libpq` cherche le mot de passe dans cet ordre : paramètre de connexion
-(`password=` dans une URI — celui-là **est** dans `ps`), `PGPASSWORD`,
-`PGPASSFILE` ou `~/.pgpass`, puis prompt. Le format `.pgpass` accepte `*`
-comme joker sur chaque champ (`*:*:*:factura_app:mdp`), et la première
-ligne qui correspond gagne. Le contrôle de droits est fait par libpq
-lui-même (pas par le noyau) : c'est un garde-fou contre le cas classique
-d'un fichier créé avec `umask 022` puis oublié — et il **ignore** le
-fichier au lieu de refuser la connexion, d'où le prompt interactif, ou en
-batch (`-w`, cron, `< /dev/null`) l'erreur `fe_sendauth: no password
-supplied`. C'est BF15.6.
-
-Pour un service systemd, la bonne place est `EnvironmentFile=` avec un
-fichier `0640 root:groupe-du-service` — c'est ce que fait `/etc/factura/
-db.env` — ou, mieux, un `.pgpass` dans le home du compte de service, ou un
-fichier de service `~/.pg_service.conf` (`[factura]` + `host=`, `dbname=`,
-`user=`, et `PGSERVICE=factura`). Le compte `postgres` en `peer` local n'a
-besoin de rien : c'est pourquoi les sauvegardes tournent sous ce compte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `libpq` cherche le mot de passe dans cet ordre : paramètre de connexion
+> (`password=` dans une URI — celui-là **est** dans `ps`), `PGPASSWORD`,
+> `PGPASSFILE` ou `~/.pgpass`, puis prompt. Le format `.pgpass` accepte `*`
+> comme joker sur chaque champ (`*:*:*:factura_app:mdp`), et la première
+> ligne qui correspond gagne. Le contrôle de droits est fait par libpq
+> lui-même (pas par le noyau) : c'est un garde-fou contre le cas classique
+> d'un fichier créé avec `umask 022` puis oublié — et il **ignore** le
+> fichier au lieu de refuser la connexion, d'où le prompt interactif, ou en
+> batch (`-w`, cron, `< /dev/null`) l'erreur `fe_sendauth: no password
+> supplied`. C'est BF15.6.
+>
+> Pour un service systemd, la bonne place est `EnvironmentFile=` avec un
+> fichier `0640 root:groupe-du-service` — c'est ce que fait `/etc/factura/
+> db.env` — ou, mieux, un `.pgpass` dans le home du compte de service, ou un
+> fichier de service `~/.pg_service.conf` (`[factura]` + `host=`, `dbname=`,
+> `user=`, et `PGSERVICE=factura`). Le compte `postgres` en `peer` local n'a
+> besoin de rien : c'est pourquoi les sauvegardes tournent sous ce compte.
 
 ---
 
-**E15.14** — *`redis-cli` : `PING`, version, TTL, hash, file, 200 tours, compter sans `KEYS`, grosses clés.*
+<a id="e15-14"></a>**[E15.14](README.md#e15-14)** — *`redis-cli` : `PING`, version, TTL, hash, file, 200 tours, compter sans `KEYS`, grosses clés.*
 
 ```bash
 redis-cli PING                                  # PONG
@@ -2068,35 +2136,36 @@ redis-cli --bigkeys
 # Biggest hash found 'user:42' has 2 fields ...
 ```
 
-::: pourquoi
-Chaque structure répond à un besoin d'application, et un exploitant doit
-les reconnaître pour comprendre ce que fait l'application dans Redis :
-
-* **string** avec `EX` : la session, le cache d'une page, un verrou
-  (`SET lock:x 1 NX EX 30`), un compteur (`INCR` est atomique). `TTL` = -1
-  sans expiration, -2 clé absente.
-* **hash** : un objet avec des champs, lisible champ par champ (`HGET`),
-  compact en mémoire pour les petits objets (encodage `listpack`).
-* **list** : la file. `LPUSH` à gauche, `BRPOP` à droite = FIFO ; `BRPOP`
-  **bloque** le client jusqu'à ce qu'un élément arrive (ou timeout) —
-  c'est ce qui permet un worker sans boucle d'attente active. Un élément
-  pris est retiré : si le worker meurt avant de le traiter, il est perdu
-  (« au plus une fois ») ; `LMOVE` vers une liste de travail en cours
-  permet le « au moins une fois ».
-* **set** : appartenance (`SISMEMBER`), unicité ; **sorted set** :
-  classement, files à priorité, fenêtres temporelles.
-
-`--scan` enchaîne des `SCAN` de 10 clés par défaut ; `--bigkeys` fait de
-même en appelant `STRLEN`/`LLEN`/`HLEN`/`SCARD`/`ZCARD` sur chaque clé,
-sans bloquer (il est prévu pour la production) ; `--memkeys` utilise
-`MEMORY USAGE`, plus précis mais plus lent. `OBJECT ENCODING clé` montre
-l'encodage interne (`listpack`, `quicklist`, `int`, `embstr`) — utile
-pour comprendre pourquoi une clé pèse ce qu'elle pèse.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque structure répond à un besoin d'application, et un exploitant doit
+> les reconnaître pour comprendre ce que fait l'application dans Redis :
+>
+> * **string** avec `EX` : la session, le cache d'une page, un verrou
+>   (`SET lock:x 1 NX EX 30`), un compteur (`INCR` est atomique). `TTL` = -1
+>   sans expiration, -2 clé absente.
+> * **hash** : un objet avec des champs, lisible champ par champ (`HGET`),
+>   compact en mémoire pour les petits objets (encodage `listpack`).
+> * **list** : la file. `LPUSH` à gauche, `BRPOP` à droite = FIFO ; `BRPOP`
+>   **bloque** le client jusqu'à ce qu'un élément arrive (ou timeout) —
+>   c'est ce qui permet un worker sans boucle d'attente active. Un élément
+>   pris est retiré : si le worker meurt avant de le traiter, il est perdu
+>   (« au plus une fois ») ; `LMOVE` vers une liste de travail en cours
+>   permet le « au moins une fois ».
+> * **set** : appartenance (`SISMEMBER`), unicité ; **sorted set** :
+>   classement, files à priorité, fenêtres temporelles.
+>
+> `--scan` enchaîne des `SCAN` de 10 clés par défaut ; `--bigkeys` fait de
+> même en appelant `STRLEN`/`LLEN`/`HLEN`/`SCARD`/`ZCARD` sur chaque clé,
+> sans bloquer (il est prévu pour la production) ; `--memkeys` utilise
+> `MEMORY USAGE`, plus précis mais plus lent. `OBJECT ENCODING clé` montre
+> l'encodage interne (`listpack`, `quicklist`, `int`, `embstr`) — utile
+> pour comprendre pourquoi une clé pèse ce qu'elle pèse.
 
 ---
 
-**E15.15** — *`BGSAVE`, preuve de fin, copie horodatée, AOF à chaud, `CONFIG REWRITE`, fichiers.*
+<a id="e15-15"></a>**[E15.15](README.md#e15-15)** — *`BGSAVE`, preuve de fin, copie horodatée, AOF à chaud, `CONFIG REWRITE`, fichiers.*
 
 ```bash
 redis-cli BGSAVE                                # Background saving started
@@ -2117,34 +2186,35 @@ sudo ls -la /var/lib/redis/ /var/lib/redis/appendonlydir/
 # appendonlydir/appendonly.aof.manifest
 ```
 
-::: pourquoi
-`BGSAVE` fait un `fork()` : l'enfant écrit `temp-<pid>.rdb` puis le
-renomme en `dump.rdb` — le renommage est atomique, donc `dump.rdb` est
-**toujours** un fichier complet et cohérent, même pendant une sauvegarde
-en cours. C'est pourquoi le copier à n'importe quel moment est sûr
-(alors que copier `appendonlydir/` pendant une réécriture ne l'est pas).
-`SAVE` (sans `BG`) fait la même chose dans le processus principal, en
-bloquant tout : à ne jamais utiliser en production.
-
-`CONFIG SET appendonly yes` déclenche une réécriture AOF (`BGREWRITEAOF`)
-pour créer le fichier de base à partir de l'état courant ; ensuite chaque
-écriture est ajoutée à l'`.incr.aof`. Redis 7 a remplacé l'AOF monolithique
-par ce répertoire multi-fichiers : un fichier de base (au format RDB par
-défaut, `aof-use-rdb-preamble yes`), des incréments, et un manifeste. Au
-démarrage, si l'AOF est activé, c'est lui qui est chargé — `dump.rdb` ne
-sert plus qu'aux copies.
-
-`CONFIG REWRITE` réécrit `redis.conf` en conservant les commentaires et
-en modifiant seulement les directives qui diffèrent de la valeur chargée :
-c'est le seul moyen propre de rendre un `CONFIG SET` persistant. Il exige
-que Redis puisse écrire le fichier — sur Ubuntu `redis.conf` appartient à
-`redis`, c'est prévu pour. Sans `REWRITE`, le prochain restart repart de
-l'ancien fichier, et l'AOF disparaît silencieusement.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `BGSAVE` fait un `fork()` : l'enfant écrit `temp-<pid>.rdb` puis le
+> renomme en `dump.rdb` — le renommage est atomique, donc `dump.rdb` est
+> **toujours** un fichier complet et cohérent, même pendant une sauvegarde
+> en cours. C'est pourquoi le copier à n'importe quel moment est sûr
+> (alors que copier `appendonlydir/` pendant une réécriture ne l'est pas).
+> `SAVE` (sans `BG`) fait la même chose dans le processus principal, en
+> bloquant tout : à ne jamais utiliser en production.
+>
+> `CONFIG SET appendonly yes` déclenche une réécriture AOF (`BGREWRITEAOF`)
+> pour créer le fichier de base à partir de l'état courant ; ensuite chaque
+> écriture est ajoutée à l'`.incr.aof`. Redis 7 a remplacé l'AOF monolithique
+> par ce répertoire multi-fichiers : un fichier de base (au format RDB par
+> défaut, `aof-use-rdb-preamble yes`), des incréments, et un manifeste. Au
+> démarrage, si l'AOF est activé, c'est lui qui est chargé — `dump.rdb` ne
+> sert plus qu'aux copies.
+>
+> `CONFIG REWRITE` réécrit `redis.conf` en conservant les commentaires et
+> en modifiant seulement les directives qui diffèrent de la valeur chargée :
+> c'est le seul moyen propre de rendre un `CONFIG SET` persistant. Il exige
+> que Redis puisse écrire le fichier — sur Ubuntu `redis.conf` appartient à
+> `redis`, c'est prévu pour. Sans `REWRITE`, le prochain restart repart de
+> l'ancien fichier, et l'AOF disparaît silencieusement.
 
 ---
 
-**E15.16** — *Unités chargées, `User=`, sockets, qui peut se connecter, `[Unit]` d'une application locale.*
+<a id="e15-16"></a>**[E15.16](README.md#e15-16)** — *Unités chargées, `User=`, sockets, qui peut se connecter, `[Unit]` d'une application locale.*
 
 ```bash
 systemctl cat postgresql@16-main.service | grep -E '^(User|ExecStart|Type)'
@@ -2177,29 +2247,30 @@ After=network-online.target postgresql.service redis-server.service
 Wants=network-online.target postgresql.service redis-server.service
 ```
 
-::: pourquoi
-`systemctl cat` affiche l'unité **et** ses drop-ins : sur Ubuntu,
-`postgresql@16-main.service` est en fait générée à partir du modèle
-`postgresql@.service` (dans `/usr/lib/systemd/system/`), qui lance
-`pg_ctlcluster` — c'est lui qui lit `/etc/postgresql/16/main/` et démarre
-le bon binaire dans `/usr/lib/postgresql/16/bin/` sous le compte propriétaire du cluster. `Type=forking` : `pg_ctlcluster` attend que le postmaster **accepte les connexions** (`pg_ctl -w`) avant de rendre la main, d'où la fiabilité d'`After=`. Le
-service `redis-server` est `Type=` `notify` grâce à `--supervised
-systemd` (`User=redis`), et l'unité Ubuntu est déjà durcie (`ProtectSystem=strict`,
-`ReadWritePaths=` sur `/var/lib/redis`, `/var/log/redis`, `/var/run/redis`, `ReadWriteDirectories=-/etc/redis`).
-
-`postgresql.service` est la cible parapluie : `Wants=postgresql@16-main.service`
-généré par `postgresql-generator`, et `RemainAfterExit=on` pour qu'elle
-apparaisse `active (exited)`. `After=postgresql.service` dans une
-application est donc correct et stable (le nom ne change pas quand on
-migre vers 17), mais un `systemctl restart postgresql.service` redémarre
-**tous** les clusters — pour un seul, viser `postgresql@16-main`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `systemctl cat` affiche l'unité **et** ses drop-ins : sur Ubuntu,
+> `postgresql@16-main.service` est en fait générée à partir du modèle
+> `postgresql@.service` (dans `/usr/lib/systemd/system/`), qui lance
+> `pg_ctlcluster` — c'est lui qui lit `/etc/postgresql/16/main/` et démarre
+> le bon binaire dans `/usr/lib/postgresql/16/bin/` sous le compte propriétaire du cluster. `Type=forking` : `pg_ctlcluster` attend que le postmaster **accepte les connexions** (`pg_ctl -w`) avant de rendre la main, d'où la fiabilité d'`After=`. Le
+> service `redis-server` est `Type=` `notify` grâce à `--supervised
+> systemd` (`User=redis`), et l'unité Ubuntu est déjà durcie (`ProtectSystem=strict`,
+> `ReadWritePaths=` sur `/var/lib/redis`, `/var/log/redis`, `/var/run/redis`, `ReadWriteDirectories=-/etc/redis`).
+>
+> `postgresql.service` est la cible parapluie : `Wants=postgresql@16-main.service`
+> généré par `postgresql-generator`, et `RemainAfterExit=on` pour qu'elle
+> apparaisse `active (exited)`. `After=postgresql.service` dans une
+> application est donc correct et stable (le nom ne change pas quand on
+> migre vers 17), mais un `systemctl restart postgresql.service` redémarre
+> **tous** les clusters — pour un seul, viser `postgresql@16-main`.
 
 ---
 
 ## 15.6 Labs
 
-### **L15.1** — Ticket WEB-412 : le vhost complet
+### <a id="l15-1"></a>**[L15.1](README.md#l15-1)** — Ticket WEB-412 : le vhost complet
 
 *Écrire `/etc/nginx/sites-available/factura-demo` : statique SPA, cache et
 gzip, docs protégées, upstream à deux instances, limitation, allow/deny,
@@ -2344,67 +2415,69 @@ sudo rm /srv/www/maintenance.on
 sudo tail -2 /var/log/nginx/factura.access.log    # rt= urt= ua= us= présents
 ```
 
-::: pourquoi
-Les choix qui comptent, et pourquoi :
+> [!NOTE]
+> **Pourquoi**
+>
+> Les choix qui comptent, et pourquoi :
+>
+> * **`^~ /api/`** : le préfixe gagne et les regex ne sont plus consultées.
+>   C'est la ligne qui rend BF15.1 impossible. Les locations exactes
+>   (`= /api/login`, `= /api/health`...) restent prioritaires sur lui — c'est
+>   voulu — et comme chacune définit ses propres directives, chacune
+>   `include` le snippet : sans ça, la location `= /api/login` enverrait
+>   `Host: factura_api` au backend (héritage non additif).
+> * **`/api/health` hors maintenance** : la supervision doit distinguer
+>   « site en maintenance » de « site mort ». Une location exacte sans le
+>   test `-f` suffit ; on aurait pu aussi laisser passer `10.10.10.14`.
+> * **`if (-f ...) { return 503; }`** : la règle « `if` is evil » de nginx
+>   vise les `if` qui contiennent autre chose que `return` ou `rewrite ...
+>   last` — ceux-là sont sûrs. L'alternative sans `if` (`try_files
+>   /maintenance.on @maintenance;`) fonctionne mais renvoie 200 avec la page
+>   au lieu d'un 503 honnête, et casse `try_files` existant. Le test de
+>   fichier est fait **à chaque requête** : pas de reload, et la page
+>   disparaît dès que le fichier est supprimé.
+> * **`error_page 503 @maintenance`** + location nommée avec son propre
+>   `root` : le `rewrite ... break` remplace l'URI par `/503.html` sans
+>   relancer la recherche de location. nginx garde le code 503 : les
+>   moteurs de recherche et les sondes savent que c'est temporaire.
+> * **`try_files $uri $uri/ /index.html`** : une SPA gère ses routes côté
+>   client ; toute URI inconnue doit renvoyer l'application (200), pas un
+>   404. Le revers : une faute de frappe dans une URL de fichier statique
+>   renvoie `index.html` en 200, ce que `/static/` (sans `try_files`, donc
+>   404 franc) évite pour les assets.
+> * **`gzip`** : `text/html` est toujours inclus ; `gzip_vary on` ajoute
+>   `Vary: Accept-Encoding` pour que les caches intermédiaires ne servent
+>   pas une version compressée à un client qui ne la comprend pas. Ne jamais
+>   compresser en TLS des contenus qui mélangent secret et entrée
+>   utilisateur (attaque BREACH) — un JSON d'API avec un jeton, par
+>   exemple ; ici le JSON est public.
+> * **`expires 30d` + `Cache-Control: public`** : `expires` génère à la fois
+>   `Expires:` et `Cache-Control: max-age=`. Le `add_header` ajouté ici
+>   désactive l'héritage — il n'y avait rien à hériter dans cette version
+>   HTTP ; en L15.2 avec HSTS, il faudra l'`include`.
+> * **`max_fails=2 fail_timeout=10s`** : deux échecs en 10 s sortent
+>   l'instance pendant 10 s ; avec la valeur par défaut (1), un seul
+>   timeout la sort, ce qui amplifie une simple lenteur.
+> * **`server_tokens off`** : la version de nginx disparaît de `Server:` et
+>   des pages d'erreur. Ce n'est pas de la sécurité, c'est de l'hygiène.
 
-* **`^~ /api/`** : le préfixe gagne et les regex ne sont plus consultées.
-  C'est la ligne qui rend BF15.1 impossible. Les locations exactes
-  (`= /api/login`, `= /api/health`...) restent prioritaires sur lui — c'est
-  voulu — et comme chacune définit ses propres directives, chacune
-  `include` le snippet : sans ça, la location `= /api/login` enverrait
-  `Host: factura_api` au backend (héritage non additif).
-* **`/api/health` hors maintenance** : la supervision doit distinguer
-  « site en maintenance » de « site mort ». Une location exacte sans le
-  test `-f` suffit ; on aurait pu aussi laisser passer `10.10.10.14`.
-* **`if (-f ...) { return 503; }`** : la règle « `if` is evil » de nginx
-  vise les `if` qui contiennent autre chose que `return` ou `rewrite ...
-  last` — ceux-là sont sûrs. L'alternative sans `if` (`try_files
-  /maintenance.on @maintenance;`) fonctionne mais renvoie 200 avec la page
-  au lieu d'un 503 honnête, et casse `try_files` existant. Le test de
-  fichier est fait **à chaque requête** : pas de reload, et la page
-  disparaît dès que le fichier est supprimé.
-* **`error_page 503 @maintenance`** + location nommée avec son propre
-  `root` : le `rewrite ... break` remplace l'URI par `/503.html` sans
-  relancer la recherche de location. nginx garde le code 503 : les
-  moteurs de recherche et les sondes savent que c'est temporaire.
-* **`try_files $uri $uri/ /index.html`** : une SPA gère ses routes côté
-  client ; toute URI inconnue doit renvoyer l'application (200), pas un
-  404. Le revers : une faute de frappe dans une URL de fichier statique
-  renvoie `index.html` en 200, ce que `/static/` (sans `try_files`, donc
-  404 franc) évite pour les assets.
-* **`gzip`** : `text/html` est toujours inclus ; `gzip_vary on` ajoute
-  `Vary: Accept-Encoding` pour que les caches intermédiaires ne servent
-  pas une version compressée à un client qui ne la comprend pas. Ne jamais
-  compresser en TLS des contenus qui mélangent secret et entrée
-  utilisateur (attaque BREACH) — un JSON d'API avec un jeton, par
-  exemple ; ici le JSON est public.
-* **`expires 30d` + `Cache-Control: public`** : `expires` génère à la fois
-  `Expires:` et `Cache-Control: max-age=`. Le `add_header` ajouté ici
-  désactive l'héritage — il n'y avait rien à hériter dans cette version
-  HTTP ; en L15.2 avec HSTS, il faudra l'`include`.
-* **`max_fails=2 fail_timeout=10s`** : deux échecs en 10 s sortent
-  l'instance pendant 10 s ; avec la valeur par défaut (1), un seul
-  timeout la sort, ce qui amplifie une simple lenteur.
-* **`server_tokens off`** : la version de nginx disparaît de `Server:` et
-  des pages d'erreur. Ce n'est pas de la sécurité, c'est de l'hygiène.
-:::
-
-::: piege
-* `client_max_body_size` se pose au niveau `server` : posé seulement dans
-  `location ^~ /api/`, il ne s'appliquerait pas à `= /api/upload` si on en
-  créait une — chaque location exacte repart des valeurs du `server`.
-* `limit_req` sur `= /api/login` avec `nodelay` : les 6 premières passent,
-  puis 429 ; **sans** `nodelay`, le compte est le même (6 × 200, 6 × 429) mais les 5 requêtes de rafale sont retardées de 12 s en 12 s : `tir.sh` met une minute et tu crois à une panne du backend.
-* `htpasswd -c` **écrase** le fichier : pour ajouter un second
-  utilisateur, sans `-c`.
-* `error_log ... warn` : les `connect() failed` sont en `error`, donc
-  visibles ; les `limiting requests` aussi ; en `crit` on ne verrait plus
-  rien d'utile.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `client_max_body_size` se pose au niveau `server` : posé seulement dans
+>   `location ^~ /api/`, il ne s'appliquerait pas à `= /api/upload` si on en
+>   créait une — chaque location exacte repart des valeurs du `server`.
+> * `limit_req` sur `= /api/login` avec `nodelay` : les 6 premières passent,
+>   puis 429 ; **sans** `nodelay`, le compte est le même (6 × 200, 6 × 429) mais les 5 requêtes de rafale sont retardées de 12 s en 12 s : `tir.sh` met une minute et tu crois à une panne du backend.
+> * `htpasswd -c` **écrase** le fichier : pour ajouter un second
+>   utilisateur, sans `-c`.
+> * `error_log ... warn` : les `connect() failed` sont en `error`, donc
+>   visibles ; les `limiting requests` aussi ; en `crit` on ne verrait plus
+>   rien d'utile.
 
 ---
 
-### **L15.2** — HTTPS et les six pannes
+### <a id="l15-2"></a>**[L15.2](README.md#l15-2)** — HTTPS et les six pannes
 
 *Certificat, `server` 443 durci, redirection 80 sauf ACME, puis provoquer
 502, 502 partiel, 504, 413, 403 ×2, boucle 301, 404 API.*
@@ -2461,46 +2534,48 @@ présent sur `/api/health` (preuve de l'include).
 | 10. boucle | `return 301` dans le 443 ; `curl -sIL --max-redirs 3 https://...` → 3 × 301 puis erreur `Maximum (3) redirects followed` | rien (nginx a répondu correctement à chaque fois) | le 301 doit vivre **uniquement** dans le `server` 80 |
 | 11. 404 API | regex `\.(json\|js\|css)$` ajoutée ; `/api/invoices.json` → **200** | rien | `^~ /api/` protège : le préfixe gagne et la regex n'est pas consultée. Sans `^~`, 404 et `open() ".../api/invoices.json" failed (2: No such file or directory)` |
 
-::: pourquoi
-Deux mécanismes à retenir de cette partie :
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux mécanismes à retenir de cette partie :
+>
+> **`/.well-known/acme-challenge/` en clair.** Le protocole ACME (Let's
+> Encrypt, certbot) prouve la possession du nom en demandant un fichier
+> sur `http://nom/.well-known/acme-challenge/<jeton>` — en HTTP, port 80,
+> parce qu'avant le premier certificat il n'y a pas de HTTPS. Une
+> redirection 301 globale casse le renouvellement `certbot --webroot`.
+> La location `^~` en tête du `server` 80 passe avant le `return`. Sur le
+> lab il n'y a pas d'ACME (pas de DNS public), mais le réflexe s'installe
+> ici, et le module 18 montre `certbot`.
+>
+> **Le 502 « no live upstreams ».** Quand nginx a marqué tous les serveurs
+> d'un `upstream` comme indisponibles (après `max_fails`), il ne tente même
+> plus de connexion pendant `fail_timeout` et répond 502 instantanément avec
+> cette ligne — plus rapide, mais aussi plus déroutant : les backends sont
+> peut-être revenus depuis 5 secondes. À l'inverse, avec un seul serveur
+> dans l'upstream (ou `server ... ` unique), nginx ignore `max_fails` et
+> retente à chaque requête. Le comportement de l'étape 6 est le plus
+> important à connaître : une instance morte sur deux ne produit **aucune
+> erreur utilisateur**. Une supervision fondée sur les codes HTTP ne la
+> verra jamais ; c'est pourquoi le défi demande de compter les instances
+> dans `access.log` (`ua=`), ou de surveiller `error.log`, ou de sonder
+> chaque instance directement (`curl 127.0.0.1:8002/api/health` depuis
+> `lab-web`).
 
-**`/.well-known/acme-challenge/` en clair.** Le protocole ACME (Let's
-Encrypt, certbot) prouve la possession du nom en demandant un fichier
-sur `http://nom/.well-known/acme-challenge/<jeton>` — en HTTP, port 80,
-parce qu'avant le premier certificat il n'y a pas de HTTPS. Une
-redirection 301 globale casse le renouvellement `certbot --webroot`.
-La location `^~` en tête du `server` 80 passe avant le `return`. Sur le
-lab il n'y a pas d'ACME (pas de DNS public), mais le réflexe s'installe
-ici, et le module 18 montre `certbot`.
-
-**Le 502 « no live upstreams ».** Quand nginx a marqué tous les serveurs
-d'un `upstream` comme indisponibles (après `max_fails`), il ne tente même
-plus de connexion pendant `fail_timeout` et répond 502 instantanément avec
-cette ligne — plus rapide, mais aussi plus déroutant : les backends sont
-peut-être revenus depuis 5 secondes. À l'inverse, avec un seul serveur
-dans l'upstream (ou `server ... ` unique), nginx ignore `max_fails` et
-retente à chaque requête. Le comportement de l'étape 6 est le plus
-important à connaître : une instance morte sur deux ne produit **aucune
-erreur utilisateur**. Une supervision fondée sur les codes HTTP ne la
-verra jamais ; c'est pourquoi le défi demande de compter les instances
-dans `access.log` (`ua=`), ou de surveiller `error.log`, ou de sonder
-chaque instance directement (`curl 127.0.0.1:8002/api/health` depuis
-`lab-web`).
-:::
-
-::: piege
-Étape 7 : le 504 arrive après **exactement** `proxy_read_timeout`
-(`%{time_total}` ≈ 5,0 s) — c'est la signature qui distingue un timeout
-nginx d'un backend qui répond lui-même 504 (`upstream_status 504` dans
-`access.log`, temps quelconque). Et attention : après le 504, le backend
-**continue** de traiter la requête (il dort encore 5 s) ; les clients qui
-réessaient empilent des requêtes sur un backend déjà saturé. C'est
-l'argument pour un timeout côté backend aussi (Gunicorn `--timeout`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Étape 7 : le 504 arrive après **exactement** `proxy_read_timeout`
+> (`%{time_total}` ≈ 5,0 s) — c'est la signature qui distingue un timeout
+> nginx d'un backend qui répond lui-même 504 (`upstream_status 504` dans
+> `access.log`, temps quelconque). Et attention : après le 504, le backend
+> **continue** de traiter la requête (il dort encore 5 s) ; les clients qui
+> réessaient empilent des requêtes sur un backend déjà saturé. C'est
+> l'argument pour un timeout côté backend aussi (Gunicorn `--timeout`).
 
 ---
 
-### **L15.3** — Ouvrir la base à `lab-web`
+### <a id="l15-3"></a>**[L15.3](README.md#l15-3)** — Ouvrir la base à `lab-web`
 
 *`conf.d/10-factura.conf` avec les douze paramètres, `pg_hba` minimal en
 scram, restart, `pg_stat_statements`, tests depuis `lab-web` et `lab-adm`,
@@ -2621,57 +2696,59 @@ sudo -u postgres psql -d factura_demo -c "SELECT calls,
   ORDER BY total_exec_time DESC LIMIT 5"
 ```
 
-::: pourquoi
-**Pourquoi `conf.d/` et pas `postgresql.conf`** : le fichier principal est
-livré par le paquet et fait 800 lignes ; `include_dir = 'conf.d'` (déjà
-présent en fin de fichier sur Ubuntu) charge les `*.conf` du répertoire
-**après**, donc ils l'emportent. Un fichier de 20 lignes est lisible,
-diffable, déployable par Ansible, et survit à une mise à jour du paquet.
-`ALTER SYSTEM` écrit `postgresql.auto.conf`, chargé en dernier : il
-l'emporte sur `conf.d/` — un piège quand on ne sait pas qui a fait quoi ;
-`SELECT name, source, sourcefile FROM pg_settings WHERE source <> 'default'`
-dit d'où vient chaque valeur.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi `conf.d/` et pas `postgresql.conf`** : le fichier principal est
+> livré par le paquet et fait 800 lignes ; `include_dir = 'conf.d'` (déjà
+> présent en fin de fichier sur Ubuntu) charge les `*.conf` du répertoire
+> **après**, donc ils l'emportent. Un fichier de 20 lignes est lisible,
+> diffable, déployable par Ansible, et survit à une mise à jour du paquet.
+> `ALTER SYSTEM` écrit `postgresql.auto.conf`, chargé en dernier : il
+> l'emporte sur `conf.d/` — un piège quand on ne sait pas qui a fait quoi ;
+> `SELECT name, source, sourcefile FROM pg_settings WHERE source <> 'default'`
+> dit d'où vient chaque valeur.
+>
+> **Les valeurs** : `shared_buffers` est le cache de pages de PostgreSQL ;
+> 25 % de la RAM est le point de départ classique, le reste de la RAM
+> servant au cache de fichiers du noyau (que `effective_cache_size` décrit
+> au planificateur — c'est une **estimation**, pas une allocation : elle
+> influence le choix index vs parcours séquentiel). `work_mem` est alloué
+> **par opération** de tri/hachage, **par requête**, et il peut y en avoir
+> plusieurs par requête et 100 requêtes en parallèle : 8 Mo × 100 × 3 = 2,4
+> Go dans le pire cas — d'où la prudence ; on le monte par session pour une
+> requête précise plutôt que globalement. `maintenance_work_mem` ne
+> concerne que `VACUUM`, `CREATE INDEX` : on peut être généreux.
+> `log_min_duration_statement = 500` journalise **la requête complète** avec
+> sa durée dès qu'elle dépasse 500 ms : c'est la trace qu'on cherche à 3 h
+> du matin ; `pg_stat_statements` agrège par requête normalisée (les
+> constantes remplacées par `$1`) et donne le cumul — les deux se
+> complètent. `idle_in_transaction_session_timeout` est le filet contre
+> Q15.14.
+>
+> **`pg_hba` minimal** : une ligne par rôle, base explicite, `/32`, `scram`.
+> Pas de `hostssl` ici : le chiffrement entre `lab-web` et `lab-db` est
+> souhaitable mais exige un certificat serveur vérifié côté client
+> (`sslmode=verify-full`), sinon `hostssl` chiffre sans authentifier — à
+> faire proprement avec la PKI du module 18. Le message d'erreur depuis
+> `lab-adm` cite `SSL encryption` : libpq tente d'abord en SSL (Ubuntu
+> livre un certificat *snakeoil* et `ssl = on`), puis en clair si aucune
+> règle `hostssl` ne correspond — d'où parfois deux lignes dans le journal
+> serveur pour une seule tentative.
 
-**Les valeurs** : `shared_buffers` est le cache de pages de PostgreSQL ;
-25 % de la RAM est le point de départ classique, le reste de la RAM
-servant au cache de fichiers du noyau (que `effective_cache_size` décrit
-au planificateur — c'est une **estimation**, pas une allocation : elle
-influence le choix index vs parcours séquentiel). `work_mem` est alloué
-**par opération** de tri/hachage, **par requête**, et il peut y en avoir
-plusieurs par requête et 100 requêtes en parallèle : 8 Mo × 100 × 3 = 2,4
-Go dans le pire cas — d'où la prudence ; on le monte par session pour une
-requête précise plutôt que globalement. `maintenance_work_mem` ne
-concerne que `VACUUM`, `CREATE INDEX` : on peut être généreux.
-`log_min_duration_statement = 500` journalise **la requête complète** avec
-sa durée dès qu'elle dépasse 500 ms : c'est la trace qu'on cherche à 3 h
-du matin ; `pg_stat_statements` agrège par requête normalisée (les
-constantes remplacées par `$1`) et donne le cumul — les deux se
-complètent. `idle_in_transaction_session_timeout` est le filet contre
-Q15.14.
-
-**`pg_hba` minimal** : une ligne par rôle, base explicite, `/32`, `scram`.
-Pas de `hostssl` ici : le chiffrement entre `lab-web` et `lab-db` est
-souhaitable mais exige un certificat serveur vérifié côté client
-(`sslmode=verify-full`), sinon `hostssl` chiffre sans authentifier — à
-faire proprement avec la PKI du module 18. Le message d'erreur depuis
-`lab-adm` cite `SSL encryption` : libpq tente d'abord en SSL (Ubuntu
-livre un certificat *snakeoil* et `ssl = on`), puis en clair si aucune
-règle `hostssl` ne correspond — d'où parfois deux lignes dans le journal
-serveur pour une seule tentative.
-:::
-
-::: piege
-Le restart coupe toutes les sessions. Sur une vraie production, on
-regroupe les changements `postmaster` et on annonce une fenêtre. Et on
-vérifie **avant** avec `pending_restart` qu'on n'a pas oublié un
-paramètre : sinon on redémarre deux fois. Enfin, `log_connections = on`
-est tentant pour le diagnostic mais produit une ligne par connexion —
-avec une application sans pool, c'est des milliers de lignes par minute.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le restart coupe toutes les sessions. Sur une vraie production, on
+> regroupe les changements `postmaster` et on annonce une fenêtre. Et on
+> vérifie **avant** avec `pending_restart` qu'on n'a pas oublié un
+> paramètre : sinon on redémarre deux fois. Enfin, `log_connections = on`
+> est tentant pour le diagnostic mais produit une ligne par connexion —
+> avec une application sans pool, c'est des milliers de lignes par minute.
 
 ---
 
-### **L15.4** — Sauvegarde nocturne, restauration, PITR
+### <a id="l15-4"></a>**[L15.4](README.md#l15-4)** — Sauvegarde nocturne, restauration, PITR
 
 *Script `pg-sauvegarde.sh` sous `postgres`, timer 02:30, restauration
 chronométrée, archivage WAL, `pg_basebackup`, catastrophe, retour à T-10 s,
@@ -2864,69 +2941,71 @@ postgresql@16-main`. Vérifications : `pg_stat_replication` sur `lab-db`
 seconde, et un `INSERT` sur `lab-ops` refusé (`cannot execute INSERT in a
 read-only transaction`).
 
-::: pourquoi
-**Le script** : sous `postgres` en `peer`, aucun secret. `set -euo
-pipefail` + `trap ERR` : une étape qui échoue arrête tout avec une ligne
-explicite, et le service passe en `failed` — ce qu'un `OnFailure=` (module
-17) transformera en alerte. Le test `[ -s ]` refuse un dump vide — c'est
-la leçon de BF15.6. `sha256sum` permet à la copie distante (rsync) d'être
-vérifiée. La purge par `-mtime +7` sur les répertoires horodatés est plus
-sûre qu'une purge par nom.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Le script** : sous `postgres` en `peer`, aucun secret. `set -euo
+> pipefail` + `trap ERR` : une étape qui échoue arrête tout avec une ligne
+> explicite, et le service passe en `failed` — ce qu'un `OnFailure=` (module
+> 17) transformera en alerte. Le test `[ -s ]` refuse un dump vide — c'est
+> la leçon de BF15.6. `sha256sum` permet à la copie distante (rsync) d'être
+> vérifiée. La purge par `-mtime +7` sur les répertoires horodatés est plus
+> sûre qu'une purge par nom.
+>
+> **`pg_dump` est cohérent sans verrou** : il ouvre une transaction en
+> `REPEATABLE READ` et lit un instantané ; les écritures continuent pendant
+> le dump (elles ne sont pas dans le dump, c'est tout). Sur une base de
+> plusieurs centaines de Go, la durée du dump devient le problème
+> (`-Fd -j`), et l'espace de sauvegarde aussi : c'est là que la physique
+> prend le relais.
+>
+> **L'archivage** : à chaque segment WAL terminé (16 Mo, ou `archive_timeout`),
+> PostgreSQL exécute `archive_command` avec `%p` (chemin du segment) et `%f`
+> (son nom). La commande doit renvoyer 0 **uniquement** si le segment est
+> en sécurité ; le test `! -f` refuse d'écraser (un segment archivé deux
+> fois signale un problème, on veut le voir), et la copie vers `.tmp` suivie
+> d'un `mv` garantit qu'un fichier au nom final est toujours complet. Tant que la commande échoue,
+> le segment est **conservé** dans `pg_wal` et réessayé : c'est le
+> mécanisme de la Q15.15. En production, `cp` local est un brouillon : la
+> destination est un autre disque, un NFS, un S3 (`pgbackrest`, `wal-g`
+> font ça proprement, avec compression, chiffrement et rétention).
+>
+> **`pg_basebackup -c fast -Xs`** : demande un checkpoint immédiat (sinon
+> attente jusqu'au prochain, plusieurs minutes), et `-X stream` ouvre une
+> seconde connexion pour recevoir le WAL produit **pendant** la copie — la
+> base tar seule est incohérente (des pages copiées à des instants
+> différents) ; ce WAL la rend cohérente au rejeu.
+>
+> **Le PITR** : au démarrage, la présence de `recovery.signal` fait entrer
+> le serveur en mode restauration ; il rejoue le WAL local puis appelle
+> `restore_command` segment par segment jusqu'à atteindre
+> `recovery_target_time`, **s'arrête avant la première transaction validée
+> après cet instant**, puis (`promote`) sort de la restauration en créant
+> une nouvelle *timeline* (`00000002...`) — la branche d'histoire divergente.
+> La cible peut aussi être un LSN, un nom de point de restauration
+> (`pg_create_restore_point('avant-migration')`) ou un identifiant de
+> transaction. Le RPO est ici le `DELETE` lui-même : on revient 10 s avant.
+> La procédure sur un second cluster est celle de la production : on
+> restaure à côté, on vérifie, on extrait ce qu'il faut (ou on bascule).
 
-**`pg_dump` est cohérent sans verrou** : il ouvre une transaction en
-`REPEATABLE READ` et lit un instantané ; les écritures continuent pendant
-le dump (elles ne sont pas dans le dump, c'est tout). Sur une base de
-plusieurs centaines de Go, la durée du dump devient le problème
-(`-Fd -j`), et l'espace de sauvegarde aussi : c'est là que la physique
-prend le relais.
-
-**L'archivage** : à chaque segment WAL terminé (16 Mo, ou `archive_timeout`),
-PostgreSQL exécute `archive_command` avec `%p` (chemin du segment) et `%f`
-(son nom). La commande doit renvoyer 0 **uniquement** si le segment est
-en sécurité ; le test `! -f` refuse d'écraser (un segment archivé deux
-fois signale un problème, on veut le voir), et la copie vers `.tmp` suivie
-d'un `mv` garantit qu'un fichier au nom final est toujours complet. Tant que la commande échoue,
-le segment est **conservé** dans `pg_wal` et réessayé : c'est le
-mécanisme de la Q15.15. En production, `cp` local est un brouillon : la
-destination est un autre disque, un NFS, un S3 (`pgbackrest`, `wal-g`
-font ça proprement, avec compression, chiffrement et rétention).
-
-**`pg_basebackup -c fast -Xs`** : demande un checkpoint immédiat (sinon
-attente jusqu'au prochain, plusieurs minutes), et `-X stream` ouvre une
-seconde connexion pour recevoir le WAL produit **pendant** la copie — la
-base tar seule est incohérente (des pages copiées à des instants
-différents) ; ce WAL la rend cohérente au rejeu.
-
-**Le PITR** : au démarrage, la présence de `recovery.signal` fait entrer
-le serveur en mode restauration ; il rejoue le WAL local puis appelle
-`restore_command` segment par segment jusqu'à atteindre
-`recovery_target_time`, **s'arrête avant la première transaction validée
-après cet instant**, puis (`promote`) sort de la restauration en créant
-une nouvelle *timeline* (`00000002...`) — la branche d'histoire divergente.
-La cible peut aussi être un LSN, un nom de point de restauration
-(`pg_create_restore_point('avant-migration')`) ou un identifiant de
-transaction. Le RPO est ici le `DELETE` lui-même : on revient 10 s avant.
-La procédure sur un second cluster est celle de la production : on
-restaure à côté, on vérifie, on extrait ce qu'il faut (ou on bascule).
-:::
-
-::: piege
-* La cible temporelle est en **fuseau de la session** ; donner l'offset
-  (`+02`) évite une heure d'écart avec `timezone = 'Europe/Paris'`.
-* Une cible antérieure à la fin de la sauvegarde de base est impossible : `requested`
-  `recovery stop point is before consistent recovery point`. La base
-  `pg_basebackup` doit être **antérieure** à l'instant visé (et une cible au-delà du dernier WAL archivé donne `recovery ended before configured recovery target was reached`).
-* `archive_mode = on` avec un `archive_command` qui échoue en silence
-  (destination pleine à 3 h du matin) remplit `pg_wal` : surveiller
-  `pg_stat_archiver.failed_count` et `last_failed_time` est obligatoire
-  dès qu'on active l'archivage.
-* Le second cluster a `archive_mode = off` : sinon il archiverait ses
-  propres segments (timeline 2) dans le même répertoire.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * La cible temporelle est en **fuseau de la session** ; donner l'offset
+>   (`+02`) évite une heure d'écart avec `timezone = 'Europe/Paris'`.
+> * Une cible antérieure à la fin de la sauvegarde de base est impossible : `requested`
+>   `recovery stop point is before consistent recovery point`. La base
+>   `pg_basebackup` doit être **antérieure** à l'instant visé (et une cible au-delà du dernier WAL archivé donne `recovery ended before configured recovery target was reached`).
+> * `archive_mode = on` avec un `archive_command` qui échoue en silence
+>   (destination pleine à 3 h du matin) remplit `pg_wal` : surveiller
+>   `pg_stat_archiver.failed_count` et `last_failed_time` est obligatoire
+>   dès qu'on active l'archivage.
+> * Le second cluster a `archive_mode = off` : sinon il archiverait ses
+>   propres segments (timeline 2) dans le même répertoire.
 
 ---
 
-### **L15.5** — Redis : sécuriser, dimensionner, observer
+### <a id="l15-5"></a>**[L15.5](README.md#l15-5)** — Redis : sécuriser, dimensionner, observer
 
 *État des lieux, `redis.conf` de production justifié, ACL, pare-feu, charge
 depuis `lab-web`, mesures, `maxmemory` abaissé à chaud, `BGSAVE`.*
@@ -3022,73 +3101,75 @@ sudo install -d -m 0750 /var/backups/redis
 sudo cp /var/lib/redis/dump.rdb /var/backups/redis/dump-$(date +%Y%m%d-%H%M).rdb
 ```
 
-::: pourquoi
-**`bind` et `protected-mode`** : Redis n'a **aucune** authentification par
-défaut ; `protected-mode yes` refuse les connexions non locales tant
-qu'aucun mot de passe n'est défini — c'est le garde-fou ajouté après les
-milliers d'instances Redis ouvertes sur Internet en 2015-2016 (et
-rançonnées). `bind` sur l'adresse du LAN + pare-feu + ACL : trois couches,
-parce qu'une seule saute toujours un jour.
+> [!NOTE]
+> **Pourquoi**
+>
+> **`bind` et `protected-mode`** : Redis n'a **aucune** authentification par
+> défaut ; `protected-mode yes` refuse les connexions non locales tant
+> qu'aucun mot de passe n'est défini — c'est le garde-fou ajouté après les
+> milliers d'instances Redis ouvertes sur Internet en 2015-2016 (et
+> rançonnées). `bind` sur l'adresse du LAN + pare-feu + ACL : trois couches,
+> parce qu'une seule saute toujours un jour.
+>
+> **ACL plutôt que `requirepass`** : `requirepass` est un mot de passe unique
+> pour un utilisateur `default` qui peut tout — y compris `CONFIG SET dir
+> /var/www/html` puis `SAVE`, le vecteur classique pour écrire un fichier
+> arbitraire. Les ACL (Redis 6+) donnent un utilisateur par application avec
+> un **motif de clés** (`~sess:*`) et un **jeu de commandes** (`+@all
+> -@dangerous` retire `KEYS`, `FLUSHALL`, `CONFIG`, `SHUTDOWN`, `DEBUG`,
+> `MONITOR`, `SAVE`, `BGSAVE`...). `user default off` supprime l'accès sans
+> mot de passe. `&*` est le motif de canaux Pub/Sub. Les mots de passe sont
+> stockés hachés (SHA-256) dans le fichier ACL ou `redis.conf`. Sur une
+> production, `aclfile /etc/redis/users.acl` sépare les utilisateurs de la
+> configuration.
+>
+> **`maxmemory 128mb`** sur une VM de 2 Go partagée avec PostgreSQL
+> (`shared_buffers 512MB`) : le calcul est RAM totale moins PostgreSQL moins
+> cache de fichiers moins marge pour le `fork()` de `BGSAVE` (copie sur
+> écriture : dans le pire cas, la mémoire de Redis double le temps de la
+> sauvegarde). `volatile-lru` parce que les sessions ont un TTL et la file
+> non (Q15.16). `appendonly yes` + `everysec` : une seconde de perte maximum,
+> acceptable pour des sessions et une file rejouable ; `save` conservé pour
+> les copies. Le prix de l'AOF : des écritures disque continues et un
+> redémarrage plus long (rejeu).
+>
+> **Les mesures** : `used_memory` vs `maxmemory` (marge), `evicted_keys` (si
+> ça monte hors incident, le cache est trop petit), `keyspace_hits /
+> (hits+misses)` (taux de succès du cache ; sous 80 % on s'interroge),
+> `instantaneous_ops_per_sec`, `connected_clients` (une application sans
+> pool qui fuit se voit ici), `rejected_connections` (`maxclients` atteint),
+> `SLOWLOG` (commandes > 10 ms par défaut : un `KEYS` ou un gros `HGETALL`
+> y apparaît), `--latency` (typiquement 0,1 ms en local ; des pics = `fork`,
+> `KEYS`, swap). Les trois seuils à proposer au module 26 : `used_memory /
+> maxmemory > 0.9`, `evicted_keys` en hausse sur 5 min, `mem_fragmentation_
+> ratio` hors [1 ; 1,5].
+>
+> **`BGSAVE` et la copie** : le `rename()` atomique de `temp-*.rdb` vers
+> `dump.rdb` garantit qu'à tout instant `dump.rdb` est un fichier complet ;
+> la copie ne voit jamais un fichier en cours d'écriture. Pour l'AOF, le
+> répertoire évolue en continu et une copie brute peut prendre un manifeste
+> et des incréments incohérents : la sauvegarde AOF passe par `BGREWRITEAOF`
+> puis copie du répertoire complet, ou plus simplement par le RDB.
 
-**ACL plutôt que `requirepass`** : `requirepass` est un mot de passe unique
-pour un utilisateur `default` qui peut tout — y compris `CONFIG SET dir
-/var/www/html` puis `SAVE`, le vecteur classique pour écrire un fichier
-arbitraire. Les ACL (Redis 6+) donnent un utilisateur par application avec
-un **motif de clés** (`~sess:*`) et un **jeu de commandes** (`+@all
--@dangerous` retire `KEYS`, `FLUSHALL`, `CONFIG`, `SHUTDOWN`, `DEBUG`,
-`MONITOR`, `SAVE`, `BGSAVE`...). `user default off` supprime l'accès sans
-mot de passe. `&*` est le motif de canaux Pub/Sub. Les mots de passe sont
-stockés hachés (SHA-256) dans le fichier ACL ou `redis.conf`. Sur une
-production, `aclfile /etc/redis/users.acl` sépare les utilisateurs de la
-configuration.
-
-**`maxmemory 128mb`** sur une VM de 2 Go partagée avec PostgreSQL
-(`shared_buffers 512MB`) : le calcul est RAM totale moins PostgreSQL moins
-cache de fichiers moins marge pour le `fork()` de `BGSAVE` (copie sur
-écriture : dans le pire cas, la mémoire de Redis double le temps de la
-sauvegarde). `volatile-lru` parce que les sessions ont un TTL et la file
-non (Q15.16). `appendonly yes` + `everysec` : une seconde de perte maximum,
-acceptable pour des sessions et une file rejouable ; `save` conservé pour
-les copies. Le prix de l'AOF : des écritures disque continues et un
-redémarrage plus long (rejeu).
-
-**Les mesures** : `used_memory` vs `maxmemory` (marge), `evicted_keys` (si
-ça monte hors incident, le cache est trop petit), `keyspace_hits /
-(hits+misses)` (taux de succès du cache ; sous 80 % on s'interroge),
-`instantaneous_ops_per_sec`, `connected_clients` (une application sans
-pool qui fuit se voit ici), `rejected_connections` (`maxclients` atteint),
-`SLOWLOG` (commandes > 10 ms par défaut : un `KEYS` ou un gros `HGETALL`
-y apparaît), `--latency` (typiquement 0,1 ms en local ; des pics = `fork`,
-`KEYS`, swap). Les trois seuils à proposer au module 26 : `used_memory /
-maxmemory > 0.9`, `evicted_keys` en hausse sur 5 min, `mem_fragmentation_
-ratio` hors [1 ; 1,5].
-
-**`BGSAVE` et la copie** : le `rename()` atomique de `temp-*.rdb` vers
-`dump.rdb` garantit qu'à tout instant `dump.rdb` est un fichier complet ;
-la copie ne voit jamais un fichier en cours d'écriture. Pour l'AOF, le
-répertoire évolue en continu et une copie brute peut prendre un manifeste
-et des incréments incohérents : la sauvegarde AOF passe par `BGREWRITEAOF`
-puis copie du répertoire complet, ou plus simplement par le RDB.
-:::
-
-::: piege
-* `CONFIG SET` sans `CONFIG REWRITE` (ou sans éditer le fichier) : le
-  changement disparaît au prochain restart. Ici on édite le fichier, donc
-  pas de problème — mais l'étape 6 utilise `CONFIG SET` volontairement à
-  titre temporaire.
-* Le mot de passe dans `--pass` ou `-a` apparaît dans `ps` et l'historique
-  du shell (`redis-cli` affiche d'ailleurs un avertissement) ;
-  `REDISCLI_AUTH` évite les deux.
-* `redis-app.py` reçoit l'URL avec le mot de passe en argument : lisible
-  dans `ps`. Pour un vrai service, `FACTURA_REDIS_URL` vient d'un
-  `EnvironmentFile=`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `CONFIG SET` sans `CONFIG REWRITE` (ou sans éditer le fichier) : le
+>   changement disparaît au prochain restart. Ici on édite le fichier, donc
+>   pas de problème — mais l'étape 6 utilise `CONFIG SET` volontairement à
+>   titre temporaire.
+> * Le mot de passe dans `--pass` ou `-a` apparaît dans `ps` et l'historique
+>   du shell (`redis-cli` affiche d'ailleurs un avertissement) ;
+>   `REDISCLI_AUTH` évite les deux.
+> * `redis-app.py` reçoit l'URL avec le mot de passe en argument : lisible
+>   dans `ps`. Pour un vrai service, `FACTURA_REDIS_URL` vient d'un
+>   `EnvironmentFile=`.
 
 ---
 
 ## 15.7 Break & Fix
 
-### **BF15.1** — « La page dit ERREUR, l'API répond »
+### <a id="bf15-1"></a>**[BF15.1](README.md#bf15-1)** — « La page dit ERREUR, l'API répond »
 
 *`/api/invoices.json` renvoie 404 alors que `/api/health` répond 200 ; un
 collègue a « ajouté du cache statique ».*
@@ -3140,26 +3221,27 @@ non-régression (`curl` sur trois URI de l'API dont une avec extension)
 dans le check de déploiement ; et une sonde de supervision sur une URI
 **réelle** de l'application, pas seulement `/health`.
 
-::: pourquoi
-Le mécanisme est celui de Q15.1. Ce qui le rend redoutable : la
-modification est « évidemment sans rapport » avec l'API (elle parle de
-`.css` et `.js`), `nginx -t` la valide, le collègue a testé `/static/app.js`
-et vu le cache fonctionner, et la sonde `/api/health` continue de
-répondre. L'incident n'est visible que par l'utilisateur, et seulement sur
-les routes dont le nom finit par une extension — dans une API REST
-moderne, il y en a rarement, ce qui explique pourquoi cette panne dort
-parfois des mois avant qu'une route `/export.csv` ne la réveille.
-
-Le réflexe de diagnostic est celui de QO15.3 : tester le backend en
-direct (il répond → nginx est coupable), puis lire le chemin de fichier
-dans `error.log` (nginx a cherché un **fichier** pour une URI d'API → une
-location statique a capturé la requête), puis `nginx -T | grep location`
-pour trouver laquelle.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme est celui de Q15.1. Ce qui le rend redoutable : la
+> modification est « évidemment sans rapport » avec l'API (elle parle de
+> `.css` et `.js`), `nginx -t` la valide, le collègue a testé `/static/app.js`
+> et vu le cache fonctionner, et la sonde `/api/health` continue de
+> répondre. L'incident n'est visible que par l'utilisateur, et seulement sur
+> les routes dont le nom finit par une extension — dans une API REST
+> moderne, il y en a rarement, ce qui explique pourquoi cette panne dort
+> parfois des mois avant qu'une route `/export.csv` ne la réveille.
+>
+> Le réflexe de diagnostic est celui de QO15.3 : tester le backend en
+> direct (il répond → nginx est coupable), puis lire le chemin de fichier
+> dans `error.log` (nginx a cherché un **fichier** pour une URI d'API → une
+> location statique a capturé la requête), puis `nginx -T | grep location`
+> pour trouver laquelle.
 
 ---
 
-### **BF15.2** — « 502 sur tout /api/ »
+### <a id="bf15-2"></a>**[BF15.2](README.md#bf15-2)** — « 502 sur tout /api/ »
 
 *Toutes les URI `/api/` en 502, instances `active`, le collègue a
 « harmonisé les ports ».*
@@ -3197,34 +3279,35 @@ validation fonctionnelle est `curl` après reload, sur une URI de l'API,
 **avant** de fermer le ticket. Et une supervision de la ligne `no live
 upstreams` dans `error.log`.
 
-::: pourquoi
-`connect() failed (111)` = `ECONNREFUSED` : le noyau de `lab-web` a répondu
-par un `RST` parce qu'aucune socket n'écoute sur ce port. C'est différent
-d'un timeout (`110`, pare-feu qui jette) et d'un `113` (`No route to host`,
-réseau). Le port apparaît en clair dans la ligne : le diagnostic tient
-dans la lecture de cette ligne + `ss -tlnp` pour confronter à la réalité.
-
-Le passage par `no live upstreams` explique un détail : après avoir
-constaté deux échecs (`max_fails=2` de L15.1, ou 1 par défaut), nginx
-n'essaie même plus pendant `fail_timeout` (10 s) et répond 502 sans
-tenter de connexion — les lignes `connect() failed` cessent, remplacées par
-`no live upstreams`. Un opérateur qui lit `error.log` **après** la
-première salve ne voit plus le port fautif : il faut remonter quelques
-lignes, ou attendre le prochain essai. C'est aussi pourquoi, après
-correction, le premier `curl` peut encore donner 502 pendant quelques
-secondes si l'on n'a pas rechargé (le reload réinitialise l'état des
-upstreams).
-
-Sur Rocky, le même symptôme avec `13: Permission denied` au lieu de `111`
-désigne SELinux : `setsebool -P httpd_can_network_connect 1`. Et avec une
-socket Unix (`proxy_pass http://unix:/run/app.sock;`), `13` désigne les
-droits de la socket (`www-data` doit avoir `rw`, souvent via un groupe
-commun) ou `2: No such file` si l'application ne l'a pas créée.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `connect() failed (111)` = `ECONNREFUSED` : le noyau de `lab-web` a répondu
+> par un `RST` parce qu'aucune socket n'écoute sur ce port. C'est différent
+> d'un timeout (`110`, pare-feu qui jette) et d'un `113` (`No route to host`,
+> réseau). Le port apparaît en clair dans la ligne : le diagnostic tient
+> dans la lecture de cette ligne + `ss -tlnp` pour confronter à la réalité.
+>
+> Le passage par `no live upstreams` explique un détail : après avoir
+> constaté deux échecs (`max_fails=2` de L15.1, ou 1 par défaut), nginx
+> n'essaie même plus pendant `fail_timeout` (10 s) et répond 502 sans
+> tenter de connexion — les lignes `connect() failed` cessent, remplacées par
+> `no live upstreams`. Un opérateur qui lit `error.log` **après** la
+> première salve ne voit plus le port fautif : il faut remonter quelques
+> lignes, ou attendre le prochain essai. C'est aussi pourquoi, après
+> correction, le premier `curl` peut encore donner 502 pendant quelques
+> secondes si l'on n'a pas rechargé (le reload réinitialise l'état des
+> upstreams).
+>
+> Sur Rocky, le même symptôme avec `13: Permission denied` au lieu de `111`
+> désigne SELinux : `setsebool -P httpd_can_network_connect 1`. Et avec une
+> socket Unix (`proxy_pass http://unix:/run/app.sock;`), `13` désigne les
+> droits de la socket (`www-data` doit avoir `rw`, souvent via un groupe
+> commun) ou `2: No such file` si l'application ne l'a pas créée.
 
 ---
 
-### **BF15.3** — « L'application ne se connecte plus depuis la migration »
+### <a id="bf15-3"></a>**[BF15.3](README.md#bf15-3)** — « L'application ne se connecte plus depuis la migration »
 
 *Deux causes superposées : `pg_hba` modifié, puis secret `md5` face à une
 méthode `scram`.*
@@ -3311,28 +3394,29 @@ que la première qui bloque.
 'md5%'`) ; et un compte de prestataire nominatif, pour que `journalctl` et
 `\du` disent qui a fait quoi.
 
-::: pourquoi
-La compatibilité `md5`/`scram` est asymétrique : la méthode `md5` de
-`pg_hba` sait vérifier un secret SCRAM (elle bascule d'elle-même en
-SCRAM), mais la méthode `scram-sha-256` ne sait rien faire d'un secret
-MD5 — le protocole SCRAM exige un secret dérivé par PBKDF2 avec un sel,
-que le hachage MD5 non salé ne fournit pas. D'où le `DETAIL: does not have
-a valid SCRAM secret`, qui n'apparaît **que côté serveur** : le client
-reçoit le même `password authentication failed` qu'avec un mot de passe
-faux, par conception (ne pas renseigner un attaquant).
-
-`password_encryption` ne convertit rien : il ne s'applique qu'au
-**prochain** `ALTER ROLE ... PASSWORD` ou `\password`. Une base migrée
-depuis PG 10-13 peut donc contenir des secrets MD5 des années après le
-passage en `scram-sha-256` par défaut (PG 14), sans que personne ne le
-sache, jusqu'au jour où quelqu'un remplace `md5` par `scram-sha-256` dans
-`pg_hba.conf` « pour durcir ». Le contrôle `SELECT rolname FROM pg_authid
-WHERE rolpassword LIKE 'md5%'` fait partie de tout audit PostgreSQL.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La compatibilité `md5`/`scram` est asymétrique : la méthode `md5` de
+> `pg_hba` sait vérifier un secret SCRAM (elle bascule d'elle-même en
+> SCRAM), mais la méthode `scram-sha-256` ne sait rien faire d'un secret
+> MD5 — le protocole SCRAM exige un secret dérivé par PBKDF2 avec un sel,
+> que le hachage MD5 non salé ne fournit pas. D'où le `DETAIL: does not have
+> a valid SCRAM secret`, qui n'apparaît **que côté serveur** : le client
+> reçoit le même `password authentication failed` qu'avec un mot de passe
+> faux, par conception (ne pas renseigner un attaquant).
+>
+> `password_encryption` ne convertit rien : il ne s'applique qu'au
+> **prochain** `ALTER ROLE ... PASSWORD` ou `\password`. Une base migrée
+> depuis PG 10-13 peut donc contenir des secrets MD5 des années après le
+> passage en `scram-sha-256` par défaut (PG 14), sans que personne ne le
+> sache, jusqu'au jour où quelqu'un remplace `md5` par `scram-sha-256` dans
+> `pg_hba.conf` « pour durcir ». Le contrôle `SELECT rolname FROM pg_authid
+> WHERE rolpassword LIKE 'md5%'` fait partie de tout audit PostgreSQL.
 
 ---
 
-### **BF15.4** — « Plus aucune connexion, la base ne fait rien »
+### <a id="bf15-4"></a>**[BF15.4](README.md#bf15-4)** — « Plus aucune connexion, la base ne fait rien »
 
 *`remaining connection slots are reserved`, charge nulle, restart interdit,
 « optimisation mémoire » d'un collègue.*
@@ -3408,32 +3492,33 @@ connexions qu'elle veut vers pgbouncer, qui n'en maintient qu'une poignée
 vers PostgreSQL. C'est la réponse standard, et elle rend `max_connections
 = 20` presque acceptable.
 
-::: pourquoi
-Chaque connexion PostgreSQL est un **processus** (`fork()` du postmaster)
-avec sa mémoire propre (quelques Mo) plus `work_mem` par tri : c'est pour
-ça que le collègue voulait baisser `max_connections`, et c'est pour ça
-qu'on ne le monte pas à 1 000. Mais une session `idle` coûte presque rien
-en CPU : elle occupe juste un slot. Le vrai problème est l'application qui
-ouvre sans fermer — un pool mal réglé (`pool_size` × workers × instances >
-slots), ou des connexions abandonnées après un crash côté client sans
-`tcp_keepalives` (PostgreSQL ne les voit mourir qu'au premier envoi ;
-`tcp_keepalives_idle = 60` accélère la détection).
-
-Les slots réservés (`superuser_reserved_connections`, et
-`reserved_connections` + rôle `pg_use_reserved_connections` en PG 16) sont
-précisément la porte de secours de cet incident : sans eux, l'opérateur
-serait enfermé dehors avec les utilisateurs. `pg_terminate_backend` sur
-des sessions `idle` est sans risque fonctionnel : elles n'ont aucune
-transaction en cours ; le client recevra une erreur à sa **prochaine**
-requête et devra se reconnecter — une application correcte le fait.
-L'interdit de l'énoncé (pas de restart) est réaliste : un restart aurait
-tout réglé en 5 secondes et tué la session de clôture ; l'exploitant qui
-sait lire `pg_stat_activity` n'a pas besoin de ce marteau.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque connexion PostgreSQL est un **processus** (`fork()` du postmaster)
+> avec sa mémoire propre (quelques Mo) plus `work_mem` par tri : c'est pour
+> ça que le collègue voulait baisser `max_connections`, et c'est pour ça
+> qu'on ne le monte pas à 1 000. Mais une session `idle` coûte presque rien
+> en CPU : elle occupe juste un slot. Le vrai problème est l'application qui
+> ouvre sans fermer — un pool mal réglé (`pool_size` × workers × instances >
+> slots), ou des connexions abandonnées après un crash côté client sans
+> `tcp_keepalives` (PostgreSQL ne les voit mourir qu'au premier envoi ;
+> `tcp_keepalives_idle = 60` accélère la détection).
+>
+> Les slots réservés (`superuser_reserved_connections`, et
+> `reserved_connections` + rôle `pg_use_reserved_connections` en PG 16) sont
+> précisément la porte de secours de cet incident : sans eux, l'opérateur
+> serait enfermé dehors avec les utilisateurs. `pg_terminate_backend` sur
+> des sessions `idle` est sans risque fonctionnel : elles n'ont aucune
+> transaction en cours ; le client recevra une erreur à sa **prochaine**
+> requête et devra se reconnecter — une application correcte le fait.
+> L'interdit de l'énoncé (pas de restart) est réaliste : un restart aurait
+> tout réglé en 5 secondes et tué la session de clôture ; l'exploitant qui
+> sait lire `pg_stat_activity` n'a pas besoin de ce marteau.
 
 ---
 
-### **BF15.5** — « L'application plante en écriture, Redis répond »
+### <a id="bf15-5"></a>**[BF15.5](README.md#bf15-5)** — « L'application plante en écriture, Redis répond »
 
 *`ECRITURE REFUSEE`, `PING` OK, « réglage mémoire » récent.*
 
@@ -3483,28 +3568,29 @@ et reste. Ou deux instances Redis : `noeviction` pour la file (une
 écriture refusée vaut mieux qu'un travail perdu, et l'application doit
 gérer l'erreur), `allkeys-lru` pour le cache pur.
 
-::: pourquoi
-Le message `OOM command not allowed when used memory > 'maxmemory'` est
-renvoyé **par commande** : Redis vérifie avant chaque commande marquée
-« consomme de la mémoire » si `used_memory > maxmemory` ; si la politique
-est `noeviction` (ou si elle est `volatile-*` et qu'il n'y a plus rien
-de volatil à évincer), la commande est refusée. Les commandes en lecture
-ne sont pas concernées, ni `DEL`, ni `PING` : c'est ce qui rend la panne
-partielle et trompeuse pour une sonde qui ne fait que `PING`.
-
-Une bonne sonde Redis **écrit** une clé de test (`SET sonde:x 1 EX 10`)
-et mesure le résultat. Et le réglage de `maxmemory` ne se fait jamais en
-réponse à une alerte sans regarder `INFO keyspace` (combien de clés,
-combien avec TTL) et `used_memory_peak` : ici l'application avait besoin
-d'environ 3 Mo par tranche de 30 minutes de sessions ; 1 Mo était en
-dessous de la mémoire de base de Redis lui-même (`used_memory` à vide). `CONFIG SET` + `CONFIG REWRITE` est la
-séquence sans coupure ; l'oubli du `REWRITE` est la cause classique d'une
-panne qui « revient toute seule » au restart suivant.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le message `OOM command not allowed when used memory > 'maxmemory'` est
+> renvoyé **par commande** : Redis vérifie avant chaque commande marquée
+> « consomme de la mémoire » si `used_memory > maxmemory` ; si la politique
+> est `noeviction` (ou si elle est `volatile-*` et qu'il n'y a plus rien
+> de volatil à évincer), la commande est refusée. Les commandes en lecture
+> ne sont pas concernées, ni `DEL`, ni `PING` : c'est ce qui rend la panne
+> partielle et trompeuse pour une sonde qui ne fait que `PING`.
+>
+> Une bonne sonde Redis **écrit** une clé de test (`SET sonde:x 1 EX 10`)
+> et mesure le résultat. Et le réglage de `maxmemory` ne se fait jamais en
+> réponse à une alerte sans regarder `INFO keyspace` (combien de clés,
+> combien avec TTL) et `used_memory_peak` : ici l'application avait besoin
+> d'environ 3 Mo par tranche de 30 minutes de sessions ; 1 Mo était en
+> dessous de la mémoire de base de Redis lui-même (`used_memory` à vide). `CONFIG SET` + `CONFIG REWRITE` est la
+> séquence sans coupure ; l'oubli du `REWRITE` est la cause classique d'une
+> panne qui « revient toute seule » au restart suivant.
 
 ---
 
-### **BF15.6** — « Les exports de nuit font 0 octet »
+### <a id="bf15-6"></a>**[BF15.6](README.md#bf15-6)** — « Les exports de nuit font 0 octet »
 
 *Fichiers horodatés mais vides ; « à la main ça marche » ; compte dédié,
 pas de mot de passe dans cron.*
@@ -3580,33 +3666,34 @@ produire (ci-dessus) ; un contrôle indépendant (le healthcheck de D15 ou
 du projet P1) vérifie **âge et taille** du dernier fichier ; et une
 restauration de test périodique — la seule preuve.
 
-::: pourquoi
-Deux mécanismes se combinent. Le premier est celui de E15.13 : libpq
-vérifie lui-même le mode de `.pgpass` et **ignore** un fichier trop
-ouvert au lieu de refuser la connexion — un choix qui protège le secret
-(il ne l'utilisera pas si d'autres peuvent le lire) mais qui transforme
-une faute de droits en échec d'authentification. Le second est la
-sémantique du shell : dans `cmd > f`, le shell ouvre (et tronque) `f`
-**avant** d'exécuter `cmd` ; si `cmd` échoue sans rien écrire, `f` existe,
-vide, avec une date récente. Toute vérification fondée sur « le fichier du
-jour existe » est trompée.
-
-C'est pourquoi le script de L15.4 (sous `postgres`, `peer`, pas de
-`.pgpass`) est la meilleure réponse au besoin : il supprime la première
-cause. Quand un compte dédié est imposé, le `.pgpass` en `0600` dans son
-home, ou `PGPASSFILE=` vers un fichier en `0600` que `dumpops` possède — pas un `root:dumpops 0640` : libpq
-refuse tout bit groupe ou autres, quel que soit le propriétaire; la
-variante propre est un `~/.pg_service.conf` + `.pgpass`, ou un
-`EnvironmentFile=` de service systemd. Et dans tous les cas, `2>/dev/null`
-sur une commande de sauvegarde est une faute professionnelle : on
-supprime la seule trace de l'échec.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux mécanismes se combinent. Le premier est celui de E15.13 : libpq
+> vérifie lui-même le mode de `.pgpass` et **ignore** un fichier trop
+> ouvert au lieu de refuser la connexion — un choix qui protège le secret
+> (il ne l'utilisera pas si d'autres peuvent le lire) mais qui transforme
+> une faute de droits en échec d'authentification. Le second est la
+> sémantique du shell : dans `cmd > f`, le shell ouvre (et tronque) `f`
+> **avant** d'exécuter `cmd` ; si `cmd` échoue sans rien écrire, `f` existe,
+> vide, avec une date récente. Toute vérification fondée sur « le fichier du
+> jour existe » est trompée.
+>
+> C'est pourquoi le script de L15.4 (sous `postgres`, `peer`, pas de
+> `.pgpass`) est la meilleure réponse au besoin : il supprime la première
+> cause. Quand un compte dédié est imposé, le `.pgpass` en `0600` dans son
+> home, ou `PGPASSFILE=` vers un fichier en `0600` que `dumpops` possède — pas un `root:dumpops 0640` : libpq
+> refuse tout bit groupe ou autres, quel que soit le propriétaire; la
+> variante propre est un `~/.pg_service.conf` + `.pgpass`, ou un
+> `EnvironmentFile=` de service systemd. Et dans tous les cas, `2>/dev/null`
+> sur une commande de sauvegarde est une faute professionnelle : on
+> supprime la seule trace de l'échec.
 
 ---
 
 ## 15.8 Défi du module
 
-**D15** — *Dossier d'exploitation : configurations, `verif-services.sh`,
+<a id="d15"></a>**[D15](README.md#d15)** — *Dossier d'exploitation : configurations, `verif-services.sh`,
 runbook, fiche entretien, preuve.*
 
 **Configurations** : copie de chaque fichier avec l'en-tête demandé, par
@@ -3765,22 +3852,29 @@ dix lignes par brique, à la première personne, avec un exemple vécu (« sur
 le lab, j'ai provoqué un 404 d'API par une regex de cache et je sais
 pourquoi `^~` le rend impossible »).
 
-::: pourquoi
-Le script de conformité est le cœur du livrable parce qu'il transforme
-chaque leçon du module en **assertion vérifiable** : les deux instances
-qui servent (E15.6, L15.2 étape 6), `pg_hba` sans `trust`/`md5` (BF15.3),
-le taux de connexions et les `idle in transaction` (Q15.14, BF15.4), la
-sauvegarde récente et vérifiée (L15.4, BF15.6), l'archivage sans échec
-(Q15.15), `PING` refusé et la politique d'éviction (L15.5, BF15.5), la
-fragmentation et le swap (Q15.18). C'est exactement ce qu'un exporter
-Prometheus mesurera au module 26 — ici en bash, pour comprendre ce que
-chaque métrique veut dire avant de la grapher.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le script de conformité est le cœur du livrable parce qu'il transforme
+> chaque leçon du module en **assertion vérifiable** : les deux instances
+> qui servent (E15.6, L15.2 étape 6), `pg_hba` sans `trust`/`md5` (BF15.3),
+> le taux de connexions et les `idle in transaction` (Q15.14, BF15.4), la
+> sauvegarde récente et vérifiée (L15.4, BF15.6), l'archivage sans échec
+> (Q15.15), `PING` refusé et la politique d'éviction (L15.5, BF15.5), la
+> fragmentation et le swap (Q15.18). C'est exactement ce qu'un exporter
+> Prometheus mesurera au module 26 — ici en bash, pour comprendre ce que
+> chaque métrique veut dire avant de la grapher.
+>
+> La rotation de secrets « sans interruption » est la question de runbook
+> la plus discriminante : PostgreSQL n'a qu'un mot de passe par rôle (donc
+> il faut soit un second rôle temporaire, soit une micro-coupure ordonnée),
+> alors que les ACL Redis acceptent **plusieurs** mots de passe par
+> utilisateur (`>nouveau` ajoute, `<ancien` retire) — ce qui permet une
+> bascule propre. Savoir que les deux briques diffèrent sur ce point est le
+> genre de détail qui prouve une pratique réelle.
 
-La rotation de secrets « sans interruption » est la question de runbook
-la plus discriminante : PostgreSQL n'a qu'un mot de passe par rôle (donc
-il faut soit un second rôle temporaire, soit une micro-coupure ordonnée),
-alors que les ACL Redis acceptent **plusieurs** mots de passe par
-utilisateur (`>nouveau` ajoute, `<ancien` retire) — ce qui permet une
-bascule propre. Savoir que les deux briques diffèrent sur ce point est le
-genre de détail qui prouve une pratique réelle.
-:::
+<!-- nav:début -->
+---
+
+[← Module 14](../14-ssh/corrige.md) · [Énoncé](README.md) · [Module 16 →](../16-logs-monitoring/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

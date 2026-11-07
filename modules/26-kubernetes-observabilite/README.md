@@ -1,46 +1,75 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 26**  
+[← Module 25](../25-cicd/README.md) · [Corrigé](corrige.md) · [Module 27 →](../27-python-ops/README.md)
+
+<details><summary>Scripts du module (13)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M26.sh`](../../scripts/setup/setup_M26.sh) | prépare le module |
+| [`check_M26_01.sh`](../../scripts/check/check_M26_01.sh) | vérification |
+| [`check_M26_02.sh`](../../scripts/check/check_M26_02.sh) | vérification |
+| [`check_M26_03.sh`](../../scripts/check/check_M26_03.sh) | vérification |
+| [`check_M26_04.sh`](../../scripts/check/check_M26_04.sh) | vérification |
+| [`check_M26_05.sh`](../../scripts/check/check_M26_05.sh) | vérification |
+| [`check_M26_06.sh`](../../scripts/check/check_M26_06.sh) | vérification |
+| [`break_M26_01.sh`](../../scripts/break/break_M26_01.sh) | installe une panne |
+| [`break_M26_02.sh`](../../scripts/break/break_M26_02.sh) | installe une panne |
+| [`break_M26_03.sh`](../../scripts/break/break_M26_03.sh) | installe une panne |
+| [`break_M26_04.sh`](../../scripts/break/break_M26_04.sh) | installe une panne |
+| [`break_M26_05.sh`](../../scripts/break/break_M26_05.sh) | installe une panne |
+| [`break_M26_06.sh`](../../scripts/break/break_M26_06.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 26 — Kubernetes et observabilité
 
 ## 26.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* décrire l'architecture d'un cluster Kubernetes (api-server, etcd, scheduler,
-  controller-manager, kubelet, kube-proxy, runtime), expliquer le modèle
-  déclaratif et ce qu'est une boucle de réconciliation, et dire ce que k3s
-  remplace ou embarque par rapport à un cluster « complet » ;
-* installer k3s sur `lab-ops`, configurer `kubectl` (kubeconfig, contextes,
-  namespace par défaut, alias, complétion) depuis `lab-ops` **et** `lab-adm`,
-  et installer, mettre à jour et revenir en arrière sur un chart Helm ;
-* écrire de zéro des manifestes corrects pour Pod, Deployment, Service,
-  Ingress (Traefik, TLS), ConfigMap, Secret, StatefulSet + PVC, Job/CronJob,
-  DaemonSet, ResourceQuota, et les appliquer dans un Namespace dédié ;
-* déployer nginx + une API + PostgreSQL sur k3s, depuis un registre privé
-  authentifié, avec probes, requests/limits, rolling update et rollback ;
-* dérouler une méthode de diagnostic sur un Pod `Pending`, `ImagePullBackOff`,
-  `CrashLoopBackOff`, `OOMKilled`, une readiness qui échoue, un Service sans
-  endpoint, un Ingress en 404/5xx, une résolution DNS interne qui échoue —
-  en lisant `describe`, `logs --previous` et `get events --sort-by` ;
-* définir SLI, SLO, SLA et budget d'erreur, et calculer un budget et une
-  vitesse de consommation (*burn rate*) sur un cas chiffré ;
-* déployer Prometheus, Alertmanager, Grafana, Loki et Alloy sur `lab-ops`,
-  scraper les cinq VM et des exporters (nginx, PostgreSQL, blackbox,
-  kube-state-metrics, l'API sur k3s), et écrire les dix requêtes PromQL
-  qu'on tape vraiment en astreinte ;
-* écrire des règles d'enregistrement et d'alerte correctes (`expr`, `for`,
-  `labels`, `annotations`, `runbook_url`), router, grouper, inhiber et faire
-  taire une alerte dans Alertmanager ;
-* provisionner Grafana par fichiers, construire un tableau de bord avec
-  variables et seuils, importer un tableau de bord communautaire, et corréler
-  une métrique avec les logs Loki en LogQL ;
-* distinguer ce qui mérite une page de ce qui mérite un ticket, reconnaître
-  la fatigue d'alerte, et raccrocher un incident à un post-mortem.
-
-Temps estimé : 12 h (deux séances de 6 h, partie A puis partie B)
-Prérequis : modules 08 (systemd), 12 (réseau), 14 (SSH), 16 (journaux,
-`node_exporter`), 19 (méthode d'incident, post-mortem), et le module 22
-(Docker : images, registre, Compose). PostgreSQL et nginx sont utilisés tels quels.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * décrire l'architecture d'un cluster Kubernetes (api-server, etcd, scheduler,
+>   controller-manager, kubelet, kube-proxy, runtime), expliquer le modèle
+>   déclaratif et ce qu'est une boucle de réconciliation, et dire ce que k3s
+>   remplace ou embarque par rapport à un cluster « complet » ;
+> * installer k3s sur `lab-ops`, configurer `kubectl` (kubeconfig, contextes,
+>   namespace par défaut, alias, complétion) depuis `lab-ops` **et** `lab-adm`,
+>   et installer, mettre à jour et revenir en arrière sur un chart Helm ;
+> * écrire de zéro des manifestes corrects pour Pod, Deployment, Service,
+>   Ingress (Traefik, TLS), ConfigMap, Secret, StatefulSet + PVC, Job/CronJob,
+>   DaemonSet, ResourceQuota, et les appliquer dans un Namespace dédié ;
+> * déployer nginx + une API + PostgreSQL sur k3s, depuis un registre privé
+>   authentifié, avec probes, requests/limits, rolling update et rollback ;
+> * dérouler une méthode de diagnostic sur un Pod `Pending`, `ImagePullBackOff`,
+>   `CrashLoopBackOff`, `OOMKilled`, une readiness qui échoue, un Service sans
+>   endpoint, un Ingress en 404/5xx, une résolution DNS interne qui échoue —
+>   en lisant `describe`, `logs --previous` et `get events --sort-by` ;
+> * définir SLI, SLO, SLA et budget d'erreur, et calculer un budget et une
+>   vitesse de consommation (*burn rate*) sur un cas chiffré ;
+> * déployer Prometheus, Alertmanager, Grafana, Loki et Alloy sur `lab-ops`,
+>   scraper les cinq VM et des exporters (nginx, PostgreSQL, blackbox,
+>   kube-state-metrics, l'API sur k3s), et écrire les dix requêtes PromQL
+>   qu'on tape vraiment en astreinte ;
+> * écrire des règles d'enregistrement et d'alerte correctes (`expr`, `for`,
+>   `labels`, `annotations`, `runbook_url`), router, grouper, inhiber et faire
+>   taire une alerte dans Alertmanager ;
+> * provisionner Grafana par fichiers, construire un tableau de bord avec
+>   variables et seuils, importer un tableau de bord communautaire, et corréler
+>   une métrique avec les logs Loki en LogQL ;
+> * distinguer ce qui mérite une page de ce qui mérite un ticket, reconnaître
+>   la fatigue d'alerte, et raccrocher un incident à un post-mortem.
+>
+> **Temps estimé** : 12 h (deux séances de 6 h, partie A puis partie B)
+>
+> **Prérequis** : modules 08 (systemd), 12 (réseau), 14 (SSH), 16 (journaux,
+> `node_exporter`), 19 (méthode d'incident, post-mortem), et le module 22
+> (Docker : images, registre, Compose). PostgreSQL et nginx sont utilisés tels quels.
 
 ---
 
@@ -95,21 +124,23 @@ curl -fsSLo kubectl "https://dl.k8s.io/release/$(curl -fsSL \
 sudo install -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
 ```
 
-::: rhel
-Sur `lab-rhel`, `node_exporter` n'est pas dans les dépôts de base : le script
-`~/lab26/bin/installer-node-exporter.sh` télécharge le binaire officiel, crée
-`node_exporter.service` et ouvre `9100/tcp` dans firewalld. Pense au SELinux :
-le binaire dans `/usr/local/bin` est exécutable par systemd sans étiquette
-particulière.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel`, `node_exporter` n'est pas dans les dépôts de base : le script
+> `~/lab26/bin/installer-node-exporter.sh` télécharge le binaire officiel, crée
+> `node_exporter.service` et ouvre `9100/tcp` dans firewalld. Pense au SELinux :
+> le binaire dans `/usr/local/bin` est exécutable par systemd sans étiquette
+> particulière.
 
-::: attention
-`lab-ops` a 4 Go de RAM pour Docker (registre + 7 conteneurs d'observabilité)
-**et** k3s. Ça tient, à condition de respecter les `requests`/`limits` des
-manifestes et de ne pas installer `kube-prometheus-stack` complet (voir 26.9).
-Surveille `kubectl top node` **et** `free -m` : si la VM swappe, tout ralentit sans qu'aucun pod ne soit tué. Le snapshot
-`avant-lab26` est ta porte de sortie ; `k3s-uninstall.sh` en est une autre.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `lab-ops` a 4 Go de RAM pour Docker (registre + 7 conteneurs d'observabilité)
+> **et** k3s. Ça tient, à condition de respecter les `requests`/`limits` des
+> manifestes et de ne pas installer `kube-prometheus-stack` complet (voir 26.9).
+> Surveille `kubectl top node` **et** `free -m` : si la VM swappe, tout ralentit sans qu'aucun pod ne soit tué. Le snapshot
+> `avant-lab26` est ta porte de sortie ; `k3s-uninstall.sh` en est une autre.
 
 ---
 
@@ -137,7 +168,9 @@ l'état observé à l'état désiré et corrigent l'écart : c'est la
 **réconciliation**. Rien n'est « exécuté » par `kubectl` : il écrit un objet,
 puis quelqu'un d'autre réagit.
 
-@fig(k8s-architecture): Control plane et nœud : tout passe par l'API server, les contrôleurs réconcilient ; `kubectl apply` écrit un Deployment, le ReplicaSet crée les Pods, le Service leur donne une IP stable, l'Ingress route depuis l'extérieur.
+<p align="center"><img src="../../assets/figures/k8s-architecture.svg" alt="Schéma : k8s-architecture"></p>
+
+*Figure — Control plane et nœud : tout passe par l'API server, les contrôleurs réconcilient ; `kubectl apply` écrit un Deployment, le ReplicaSet crée les Pods, le Service leur donne une IP stable, l'Ingress route depuis l'extérieur.*
 
 **k3s** : un seul binaire, un seul service `k3s.service`. Il embarque containerd,
 flannel (CNI), CoreDNS, **Traefik** (Ingress, classe `traefik`), ServiceLB
@@ -349,7 +382,9 @@ Collecte : Alloy (Promtail est en fin de vie). LogQL :
 sum by (host) (rate({job="systemd-journal"} |= "oom" [5m]))
 ```
 
-@fig(observabilite-pile): La pile d'observabilité sur lab-ops : Prometheus scrape les exporters et la sonde blackbox, évalue les règles et pousse les alertes à Alertmanager qui les route ; Promtail/Alloy poussent les logs vers Loki ; Grafana lit les deux ; le SLO fixe le budget d'erreur.
+<p align="center"><img src="../../assets/figures/observabilite-pile.svg" alt="Schéma : observabilite-pile"></p>
+
+*Figure — La pile d'observabilité sur lab-ops : Prometheus scrape les exporters et la sonde blackbox, évalue les règles et pousse les alertes à Alertmanager qui les route ; Promtail/Alloy poussent les logs vers Loki ; Grafana lit les deux ; le SLO fixe le budget d'erreur.*
 
 Traces : OpenTelemetry (SDK + collecteur + protocole OTLP) produit des
 *spans* reliés par un `trace_id`, propagé en HTTP par l'en-tête
@@ -381,7 +416,7 @@ post-mortem blameless (modèle : `~/lab19/modeles/postmortem.md`).
 
 ## 26.3 Quiz — QCM
 
-**Q26.1** — Tu tapes `kubectl scale deploy factura-api --replicas=3`. Décris ce
+<a id="q26-1"></a>**[Q26.1](corrige.md#q26-1)** — Tu tapes `kubectl scale deploy factura-api --replicas=3`. Décris ce
 qui se passe réellement dans le cluster.
 
 a) `kubectl` demande au kubelet de lancer un troisième conteneur
@@ -392,7 +427,7 @@ b) `kubectl` modifie `spec.replicas` via l'API server ; le contrôleur de
 c) le scheduler crée directement le pod sur le nœud le moins chargé
 d) etcd notifie le kubelet qu'un pod manque
 
-**Q26.2** — Sur k3s mono-nœud, quelle affirmation est vraie ? **Deux réponses
+<a id="q26-2"></a>**[Q26.2](corrige.md#q26-2)** — Sur k3s mono-nœud, quelle affirmation est vraie ? **Deux réponses
 correctes.**
 
 a) etcd tourne dans un pod `kube-system`
@@ -400,7 +435,7 @@ b) le datastore par défaut est SQLite, servi à l'API server par kine
 c) Traefik, CoreDNS et metrics-server sont déployés automatiquement
 d) kube-proxy est remplacé par nginx
 
-**Q26.3** — `kubectl get pods -n factura` affiche :
+<a id="q26-3"></a>**[Q26.3](corrige.md#q26-3)** — `kubectl get pods -n factura` affiche :
 
 ```text
 NAME                           READY   STATUS             RESTARTS      AGE
@@ -414,7 +449,7 @@ b) `kubectl logs factura-api-7d9c8b5f4-x2k9p --previous`
 c) `kubectl get events -n factura`
 d) `kubectl top pod factura-api-7d9c8b5f4-x2k9p`
 
-**Q26.4** — `kubectl describe pod` montre `Last State: Terminated, Reason:
+<a id="q26-4"></a>**[Q26.4](corrige.md#q26-4)** — `kubectl describe pod` montre `Last State: Terminated, Reason:
 OOMKilled, Exit Code: 137`. Que s'est-il passé ?
 
 a) la liveness probe a échoué trois fois et le kubelet a redémarré le pod
@@ -423,7 +458,7 @@ b) le conteneur a dépassé `resources.limits.memory` ; le noyau (cgroup) l'a
 c) le nœud manque de mémoire et le scheduler a évincé le pod
 d) `requests.memory` est trop bas, il faut l'augmenter
 
-**Q26.5** — Un Service `factura-api` a une ClusterIP mais
+<a id="q26-5"></a>**[Q26.5](corrige.md#q26-5)** — Un Service `factura-api` a une ClusterIP mais
 `kubectl get endpoints factura-api` renvoie `<none>`. Les pods de l'API sont
 `Running` et `1/1`. Cause la plus probable ?
 
@@ -432,7 +467,7 @@ b) le `selector` du Service ne correspond pas aux labels des pods
 c) CoreDNS est arrêté
 d) il manque un Ingress
 
-**Q26.6** — Même Service, mais cette fois les pods sont `Running` et `0/1`.
+<a id="q26-6"></a>**[Q26.6](corrige.md#q26-6)** — Même Service, mais cette fois les pods sont `Running` et `0/1`.
 Que conclus-tu ? **Deux réponses correctes.**
 
 a) la readiness probe échoue, donc les pods sont retirés des Endpoints
@@ -441,7 +476,7 @@ c) `kubectl describe pod` montrera `Readiness probe failed` avec la raison
    (connexion refusée, 503, timeout)
 d) les pods sont en attente de scheduling
 
-**Q26.7** — Un Secret contient `POSTGRES_PASSWORD: bGFicGFzcw==`. Qu'affirmer ?
+<a id="q26-7"></a>**[Q26.7](corrige.md#q26-7)** — Un Secret contient `POSTGRES_PASSWORD: bGFicGFzcw==`. Qu'affirmer ?
 
 a) la valeur est chiffrée avec la clé de l'API server
 b) c'est du base64 : `echo bGFicGFzcw== | base64 -d` donne `labpass` ; tout
@@ -449,7 +484,7 @@ b) c'est du base64 : `echo bGFicGFzcw== | base64 -d` donne `labpass` ; tout
 c) seul root sur le nœud peut la décoder
 d) un Secret est toujours chiffré au repos dans etcd
 
-**Q26.8** — Depuis un pod du namespace `casse`, `nslookup postgres` échoue en
+<a id="q26-8"></a>**[Q26.8](corrige.md#q26-8)** — Depuis un pod du namespace `casse`, `nslookup postgres` échoue en
 `NXDOMAIN`, alors que le Service `postgres` existe dans le namespace
 `factura`. Quel nom fonctionne ?
 
@@ -458,7 +493,7 @@ b) `postgres.cluster.local`
 c) `factura.postgres.svc`
 d) `postgres.kube-system`
 
-**Q26.9** — Un Deployment (2 réplicas, `RollingUpdate` par défaut) reçoit une
+<a id="q26-9"></a>**[Q26.9](corrige.md#q26-9)** — Un Deployment (2 réplicas, `RollingUpdate` par défaut) reçoit une
 nouvelle image dont la readiness ne passe jamais. Que voit-on après 5 minutes ?
 
 a) les 2 anciens pods sont supprimés, le service est coupé
@@ -467,7 +502,7 @@ b) 3 pods : 2 anciens `1/1` et 1 nouveau `0/1` ; le rollout reste bloqué mais
 c) le Deployment revient tout seul à l'ancienne image
 d) les nouveaux pods passent `CrashLoopBackOff`
 
-**Q26.10** — `curl -k https://factura.lab.local/api/factures` (résolu vers
+<a id="q26-10"></a>**[Q26.10](corrige.md#q26-10)** — `curl -k https://factura.lab.local/api/factures` (résolu vers
 10.10.10.14) répond `404 page not found`, corps de Traefik. Que vérifies-tu en
 premier ?
 
@@ -477,7 +512,7 @@ b) que l'Ingress a bien une règle dont `host` vaut `factura.lab.local` et
 c) que le pod nginx a une limite mémoire suffisante
 d) que le Secret TLS est valide
 
-**Q26.11** — `kubectl get pod x -o jsonpath='{.status.qosClass}'` renvoie
+<a id="q26-11"></a>**[Q26.11](corrige.md#q26-11)** — `kubectl get pod x -o jsonpath='{.status.qosClass}'` renvoie
 `Burstable`. Ce qui est vrai :
 
 a) requests et limits sont égaux pour CPU et mémoire sur tous les conteneurs
@@ -487,7 +522,7 @@ c) au moins un conteneur a une request ou une limite, sans que tout soit égal ;
    `Guaranteed`
 d) le pod ne peut pas être évincé
 
-**Q26.12** — `rate(factura_http_requests_total[5m])` et
+<a id="q26-12"></a>**[Q26.12](corrige.md#q26-12)** — `rate(factura_http_requests_total[5m])` et
 `increase(factura_http_requests_total[5m])`. **Deux réponses correctes.**
 
 a) `increase` = `rate` × 300 sur cette fenêtre
@@ -495,7 +530,7 @@ b) `rate` renvoie un nombre par seconde, `increase` un nombre d'événements
 c) `rate` s'utilise sur une gauge, `increase` sur un counter
 d) `irate` est préférable dans une règle d'alerte parce qu'il réagit plus vite
 
-**Q26.13** — Quel est le p95 correct de la latence de l'API à partir de son
+<a id="q26-13"></a>**[Q26.13](corrige.md#q26-13)** — Quel est le p95 correct de la latence de l'API à partir de son
 histogramme, toutes routes confondues ?
 
 a) `histogram_quantile(0.95, factura_http_request_duration_seconds_bucket)`
@@ -505,7 +540,7 @@ c) `quantile(0.95, rate(factura_http_request_duration_seconds_sum[5m]))`
 d) `rate(factura_http_request_duration_seconds_sum[5m]) /
    rate(factura_http_request_duration_seconds_count[5m])`
 
-**Q26.14** — Une règle `InstanceDown` avec `expr: up == 0` et `for: 2m`. Tu
+<a id="q26-14"></a>**[Q26.14](corrige.md#q26-14)** — Une règle `InstanceDown` avec `expr: up == 0` et `for: 2m`. Tu
 arrêtes `node_exporter` sur lab-web. À `t+60s`, que montre
 `http://lab-ops:9090/alerts` ?
 
@@ -516,7 +551,7 @@ b) `InstanceDown` en état **pending** (jaune) ; elle passera **firing** à
 c) `InstanceDown` en firing, Alertmanager attend `group_wait`
 d) une erreur, car `up` n'est pas une métrique définie
 
-**Q26.15** — Dans `alertmanager.yml`, que fait ce bloc ?
+<a id="q26-15"></a>**[Q26.15](corrige.md#q26-15)** — Dans `alertmanager.yml`, que fait ce bloc ?
 
 ```yaml
 inhibit_rules:
@@ -532,7 +567,7 @@ b) tant qu'`InstanceDown` est en cours pour une instance, toute alerte
 c) transforme les `ticket` en `page`
 d) regroupe `InstanceDown` avec les tickets dans une seule notification
 
-**Q26.16** — SLO 99,9 % sur 30 jours pour l'API. Sur les 10 premiers jours, elle
+<a id="q26-16"></a>**[Q26.16](corrige.md#q26-16)** — SLO 99,9 % sur 30 jours pour l'API. Sur les 10 premiers jours, elle
 a cumulé 30 minutes d'indisponibilité. Que peut-on dire ?
 
 a) le SLO est déjà violé
@@ -541,7 +576,7 @@ b) il reste 13,2 minutes de budget pour 20 jours : le burn rate est ≈ 2,1 ;
 c) il reste 70 % du budget, tout va bien
 d) le SLA est violé
 
-**Q26.17** — Ce qu'indexe Loki, et pourquoi c'est important :
+<a id="q26-17"></a>**[Q26.17](corrige.md#q26-17)** — Ce qu'indexe Loki, et pourquoi c'est important :
 
 a) le texte intégral de chaque ligne, comme Elasticsearch
 b) uniquement les labels du flux ; d'où la règle « peu de labels, à faible
@@ -550,7 +585,7 @@ b) uniquement les labels du flux ; d'où la règle « peu de labels, à faible
 c) rien, tout est en mémoire
 d) les labels **et** les champs `logfmt`
 
-**Q26.18** — Quelle alerte mérite une **page** de nuit ? **Une seule réponse.**
+<a id="q26-18"></a>**[Q26.18](corrige.md#q26-18)** — Quelle alerte mérite une **page** de nuit ? **Une seule réponse.**
 
 a) `node_filesystem_avail_bytes / node_filesystem_size_bytes < 0.30` sur
    lab-adm
@@ -563,195 +598,175 @@ d) `predict_linear` annonce un disque plein dans 4 jours
 
 ## 26.4 Quiz — questions ouvertes
 
-**QO26.1** — *On te demande en entretien* : « Explique-moi ce qui se passe entre
+<a id="qo26-1"></a>**[QO26.1](corrige.md#qo26-1)** — *On te demande en entretien* : « Explique-moi ce qui se passe entre
 `kubectl apply -f deployment.yaml` et le moment où le conteneur répond. »
 Cite chaque composant, ce qu'il lit, ce qu'il écrit, et où se trouve l'état.
 Termine par ce que signifie « modèle déclaratif » et donne un exemple de
 réconciliation qui se produit **sans** aucune action humaine.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO26.2** — Compare liveness, readiness et startup probe : ce qui se passe
+<a id="qo26-2"></a>**[QO26.2](corrige.md#qo26-2)** — Compare liveness, readiness et startup probe : ce qui se passe
 quand chacune échoue, un exemple concret de mauvais usage (une liveness qui
 teste la base de données, par exemple) et ses conséquences en production.
 Dans quel cas une readiness qui échoue est-elle une **bonne** nouvelle ?
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO26.3** — Un pod est `Pending` depuis 10 minutes. Déroule ta méthode :
+<a id="qo26-3"></a>**[QO26.3](corrige.md#qo26-3)** — Un pod est `Pending` depuis 10 minutes. Déroule ta méthode :
 quelles commandes, dans quel ordre, ce que tu cherches dans chaque sortie.
 Couvre au moins : ressources insuffisantes, `nodeSelector`/taints, PVC non
 lié, `ResourceQuota` dépassé (où se lit celui-là ?), et nœud `NotReady`.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO26.4** — *On te demande en entretien* : « Deployment ou StatefulSet pour
+<a id="qo26-4"></a>**[QO26.4](corrige.md#qo26-4)** — *On te demande en entretien* : « Deployment ou StatefulSet pour
 PostgreSQL ? Et pourquoi un Service headless ? » Explique identité stable,
 `volumeClaimTemplates`, ordre de démarrage, DNS `pod-0.svc`, et dis ce
 qu'un Deployment avec un PVC ferait de mal lors d'un rolling update.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO26.5** — GitOps, operators, service mesh, managé vs auto-hébergé :
+<a id="qo26-5"></a>**[QO26.5](corrige.md#qo26-5)** — GitOps, operators, service mesh, managé vs auto-hébergé :
 donne pour chacun une définition en deux phrases, un outil, et le problème
 qu'il résout. Puis prends position : pour une équipe de 4 personnes qui
 héberge 10 applications, que recommandes-tu et pourquoi ?
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO26.6** — Définis SLI, SLO, SLA et budget d'erreur avec un exemple chiffré
+<a id="qo26-6"></a>**[QO26.6](corrige.md#qo26-6)** — Définis SLI, SLO, SLA et budget d'erreur avec un exemple chiffré
 pour `factura-api`. Explique pourquoi on alerte sur la **vitesse de
 consommation** du budget plutôt que sur un seuil fixe, et décris l'alerte
 « multi-fenêtre, multi-burn-rate » (deux fenêtres, deux seuils).
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO26.7** — *On te demande en entretien* : « Pourquoi `rate()` sur un counter
+<a id="qo26-7"></a>**[QO26.7](corrige.md#qo26-7)** — *On te demande en entretien* : « Pourquoi `rate()` sur un counter
 et pas une soustraction de deux valeurs ? Que se passe-t-il si le service
 redémarre ? Pourquoi une fenêtre de `[1m]` avec un scrape à 15 s est-elle une
 mauvaise idée ? » Explique aussi pourquoi `sum(rate(...))` est correct et
 `rate(sum(...))` est faux.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO26.8** — Décris le chemin complet d'une alerte, de l'expression PromQL
+<a id="qo26-8"></a>**[QO26.8](corrige.md#qo26-8)** — Décris le chemin complet d'une alerte, de l'expression PromQL
 jusqu'au téléphone de l'astreinte : évaluation, `pending`/`firing`, envoi à
 Alertmanager, déduplication, routage, groupement (`group_wait`,
 `group_interval`, `repeat_interval`), inhibition, silence, notification,
 résolution. À chaque étape, dis ce qui peut faire qu'une alerte « n'arrive
 jamais ».
 
-::: repondre
-lignes: 14
-:::
+<!-- repondre: 14 -->
 
-**QO26.9** — Un collègue propose d'ajouter un label `user_id` aux métriques
+<a id="qo26-9"></a>**[QO26.9](corrige.md#qo26-9)** — Un collègue propose d'ajouter un label `user_id` aux métriques
 HTTP de l'API et `request_id` aux labels Loki « pour pouvoir tout retrouver ».
 Explique ce qu'est la cardinalité, ce que ça coûte dans Prometheus et dans
 Loki, et propose la bonne façon de retrouver une requête précise (logs,
 traces, exemplars).
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO26.10** — Ton équipe reçoit 40 alertes par nuit, dont 3 utiles. Décris la
+<a id="qo26-10"></a>**[QO26.10](corrige.md#qo26-10)** — Ton équipe reçoit 40 alertes par nuit, dont 3 utiles. Décris la
 fatigue d'alerte, ses conséquences, et un plan en cinq actions concrètes pour
 passer à moins de 5 alertes par nuit sans rater un incident. Quel rôle joue le
 post-mortem là-dedans ?
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 26.5 Exercices guidés ★
 
-**E26.1** — Depuis `lab-adm`, sans copier-coller le fichier à la main dans un
+<a id="e26-1"></a>**[E26.1](corrige.md#e26-1)** — Depuis `lab-adm`, sans copier-coller le fichier à la main dans un
 éditeur, récupère le kubeconfig de k3s, adapte l'adresse du serveur, et fais en
 sorte que `kubectl get nodes` fonctionne. Puis règle `factura` comme
 namespace par défaut du contexte, installe la complétion bash **et** l'alias
 `k` avec complétion. Prouve que `k get po` complète les noms de pods.
 
-**E26.2** — Génère, sans l'appliquer, le manifeste YAML d'un Deployment
+<a id="e26-2"></a>**[E26.2](corrige.md#e26-2)** — Génère, sans l'appliquer, le manifeste YAML d'un Deployment
 `demo` (image `nginx:1.27-alpine`, 2 réplicas) puis celui d'un Service
 ClusterIP qui l'expose sur le port 80. Nettoie les champs inutiles
 (`creationTimestamp: null`, `status: {}`, `resources: {}`) et applique les
 deux fichiers dans un namespace `demo`. Vérifie avec `kubectl get all`.
 
-**E26.3** — Affiche, en **une** commande chacune : (a) le nom, l'IP et le nœud
+<a id="e26-3"></a>**[E26.3](corrige.md#e26-3)** — Affiche, en **une** commande chacune : (a) le nom, l'IP et le nœud
 de chaque pod de tous les namespaces avec `custom-columns` ; (b) l'image de
 chaque conteneur de chaque Deployment du namespace `factura` avec `jsonpath` ;
 (c) les 15 derniers événements du cluster classés par date.
 
-**E26.4** — Sans Service ni Ingress, atteins nginx du Deployment `demo` depuis
+<a id="e26-4"></a>**[E26.4](corrige.md#e26-4)** — Sans Service ni Ingress, atteins nginx du Deployment `demo` depuis
 `lab-adm` grâce à un tunnel `kubectl`. Ensuite, ouvre un shell dans un pod
 `demo`, affiche son `/etc/resolv.conf`, et explique les lignes `search` et
 `ndots`. Enfin, affiche les 20 dernières lignes des logs de **tous** les pods
 du Deployment en une commande.
 
-**E26.5** — Pose le label `env=test` sur un seul des pods `demo`, puis affiche
+<a id="e26-5"></a>**[E26.5](corrige.md#e26-5)** — Pose le label `env=test` sur un seul des pods `demo`, puis affiche
 les pods avec la colonne `env` visible, puis uniquement ceux qui ont
 `env=test`, puis ceux qui **n'ont pas** ce label. Que se passe-t-il si tu
 changes le label `app` d'un pod du Deployment ? Prouve-le.
 
-**E26.6** — Crée une ConfigMap `demo-conf` à partir d'un fichier
+<a id="e26-6"></a>**[E26.6](corrige.md#e26-6)** — Crée une ConfigMap `demo-conf` à partir d'un fichier
 `message.txt` et d'un littéral `COULEUR=bleu`, injecte-la dans un pod à la
 fois comme variable d'environnement et comme fichier monté, et montre les
 deux depuis le pod. Puis modifie la ConfigMap et observe, sans redémarrer, ce
 qui change et ce qui ne change pas. Explique.
 
-**E26.7** — Complète `~/lab26/k8s/60-cronjob-sauvegarde.yaml` : un CronJob
+<a id="e26-7"></a>**[E26.7](corrige.md#e26-7)** — Complète `~/lab26/k8s/60-cronjob-sauvegarde.yaml` : un CronJob
 `sauvegarde-pg` à 02:30 tous les jours qui exécute `pg_dump` vers
 `/backup/factura-<date>.sql` sur un PVC `sauvegardes` de 1 Gi, mot de passe
 tiré du Secret `postgres-auth`. Déclenche-le **immédiatement** sans attendre
 02:30, suis le Job, et vérifie le fichier produit. Quelle directive empêche
 que deux exécutions se chevauchent ?
 
-**E26.8** — Écris un DaemonSet `noeud-info` (namespace `kube-system`, image
+<a id="e26-8"></a>**[E26.8](corrige.md#e26-8)** — Écris un DaemonSet `noeud-info` (namespace `kube-system`, image
 `busybox:1.36`) dont le conteneur affiche toutes les 60 s le nom du nœud
 (injecté depuis `spec.nodeName` via la Downward API) et l'uptime lu dans
 `/proc/uptime` du **nœud** (pas du conteneur). Vérifie dans les logs.
 
-**E26.9** — *(optionnel, si lab-web a de la marge)* Ajoute `lab-web` comme
+<a id="e26-9"></a>**[E26.9](corrige.md#e26-9)** — *(optionnel, si lab-web a de la marge)* Ajoute `lab-web` comme
 agent du cluster. Vérifie `kubectl get nodes -o wide`, pose le label
 `role=web` sur ce nœud, puis force le Deployment `demo` à n'y tourner que là.
 Prouve-le avec la colonne NODE. Retire ensuite le nœud proprement (`drain`,
 `delete node`, désinstallation de l'agent).
 
-**E26.10** — Crée dans `factura` un ServiceAccount `lecteur`, donne-lui le
+<a id="e26-10"></a>**[E26.10](corrige.md#e26-10)** — Crée dans `factura` un ServiceAccount `lecteur`, donne-lui le
 droit de lire pods, services et logs dans ce namespace **seulement**, via une
 ClusterRole existante. Prouve avec `kubectl auth can-i` (a) qu'il peut lister
 les pods de `factura`, (b) qu'il ne peut pas les supprimer, (c) qu'il ne peut
 rien lister dans `kube-system`.
 
-**E26.11** — Pose une `ResourceQuota` sur `factura` : 4 pods maximum, 2 CPU et
+<a id="e26-11"></a>**[E26.11](corrige.md#e26-11)** — Pose une `ResourceQuota` sur `factura` : 4 pods maximum, 2 CPU et
 2 Gi de requests. Scale `factura-api` à 5 réplicas. Combien de pods
 apparaissent ? Où se lit le refus (ce n'est **pas** dans `get pods`) ? Reviens
 à 2 réplicas et retire la quota.
 
-**E26.12** — Depuis l'interface Prometheus (`http://10.10.10.14:9090`), écris
+<a id="e26-12"></a>**[E26.12](corrige.md#e26-12)** — Depuis l'interface Prometheus (`http://10.10.10.14:9090`), écris
 et exécute les requêtes suivantes, et note pour chacune la valeur sur
 `lab-web` : (a) CPU utilisé en % par instance ; (b) mémoire disponible en % ;
 (c) espace disque `/` utilisé en % ; (d) charge 5 min divisée par le nombre de
 cœurs ; (e) débit réseau entrant en bit/s hors `lo` et interfaces virtuelles.
 
-**E26.13** — Toujours en PromQL : (f) le nombre de requêtes par seconde de
+<a id="e26-13"></a>**[E26.13](corrige.md#e26-13)** — Toujours en PromQL : (f) le nombre de requêtes par seconde de
 l'API par code HTTP ; (g) le ratio de 5xx sur 5 min ; (h) le p95 de latence de
 `/factures` ; (i) la date estimée à laquelle `/` de `lab-db` sera plein si la
 tendance des 6 dernières heures continue ; (j) les cibles `down` et depuis
 combien de temps (indice : `changes`). Utilise `~/lab26/bin/charge-api.sh`
 pour avoir du trafic.
 
-**E26.14** — Calcule à la main, puis vérifie en PromQL avec les métriques de
+<a id="e26-14"></a>**[E26.14](corrige.md#e26-14)** — Calcule à la main, puis vérifie en PromQL avec les métriques de
 l'API : pour un SLO de 99,5 % de requêtes sans 5xx sur 30 jours, (a) le budget
 en pourcentage et en nombre de requêtes si l'API en sert 2 millions par mois ;
 (b) le budget en minutes si on raisonne en disponibilité ; (c) le burn rate
 si le taux d'erreur mesuré sur 1 h est de 2 % ; (d) en combien de temps le
 budget est épuisé à ce rythme.
 
-**E26.15** — Avec `amtool` (dans le conteneur `alertmanager`) : liste les
+<a id="e26-15"></a>**[E26.15](corrige.md#e26-15)** — Avec `amtool` (dans le conteneur `alertmanager`) : liste les
 alertes en cours, crée un silence de 2 h sur `alertname=InstanceDown` pour
 `instance=lab-rhel` avec un commentaire, liste les silences, puis expire-le.
 Montre que la commande `amtool check-config` valide bien
 `/opt/observabilite/alertmanager/alertmanager.yml`.
 
-**E26.16** — En LogQL dans Grafana → Explore : (a) toutes les lignes du
+<a id="e26-16"></a>**[E26.16](corrige.md#e26-16)** — En LogQL dans Grafana → Explore : (a) toutes les lignes du
 journal systemd de lab-ops contenant `k3s` mais pas `level=info` ; (b) le
 nombre de lignes par minute du journal sur les 30 dernières minutes ; (c) les
 lignes de l'API `factura` (via les logs de pods montés, ou après l'étape Loki
@@ -762,14 +777,14 @@ seconde.
 
 ## 26.6 Labs ★★
 
-### **L26.1** — Installer k3s et livrer un premier Deployment proprement
+### <a id="l26-1"></a>**[L26.1](corrige.md#l26-1)** — Installer k3s et livrer un premier Deployment proprement
 
-::: contexte
-Ticket CHG-4401 : « Mettre à disposition un cluster Kubernetes de lab sur
-lab-ops, accessible depuis lab-adm, avec un premier service de démonstration,
-une mise à jour et un retour arrière documentés. » L'équipe attend un cluster
-qu'on peut détruire et reconstruire en dix minutes.
-:::
+> **Contexte**
+>
+> Ticket CHG-4401 : « Mettre à disposition un cluster Kubernetes de lab sur
+> lab-ops, accessible depuis lab-adm, avec un premier service de démonstration,
+> une mise à jour et un retour arrière documentés. » L'équipe attend un cluster
+> qu'on peut détruire et reconstruire en dix minutes.
 
 1. Installe k3s sur `lab-ops`. Vérifie le service, le nœud (`Ready`), les
    pods de `kube-system`, et note ce qui tourne : quels composants sont des
@@ -800,34 +815,36 @@ qu'on peut détruire et reconstruire en dix minutes.
    que son `/metrics` répond via `port-forward`. Fais un `helm upgrade` à 2
    réplicas, lis `helm history`, reviens à la révision 1 avec `helm rollback`.
 
-::: astuce
-`kubectl get pods -w` et `kubectl get events -w` dans un second terminal
-`tmux` pendant chaque étape : tu verras les objets naître et mourir. C'est la
-meilleure façon d'intérioriser le modèle déclaratif.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `kubectl get pods -w` et `kubectl get events -w` dans un second terminal
+> `tmux` pendant chaque étape : tu verras les objets naître et mourir. C'est la
+> meilleure façon d'intérioriser le modèle déclaratif.
 
-::: check
-Critère de succès : nœud `Ready`, `kubectl` fonctionne pour `mathieu` sans
-`sudo` sur lab-ops, Deployment `factura-api` à 2 réplicas en image `1.0`
-avec au moins 2 révisions d'historique, Secret `registre-lab` présent,
-release Helm `ksm` déployée en révision ≥ 3, rapport rédigé.
-
-```bash
-bash check_M26_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : nœud `Ready`, `kubectl` fonctionne pour `mathieu` sans
+> `sudo` sur lab-ops, Deployment `factura-api` à 2 réplicas en image `1.0`
+> avec au moins 2 révisions d'historique, Secret `registre-lab` présent,
+> release Helm `ksm` déployée en révision ≥ 3, rapport rédigé.
+>
+> ```bash
+> bash check_M26_01.sh
+> ```
 
 ---
 
-### **L26.2** — Déployer factura : nginx + API + PostgreSQL, TLS, quotas
+### <a id="l26-2"></a>**[L26.2](corrige.md#l26-2)** — Déployer factura : nginx + API + PostgreSQL, TLS, quotas
 
-::: contexte
-Ticket CHG-4402 : « Déployer l'application factura sur le cluster, exposée en
-HTTPS sur `factura.lab.local`, avec une base PostgreSQL persistante. Les
-manifestes doivent être versionnables et applicables d'un seul `kubectl
-apply`. » Les squelettes sont dans `~/lab26/k8s/`, chaque `A_COMPLETER` est un
-trou à boucher.
-:::
+> **Contexte**
+>
+> Ticket CHG-4402 : « Déployer l'application factura sur le cluster, exposée en
+> HTTPS sur `factura.lab.local`, avec une base PostgreSQL persistante. Les
+> manifestes doivent être versionnables et applicables d'un seul `kubectl
+> apply`. » Les squelettes sont dans `~/lab26/k8s/`, chaque `A_COMPLETER` est un
+> trou à boucher.
 
 1. Complète `10-configmap.yaml` (`DB_HOST` vers le Service PostgreSQL) et
    `11-secret.yaml` (mot de passe `labpass`, en `data` base64 **ou** en
@@ -859,34 +876,36 @@ trou à boucher.
    chronomètre le retour de `/api/factures`. Note ce qui doit être recréé à la
    main (Secret de registre, Secret TLS) et propose une solution.
 
-::: attention
-`kubectl delete ns factura` supprime aussi le PVC de PostgreSQL et, avec
-`local-path`, **les données** (reclaimPolicy `Delete`). En production, on
-sauvegarde avant (E26.7) et on protège le PV.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `kubectl delete ns factura` supprime aussi le PVC de PostgreSQL et, avec
+> `local-path`, **les données** (reclaimPolicy `Delete`). En production, on
+> sauvegarde avant (E26.7) et on protège le PV.
 
-::: check
-Critère de succès : dans `factura`, StatefulSet `postgres` 1/1 avec un PVC
-`Bound`, Deployment `factura-api` 2/2 prêts avec probes et limites,
-Deployment `front` 1/1, Ingress `factura` avec TLS, `curl -k
-https://factura.lab.local/api/factures` répond 200 depuis lab-ops, et une
-NetworkPolicy cible `app=postgres`.
-
-```bash
-bash check_M26_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : dans `factura`, StatefulSet `postgres` 1/1 avec un PVC
+> `Bound`, Deployment `factura-api` 2/2 prêts avec probes et limites,
+> Deployment `front` 1/1, Ingress `factura` avec TLS, `curl -k
+> https://factura.lab.local/api/factures` répond 200 depuis lab-ops, et une
+> NetworkPolicy cible `app=postgres`.
+>
+> ```bash
+> bash check_M26_02.sh
+> ```
 
 ---
 
-### **L26.3** — Session de debug : cinq manifestes, cinq pannes
+### <a id="l26-3"></a>**[L26.3](corrige.md#l26-3)** — Session de debug : cinq manifestes, cinq pannes
 
-::: contexte
-Un développeur a poussé cinq manifestes dans `~/lab26/k8s/casse/` « qui
-marchent sur son poste ». Rien ne fonctionne. On te demande de tout remettre
-en état **en corrigeant les manifestes** (pas en bricolant les objets avec
-`edit`), et de documenter chaque cause dans un tableau.
-:::
+> **Contexte**
+>
+> Un développeur a poussé cinq manifestes dans `~/lab26/k8s/casse/` « qui
+> marchent sur son poste ». Rien ne fonctionne. On te demande de tout remettre
+> en état **en corrigeant les manifestes** (pas en bricolant les objets avec
+> `edit`), et de documenter chaque cause dans un tableau.
 
 Applique tout d'un coup (`kubectl apply -f ~/lab26/k8s/casse/`) puis traite
 chaque Deployment. Pour chacun, note dans `~/lab26/rapports/debug.md` :
@@ -914,29 +933,30 @@ correctif appliqué au manifeste.
    `FACTURA_MEM_MB=200` à `api-dns` avec une limite mémoire de `64Mi`,
    observe `describe` (`Reason`, `Exit Code`), puis remets en état.
 
-::: check
-Critère de succès : tous les Deployments du namespace `casse` ont leurs
-réplicas disponibles, l'Ingress `casse` répond 200 sur
-`https://casse.lab.local/factures`, et le rapport contient une ligne par
-panne.
-
-```bash
-bash check_M26_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : tous les Deployments du namespace `casse` ont leurs
+> réplicas disponibles, l'Ingress `casse` répond 200 sur
+> `https://casse.lab.local/factures`, et le rapport contient une ligne par
+> panne.
+>
+> ```bash
+> bash check_M26_03.sh
+> ```
 
 ---
 
-### **L26.4** — Prometheus et Alertmanager : scraper les cinq VM et l'API
+### <a id="l26-4"></a>**[L26.4](corrige.md#l26-4)** — Prometheus et Alertmanager : scraper les cinq VM et l'API
 
-::: contexte
-Ticket CHG-4410 : « Mettre en place la supervision centrale sur lab-ops :
-métriques système des cinq VM, nginx de lab-web, PostgreSQL de lab-db, sondes
-externes sur les URL publiques, et métriques du cluster k3s. Alertes routées
-vers deux canaux (page / ticket), avec runbooks. » Le webhook de démonstration
-`webhook` remplace PagerDuty et le système de tickets : ses logs sont ta
-preuve de réception.
-:::
+> **Contexte**
+>
+> Ticket CHG-4410 : « Mettre en place la supervision centrale sur lab-ops :
+> métriques système des cinq VM, nginx de lab-web, PostgreSQL de lab-db, sondes
+> externes sur les URL publiques, et métriques du cluster k3s. Alertes routées
+> vers deux canaux (page / ticket), avec runbooks. » Le webhook de démonstration
+> `webhook` remplace PagerDuty et le système de tickets : ses logs sont ta
+> preuve de réception.
 
 1. Installe `node_exporter` sur lab-adm, lab-web, lab-db et lab-rhel avec
    `~/lab26/bin/installer-node-exporter.sh` (via SSH depuis lab-adm ; sur
@@ -996,36 +1016,38 @@ preuve de réception.
    `node_exporter`, observe la résolution. Consigne les temps dans
    `~/lab26/rapports/alerting.md`.
 
-::: astuce
-Pour les jobs k8s, les IP de pods (`10.42.0.0/24`) sont joignables depuis les
-conteneurs Docker de lab-ops parce que l'hôte route vers `cni0`. Si ce
-n'était pas le cas, la solution de repli est un Service `NodePort` scrapé en
-statique — mais tu perdrais alors la ventilation par pod (chaque scrape
-tomberait sur un pod au hasard et tes `rate()` seraient faux).
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour les jobs k8s, les IP de pods (`10.42.0.0/24`) sont joignables depuis les
+> conteneurs Docker de lab-ops parce que l'hôte route vers `cni0`. Si ce
+> n'était pas le cas, la solution de repli est un Service `NodePort` scrapé en
+> statique — mais tu perdrais alors la ventilation par pod (chaque scrape
+> tomberait sur un pod au hasard et tes `rate()` seraient faux).
 
-::: check
-Critère de succès : au moins 8 cibles UP (5 node, nginx, postgres,
-prometheus), un job `blackbox-http` avec `probe_success` et un job `k8s-pods`
-avec des séries `factura_http_requests_total`, les deux fichiers de règles
-valides et chargés, `alertmanager.yml` avec deux routes et une inhibition,
-rapport rédigé.
-
-```bash
-bash check_M26_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : au moins 8 cibles UP (5 node, nginx, postgres,
+> prometheus), un job `blackbox-http` avec `probe_success` et un job `k8s-pods`
+> avec des séries `factura_http_requests_total`, les deux fichiers de règles
+> valides et chargés, `alertmanager.yml` avec deux routes et une inhibition,
+> rapport rédigé.
+>
+> ```bash
+> bash check_M26_04.sh
+> ```
 
 ---
 
-### **L26.5** — Grafana et Loki : voir, corréler, provisionner
+### <a id="l26-5"></a>**[L26.5](corrige.md#l26-5)** — Grafana et Loki : voir, corréler, provisionner
 
-::: contexte
-Ticket CHG-4411 : « Tableau de bord d'exploitation pour l'équipe : état des
-cinq VM, santé de l'API, et accès aux logs depuis le même écran. Tout doit
-être reconstruit depuis des fichiers versionnés, sans clic. » Un tableau de
-bord minimal est déjà provisionné (`Lab — Nœuds`) : c'est ton point de départ.
-:::
+> **Contexte**
+>
+> Ticket CHG-4411 : « Tableau de bord d'exploitation pour l'équipe : état des
+> cinq VM, santé de l'API, et accès aux logs depuis le même écran. Tout doit
+> être reconstruit depuis des fichiers versionnés, sans clic. » Un tableau de
+> bord minimal est déjà provisionné (`Lab — Nœuds`) : c'est ton point de départ.
 
 1. Connecte-toi (`admin` / `labpass`), vérifie que les trois sources
    (Prometheus, Loki, Alertmanager) sont provisionnées et que `Lab — Nœuds`
@@ -1056,29 +1078,31 @@ bord minimal est déjà provisionné (`Lab — Nœuds`) : c'est ton point de dé
    filtré par `$pod`, et un panneau *State timeline* de l'alerte
    `ApiErreurs5xx` à partir de la métrique `ALERTS`.
 
-::: check
-Critère de succès : Grafana répond, trois sources provisionnées, deux
-tableaux dans le dossier `Lab` dont `Lab — API factura` avec au moins 5
-panneaux et une variable `pod`, Loki a des flux `systemd-journal` **et**
-`k8s-pods`, rapport rédigé.
-
-```bash
-bash check_M26_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : Grafana répond, trois sources provisionnées, deux
+> tableaux dans le dossier `Lab` dont `Lab — API factura` avec au moins 5
+> panneaux et une variable `pod`, Loki a des flux `systemd-journal` **et**
+> `k8s-pods`, rapport rédigé.
+>
+> ```bash
+> bash check_M26_05.sh
+> ```
 
 ---
 
 ## 26.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9005 avant-bf26`. Le snapshot de
-secours reste `avant-lab26`, mais l'utiliser vaut échec de l'exercice.
-BF26.1 à BF26.4 supposent L26.2 terminé ; BF26.5 et BF26.6 supposent L26.4.
-Tous les scripts se lancent sur `lab-ops`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9005 avant-bf26`. Le snapshot de
+> secours reste `avant-lab26`, mais l'utiliser vaut échec de l'exercice.
+> BF26.1 à BF26.4 supposent L26.2 terminé ; BF26.5 et BF26.6 supposent L26.4.
+> Tous les scripts se lancent sur `lab-ops`.
 
-### **BF26.1** — « L'API répond 502 depuis le déploiement de ce matin »
+### <a id="bf26-1"></a>**[BF26.1](corrige.md#bf26-1)** — « L'API répond 502 depuis le déploiement de ce matin »
 
 ```bash
 sudo bash break_M26_01.sh
@@ -1096,11 +1120,9 @@ redéployer depuis `~/lab26/k8s/` sans avoir trouvé la cause.
 **Objectif** : trouver pourquoi le trafic n'arrive plus aux pods, corriger,
 et expliquer pourquoi nginx répond 502 et non 504 ou 404.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF26.2** — « Le rollout ne finit jamais »
+### <a id="bf26-2"></a>**[BF26.2](corrige.md#bf26-2)** — « Le rollout ne finit jamais »
 
 ```bash
 sudo bash break_M26_02.sh
@@ -1120,11 +1142,9 @@ le Deployment n'a pas coupé le service, corriger le manifeste, et proposer
 la valeur de `progressDeadlineSeconds` qui aurait fait sortir `rollout
 status` en erreur au lieu d'attendre.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF26.3** — « L'API redémarre en boucle, le code n'a pas changé »
+### <a id="bf26-3"></a>**[BF26.3](corrige.md#bf26-3)** — « L'API redémarre en boucle, le code n'a pas changé »
 
 ```bash
 sudo bash break_M26_03.sh
@@ -1141,11 +1161,9 @@ jure que l'image `1.0` est celle de la semaine dernière.
 pas dans les logs), la relier à une valeur du manifeste, mesurer le besoin
 réel avec un pod sain, et fixer une limite justifiée.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF26.4** — « Depuis le redémarrage, plus aucun pod ne démarre »
+### <a id="bf26-4"></a>**[BF26.4](corrige.md#bf26-4)** — « Depuis le redémarrage, plus aucun pod ne démarre »
 
 ```bash
 sudo bash break_M26_04.sh
@@ -1163,11 +1181,9 @@ depuis lab-ops. Le namespace `casse` n'est pas affecté.
 `casse`), remettre en place, et expliquer pourquoi le pull marche sur lab-ops
 mais pas dans le cluster.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF26.5** — « Toutes les VM sont DOWN dans Prometheus »
+### <a id="bf26-5"></a>**[BF26.5](corrige.md#bf26-5)** — « Toutes les VM sont DOWN dans Prometheus »
 
 ```bash
 sudo bash break_M26_05.sh
@@ -1184,11 +1200,9 @@ partout, et `curl http://10.10.10.11:9100/metrics` depuis lab-ops répond.
 cause dans la configuration, corriger, recharger sans redémarrer Prometheus,
 et dire pourquoi l'alerte `InstanceDown` a été utile **et** trompeuse.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF26.6** — « L'alerte ne part jamais »
+### <a id="bf26-6"></a>**[BF26.6](corrige.md#bf26-6)** — « L'alerte ne part jamais »
 
 ```bash
 sudo bash break_M26_06.sh
@@ -1207,23 +1221,21 @@ de `pending` et de `for` (que se passe-t-il si la condition redevient fausse
 une seule évaluation ?), corriger, et proposer un test `promtool test rules`
 qui aurait attrapé l'erreur avant la mise en production.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 26.8 Défi du module ★★★
 
-**D26 — factura en production : cluster, supervision, SLO et astreinte**
+<a id="d26"></a>**[D26](corrige.md#d26) — factura en production : cluster, supervision, SLO et astreinte**
 
-::: contexte
-L'application passe en production sur le cluster. On te demande le dossier
-d'exploitation complet : manifestes finaux, supervision, SLO chiffré, alerting
-fondé sur le budget d'erreur, tableau de bord, runbooks, et un script qui
-vérifie la conformité du tout. Un collègue qui n'a pas fait le module doit
-pouvoir reconstruire l'ensemble.
-:::
+> **Contexte**
+>
+> L'application passe en production sur le cluster. On te demande le dossier
+> d'exploitation complet : manifestes finaux, supervision, SLO chiffré, alerting
+> fondé sur le budget d'erreur, tableau de bord, runbooks, et un script qui
+> vérifie la conformité du tout. Un collègue qui n'a pas fait le module doit
+> pouvoir reconstruire l'ensemble.
 
 Cahier des charges :
 
@@ -1265,11 +1277,12 @@ Cahier des charges :
 
 Temps visé : 90 minutes.
 
-::: check
-```bash
-bash check_M26_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M26_06.sh
+> ```
 
 ---
 
@@ -1304,3 +1317,9 @@ Pour aller plus loin :
 * Déploie ArgoCD sur k3s et fais-lui synchroniser `~/lab26/prod/` depuis un
   dépôt Git : tu auras fait du GitOps de bout en bout, et tu comprendras ce
   que « drift » veut dire quand tu modifieras un objet à la main.
+
+<!-- nav:début -->
+---
+
+[← Module 25](../25-cicd/README.md) · [Corrigé](corrige.md) · [Module 27 →](../27-python-ops/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

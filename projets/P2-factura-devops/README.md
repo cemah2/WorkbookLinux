@@ -1,35 +1,66 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet B — Factura v2 : industrialisation DevOps › **Projet B**  
+[← Module 27](../../modules/27-python-ops/README.md) · [Corrigé](corrige.md) · [Projet C →](../P3-astreinte/README.md)
+
+<details><summary>Scripts du module (15)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_P2.sh`](../../scripts/projects/P2/setup_P2.sh) | prépare le module |
+| [`check_PB_01.sh`](../../scripts/projects/P2/check_PB_01.sh) | vérification |
+| [`check_PB_02.sh`](../../scripts/projects/P2/check_PB_02.sh) | vérification |
+| [`check_PB_03.sh`](../../scripts/projects/P2/check_PB_03.sh) | vérification |
+| [`check_PB_04.sh`](../../scripts/projects/P2/check_PB_04.sh) | vérification |
+| [`check_PB_05.sh`](../../scripts/projects/P2/check_PB_05.sh) | vérification |
+| [`check_PB_06.sh`](../../scripts/projects/P2/check_PB_06.sh) | vérification |
+| [`check_PB_07.sh`](../../scripts/projects/P2/check_PB_07.sh) | vérification |
+| [`check_PB_08.sh`](../../scripts/projects/P2/check_PB_08.sh) | vérification |
+| [`check_PB_09.sh`](../../scripts/projects/P2/check_PB_09.sh) | vérification |
+| [`check_PB_10.sh`](../../scripts/projects/P2/check_PB_10.sh) | vérification |
+| [`break_PB_01.sh`](../../scripts/projects/P2/break_PB_01.sh) | installe une panne |
+| [`break_PB_02.sh`](../../scripts/projects/P2/break_PB_02.sh) | installe une panne |
+| [`break_PB_03.sh`](../../scripts/projects/P2/break_PB_03.sh) | installe une panne |
+| [`break_PB_04.sh`](../../scripts/projects/P2/break_PB_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Projet B — Factura v2 : industrialisation DevOps
 
 ## B.0 Présentation
 
-::: objectif
-Ce projet fil rouge reprend la plateforme Factura du projet A et la refait
-**avec les outils des modules 21 à 26** : Git, Docker et Compose, Ansible,
-OpenTofu, Gitea Actions, k3s et la pile Prometheus/Grafana/Loki. À la fin, tu
-sais :
-
-* tenir un mono-repo infra + application sur une forge, protégé par des
-  hooks (secrets, lint) et une convention de commit ;
-* provisionner un environnement complet (VM, réseau, comptes, cloud-init)
-  en une commande, et en avoir deux identiques (staging, prod) sans copier
-  du code ;
-* décrire l'état attendu d'une machine dans des rôles Ansible idempotents,
-  et prouver l'idempotence ;
-* conteneuriser une application proprement (multi-stage, non-root,
-  healthcheck, scan) et la déployer par Compose avec des secrets chiffrés ;
-* écrire un pipeline complet : lint → tests → build → scan → push → staging
-  automatique → promotion manuelle en prod, **bleu/vert**, smoke test et
-  rollback automatique ;
-* superviser avec des SLO et un budget d'erreur, alerter, corréler métriques
-  et journaux ;
-* prouver que la plateforme se **reconstruit de zéro en moins d'une heure**,
-  sauvegardes restaurées comprises ;
-* porter l'API sur Kubernetes (k3s) et défendre, chiffres à l'appui, le
-  choix Compose ou k3s pour une PME.
-
-Temps estimé : 30 à 40 h, sur trois à quatre semaines.
-Prérequis : projet A terminé (ou au moins lu), modules 21 à 26 faits.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> Ce projet fil rouge reprend la plateforme Factura du projet A et la refait
+> **avec les outils des modules 21 à 26** : Git, Docker et Compose, Ansible,
+> OpenTofu, Gitea Actions, k3s et la pile Prometheus/Grafana/Loki. À la fin, tu
+> sais :
+>
+> * tenir un mono-repo infra + application sur une forge, protégé par des
+>   hooks (secrets, lint) et une convention de commit ;
+> * provisionner un environnement complet (VM, réseau, comptes, cloud-init)
+>   en une commande, et en avoir deux identiques (staging, prod) sans copier
+>   du code ;
+> * décrire l'état attendu d'une machine dans des rôles Ansible idempotents,
+>   et prouver l'idempotence ;
+> * conteneuriser une application proprement (multi-stage, non-root,
+>   healthcheck, scan) et la déployer par Compose avec des secrets chiffrés ;
+> * écrire un pipeline complet : lint → tests → build → scan → push → staging
+>   automatique → promotion manuelle en prod, **bleu/vert**, smoke test et
+>   rollback automatique ;
+> * superviser avec des SLO et un budget d'erreur, alerter, corréler métriques
+>   et journaux ;
+> * prouver que la plateforme se **reconstruit de zéro en moins d'une heure**,
+>   sauvegardes restaurées comprises ;
+> * porter l'API sur Kubernetes (k3s) et défendre, chiffres à l'appui, le
+>   choix Compose ou k3s pour une PME.
+>
+> **Temps estimé** : 30 à 40 h, sur trois à quatre semaines.
+>
+> **Prérequis** : projet A terminé (ou au moins lu), modules 21 à 26 faits.
 
 ### Le contexte
 
@@ -150,19 +181,21 @@ génère une clé SSH `~/.ssh/id_ed25519` si tu n'en as pas, complète
 comme non sécurisé pour Docker. Il ne crée **ni VM, ni dépôt Gitea, ni
 pipeline** : c'est le projet.
 
-::: attention
-OpenTofu **détruit** des VM aussi facilement qu'il les crée, et la
-reconstruction de PB.9 le fait exprès. Vérifie deux fois `terraform.workspace`
-avant un `apply` ou un `destroy`. Les VMID 9021–9041 sont réservés au projet
-: si `tofu plan` propose de toucher un autre VMID, arrête-toi.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> OpenTofu **détruit** des VM aussi facilement qu'il les crée, et la
+> reconstruction de PB.9 le fait exprès. Vérifie deux fois `terraform.workspace`
+> avant un `apply` ou un `destroy`. Les VMID 9021–9041 sont réservés au projet
+> : si `tofu plan` propose de toucher un autre VMID, arrête-toi.
 
-::: astuce
-Lis `app/api/app.py` et `app/worker/worker.py` en entier avant PB.4 : les
-variables d'environnement, `/health`, `/version`, `/metrics`, le format des
-journaux et le nom de la file Redis sont tout ce dont tes rôles, ton pipeline
-et tes alertes auront besoin. Les devs ont mis les réponses dans l'en-tête.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Lis `app/api/app.py` et `app/worker/worker.py` en entier avant PB.4 : les
+> variables d'environnement, `/health`, `/version`, `/metrics`, le format des
+> journaux et le nom de la file Redis sont tout ce dont tes rôles, ton pipeline
+> et tes alertes auront besoin. Les devs ont mis les réponses dans l'en-tête.
 
 ---
 
@@ -202,7 +235,9 @@ et tes alertes auront besoin. Les devs ont mis les réponses dans l'en-tête.
    └────────────────────────┘  https://factura-k3s.lab.local  │
 ```
 
-@fig(p2-flux): Le flux DevOps de Factura : Git sur lab-ops, CI par le runner (lint, tests, build, scan, push), OpenTofu qui crée les VM via Proxmox, Ansible qui déploie la stack Compose blue/green en staging puis en prod, observabilité sur lab-ops, k3s en cible finale.
+<p align="center"><img src="../../assets/figures/p2-flux.svg" alt="Schéma : p2-flux"></p>
+
+*Figure — Le flux DevOps de Factura : Git sur lab-ops, CI par le runner (lint, tests, build, scan, push), OpenTofu qui crée les VM via Proxmox, Ansible qui déploie la stack Compose blue/green en staging puis en prod, observabilité sur lab-ops, k3s en cible finale.*
 
 ### Flux autorisés (tout le reste est fermé par ufw)
 
@@ -255,14 +290,14 @@ Chaque jalon : contexte, objectif, cahier des charges (chaque puce est
 vérifiable), modules mobilisés, indices, livrable, critère de réussite. Dans
 l'ordre : chaque check suppose les précédents.
 
-### **PB.1** — Mono-repo sur Gitea, hooks et convention
+### <a id="pb-1"></a>**[PB.1](corrige.md#pb-1)** — Mono-repo sur Gitea, hooks et convention
 
-::: contexte
-Deux devs, toi, et bientôt un prestataire : il faut un seul endroit où vit
-tout ce qui décrit la plateforme. Le squelette est dans `~/factura-v2`. Tu
-en fais un dépôt Git protégé : un secret commité ne passe pas, un script
-Bash cassé ne passe pas, un YAML mal indenté ne passe pas.
-:::
+> **Contexte**
+>
+> Deux devs, toi, et bientôt un prestataire : il faut un seul endroit où vit
+> tout ce qui décrit la plateforme. Le squelette est dans `~/factura-v2`. Tu
+> en fais un dépôt Git protégé : un secret commité ne passe pas, un script
+> Bash cassé ne passe pas, un YAML mal indenté ne passe pas.
 
 **Objectif** : `~/factura-v2` versionné, poussé sur Gitea, avec des hooks
 `pre-commit` qui bloquent secrets et fautes de lint, et une convention de
@@ -315,25 +350,26 @@ commit appliquée par un hook.
 message de commit (dans `tools/` ou en ligne dans la config), `README.md`,
 `docs/journal.md`.
 
-::: check
-Critère de réussite : `check_PB_01.sh` passe sur `lab-adm`.
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_01.sh` passe sur `lab-adm`.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_01.sh
+> ```
 
 ---
 
-### **PB.2** — OpenTofu, cloud-init, deux environnements identiques
+### <a id="pb-2"></a>**[PB.2](corrige.md#pb-2)** — OpenTofu, cloud-init, deux environnements identiques
 
-::: contexte
-Staging et prod doivent être **le même code**. Tu écris une configuration
-OpenTofu qui crée les VM `web` et `db` d'un environnement à partir du
-template cloud-init, et tu l'appliques deux fois : une par *workspace*. Elle
-génère aussi l'inventaire Ansible, pour que la suite du projet ne dépende
-jamais d'une IP tapée à la main.
-:::
+> **Contexte**
+>
+> Staging et prod doivent être **le même code**. Tu écris une configuration
+> OpenTofu qui crée les VM `web` et `db` d'un environnement à partir du
+> template cloud-init, et tu l'appliques deux fois : une par *workspace*. Elle
+> génère aussi l'inventaire Ansible, pour que la suite du projet ne dépende
+> jamais d'une IP tapée à la main.
 
 **Objectif** : `tofu apply` dans le workspace `staging` crée
 `factura-staging-web` et `factura-staging-db` joignables en SSH par clé ;
@@ -410,25 +446,26 @@ workspaces, `templatefile`, `local_file`), 14 (SSH, clés), 12 (IP).
 et dans le journal : le temps d'un `apply` complet du staging (il servira de
 référence en PB.9).
 
-::: check
-Critère de réussite : `check_PB_02.sh` passe sur `lab-adm` (il lit l'état
-des deux workspaces et se connecte aux quatre VM).
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_02.sh` passe sur `lab-adm` (il lit l'état
+> des deux workspaces et se connecte aux quatre VM).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_02.sh
+> ```
 
 ---
 
-### **PB.3** — Baseline Ansible
+### <a id="pb-3"></a>**[PB.3](corrige.md#pb-3)** — Baseline Ansible
 
-::: contexte
-Au projet A, tu as fait à la main sur chaque VM : comptes, SSH durci, ufw,
-NTP, mises à jour automatiques, `node_exporter`. Tu as les fichiers dans
-`~/P1/conf/`. Tu les transformes en rôles Ansible, appliqués aux quatre VM
-en une commande, rejouables sans effet la seconde fois.
-:::
+> **Contexte**
+>
+> Au projet A, tu as fait à la main sur chaque VM : comptes, SSH durci, ufw,
+> NTP, mises à jour automatiques, `node_exporter`. Tu as les fichiers dans
+> `~/P1/conf/`. Tu les transformes en rôles Ansible, appliqués aux quatre VM
+> en une commande, rejouables sans effet la seconde fois.
 
 **Objectif** : `ansible-playbook ansible/playbooks/baseline.yml` amène toute
 VM fraîchement créée par PB.2 à l'état « prête à recevoir l'application »,
@@ -513,26 +550,27 @@ unattended_upgrades,node_exporter,promtail,docker}`, `baseline.yml`,
 `group_vars/{all,web,db}/main.yml`, et dans le journal la sortie
 `PLAY RECAP` du second passage.
 
-::: check
-Critère de réussite : `check_PB_03.sh` passe sur `lab-adm` (il interroge les
-quatre VM).
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_03.sh` passe sur `lab-adm` (il interroge les
+> quatre VM).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_03.sh
+> ```
 
 ---
 
-### **PB.4** — Conteneurisation et stack Compose de dev
+### <a id="pb-4"></a>**[PB.4](corrige.md#pb-4)** — Conteneurisation et stack Compose de dev
 
-::: contexte
-Les devs ont écrit un `Dockerfile` « qui marche » : `FROM python`, `COPY .`,
-`pip install`, root, 1,1 Go. Tu le reprends : image minimale, non-root,
-healthcheck, version injectée au build, scan de vulnérabilités. Puis un
-`compose.yaml` pour qu'un dev lance toute la stack en une commande sur son
-poste — c'est aussi ce que la CI utilisera.
-:::
+> **Contexte**
+>
+> Les devs ont écrit un `Dockerfile` « qui marche » : `FROM python`, `COPY .`,
+> `pip install`, root, 1,1 Go. Tu le reprends : image minimale, non-root,
+> healthcheck, version injectée au build, scan de vulnérabilités. Puis un
+> `compose.yaml` pour qu'un dev lance toute la stack en une commande sur son
+> poste — c'est aussi ce que la CI utilisera.
 
 **Objectif** : `docker build` produit des images `factura-api` et
 `factura-worker` de moins de 250 Mo, non-root, avec healthcheck, dont
@@ -596,27 +634,28 @@ volumes, réseaux), 18 (scan, non-root).
 `app/nginx/dev.conf`, `docs/scan-api.txt`, `docs/scan-worker.txt`, et dans
 le journal la justification ligne à ligne du `Dockerfile` de l'API.
 
-::: check
-Critère de réussite : `check_PB_04.sh` passe sur `lab-adm` avec la stack de
-dev démarrée (`cd ~/factura-v2/app & docker compose up -d`).
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_04.sh` passe sur `lab-adm` avec la stack de
+> dev démarrée (`cd ~/factura-v2/app & docker compose up -d`).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_04.sh
+> ```
 
 ---
 
-### **PB.5** — Rôle de déploiement Compose, secrets chiffrés, staging puis prod
+### <a id="pb-5"></a>**[PB.5](corrige.md#pb-5)** — Rôle de déploiement Compose, secrets chiffrés, staging puis prod
 
-::: contexte
-Tu as des VM prêtes (PB.3) et des images (PB.4). Reste à les marier : un
-rôle Ansible qui dépose la stack Compose sur les VM `web` et `db` d'un
-environnement, avec les secrets sortis d'un coffre `ansible-vault`, et qui
-prépare déjà le bleu/vert de PB.7 (deux services API, une couleur active).
-Ce rôle sera exécuté par le runner CI en tant que `deploy` : il ne doit
-jamais avoir besoin de `sudo`.
-:::
+> **Contexte**
+>
+> Tu as des VM prêtes (PB.3) et des images (PB.4). Reste à les marier : un
+> rôle Ansible qui dépose la stack Compose sur les VM `web` et `db` d'un
+> environnement, avec les secrets sortis d'un coffre `ansible-vault`, et qui
+> prépare déjà le bleu/vert de PB.7 (deux services API, une couleur active).
+> Ce rôle sera exécuté par le runner CI en tant que `deploy` : il ne doit
+> jamais avoir besoin de `sudo`.
 
 **Objectif** : `ansible-playbook ansible/playbooks/deploy.yml -i
 ansible/inventory/staging.ini -e factura_image_tag=<tag>` déploie ou met à
@@ -700,24 +739,25 @@ réseaux, volumes nommés), 18 (secrets).
 `PLAY RECAP` idempotent et le résultat de `nc -zv 10.10.10.22 5432` depuis
 `lab-adm` (refusé) et depuis `10.10.10.21` (ouvert).
 
-::: check
-Critère de réussite : `check_PB_05.sh` passe sur `lab-adm`.
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_05.sh` passe sur `lab-adm`.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_05.sh
+> ```
 
 ---
 
-### **PB.6** — Pipeline d'intégration continue
+### <a id="pb-6"></a>**[PB.6](corrige.md#pb-6)** — Pipeline d'intégration continue
 
-::: contexte
-À partir de maintenant, plus personne ne construit une image sur son poste.
-Chaque push sur Gitea déclenche un pipeline qui lint, teste, construit,
-scanne et publie. Une image qui n'a pas été produite par ce pipeline n'a pas
-le droit de tourner en prod.
-:::
+> **Contexte**
+>
+> À partir de maintenant, plus personne ne construit une image sur son poste.
+> Chaque push sur Gitea déclenche un pipeline qui lint, teste, construit,
+> scanne et publie. Une image qui n'a pas été produite par ce pipeline n'a pas
+> le droit de tourner en prod.
 
 **Objectif** : `.gitea/workflows/ci.yaml` avec les jobs `lint`, `test`,
 `build` chaînés, qui pousse `factura-api` et `factura-worker` sur le
@@ -776,27 +816,28 @@ branches protégées).
 **Livrable** : `.gitea/workflows/ci.yaml`, capture ou lien du run vert dans
 le journal, `docs/journal.md` avec la durée et l'analyse.
 
-::: check
-Critère de réussite : `check_PB_06.sh` passe sur `lab-adm` (`export
-GITEA_TOKEN=...` pour qu'il interroge l'API du dépôt privé).
-
-```bash
-GITEA_TOKEN=xxx bash ~/workbook/scripts/projects/P2/check_PB_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_06.sh` passe sur `lab-adm` (`export
+> GITEA_TOKEN=...` pour qu'il interroge l'API du dépôt privé).
+>
+> ```bash
+> GITEA_TOKEN=xxx bash ~/workbook/scripts/projects/P2/check_PB_06.sh
+> ```
 
 ---
 
-### **PB.7** — Livraison continue : staging automatique, prod promue, bleu/vert
+### <a id="pb-7"></a>**[PB.7](corrige.md#pb-7)** — Livraison continue : staging automatique, prod promue, bleu/vert
 
-::: contexte
-Le pipeline produit des images ; il doit maintenant les déployer. Tout ce
-qui arrive sur `main` part en staging automatiquement. La prod, elle, ne
-bouge que sur décision humaine : quelqu'un promeut un tag `vX.Y.Z` qui a
-déjà tourné en staging. Dans les deux cas : bleu/vert, smoke test, retour
-arrière automatique si le smoke échoue, et zéro requête perdue sur le
-port 80.
-:::
+> **Contexte**
+>
+> Le pipeline produit des images ; il doit maintenant les déployer. Tout ce
+> qui arrive sur `main` part en staging automatiquement. La prod, elle, ne
+> bouge que sur décision humaine : quelqu'un promeut un tag `vX.Y.Z` qui a
+> déjà tourné en staging. Dans les deux cas : bleu/vert, smoke test, retour
+> arrière automatique si le smoke échoue, et zéro requête perdue sur le
+> port 80.
 
 **Objectif** : push sur `main` → staging à jour en moins de 5 minutes ;
 `cd-prod.yaml` lancé à la main avec un tag → prod à jour sans coupure ; un
@@ -871,26 +912,27 @@ complété, `docs/runbook-deploy.md`, et dans le journal : la boucle
 zéro-coupure (nombre de requêtes, 0 erreur), le run de rollback rouge et
 la ligne `switch.log` correspondante.
 
-::: check
-Critère de réussite : `check_PB_07.sh` passe sur `lab-adm`.
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_07.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_07.sh` passe sur `lab-adm`.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_07.sh
+> ```
 
 ---
 
-### **PB.8** — Observabilité : métriques, journaux, alertes, SLO
+### <a id="pb-8"></a>**[PB.8](corrige.md#pb-8)** — Observabilité : métriques, journaux, alertes, SLO
 
-::: contexte
-Au projet A, ta supervision était un script et un timer. Ici, la direction
-veut « un chiffre » : le service est-il dans l'objectif ce mois-ci, et
-combien de marge reste-t-il ? Tu déploies Prometheus, Alertmanager,
-Grafana et Loki sur `lab-ops` par Ansible, tu branches les exporters de
-PB.3 et PB.5, tu définis un SLO et tu alertes sur son budget d'erreur —
-pas sur « CPU > 80 % ».
-:::
+> **Contexte**
+>
+> Au projet A, ta supervision était un script et un timer. Ici, la direction
+> veut « un chiffre » : le service est-il dans l'objectif ce mois-ci, et
+> combien de marge reste-t-il ? Tu déploies Prometheus, Alertmanager,
+> Grafana et Loki sur `lab-ops` par Ansible, tu branches les exporters de
+> PB.3 et PB.5, tu définis un SLO et tu alertes sur son budget d'erreur —
+> pas sur « CPU > 80 % ».
 
 **Objectif** : `ansible-playbook -i ansible/inventory/ops.ini
 ansible/playbooks/monitoring.yml` déploie la pile dans
@@ -986,27 +1028,28 @@ Grafana provisioning, Loki/LogQL, SLO), 23 (déploiement par Ansible), 22.
 dans le journal : la ligne d'`alerts.log` de `FacturaApiDown` avec le délai
 de détection, et une capture du dashboard pendant le burn.
 
-::: check
-Critère de réussite : `check_PB_08.sh` passe sur `lab-adm` (il interroge
-Prometheus, Alertmanager, Grafana et Loki sur `lab-ops`).
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_08.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_08.sh` passe sur `lab-adm` (il interroge
+> Prometheus, Alertmanager, Grafana et Loki sur `lab-ops`).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_08.sh
+> ```
 
 ---
 
-### **PB.9** — Sauvegardes, restauration testée par la CI, reconstruction chronométrée
+### <a id="pb-9"></a>**[PB.9](corrige.md#pb-9)** — Sauvegardes, restauration testée par la CI, reconstruction chronométrée
 
-::: contexte
-La question de l'audit : « si `factura-prod-web` et `factura-prod-db`
-disparaissent, vous êtes de retour quand ? ». Tu vas y répondre avec un
-chronomètre. Mais d'abord, la sauvegarde : automatisée, poussée sur
-`lab-ops`, **restaurée toutes les semaines par un job CI** qui compare le
-nombre de lignes — parce qu'une sauvegarde qu'on n'a pas restaurée n'existe
-pas (projet A, tu te souviens).
-:::
+> **Contexte**
+>
+> La question de l'audit : « si `factura-prod-web` et `factura-prod-db`
+> disparaissent, vous êtes de retour quand ? ». Tu vas y répondre avec un
+> chronomètre. Mais d'abord, la sauvegarde : automatisée, poussée sur
+> `lab-ops`, **restaurée toutes les semaines par un job CI** qui compare le
+> nombre de lignes — parce qu'une sauvegarde qu'on n'a pas restaurée n'existe
+> pas (projet A, tu te souviens).
 
 **Objectif** : sauvegarde nocturne de chaque base sur `lab-ops`, métrique
 d'âge dans Prometheus, restauration hebdomadaire automatique par la CI
@@ -1084,25 +1127,26 @@ de 60 minutes**, journal de temps à l'appui.
 `docs/runbook-deploy.md` complété (sinistre, RPO/RTO), un rapport de
 restauration hebdo dans `restore-tests/`.
 
-::: check
-Critère de réussite : `check_PB_09.sh` passe sur `lab-adm`.
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_09.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_09.sh` passe sur `lab-adm`.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_09.sh
+> ```
 
 ---
 
-### **PB.10** — L'API sur k3s, et le verdict Compose contre k3s
+### <a id="pb-10"></a>**[PB.10](corrige.md#pb-10)** — L'API sur k3s, et le verdict Compose contre k3s
 
-::: contexte
-Un des devs a lu que « tout le monde est sur Kubernetes ». La direction
-te demande un avis argumenté, pas un avis de principe. Tu portes l'API (et
-son worker, Redis, PostgreSQL) sur un k3s mono-nœud créé par OpenTofu,
-avec ce que Kubernetes apporte réellement — probes, autoscaling, Ingress
-TLS, rolling update natif — et tu compares avec ce que tu as déjà.
-:::
+> **Contexte**
+>
+> Un des devs a lu que « tout le monde est sur Kubernetes ». La direction
+> te demande un avis argumenté, pas un avis de principe. Tu portes l'API (et
+> son worker, Redis, PostgreSQL) sur un k3s mono-nœud créé par OpenTofu,
+> avec ce que Kubernetes apporte réellement — probes, autoscaling, Ingress
+> TLS, rolling update natif — et tu compares avec ce que tu as déjà.
 
 **Objectif** : `factura-k3s` (10.10.10.41) créée par le workspace `k3s`,
 k3s installé par Ansible, manifestes dans `k8s/`, API joignable en HTTPS
@@ -1186,31 +1230,33 @@ registre privé, scrape), 24 (workspace supplémentaire), 23 (rôle k3s), 18
 génère, `docs/compose-vs-k3s.md`, et dans le journal : délais HPA, et la
 sortie de `free -m` sur `factura-prod-web` et `factura-k3s` au repos.
 
-::: check
-Critère de réussite : `check_PB_10.sh` passe sur `lab-adm`
-(`KUBECONFIG=~/.kube/factura-k3s.yaml`).
-
-```bash
-bash ~/workbook/scripts/projects/P2/check_PB_10.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PB_10.sh` passe sur `lab-adm`
+> (`KUBECONFIG=~/.kube/factura-k3s.yaml`).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P2/check_PB_10.sh
+> ```
 
 ---
 
 ## B.3 Incidents
 
-::: attention
-Avant chaque incident : `qm snapshot 9001 avant-incB<n>` (lab-adm) et le
-snapshot des VM concernées. Les scripts sauvegardent ce qu'ils cassent dans
-`/root/.breakfix-backup/` sur la machine où ils tournent, mais certains
-touchent au registre, à l'état OpenTofu ou à l'historique Git : le snapshot
-est ta vraie sortie de secours. Un incident à la fois. Résous avec le
-runbook et l'outillage, pas avec le corrigé. Post-mortem dans
-`docs/incidents/INC-B<n>-<slug>.md` (Résumé, Impact, Chronologie, Cause
-racine, Correctif, Prévention).
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque incident : `qm snapshot 9001 avant-incB<n>` (lab-adm) et le
+> snapshot des VM concernées. Les scripts sauvegardent ce qu'ils cassent dans
+> `/root/.breakfix-backup/` sur la machine où ils tournent, mais certains
+> touchent au registre, à l'état OpenTofu ou à l'historique Git : le snapshot
+> est ta vraie sortie de secours. Un incident à la fois. Résous avec le
+> runbook et l'outillage, pas avec le corrigé. Post-mortem dans
+> `docs/incidents/INC-B<n>-<slug>.md` (Résumé, Impact, Chronologie, Cause
+> racine, Correctif, Prévention).
 
-### **INC-B1** — « Le pipeline est vert, mais la prod calcule mal la TVA »
+### <a id="inc-b1"></a>**[INC-B1](corrige.md#inc-b1)** — « Le pipeline est vert, mais la prod calcule mal la TVA »
 
 **Contexte.** Lundi 11 h. Le service comptable signale que les factures
 créées depuis 10 h ont un TTC faux (19,6 % au lieu de 20 %). Un collègue
@@ -1234,13 +1280,11 @@ autre chose que ce qu'il a construit.
 sudo bash ~/workbook/scripts/projects/P2/break_PB_01.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
-### **INC-B2** — « `tofu plan` veut recréer la base de prod »
+### <a id="inc-b2"></a>**[INC-B2](corrige.md#inc-b2)** — « `tofu plan` veut recréer la base de prod »
 
 **Contexte.** Mardi 9 h. Hier soir, un collègue a « libéré de la RAM à
 chaud sur Proxmox » pour une autre VM, et « nettoyé un truc dans OpenTofu
@@ -1262,13 +1306,11 @@ sans perte de données ; explication des deux drifts ; règle d'équipe.
 sudo bash ~/workbook/scripts/projects/P2/break_PB_02.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
-### **INC-B3** — « Le déploiement de prod échoue : vault illisible »
+### <a id="inc-b3"></a>**[INC-B3](corrige.md#inc-b3)** — « Le déploiement de prod échoue : vault illisible »
 
 **Contexte.** Mercredi 16 h. Un collègue a « fait tourner le mot de passe
 PostgreSQL de prod » ce matin et commité « chore(vault): rotation ». Depuis,
@@ -1292,13 +1334,11 @@ de rotation qui ne peut plus produire ça.
 sudo bash ~/workbook/scripts/projects/P2/break_PB_03.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
-### **INC-B4** — « Le staging est tombé à midi, personne n'a été prévenu »
+### <a id="inc-b4"></a>**[INC-B4](corrige.md#inc-b4)** — « Le staging est tombé à midi, personne n'a été prévenu »
 
 **Contexte.** Vendredi 17 h. Un dev te dit que le staging ne répond plus
 « depuis midi, au moins ». Tu regardes `alerts.log` : rien depuis ce
@@ -1320,9 +1360,7 @@ l'avenir.
 sudo bash ~/workbook/scripts/projects/P2/break_PB_04.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
@@ -1416,3 +1454,9 @@ PostgreSQL en réplication vers le staging (RPO < 1 h).
 | `factura-backup.timer`, rsync, `restore.md` | rôle `pg_backup`, `restore.yml`, job CI hebdo | PB.9 |
 | Runbook de deux jours pour tout refaire | `tools/rebuild.sh` : < 1 h, chronométré | PB.9 |
 | Un serveur, un service, `Restart=on-failure` | Deployment, probes, HPA, rolling update | PB.10 |
+
+<!-- nav:début -->
+---
+
+[← Module 27](../../modules/27-python-ops/README.md) · [Corrigé](corrige.md) · [Projet C →](../P3-astreinte/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

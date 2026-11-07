@@ -1,46 +1,73 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 27**  
+[← Module 26](../26-kubernetes-observabilite/README.md) · [Corrigé](corrige.md) · [Projet B →](../../projets/P2-factura-devops/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M27.sh`](../../scripts/setup/setup_M27.sh) | prépare le module |
+| [`check_M27_01.sh`](../../scripts/check/check_M27_01.sh) | vérification |
+| [`check_M27_02.sh`](../../scripts/check/check_M27_02.sh) | vérification |
+| [`check_M27_03.sh`](../../scripts/check/check_M27_03.sh) | vérification |
+| [`check_M27_04.sh`](../../scripts/check/check_M27_04.sh) | vérification |
+| [`check_M27_05.sh`](../../scripts/check/check_M27_05.sh) | vérification |
+| [`check_M27_06.sh`](../../scripts/check/check_M27_06.sh) | vérification |
+| [`break_M27_01.sh`](../../scripts/break/break_M27_01.sh) | installe une panne |
+| [`break_M27_02.sh`](../../scripts/break/break_M27_02.sh) | installe une panne |
+| [`break_M27_03.sh`](../../scripts/break/break_M27_03.sh) | installe une panne |
+| [`break_M27_04.sh`](../../scripts/break/break_M27_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 27 — Python pour l'ops
 
 ## 27.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* installer Python proprement sur un serveur : distinguer l'interpréteur
-  système, un venv (`python3 -m venv`) et un outil `pipx`, épingler mes
-  dépendances dans un `requirements.txt`, et expliquer pourquoi
-  `sudo pip install` sur une machine de production est une faute ;
-* écrire un outil d'exploitation en Python idiomatique : types de base,
-  listes/dicts/sets, f-strings, compréhensions, fonctions annotées,
-  `dataclasses`, exceptions ciblées, `with`, `if __name__ == "__main__"` ;
-* remplacer les commandes système par leur équivalent standard (`pathlib`,
-  `shutil`, `subprocess.run` en liste d'arguments, `json`, `csv`, `re`,
-  `datetime`/`zoneinfo`, `socket`, `ipaddress`, `hashlib`, `tempfile`,
-  `tomllib`, `signal`) et savoir quand garder la commande ;
-* lire un journal de plusieurs Go en flux, écrire un fichier atomiquement,
-  déclarer les encodages, m'insérer dans un pipe et rendre des codes de
-  sortie que le superviseur comprend ;
-* construire une interface propre avec `argparse` (sous-commandes,
-  `--help`, `--dry-run`) et journaliser avec `logging` vers stderr et
-  syslog, jamais avec `print` ;
-* consommer une API REST avec `urllib` puis `requests` (timeout, retries,
-  erreurs HTTP, token), notamment Proxmox, Gitea et Prometheus, et lire du
-  YAML avec PyYAML ;
-* tester avec `pytest` (fixtures `tmp_path`, `monkeypatch`, `caplog`),
-  linter et formater avec `ruff`, typer légèrement avec `mypy`, structurer
-  un projet `pyproject.toml` + `src/` + `tests/` ;
-* packager et déployer : `pip install .` dans un venv dédié, wrapper ou
-  chemin absolu dans une unité systemd, journalisation dans journald ;
-* reconnaître les dix pièges classiques (`shell=True`, `check` oublié,
-  `except:` nu, mutable par défaut, encodage implicite, `print`, chemin
-  relatif, dépendances flottantes, venv absent du timer, descripteurs
-  jamais fermés) et les corriger en revue de code ;
-* décider, avec un tableau de critères, entre bash, Python et Ansible.
-
-Temps estimé : 9 h (deux séances)
-Prérequis : module 07 (scripting bash, dont sa dernière question « quand
-passer à Python »), module 08 (systemd), module 16 (`sante.sh`), module 17
-(timers), module 24 (token API Proxmox), module 26 (Prometheus).
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * installer Python proprement sur un serveur : distinguer l'interpréteur
+>   système, un venv (`python3 -m venv`) et un outil `pipx`, épingler mes
+>   dépendances dans un `requirements.txt`, et expliquer pourquoi
+>   `sudo pip install` sur une machine de production est une faute ;
+> * écrire un outil d'exploitation en Python idiomatique : types de base,
+>   listes/dicts/sets, f-strings, compréhensions, fonctions annotées,
+>   `dataclasses`, exceptions ciblées, `with`, `if __name__ == "__main__"` ;
+> * remplacer les commandes système par leur équivalent standard (`pathlib`,
+>   `shutil`, `subprocess.run` en liste d'arguments, `json`, `csv`, `re`,
+>   `datetime`/`zoneinfo`, `socket`, `ipaddress`, `hashlib`, `tempfile`,
+>   `tomllib`, `signal`) et savoir quand garder la commande ;
+> * lire un journal de plusieurs Go en flux, écrire un fichier atomiquement,
+>   déclarer les encodages, m'insérer dans un pipe et rendre des codes de
+>   sortie que le superviseur comprend ;
+> * construire une interface propre avec `argparse` (sous-commandes,
+>   `--help`, `--dry-run`) et journaliser avec `logging` vers stderr et
+>   syslog, jamais avec `print` ;
+> * consommer une API REST avec `urllib` puis `requests` (timeout, retries,
+>   erreurs HTTP, token), notamment Proxmox, Gitea et Prometheus, et lire du
+>   YAML avec PyYAML ;
+> * tester avec `pytest` (fixtures `tmp_path`, `monkeypatch`, `caplog`),
+>   linter et formater avec `ruff`, typer légèrement avec `mypy`, structurer
+>   un projet `pyproject.toml` + `src/` + `tests/` ;
+> * packager et déployer : `pip install .` dans un venv dédié, wrapper ou
+>   chemin absolu dans une unité systemd, journalisation dans journald ;
+> * reconnaître les dix pièges classiques (`shell=True`, `check` oublié,
+>   `except:` nu, mutable par défaut, encodage implicite, `print`, chemin
+>   relatif, dépendances flottantes, venv absent du timer, descripteurs
+>   jamais fermés) et les corriger en revue de code ;
+> * décider, avec un tableau de critères, entre bash, Python et Ansible.
+>
+> **Temps estimé** : 9 h (deux séances)
+>
+> **Prérequis** : module 07 (scripting bash, dont sa dernière question « quand
+> passer à Python »), module 08 (systemd), module 16 (`sante.sh`), module 17
+> (timers), module 24 (token API Proxmox), module 26 (Prometheus).
 
 ---
 
@@ -64,12 +91,13 @@ sudo apt install -y python3 python3-venv python3-pip pipx
 python3 --version        # Python 3.12.3 sur Ubuntu 24.04
 ```
 
-::: rhel
-Sous Rocky 9, le Python système est 3.9 : trop vieux pour ce module
-(`tomllib`, `datetime.UTC`, syntaxe `X | None`). Installe la version
-parallèle : `sudo dnf install -y python3.12 python3.12-pip` puis
-`python3.12 -m venv ...`. `pipx` vient d'EPEL.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9, le Python système est 3.9 : trop vieux pour ce module
+> (`tomllib`, `datetime.UTC`, syntaxe `X | None`). Installe la version
+> parallèle : `sudo dnf install -y python3.12 python3.12-pip` puis
+> `python3.12 -m venv ...`. `pipx` vient d'EPEL.
 
 Préparation du terrain de jeu (sans `sudo`, idempotent) :
 
@@ -84,11 +112,12 @@ du module 05 (et une version de 45 Mo), une fixture JSON de l'API Proxmox,
 120 archives datées, 400 factures en CSV, les fichiers de configuration des
 labs, et quatre scripts mal écrits dans `casse/`.
 
-::: attention
-Si `pip install` échoue derrière un proxy, exporte `HTTPS_PROXY` puis
-relance le setup : il ne réinstalle que ce qui manque. N'installe jamais les
-dépendances avec `sudo pip` pour contourner.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Si `pip install` échoue derrière un proxy, exporte `HTTPS_PROXY` puis
+> relance le setup : il ne réinstalle que ce qui manque. N'installe jamais les
+> dépendances avec `sudo pip` pour contourner.
 
 ---
 
@@ -268,7 +297,9 @@ StandardError=journal
 SuccessExitStatus=1 2
 ```
 
-@fig(python-outil): De l'outil Python d'exploitation à son exécution : dépôt avec `pyproject.toml`, `src/`, `tests/`, qualité par ruff/mypy/pytest, installation par `pipx`, puis un timer systemd qui lance le service et journald qui reçoit stderr et le code de sortie.
+<p align="center"><img src="../../assets/figures/python-outil.svg" alt="Schéma : python-outil"></p>
+
+*Figure — De l'outil Python d'exploitation à son exécution : dépôt avec `pyproject.toml`, `src/`, `tests/`, qualité par ruff/mypy/pytest, installation par `pipx`, puis un timer systemd qui lance le service et journald qui reçoit stderr et le code de sortie.*
 
 ### Quand quoi — prolongement du module 07
 
@@ -298,7 +329,7 @@ SuccessExitStatus=1 2
 
 ## 27.3 Quiz — QCM
 
-**Q27.1** — Sur `lab-adm` (Ubuntu 24.04), `sudo pip install requests`
+<a id="q27-1"></a>**[Q27.1](corrige.md#q27-1)** — Sur `lab-adm` (Ubuntu 24.04), `sudo pip install requests`
 répond `error: externally-managed-environment`. Quelle est la bonne
 réaction ?
 
@@ -308,7 +339,7 @@ b) `sudo apt install python3-requests` si c'est pour un outil système, sinon
 c) `pip install --user requests`
 d) réinstaller pip depuis `get-pip.py`
 
-**Q27.2** — Un timer systemd lance `ExecStart=/home/mathieu/lab27/bin/
+<a id="q27-2"></a>**[Q27.2](corrige.md#q27-2)** — Un timer systemd lance `ExecStart=/home/mathieu/lab27/bin/
 sante.py`, dont la première ligne est `#!/usr/bin/env python3`. Le script
 importe `yaml`, installé dans `~/lab27/venv`. Résultat ?
 
@@ -318,7 +349,7 @@ b) `ModuleNotFoundError: No module named 'yaml'` : `env` résout le python
 c) systemd active automatiquement le venv le plus proche
 d) `Permission denied`, systemd refuse les scripts dans `/home`
 
-**Q27.3** — Que produit ce code ?
+<a id="q27-3"></a>**[Q27.3](corrige.md#q27-3)** — Que produit ce code ?
 
 ```python
 def ajouter(nom, liste=[]):
@@ -334,7 +365,7 @@ b) `['lab-web', 'lab-db']`
 c) `TypeError`
 d) `[]`
 
-**Q27.4** — `subprocess.run("tar -czf /tmp/a.tgz " + rep, shell=True)` avec
+<a id="q27-4"></a>**[Q27.4](corrige.md#q27-4)** — `subprocess.run("tar -czf /tmp/a.tgz " + rep, shell=True)` avec
 `rep = "/srv/rapport final"`. Que se passe-t-il ? **Deux réponses.**
 
 a) tar reçoit deux arguments, `/srv/rapport` et `final`, et échoue
@@ -342,7 +373,7 @@ b) le script continue et sort en 0 : `check=True` n'est pas là
 c) Python ajoute automatiquement des guillemets autour des espaces
 d) `shell=True` refuse les chemins contenant une espace
 
-**Q27.5** — Quel appel est correct pour exécuter `systemctl is-active nginx`
+<a id="q27-5"></a>**[Q27.5](corrige.md#q27-5)** — Quel appel est correct pour exécuter `systemctl is-active nginx`
 et obtenir une exception si la commande échoue ?
 
 a) `subprocess.run("systemctl is-active nginx")`
@@ -350,7 +381,7 @@ b) `subprocess.run(["systemctl", "is-active", "nginx"], check=True)`
 c) `subprocess.call(["systemctl is-active nginx"])`
 d) `os.system("systemctl is-active nginx") or raise`
 
-**Q27.6** — Ce fragment vérifie un site :
+<a id="q27-6"></a>**[Q27.6](corrige.md#q27-6)** — Ce fragment vérifie un site :
 
 ```python
 try:
@@ -368,7 +399,7 @@ b) rien, code 0 : l'exception est avalée, le superviseur voit un succès
 c) `OK` et code 0
 d) rien, code 2
 
-**Q27.7** — `open("/var/log/factura/app.log").read()` fonctionne dans ton
+<a id="q27-7"></a>**[Q27.7](corrige.md#q27-7)** — `open("/var/log/factura/app.log").read()` fonctionne dans ton
 shell et lève `UnicodeDecodeError` sous le timer. Cause la plus probable ?
 
 a) le timer tourne en root et n'a pas les droits
@@ -377,7 +408,7 @@ b) l'encodage par défaut dépend de la locale, absente sous systemd :
 c) le fichier a changé entre-temps
 d) `read()` ne fonctionne pas hors d'un terminal
 
-**Q27.8** — Un script compte les erreurs de 3 000 journaux :
+<a id="q27-8"></a>**[Q27.8](corrige.md#q27-8)** — Un script compte les erreurs de 3 000 journaux :
 
 ```python
 handles = [open(p) for p in Path(rep).glob("*.log")]
@@ -392,7 +423,7 @@ b) ouvrir chaque fichier dans un `with` à l'intérieur de la boucle, et ne
 c) `gc.collect()` après chaque itération
 d) remplacer `open` par `Path.read_text`, qui n'ouvre rien
 
-**Q27.9** — Tu écris un rapport JSON lu par une sonde toutes les 30 s.
+<a id="q27-9"></a>**[Q27.9](corrige.md#q27-9)** — Tu écris un rapport JSON lu par une sonde toutes les 30 s.
 Quelle séquence garantit qu'elle ne lira jamais un fichier tronqué ?
 
 a) `open(cible, "w").write(texte)`
@@ -400,7 +431,7 @@ b) `mkstemp(dir=cible.parent)` → écrire → `fsync` → `os.replace(tmp, cibl
 c) `open(cible, "a")` puis `truncate`
 d) écrire dans `/tmp` puis `shutil.copy`
 
-**Q27.10** — `r = requests.get(url, timeout=5)` renvoie un `401`. Sans autre
+<a id="q27-10"></a>**[Q27.10](corrige.md#q27-10)** — `r = requests.get(url, timeout=5)` renvoie un `401`. Sans autre
 ligne, que vaut `r.json()` et que fait le script ?
 
 a) exception `HTTPError` immédiatement
@@ -409,14 +440,14 @@ b) le corps JSON d'erreur de l'API (`{"data": null}`), et le script continue
 c) `None`
 d) `requests` réessaie trois fois puis lève
 
-**Q27.11** — Quelle ligne est **fausse** à propos de `logging` ?
+<a id="q27-11"></a>**[Q27.11](corrige.md#q27-11)** — Quelle ligne est **fausse** à propos de `logging` ?
 
 a) `log.info("hôte %s", h)` ne formate la chaîne que si le message est émis
 b) `logging.basicConfig(stream=sys.stderr)` garde stdout pour le résultat
 c) `log.exception("échec")` ajoute la trace quand on est dans un `except`
 d) `print` est équivalent à `log.info` si on ajoute `file=sys.stderr`
 
-**Q27.12** — Réponse de `/api/v1/query?query=up` de Prometheus :
+<a id="q27-12"></a>**[Q27.12](corrige.md#q27-12)** — Réponse de `/api/v1/query?query=up` de Prometheus :
 
 ```json
 {"status":"success","data":{"resultType":"vector","result":[
@@ -430,7 +461,7 @@ b) `float(d["data"]["result"][0]["value"][1])` : la valeur est une chaîne
 c) `d["result"]["value"]`
 d) `d["data"]["value"][0]`
 
-**Q27.13** — `pytest` : quelle affirmation est vraie ? **Deux réponses.**
+<a id="q27-13"></a>**[Q27.13](corrige.md#q27-13)** — `pytest` : quelle affirmation est vraie ? **Deux réponses.**
 
 a) `tmp_path` fournit un répertoire vide, propre à chaque test, nettoyé
    automatiquement
@@ -439,14 +470,14 @@ b) `monkeypatch.setattr(subprocess, "run", faux)` remplace `run` pendant le
 c) `capsys.readouterr().err` contient les messages émis via `logging`
 d) un test doit s'appeler `check_*` pour être collecté
 
-**Q27.14** — `dates[-n:]` avec `n = 0` renvoie :
+<a id="q27-14"></a>**[Q27.14](corrige.md#q27-14)** — `dates[-n:]` avec `n = 0` renvoie :
 
 a) une liste vide
 b) toute la liste
 c) le dernier élément
 d) `IndexError`
 
-**Q27.15** — Un `pyproject.toml` contient
+<a id="q27-15"></a>**[Q27.15](corrige.md#q27-15)** — Un `pyproject.toml` contient
 `[project.scripts] sante-serveur = "pilotage.cli:main"`. Après
 `/opt/factura/venv/bin/pip install .`, que trouve-t-on ?
 
@@ -456,7 +487,7 @@ b) `/opt/factura/venv/bin/sante-serveur`, un lanceur qui appelle
 c) rien : il faut `python -m pilotage.cli`
 d) un alias dans `~/.bashrc`
 
-**Q27.16** — Tu dois écrire un outil qui lit l'inventaire Proxmox, le
+<a id="q27-16"></a>**[Q27.16](corrige.md#q27-16)** — Tu dois écrire un outil qui lit l'inventaire Proxmox, le
 compare à Gitea, et ouvre une issue par écart. Quel outil, et pourquoi ?
 
 a) bash + `jq` + `curl` : c'est de l'appel d'API
@@ -464,7 +495,7 @@ b) Python : deux API, des structures à croiser, une logique testable
 c) Ansible : c'est de l'inventaire
 d) un script Perl, plus rapide
 
-**Q27.17** — `datetime.now()` et `datetime.now(UTC)` : lequel comparer avec
+<a id="q27-17"></a>**[Q27.17](corrige.md#q27-17)** — `datetime.now()` et `datetime.now(UTC)` : lequel comparer avec
 la date d'expiration d'un certificat obtenue via `ssl.cert_time_to_seconds` ?
 
 a) `datetime.now()`, les certificats sont en heure locale
@@ -473,7 +504,7 @@ b) ni l'un ni l'autre : `cert_time_to_seconds` rend un timestamp, on le
 c) `datetime.now(UTC).timestamp()` est aussi correct
 d) b et c sont corrects
 
-**Q27.18** — Un script Python lancé par timer écrit `print("étape 1")` puis
+<a id="q27-18"></a>**[Q27.18](corrige.md#q27-18)** — Un script Python lancé par timer écrit `print("étape 1")` puis
 lance une commande longue qui écrit sur stderr. Dans `journalctl`, la ligne
 `étape 1` apparaît **après** la sortie de la commande. Pourquoi ?
 
@@ -487,79 +518,63 @@ d) le timer a lancé le script deux fois
 
 ## 27.4 Quiz — questions ouvertes
 
-**QO27.1** — Explique ce que fait réellement `source venv/bin/activate`
+<a id="qo27-1"></a>**[QO27.1](corrige.md#qo27-1)** — Explique ce que fait réellement `source venv/bin/activate`
 (quelles variables changent), pourquoi un timer systemd n'en a pas besoin,
 et quelle ligne `ExecStart` tu écris pour lancer un script d'un venv. Puis
 explique la différence entre `pip install x` et `python3 -m pip install x`
 sur une machine où trois interpréteurs cohabitent.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO27.2** — *On te demande en entretien* : « Tu reprends un script Python
+<a id="qo27-2"></a>**[QO27.2](corrige.md#qo27-2)** — *On te demande en entretien* : « Tu reprends un script Python
 de 400 lignes qui fait des `subprocess.run(..., shell=True)` partout. Que
 regardes-tu en premier, qu'est-ce qui est dangereux, et comment le corriges-tu
 sans tout réécrire ? » Réponds avec les mécanismes : découpage des mots,
 métacaractères, injection, `check`, `timeout`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO27.3** — Décris la différence entre `except:`, `except Exception:` et
+<a id="qo27-3"></a>**[QO27.3](corrige.md#qo27-3)** — Décris la différence entre `except:`, `except Exception:` et
 `except (OSError, ValueError):`. Quelles exceptions le premier attrape-t-il
 en plus du deuxième, et pourquoi est-ce grave dans un script lancé par un
 timer (pense à `sys.exit` et à Ctrl-C) ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO27.4** — Pourquoi `for ligne in f:` sur un fichier de 8 Go fonctionne
+<a id="qo27-4"></a>**[QO27.4](corrige.md#qo27-4)** — Pourquoi `for ligne in f:` sur un fichier de 8 Go fonctionne
 alors que `f.read().splitlines()` tue le processus ? Explique en termes de
 mémoire, puis donne l'équivalent pour un `.gz` et pour un pipe (`stdin`).
 Que se passe-t-il si le fichier est en latin-1 et que tu n'as rien précisé ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO27.5** — *On te demande en entretien* : « Ton script de rétention a
+<a id="qo27-5"></a>**[QO27.5](corrige.md#qo27-5)** — *On te demande en entretien* : « Ton script de rétention a
 supprimé une archive mensuelle qu'il devait garder. Comment tu t'assures que
 ça ne se reproduit pas ? » Réponds avec : logique pure séparée des effets,
 tests unitaires sur la sélection, `--dry-run`, et le rôle d'un cas de test
 qui reproduit l'incident.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO27.6** — Un fichier écrit avec `open(cible, "w")` peut être lu tronqué
+<a id="qo27-6"></a>**[QO27.6](corrige.md#qo27-6)** — Un fichier écrit avec `open(cible, "w")` peut être lu tronqué
 par un autre processus. Explique le mécanisme, puis décris l'écriture
 atomique (temporaire dans le même répertoire, `fsync`, `os.replace`) et
 pourquoi un temporaire dans `/tmp` ne convient pas.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO27.7** — Compare `urllib.request` et `requests` pour interroger l'API
+<a id="qo27-7"></a>**[QO27.7](corrige.md#qo27-7)** — Compare `urllib.request` et `requests` pour interroger l'API
 Proxmox : gestion du token, du timeout, des codes 4xx/5xx, des retries.
 Dans quel cas restes-tu sur la bibliothèque standard ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO27.8** — Reprends les trois critères de QO7.8 (données, idempotence,
+<a id="qo27-8"></a>**[QO27.8](corrige.md#qo27-8)** — Reprends les trois critères de QO7.8 (données, idempotence,
 taille) et ajoute-leur deux critères propres à Python : la testabilité et le
 long-running. Pour chaque critère, donne un exemple pris dans ce module et
 dis ce que bash aurait coûté.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
@@ -569,93 +584,93 @@ Sauf mention contraire, travaille dans `~/lab27` avec le venv activé.
 Chaque script doit passer `ruff check` sans avertissement et commencer par
 `#!/usr/bin/env python3`.
 
-**E27.1** — Montre, avec `which python3`, `python3 -c 'import sys;
+<a id="e27-1"></a>**[E27.1](corrige.md#e27-1)** — Montre, avec `which python3`, `python3 -c 'import sys;
 print(sys.prefix)'` et `pip --version`, ce qui change quand tu actives le
 venv puis quand tu le désactives. Lance ensuite `~/lab27/venv/bin/python -c
 'import yaml'` **sans** activation et explique pourquoi ça marche.
 
-**E27.2** — Installe `ruff` de deux façons : dans le venv (`pip`) et comme
+<a id="e27-2"></a>**[E27.2](corrige.md#e27-2)** — Installe `ruff` de deux façons : dans le venv (`pip`) et comme
 outil de poste (`pipx install ruff`). Compare `which ruff` dans les deux cas,
 puis supprime celui du venv. Justifie en deux lignes lequel garder pour un
 outil de lint et lequel pour `requests`.
 
-**E27.3** — À partir de `~/lab27/requirements.in`, produis un
+<a id="e27-3"></a>**[E27.3](corrige.md#e27-3)** — À partir de `~/lab27/requirements.in`, produis un
 `requirements.txt` épinglé avec `pip freeze`, puis recrée un second venv
 `~/lab27/venv2` à l'identique en une commande. Vérifie que
 `pip list --format=freeze` des deux venvs est identique (`diff`).
 
-**E27.4** — Écris `bin/hotes.py` qui charge la fixture
+<a id="e27-4"></a>**[E27.4](corrige.md#e27-4)** — Écris `bin/hotes.py` qui charge la fixture
 `fixtures/proxmox-qemu.json` et affiche, avec une compréhension et une
 f-string alignée, une ligne `nom vmid statut` par VM `qemu` en cours
 d'exécution, triée par nom. Un `dataclass(frozen=True)` porte chaque VM.
 
-**E27.5** — Exécute `casse/mutable.py`, explique la sortie, corrige avec
+<a id="e27-5"></a>**[E27.5](corrige.md#e27-5)** — Exécute `casse/mutable.py`, explique la sortie, corrige avec
 `None` comme valeur par défaut. Puis écris une fonction `compter(mots:
 list[str]) -> dict[str, int]` qui compte les occurrences, d'abord à la main
 avec `dict.get`, puis avec `collections.Counter`.
 
-**E27.6** — Réécris `casse/purge.py` sans `os.system` : `pathlib` pour
+<a id="e27-6"></a>**[E27.6](corrige.md#e27-6)** — Réécris `casse/purge.py` sans `os.system` : `pathlib` pour
 lister les `*.tmp`, `unlink()` pour supprimer, `--dry-run` avec `argparse`,
 refus (code 2) si le répertoire n'existe pas. Prouve qu'il ne touche pas
 `important.txt` et qu'il traite un répertoire dont le nom contient une
 espace.
 
-**E27.7** — Lance `casse/lecture.py data/clients-latin1.csv`, lis l'erreur,
+<a id="e27-7"></a>**[E27.7](corrige.md#e27-7)** — Lance `casse/lecture.py data/clients-latin1.csv`, lis l'erreur,
 corrige avec l'`encoding` adapté, puis rends le script robuste à
 `data/inventaire-excel.csv` (BOM UTF-8) avec `utf-8-sig`. Utilise
 `csv.DictReader` avec `delimiter=";"` au lieu du `split`.
 
-**E27.8** — Écris `bin/ssh-check.py` qui lit des hôtes sur **stdin** (un par
+<a id="e27-8"></a>**[E27.8](corrige.md#e27-8)** — Écris `bin/ssh-check.py` qui lit des hôtes sur **stdin** (un par
 ligne, `# commentaires` ignorés) et teste le port 22 de chacun avec
 `socket.create_connection` (timeout 2 s). Sortie : `hote OK|KO durée_ms` sur
 stdout ; code 1 si au moins un KO. Vérifie avec
 `printf '10.10.10.11\n10.10.10.99\n' | bin/ssh-check.py`.
 
-**E27.9** — Réécris `casse/stock.py` avec `logging` : niveau via `-v`,
+<a id="e27-9"></a>**[E27.9](corrige.md#e27-9)** — Réécris `casse/stock.py` avec `logging` : niveau via `-v`,
 format horodaté sur stderr, `ERREUR` en `log.error`. Ajoute un
 `SysLogHandler` vers `/dev/log` et retrouve les messages avec
 `journalctl -t stock -n 5`. Montre que `./stock.py > /dev/null` garde les
 erreurs visibles.
 
-**E27.10** — Écris `bin/exec-tracee.py`, cousin de `exec-tracee.sh` du
+<a id="e27-10"></a>**[E27.10](corrige.md#e27-10)** — Écris `bin/exec-tracee.py`, cousin de `exec-tracee.sh` du
 module 07 : `exec-tracee.py [-t tag] -- commande [args]`. Il lance la
 commande avec `subprocess.run` (liste, `timeout` optionnel), journalise début,
 fin, durée (`time.monotonic`) et code, et rend **exactement** le code de la
 commande. `exec-tracee.py -- sh -c 'exit 7'; echo $?` affiche 7 ;
 `exec-tracee.py -- printf '[%s]\n' 'a b' c` affiche deux lignes.
 
-**E27.11** — Écris `bin/dates.py` qui affiche l'heure courante en UTC et en
+<a id="e27-11"></a>**[E27.11](corrige.md#e27-11)** — Écris `bin/dates.py` qui affiche l'heure courante en UTC et en
 `Europe/Paris` (`zoneinfo`), parse la date `18/Sep/2026:14:02:11 +0200`
 d'une ligne nginx, et calcule le nombre de jours avant le 1er janvier
 prochain. Montre l'erreur obtenue en comparant un `datetime` naïf à un
 `datetime` aware.
 
-**E27.12** — Écris `bin/empreintes.py REP` qui calcule le SHA-256 de chaque
+<a id="e27-12"></a>**[E27.12](corrige.md#e27-12)** — Écris `bin/empreintes.py REP` qui calcule le SHA-256 de chaque
 fichier de `REP` (`hashlib.file_digest`), écrit un `empreintes.json`
 **atomiquement** (temporaire + `os.replace`), et, à l'exécution suivante,
 affiche les fichiers modifiés. Teste en modifiant un fichier entre deux
 exécutions.
 
-**E27.13** — Avec `urllib.request` uniquement, interroge
+<a id="e27-13"></a>**[E27.13](corrige.md#e27-13)** — Avec `urllib.request` uniquement, interroge
 `http://10.10.10.14:9090/api/v1/query?query=up` et affiche `instance valeur`
 par série. Gère `URLError` (Prometheus arrêté) et `HTTPError` avec un
 message propre et le code 1. Si ton lab-ops est éteint, cible
 `http://10.10.10.14:9090/-/healthy` et montre le message d'erreur.
 
-**E27.14** — Même chose avec `requests` : `Session`, `timeout=(3.05, 10)`,
+<a id="e27-14"></a>**[E27.14](corrige.md#e27-14)** — Même chose avec `requests` : `Session`, `timeout=(3.05, 10)`,
 `raise_for_status()`, et un `HTTPAdapter` avec `Retry(total=3,
 backoff_factor=0.5, status_forcelist=[502, 503, 504])`. Ajoute un appel à
 l'API Gitea `GET /api/v1/repos/search?q=factura` avec un token lu dans la
 variable `GITEA_TOKEN` (jamais dans le code). Montre le JSON obtenu.
 
-**E27.15** — Écris `bin/proxmox-vms.py` qui liste les VM via l'API Proxmox
+<a id="e27-15"></a>**[E27.15](corrige.md#e27-15)** — Écris `bin/proxmox-vms.py` qui liste les VM via l'API Proxmox
 avec un token `PVE_TOKEN` (créé au module 24, droits `VM.Audit`), sur
 `https://10.10.10.1:8006`, en vérifiant le certificat (`verify=` chemin du
 CA de ton PVE, ou `--insecure` explicite). Compare avec
 `pvesh get /cluster/resources --type vm --output-format json` lancé sur
 l'hyperviseur, et note deux différences entre les deux approches.
 
-**E27.16** — Crée un projet minimal `~/lab27/monoutil/` à partir de
+<a id="e27-16"></a>**[E27.16](corrige.md#e27-16)** — Crée un projet minimal `~/lab27/monoutil/` à partir de
 `pyproject.example.toml` : `src/monoutil/cli.py` avec un `main()` qui
 affiche `bonjour`, `tests/test_cli.py` avec un test, `pip install -e .`
 dans le venv, puis `monoutil` depuis n'importe quel répertoire. Termine par
@@ -665,15 +680,15 @@ dans le venv, puis `monoutil` depuis n'importe quel répertoire. Termine par
 
 ## 27.6 Labs ★★
 
-### **L27.1** — `logstats.py` : remplacer le pipeline awk du module 05
+### <a id="l27-1"></a>**[L27.1](corrige.md#l27-1)** — `logstats.py` : remplacer le pipeline awk du module 05
 
-::: contexte
-Le rapport matinal des accès nginx est produit par un pipeline
-`awk | sort | uniq -c | sort -rn` en trois exemplaires, un par indicateur,
-copié dans un mail. Quelqu'un a demandé « le p95 par URL » et le pipeline a
-doublé de taille. On te demande un outil unique, lisible, testé, qui accepte
-un fichier, un `.gz` ou stdin.
-:::
+> **Contexte**
+>
+> Le rapport matinal des accès nginx est produit par un pipeline
+> `awk | sort | uniq -c | sort -rn` en trois exemplaires, un par indicateur,
+> copié dans un mail. Quelqu'un a demandé « le p95 par URL » et le pipeline a
+> doublé de taille. On te demande un outil unique, lisible, testé, qui accepte
+> un fichier, un `.gz` ou stdin.
 
 Écris `~/lab27/bin/logstats.py` (format `combined` + `$request_time` en
 dernier champ, comme `data/access.log`).
@@ -702,27 +717,28 @@ dernier champ, comme `data/access.log`).
 7. `tests/test_logstats.py` : au moins 4 tests (percentile, ligne
    invalide comptée, `.gz`, fichier vide → code 3).
 
-::: check
-Critère de succès : `logstats.py data/access.log` affiche `10.10.10.14`
-avec `1212` en tête et `p95 0.537` ; `--json` produit un JSON avec
-`lignes = 7200` ; `head -100 data/access.log | logstats.py -` fonctionne.
-
-```bash
-bash check_M27_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `logstats.py data/access.log` affiche `10.10.10.14`
+> avec `1212` en tête et `p95 0.537` ; `--json` produit un JSON avec
+> `lignes = 7200` ; `head -100 data/access.log | logstats.py -` fonctionne.
+>
+> ```bash
+> bash check_M27_01.sh
+> ```
 
 ---
 
-### **L27.2** — `inventaire.py` : un inventaire Ansible depuis l'API Proxmox
+### <a id="l27-2"></a>**[L27.2](corrige.md#l27-2)** — `inventaire.py` : un inventaire Ansible depuis l'API Proxmox
 
-::: contexte
-L'inventaire Ansible du module 23 est écrit à la main et il diverge de la
-réalité : une VM clonée pour un test a été oubliée, une autre détruite y
-figure encore. La source de vérité, c'est Proxmox. On veut un générateur
-qui tourne aussi sur un poste sans accès à l'API — pour les tests et la CI —
-grâce à des réponses enregistrées.
-:::
+> **Contexte**
+>
+> L'inventaire Ansible du module 23 est écrit à la main et il diverge de la
+> réalité : une VM clonée pour un test a été oubliée, une autre détruite y
+> figure encore. La source de vérité, c'est Proxmox. On veut un générateur
+> qui tourne aussi sur un poste sans accès à l'API — pour les tests et la CI —
+> grâce à des réponses enregistrées.
 
 Écris `~/lab27/bin/inventaire.py`.
 
@@ -751,34 +767,36 @@ grâce à des réponses enregistrées.
    https://10.10.10.1:8006 --ca /etc/ssl/pve.crt` et compare avec la
    fixture.
 
-::: astuce
-Pour enregistrer ta propre fixture : `pvesh get /cluster/resources --type vm
---output-format json` sur l'hyperviseur, puis un `pvesh get
-/nodes/pve/qemu/9002/config --output-format json` par VM.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour enregistrer ta propre fixture : `pvesh get /cluster/resources --type vm
+> --output-format json` sur l'hyperviseur, puis un `pvesh get
+> /nodes/pve/qemu/9002/config --output-format json` par VM.
 
-::: check
-Critère de succès : la sortie INI contient `lab-web ansible_host=10.10.10.11`
-et un groupe `[prod]` avec `lab-db` et `lab-web` ; ni le template, ni le
-conteneur LXC, ni `lab-web-old` (sans `--all`) n'apparaissent ;
-`lab-sandbox` est omise et signalée.
-
-```bash
-bash check_M27_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : la sortie INI contient `lab-web ansible_host=10.10.10.11`
+> et un groupe `[prod]` avec `lab-db` et `lab-web` ; ni le template, ni le
+> conteneur LXC, ni `lab-web-old` (sans `--all`) n'apparaissent ;
+> `lab-sandbox` est omise et signalée.
+>
+> ```bash
+> bash check_M27_02.sh
+> ```
 
 ---
 
-### **L27.3** — `sante.py` : sonde multi-services, JSON, code Nagios, timer
+### <a id="l27-3"></a>**[L27.3](corrige.md#l27-3)** — `sante.py` : sonde multi-services, JSON, code Nagios, timer
 
-::: contexte
-La supervision Prometheus du module 26 dit si les cibles répondent, mais
-l'astreinte veut un verdict unique et lisible : « le port SSH de lab-web,
-la boutique, le certificat, le disque ». Une sonde en Python, configurée en
-YAML, qui sort du JSON exploitable et un code de sortie standard, lancée
-toutes les 5 minutes par un timer.
-:::
+> **Contexte**
+>
+> La supervision Prometheus du module 26 dit si les cibles répondent, mais
+> l'astreinte veut un verdict unique et lisible : « le port SSH de lab-web,
+> la boutique, le certificat, le disque ». Une sonde en Python, configurée en
+> YAML, qui sort du JSON exploitable et un code de sortie standard, lancée
+> toutes les 5 minutes par un timer.
 
 Écris `~/lab27/bin/sante.py`, configuration `~/lab27/conf/sante.yaml`.
 
@@ -808,27 +826,28 @@ toutes les 5 minutes par un timer.
    `sante.timer` (`OnCalendar=*:0/5`). Vérifie avec `systemctl list-timers`
    et `jq .statut /var/lib/factura/sante.json`.
 
-::: check
-Critère de succès : une configuration saine donne code 0 et un JSON
-`statut: OK` ; un port fermé donne code 2 ; une configuration absente donne
-code 3 ; aucun fichier temporaire ne reste après `-o`.
-
-```bash
-bash check_M27_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : une configuration saine donne code 0 et un JSON
+> `statut: OK` ; un port fermé donne code 2 ; une configuration absente donne
+> code 3 ; aucun fichier temporaire ne reste après `-o`.
+>
+> ```bash
+> bash check_M27_03.sh
+> ```
 
 ---
 
-### **L27.4** — `rotate_backups.py` : rétention GFS testée
+### <a id="l27-4"></a>**[L27.4](corrige.md#l27-4)** — `rotate_backups.py` : rétention GFS testée
 
-::: contexte
-`~/lab27/data/sauvegardes/` reçoit une archive `factura-AAAA-MM-JJ.tar.gz`
-par nuit depuis quatre mois. Le `find -mtime +30 -delete` en place a
-supprimé, un soir de restauration, l'archive du 1er du mois précédent. La
-politique demandée : 7 quotidiennes, 4 hebdomadaires, 6 mensuelles. Et cette
-fois, des tests.
-:::
+> **Contexte**
+>
+> `~/lab27/data/sauvegardes/` reçoit une archive `factura-AAAA-MM-JJ.tar.gz`
+> par nuit depuis quatre mois. Le `find -mtime +30 -delete` en place a
+> supprimé, un soir de restauration, l'archive du 1er du mois précédent. La
+> politique demandée : 7 quotidiennes, 4 hebdomadaires, 6 mensuelles. Et cette
+> fois, des tests.
 
 Écris `~/lab27/rotate/rotate_backups.py` (underscore : le fichier doit être
 importable par les tests) et `~/lab27/rotate/tests/test_rotate_backups.py`.
@@ -855,28 +874,29 @@ importable par les tests) et `~/lab27/rotate/tests/test_rotate_backups.py`.
    1er du mois précédent doit être gardé.
 7. Piège à documenter dans un commentaire : `liste[-0:]`.
 
-::: check
-Critère de succès : sur 120 archives + 2 intrus, `--dry-run` ne supprime
-rien, l'exécution réelle garde entre 12 et 17 archives `factura-*` dont les 7
-dernières et le 1er du mois précédent, les intrus survivent, un second
-passage ne change rien, et `pytest` passe (≥ 5 tests).
-
-```bash
-bash check_M27_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : sur 120 archives + 2 intrus, `--dry-run` ne supprime
+> rien, l'exécution réelle garde entre 12 et 17 archives `factura-*` dont les 7
+> dernières et le 1er du mois précédent, les intrus survivent, un second
+> passage ne change rien, et `pytest` passe (≥ 5 tests).
+>
+> ```bash
+> bash check_M27_04.sh
+> ```
 
 ---
 
-### **L27.5** — Un exporter Prometheus « métier »
+### <a id="l27-5"></a>**[L27.5](corrige.md#l27-5)** — Un exporter Prometheus « métier »
 
-::: contexte
-Les tableaux de bord du module 26 montrent CPU et latence, mais la question
-du lundi est « combien de factures en attente ? ». La donnée est dans
-PostgreSQL sur `lab-db` (ou, pour ce lab, dans `data/factures.csv`).
-On te demande un exporter qui expose cette donnée à Prometheus, déployé
-comme un service.
-:::
+> **Contexte**
+>
+> Les tableaux de bord du module 26 montrent CPU et latence, mais la question
+> du lundi est « combien de factures en attente ? ». La donnée est dans
+> PostgreSQL sur `lab-db` (ou, pour ce lab, dans `data/factures.csv`).
+> On te demande un exporter qui expose cette donnée à Prometheus, déployé
+> comme un service.
 
 Écris `~/lab27/bin/factura_exporter.py`.
 
@@ -905,29 +925,31 @@ comme un service.
    montant)` dans la base `factura`, installe `psycopg[binary]` dans le
    venv, et bascule la configuration sur `dsn`.
 
-::: check
-Critère de succès : `curl -s localhost:9105/metrics` contient
-`# TYPE factura_factures_total gauge` et une ligne par statut ; modifier le
-CSV change la valeur au scrape suivant ; un chemin inconnu répond 404 ;
-`kill -TERM` arrête le service en code 0.
-
-```bash
-bash check_M27_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl -s localhost:9105/metrics` contient
+> `# TYPE factura_factures_total gauge` et une ligne par statut ; modifier le
+> CSV change la valeur au scrape suivant ; un chemin inconnu répond 404 ;
+> `kill -TERM` arrête le service en code 0.
+>
+> ```bash
+> bash check_M27_05.sh
+> ```
 
 ---
 
 ## 27.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf27`. Le snapshot de
-secours reste `snap-clean`, mais on répare du **code** : le script fautif est
-livré dans `~/lab27/bfN/`, c'est lui qu'il faut lire, comprendre et corriger,
-ligne à ligne, avec une justification qu'on peut mettre dans une revue.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf27`. Le snapshot de
+> secours reste `snap-clean`, mais on répare du **code** : le script fautif est
+> livré dans `~/lab27/bfN/`, c'est lui qu'il faut lire, comprendre et corriger,
+> ligne à ligne, avec une justification qu'on peut mettre dans une revue.
 
-### **BF27.1** — « Ça marche chez moi, pas sous le timer »
+### <a id="bf27-1"></a>**[BF27.1](corrige.md#bf27-1)** — « Ça marche chez moi, pas sous le timer »
 
 ```bash
 sudo bash break_M27_01.sh
@@ -950,11 +972,9 @@ liste des variables d'environnement sur lesquelles un script lancé par systemd
 ne peut pas compter. Bonus : pourquoi `PYTHONUNBUFFERED=1` a sa place dans
 l'unité.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF27.2** — « L'archive est incomplète et tar râle »
+### <a id="bf27-2"></a>**[BF27.2](corrige.md#bf27-2)** — « L'archive est incomplète et tar râle »
 
 ```bash
 sudo bash break_M27_02.sh
@@ -976,11 +996,9 @@ corriger `subprocess.run` (liste d'arguments, `check=True`, `--` avant les
 noms de fichiers), et rendre un code non nul quand `tar` échoue. Prouve avec
 `tar -tzf` que les six journaux sont dans l'archive.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF27.3** — « Too many open files »
+### <a id="bf27-3"></a>**[BF27.3](corrige.md#bf27-3)** — « Too many open files »
 
 ```bash
 sudo bash break_M27_03.sh
@@ -1000,11 +1018,9 @@ résultat, et montrer que le nombre de descripteurs ouverts reste constant
 pendant tout le parcours. Expliquer aussi pourquoi `open(p).read()` sans
 `with`, dans une boucle, « marche » en CPython mais reste une faute.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF27.4** — « La supervision dit OK, le site est mort »
+### <a id="bf27-4"></a>**[BF27.4](corrige.md#bf27-4)** — « La supervision dit OK, le site est mort »
 
 ```bash
 sudo bash break_M27_04.sh
@@ -1026,24 +1042,22 @@ avec un message par URL sur stderr, et rendre `2` dès qu'un site échoue.
 Ajoute un test `pytest` avec `monkeypatch` sur `urllib.request.urlopen` qui
 aurait détecté la régression.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 27.8 Défi du module ★★★
 
-**D27 — `sante.sh` (module 16) réécrit en Python, testé, packagé, planifié**
+<a id="d27"></a>**[D27](corrige.md#d27) — `sante.sh` (module 16) réécrit en Python, testé, packagé, planifié**
 
-::: contexte
-Le `sante.sh` du module 16 a rendu service, mais il a atteint la limite du
-bash : 200 lignes d'`awk` imbriqués, aucune fonction testable, un `set -e`
-qu'on désamorce avec des `|| true`. L'équipe veut le même outil, même
-interface, en Python : un paquet installable, des tests, un timer. Toute
-personne qui lance `sante-serveur` doit obtenir exactement ce que `sante.sh`
-donnait.
-:::
+> **Contexte**
+>
+> Le `sante.sh` du module 16 a rendu service, mais il a atteint la limite du
+> bash : 200 lignes d'`awk` imbriqués, aucune fonction testable, un `set -e`
+> qu'on désamorce avec des `|| true`. L'équipe veut le même outil, même
+> interface, en Python : un paquet installable, des tests, un timer. Toute
+> personne qui lance `sante-serveur` doit obtenir exactement ce que `sante.sh`
+> donnait.
 
 Cahier des charges du projet `~/lab27/pilotage/` :
 
@@ -1089,11 +1103,12 @@ Cahier des charges du projet `~/lab27/pilotage/` :
 
 Temps visé : 90 minutes.
 
-::: check
-```bash
-bash check_M27_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M27_06.sh
+> ```
 
 ---
 
@@ -1127,3 +1142,9 @@ Pour aller plus loin :
 * Regarde `asyncio` et `concurrent.futures.ThreadPoolExecutor` pour
   vérifier 200 hôtes en parallèle dans `sante.py` : les projets du fil rouge en
   auront besoin.
+
+<!-- nav:début -->
+---
+
+[← Module 26](../26-kubernetes-observabilite/README.md) · [Corrigé](corrige.md) · [Projet B →](../../projets/P2-factura-devops/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

@@ -1,28 +1,58 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet A — Factura : plateforme multi-services, à la main › **Projet A**  
+[← Module 19](../../modules/19-troubleshooting-perf/README.md) · [Corrigé](corrige.md) · [Module 20 →](../../modules/20-virtualisation-kvm/README.md)
+
+<details><summary>Scripts du module (14)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_P1.sh`](../../scripts/projects/P1/setup_P1.sh) | prépare le module |
+| [`check_PA_01.sh`](../../scripts/projects/P1/check_PA_01.sh) | vérification |
+| [`check_PA_02.sh`](../../scripts/projects/P1/check_PA_02.sh) | vérification |
+| [`check_PA_03.sh`](../../scripts/projects/P1/check_PA_03.sh) | vérification |
+| [`check_PA_04.sh`](../../scripts/projects/P1/check_PA_04.sh) | vérification |
+| [`check_PA_05.sh`](../../scripts/projects/P1/check_PA_05.sh) | vérification |
+| [`check_PA_06.sh`](../../scripts/projects/P1/check_PA_06.sh) | vérification |
+| [`check_PA_07.sh`](../../scripts/projects/P1/check_PA_07.sh) | vérification |
+| [`check_PA_08.sh`](../../scripts/projects/P1/check_PA_08.sh) | vérification |
+| [`check_PA_09.sh`](../../scripts/projects/P1/check_PA_09.sh) | vérification |
+| [`check_PA_10.sh`](../../scripts/projects/P1/check_PA_10.sh) | vérification |
+| [`break_PA_01.sh`](../../scripts/projects/P1/break_PA_01.sh) | installe une panne |
+| [`break_PA_02.sh`](../../scripts/projects/P1/break_PA_02.sh) | installe une panne |
+| [`break_PA_03.sh`](../../scripts/projects/P1/break_PA_03.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Projet A — Factura : plateforme de facturation multi-services
 
 ## A.0 Présentation
 
-::: objectif
-Ce projet fil rouge fait travailler ensemble tout ce que tu as appris dans les
-modules 1 à 19 : comptes et permissions, FHS, systemd, paquets, LVM, réseau,
-SSH, journaux, timers, sécurité et diagnostic. À la fin, tu sais :
-
-* héberger une application multi-services (frontal, API, worker, base, file)
-  sur plusieurs machines, **entièrement à la main**, et expliquer chaque choix ;
-* isoler chaque composant : compte de service dédié, unité systemd durcie,
-  ports fermés par défaut, secrets hors du code ;
-* mettre en place ce qu'une PME attend réellement : TLS propre, journaux
-  centralisés, sauvegardes **testées**, supervision qui alerte, procédure
-  d'exploitation écrite ;
-* diagnostiquer et résoudre trois incidents réalistes en te servant du runbook
-  que tu auras écrit toi-même ;
-* dire, en entretien, ce que Docker et Ansible automatiseront ensuite — parce
-  que tu l'auras fait sans eux.
-
-Temps estimé : 20 à 30 h, à étaler sur deux ou trois semaines.
-Prérequis : modules 01 à 19. Aucun outil des modules 21 et suivants (Docker,
-Ansible, CI) n'est autorisé : le but est de comprendre ce qu'ils remplacent.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> Ce projet fil rouge fait travailler ensemble tout ce que tu as appris dans les
+> modules 1 à 19 : comptes et permissions, FHS, systemd, paquets, LVM, réseau,
+> SSH, journaux, timers, sécurité et diagnostic. À la fin, tu sais :
+>
+> * héberger une application multi-services (frontal, API, worker, base, file)
+>   sur plusieurs machines, **entièrement à la main**, et expliquer chaque choix ;
+> * isoler chaque composant : compte de service dédié, unité systemd durcie,
+>   ports fermés par défaut, secrets hors du code ;
+> * mettre en place ce qu'une PME attend réellement : TLS propre, journaux
+>   centralisés, sauvegardes **testées**, supervision qui alerte, procédure
+>   d'exploitation écrite ;
+> * diagnostiquer et résoudre trois incidents réalistes en te servant du runbook
+>   que tu auras écrit toi-même ;
+> * dire, en entretien, ce que Docker et Ansible automatiseront ensuite — parce
+>   que tu l'auras fait sans eux.
+>
+> **Temps estimé** : 20 à 30 h, à étaler sur deux ou trois semaines.
+>
+> **Prérequis** : modules 01 à 19. Aucun outil des modules 21 et suivants (Docker,
+> Ansible, CI) n'est autorisé : le but est de comprendre ce qu'ils remplacent.
 
 ### Le contexte
 
@@ -97,18 +127,20 @@ sur `lab-db` ; outils partout) et crée `~/P1/` avec un journal de bord vide.
 Il **n'installe rien d'autre**, ne crée aucun compte, aucun service, aucune
 configuration : tout ça, c'est le projet.
 
-::: attention
-Prends un snapshot **avant chaque jalon** (`qm snapshot 9002 avant-PA3`…).
-Certains jalons (pare-feu, SSH, sudo) peuvent t'enfermer dehors : garde
-toujours une seconde session SSH ouverte et la console Proxmox sous la main.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Prends un snapshot **avant chaque jalon** (`qm snapshot 9002 avant-PA3`…).
+> Certains jalons (pare-feu, SSH, sudo) peuvent t'enfermer dehors : garde
+> toujours une seconde session SSH ouverte et la console Proxmox sous la main.
 
-::: astuce
-Lis les en-têtes de `factura_api.py` et `factura_worker.py` avant de
-commencer : ils listent les variables d'environnement attendues, les routes et
-le comportement sur `SIGTERM`. Un admin qui héberge une application commence
-par lire ce qu'elle attend de lui.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Lis les en-têtes de `factura_api.py` et `factura_worker.py` avant de
+> commencer : ils listent les variables d'environnement attendues, les routes et
+> le comportement sur `SIGTERM`. Un admin qui héberge une application commence
+> par lire ce qu'elle attend de lui.
 
 ---
 
@@ -145,7 +177,9 @@ par lire ce qu'elle attend de lui.
                                           └─────────────────────────────┘
 ```
 
-@fig(p1-architecture): La plateforme Factura à la main : lab-web (nginx TLS, API Gunicorn, worker), lab-db (PostgreSQL, Redis), lab-ops (rsyslog central, sauvegardes rsync, healthcheck et webhook par timers), lab-adm seule porte d'administration en SSH.
+<p align="center"><img src="../../assets/figures/p1-architecture.svg" alt="Schéma : p1-architecture"></p>
+
+*Figure — La plateforme Factura à la main : lab-web (nginx TLS, API Gunicorn, worker), lab-db (PostgreSQL, Redis), lab-ops (rsyslog central, sauvegardes rsync, healthcheck et webhook par timers), lab-adm seule porte d'administration en SSH.*
 
 ### Flux autorisés (tout le reste est fermé)
 
@@ -190,14 +224,14 @@ Chaque jalon suit le même plan : contexte, objectif, cahier des charges
 (chaque puce est vérifiable), modules mobilisés, indices, livrable, critère de
 réussite. Fais-les dans l'ordre : chaque check suppose les précédents.
 
-### **PA.1** — Terrain, comptes de service, arborescence
+### <a id="pa-1"></a>**[PA.1](corrige.md#pa-1)** — Terrain, comptes de service, arborescence
 
-::: contexte
-Avant d'installer quoi que ce soit, tu prépares le terrain sur les quatre VM :
-noms, comptes, répertoires, droits. C'est le jalon le plus court et celui qu'on
-bâcle le plus. Chaque raccourci pris ici (un `chmod 777`, un compte avec
-shell) ressort au jalon 9.
-:::
+> **Contexte**
+>
+> Avant d'installer quoi que ce soit, tu prépares le terrain sur les quatre VM :
+> noms, comptes, répertoires, droits. C'est le jalon le plus court et celui qu'on
+> bâcle le plus. Chaque raccourci pris ici (un `chmod 777`, un compte avec
+> shell) ressort au jalon 9.
 
 **Objectif** : des machines qui se connaissent, des comptes de service sans
 shell, une arborescence conforme au FHS avec les bons propriétaires.
@@ -235,25 +269,26 @@ shell, une arborescence conforme au FHS avec les bons propriétaires.
 idempotent qui crée comptes et arborescence sur la machine où il tourne (tu
 le rejoueras si tu repars du snapshot), et la première entrée du journal.
 
-::: check
-Critère de réussite : sur chaque VM, `bash check_PA_01.sh` passe. Ton script
-`pa1-terrain.sh` relancé deux fois ne change rien la seconde fois.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : sur chaque VM, `bash check_PA_01.sh` passe. Ton script
+> `pa1-terrain.sh` relancé deux fois ne change rien la seconde fois.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_01.sh
+> ```
 
 ---
 
-### **PA.2** — PostgreSQL 16, Redis, réseau et pare-feu
+### <a id="pa-2"></a>**[PA.2](corrige.md#pa-2)** — PostgreSQL 16, Redis, réseau et pare-feu
 
-::: contexte
-`lab-db` héberge la donnée. Le développeur te donne `schema.sql` et `seed.sql`
-et te dit : « la base s'appelle `factura`, l'appli se connecte avec
-`factura_app` ». Le reste — où sont les données, qui peut s'y connecter,
-depuis où — c'est ton métier.
-:::
+> **Contexte**
+>
+> `lab-db` héberge la donnée. Le développeur te donne `schema.sql` et `seed.sql`
+> et te dit : « la base s'appelle `factura`, l'appli se connecte avec
+> `factura_app` ». Le reste — où sont les données, qui peut s'y connecter,
+> depuis où — c'est ton métier.
 
 **Objectif** : une base et une file joignables **uniquement** depuis `lab-web`,
 authentifiées, dont les données vivent sur un volume dédié.
@@ -304,26 +339,27 @@ authentifiées, dont les données vivent sur un volume dédié.
 (pour les `.conf` volumineux, garde un `diff -u` contre le fichier d'origine),
 et `SECRETS.md`.
 
-::: check
-Critère de réussite : `check_PA_02.sh` passe sur `lab-db`, sur `lab-web`
-(ports joignables) et sur `lab-adm` (ports refusés). Après
-`sudo reboot` de `lab-db`, tout est revenu sans intervention.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_02.sh` passe sur `lab-db`, sur `lab-web`
+> (ports joignables) et sur `lab-adm` (ports refusés). Après
+> `sudo reboot` de `lab-db`, tout est revenu sans intervention.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_02.sh
+> ```
 
 ---
 
-### **PA.3** — L'API sous systemd, durcie
+### <a id="pa-3"></a>**[PA.3](corrige.md#pa-3)** — L'API sous systemd, durcie
 
-::: contexte
-Le développeur lance l'API avec `flask run` dans un `tmux`. Tu en fais un
-service : venv dédié, Gunicorn, unité systemd durcie, secrets hors du code,
-journaux à leur place. Et tu prouves que le service ne peut pas faire plus que
-ce qu'il doit.
-:::
+> **Contexte**
+>
+> Le développeur lance l'API avec `flask run` dans un `tmux`. Tu en fais un
+> service : venv dédié, Gunicorn, unité systemd durcie, secrets hors du code,
+> journaux à leur place. Et tu prouves que le service ne peut pas faire plus que
+> ce qu'il doit.
 
 **Objectif** : `factura-api.service` actif, activé au boot, sous le compte
 `factura`, joignable **seulement** sur `127.0.0.1:8000`, avec un score
@@ -373,26 +409,27 @@ security`), 10 (venv, paquets `python3-venv`, `libpq`), 16 (journal).
 secrets remplacés par `XXX`), et dans le journal : score de départ, score
 final, et les trois directives qui ont le plus pesé.
 
-::: check
-Critère de réussite : `check_PA_03.sh` passe sur `lab-web` ; `systemctl
-reload factura-api` ne change pas le PID principal ; après `sudo reboot`,
-l'API répond sans intervention.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_03.sh` passe sur `lab-web` ; `systemctl
+> reload factura-api` ne change pas le PID principal ; après `sudo reboot`,
+> l'API répond sans intervention.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_03.sh
+> ```
 
 ---
 
-### **PA.4** — Le worker et la file
+### <a id="pa-4"></a>**[PA.4](corrige.md#pa-4)** — Le worker et la file
 
-::: contexte
-Créer une facture, c'est une ligne en base plus un travail dans une file Redis.
-Le worker prend le travail, génère le PDF dans `/srv/factura/exports/`, et
-marque la facture `exported`. Il doit tourner en permanence, survivre à une
-coupure de Redis ou de PostgreSQL, et s'arrêter proprement.
-:::
+> **Contexte**
+>
+> Créer une facture, c'est une ligne en base plus un travail dans une file Redis.
+> Le worker prend le travail, génère le PDF dans `/srv/factura/exports/`, et
+> marque la facture `exported`. Il doit tourner en permanence, survivre à une
+> coupure de Redis ou de PostgreSQL, et s'arrêter proprement.
 
 **Objectif** : `factura-worker.service` sous `factura`, durci, qui exporte une
 facture en moins de 15 s, et qu'on peut arrêter sans perdre de travail.
@@ -440,26 +477,27 @@ expurgé, et dans le journal : le résultat des trois tests (résilience Redis,
 résilience PostgreSQL, arrêt en charge) avec les lignes de journal qui le
 prouvent.
 
-::: check
-Critère de réussite : `check_PA_04.sh` passe sur `lab-web` (il crée une
-facture et attend le PDF) ; `NRestarts` du worker vaut 0 après les tests.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_04.sh` passe sur `lab-web` (il crée une
+> facture et attend le PDF) ; `NRestarts` du worker vaut 0 après les tests.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_04.sh
+> ```
 
 ---
 
-### **PA.5** — nginx en frontal TLS, PKI de lab, en-têtes, journaux
+### <a id="pa-5"></a>**[PA.5](corrige.md#pa-5)** — nginx en frontal TLS, PKI de lab, en-têtes, journaux
 
-::: contexte
-Les postes de la PME doivent ouvrir `https://factura.lab.local` sans
-avertissement. Il n'y a pas d'accès Internet entrant, donc pas de Let's
-Encrypt : tu montes une autorité de certification interne sur `lab-adm`, tu
-émets le certificat du frontal, et tu déploies la CA sur les postes (ici :
-`lab-adm` et `lab-ops`).
-:::
+> **Contexte**
+>
+> Les postes de la PME doivent ouvrir `https://factura.lab.local` sans
+> avertissement. Il n'y a pas d'accès Internet entrant, donc pas de Let's
+> Encrypt : tu montes une autorité de certification interne sur `lab-adm`, tu
+> émets le certificat du frontal, et tu déploies la CA sur les postes (ici :
+> `lab-adm` et `lab-ops`).
 
 **Objectif** : nginx sert le front en HTTPS, relaie `/api/` vers Gunicorn,
 n'expose rien d'autre, journalise utilement, et obtient un « A » sur les
@@ -521,23 +559,24 @@ en-têtes de sécurité.
 et un script `~/P1/bin/pa5-cert.sh` qui régénère et signe le certificat
 serveur (tu l'utiliseras pour la rotation, dans le runbook).
 
-::: check
-Critère de réussite : `check_PA_05.sh` passe sur `lab-web` puis sur `lab-adm`.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_05.sh` passe sur `lab-web` puis sur `lab-adm`.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_05.sh
+> ```
 
 ---
 
-### **PA.6** — Journaux centralisés et rotation
+### <a id="pa-6"></a>**[PA.6](corrige.md#pa-6)** — Journaux centralisés et rotation
 
-::: contexte
-« Quand ça plante, on ne sait jamais sur quelle machine regarder. » Tu
-centralises tout sur `lab-ops`, tu bornes ce que chaque machine garde, et tu
-t'assures que rien ne se perd si `lab-ops` est injoignable pendant une heure.
-:::
+> **Contexte**
+>
+> « Quand ça plante, on ne sait jamais sur quelle machine regarder. » Tu
+> centralises tout sur `lab-ops`, tu bornes ce que chaque machine garde, et tu
+> t'assures que rien ne se perd si `lab-ops` est injoignable pendant une heure.
 
 **Objectif** : tous les journaux (système, nginx, API, worker, PostgreSQL,
 Redis) arrivent sur `lab-ops`, rangés par hôte, avec rotation partout.
@@ -588,26 +627,27 @@ sur les journaux), 12 (TCP), 18 ( pare-feu).
 `~/P1/conf/lab-web/{90-forward.conf,logrotate-factura,journald-factura.conf}`,
 et dans le journal : le résultat du test de coupure (50 lignes retrouvées).
 
-::: check
-Critère de réussite : `check_PA_06.sh` passe sur `lab-web`, `lab-db` puis
-`lab-ops` (dans cet ordre : les deux premiers émettent une ligne de test que
-le troisième cherche).
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_06.sh` passe sur `lab-web`, `lab-db` puis
+> `lab-ops` (dans cet ordre : les deux premiers émettent une ligne de test que
+> le troisième cherche).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_06.sh
+> ```
 
 ---
 
-### **PA.7** — Sauvegardes nocturnes et restauration testée
+### <a id="pa-7"></a>**[PA.7](corrige.md#pa-7)** — Sauvegardes nocturnes et restauration testée
 
-::: contexte
-« On a une sauvegarde » ne veut rien dire tant qu'on n'a pas restauré. Tu mets
-en place deux sauvegardes (la base sur `lab-db`, les PDF sur `lab-web`),
-poussées chaque nuit vers `lab-ops` par un compte à qui on ne peut faire
-**que** ça, et tu restaures pour de vrai.
-:::
+> **Contexte**
+>
+> « On a une sauvegarde » ne veut rien dire tant qu'on n'a pas restauré. Tu mets
+> en place deux sauvegardes (la base sur `lab-db`, les PDF sur `lab-web`),
+> poussées chaque nuit vers `lab-ops` par un compte à qui on ne peut faire
+> **que** ça, et tu restaures pour de vrai.
 
 **Objectif** : deux timers, une rotation, une copie distante, une restauration
 prouvée, et une alerte si l'un des deux échoue.
@@ -668,25 +708,26 @@ prouvée, et une alerte si l'un des deux échoue.
 équivalents pour `lab-web`, `~/P1/conf/lab-ops/authorized_keys.backup`,
 `~/P1/restore.md`.
 
-::: check
-Critère de réussite : `check_PA_07.sh` passe sur `lab-db`, `lab-web` et
-`lab-ops` ; `factura_restore` a autant de factures que `factura`.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_07.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_07.sh` passe sur `lab-db`, `lab-web` et
+> `lab-ops` ; `factura_restore` a autant de factures que `factura`.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_07.sh
+> ```
 
 ---
 
-### **PA.8** — Supervision et alerting par timers
+### <a id="pa-8"></a>**[PA.8](corrige.md#pa-8)** — Supervision et alerting par timers
 
-::: contexte
-Pas encore de Prometheus (module 26). Mais la direction veut savoir **avant les
-utilisateurs** que Factura est tombée, et savoir si la sauvegarde de la nuit a
-eu lieu. Tu fais de la supervision avec ce que tu as : un script, un timer,
-`node_exporter`, et un webhook local qui joue le rôle de Slack.
-:::
+> **Contexte**
+>
+> Pas encore de Prometheus (module 26). Mais la direction veut savoir **avant les
+> utilisateurs** que Factura est tombée, et savoir si la sauvegarde de la nuit a
+> eu lieu. Tu fais de la supervision avec ce que tu as : un script, un timer,
+> `node_exporter`, et un webhook local qui joue le rôle de Slack.
 
 **Objectif** : un contrôle toutes les 2 minutes depuis `lab-ops`, des mesures
 exposées à `node_exporter`, et une alerte qui part sur le webhook quand un
@@ -750,25 +791,26 @@ monotones, `OnFailure`, unités modèles), 07 (script, codes de sortie), 12
 et dans le journal : la ligne de `webhook.log` reçue lors de la preuve, avec
 l'horodatage de l'arrêt de l'API pour calculer le délai de détection.
 
-::: check
-Critère de réussite : `check_PA_08.sh` passe sur `lab-ops`, `lab-web` et
-`lab-db` ; `curl -s 127.0.0.1:9100/metrics | grep factura_` sur `lab-ops`
-renvoie les cinq métriques.
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_08.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_08.sh` passe sur `lab-ops`, `lab-web` et
+> `lab-db` ; `curl -s 127.0.0.1:9100/metrics | grep factura_` sur `lab-ops`
+> renvoie les cinq métriques.
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_08.sh
+> ```
 
 ---
 
-### **PA.9** — Durcissement et audit
+### <a id="pa-9"></a>**[PA.9](corrige.md#pa-9)** — Durcissement et audit
 
-::: contexte
-L'expert-comptable de la PME demande « une attestation de sécurité » avant de
-laisser les factures sur cette plateforme. Tu n'as pas de RSSI : tu fais un
-audit honnête, tu corriges ce qui se corrige, tu documentes ce qui reste.
-:::
+> **Contexte**
+>
+> L'expert-comptable de la PME demande « une attestation de sécurité » avant de
+> laisser les factures sur cette plateforme. Tu n'as pas de RSSI : tu fais un
+> audit honnête, tu corriges ce qui se corrige, tu documentes ce qui reste.
 
 **Objectif** : SSH verrouillé, sudo restreint pour l'exploitant, fail2ban sur
 SSH et nginx, sysctl durcis, mises à jour automatiques, `lynis` à plus de 65,
@@ -834,25 +876,26 @@ lynis, unattended-upgrades, AppArmor), 03 (audit de permissions).
 **Livrable** : `~/P1/conf/*/60-factura-hardening.conf`, `sshd-factura.conf`,
 `sudoers-pme-ops`, `jail.local`, `nginx-factura-4xx.conf`, et `~/P1/audit.md`.
 
-::: check
-Critère de réussite : `check_PA_09.sh` passe sur `lab-web` et `lab-db` (lance
-le check avec `sudo`, il lit `sshd -T` et le rapport lynis).
-
-```bash
-sudo bash ~/workbook/scripts/projects/P1/check_PA_09.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_09.sh` passe sur `lab-web` et `lab-db` (lance
+> le check avec `sudo`, il lit `sshd -T` et le rapport lynis).
+>
+> ```bash
+> sudo bash ~/workbook/scripts/projects/P1/check_PA_09.sh
+> ```
 
 ---
 
-### **PA.10** — Runbook et exercice d'incident
+### <a id="pa-10"></a>**[PA.10](corrige.md#pa-10)** — Runbook et exercice d'incident
 
-::: contexte
-Tu pars en congés. L'exploitant `pme-ops` et un prestataire qui ne connaît pas
-la plateforme doivent pouvoir la faire tourner. Tu écris le runbook, puis tu le
-mets à l'épreuve : trois incidents (section A.3), à résoudre en te servant
-**uniquement** du runbook et des outils en place, chronomètre en main.
-:::
+> **Contexte**
+>
+> Tu pars en congés. L'exploitant `pme-ops` et un prestataire qui ne connaît pas
+> la plateforme doivent pouvoir la faire tourner. Tu écris le runbook, puis tu le
+> mets à l'épreuve : trois incidents (section A.3), à résoudre en te servant
+> **uniquement** du runbook et des outils en place, chronomètre en main.
 
 **Objectif** : un runbook exploitable par quelqu'un d'autre, trois incidents
 résolus, trois post-mortems, et le runbook amélioré par ce que les incidents
@@ -907,27 +950,29 @@ t'ont appris.
 **Livrable** : `~/P1/runbook.md`, `~/P1/incidents/INC-A1-*.md`,
 `INC-A2-*.md`, `INC-A3-*.md`.
 
-::: check
-Critère de réussite : `check_PA_10.sh` passe sur `lab-adm` (documents) et sur
-les trois autres VM (plateforme saine, aucune facture en erreur).
-
-```bash
-bash ~/workbook/scripts/projects/P1/check_PA_10.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de réussite : `check_PA_10.sh` passe sur `lab-adm` (documents) et sur
+> les trois autres VM (plateforme saine, aucune facture en erreur).
+>
+> ```bash
+> bash ~/workbook/scripts/projects/P1/check_PA_10.sh
+> ```
 
 ---
 
 ## A.3 Incidents
 
-::: attention
-Avant chaque incident : `qm snapshot <vmid> avant-incA<n>`. Les scripts
-sauvegardent ce qu'ils cassent dans `/root/.breakfix-backup/`, mais le
-snapshot est ta vraie sortie de secours. Un seul incident à la fois. Résous
-avec le runbook, pas avec le corrigé.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque incident : `qm snapshot <vmid> avant-incA<n>`. Les scripts
+> sauvegardent ce qu'ils cassent dans `/root/.breakfix-backup/`, mais le
+> snapshot est ta vraie sortie de secours. Un seul incident à la fois. Résous
+> avec le runbook, pas avec le corrigé.
 
-### **INC-A1** — « Le site dit "degraded" et les factures ne s'enregistrent plus »
+### <a id="inc-a1"></a>**[INC-A1](corrige.md#inc-a1)** — « Le site dit "degraded" et les factures ne s'enregistrent plus »
 
 **Contexte.** Lundi 8 h 10. Le vendredi soir, un collègue a « durci un peu la
 base » avant de partir en week-end. Il est injoignable.
@@ -949,13 +994,11 @@ que « durcir un peu » ne se reproduise plus sans trace.
 sudo bash ~/workbook/scripts/projects/P1/break_PA_01.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
-### **INC-A2** — « Les factures passent en erreur, aucun PDF »
+### <a id="inc-a2"></a>**[INC-A2](corrige.md#inc-a2)** — « Les factures passent en erreur, aucun PDF »
 
 **Contexte.** Mardi 14 h. Un collègue a « remis les droits au propre » sur
 `lab-web` ce matin après avoir vu un dossier « bizarre ».
@@ -976,13 +1019,11 @@ supervision pour qu'elle voie ce type de panne la prochaine fois.
 sudo bash ~/workbook/scripts/projects/P1/break_PA_02.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
-### **INC-A3** — « Le site ne répond plus depuis les postes »
+### <a id="inc-a3"></a>**[INC-A3](corrige.md#inc-a3)** — « Le site ne répond plus depuis les postes »
 
 **Contexte.** Jeudi 9 h 30. Hier, une maintenance réseau et un renouvellement
 de certificat ont eu lieu le même jour. Les deux personnes concernées se
@@ -1005,9 +1046,7 @@ règle d'exploitation pour les « règles temporaires ».
 sudo bash ~/workbook/scripts/projects/P1/break_PA_03.sh
 ```
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
@@ -1073,3 +1112,9 @@ Ce que ce projet t'a appris à dire — et à défendre — en entretien :
    requête sans pool, des compteurs de métriques dans Redis, pas de
    `sd_notify` dans le worker, une file « au plus une fois » : tu as lu le
    code que tu héberges et tu as des remarques d'exploitant.
+
+<!-- nav:début -->
+---
+
+[← Module 19](../../modules/19-troubleshooting-perf/README.md) · [Corrigé](corrige.md) · [Module 20 →](../../modules/20-virtualisation-kvm/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

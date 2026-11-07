@@ -1,3 +1,11 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Projet B — Factura v2 : industrialisation DevOps › **Projet B** · corrigé  
+[← Module 27](../../modules/27-python-ops/corrige.md) · [Énoncé](README.md) · [Projet C →](../P3-astreinte/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Projet B — Corrigé
 
 Ce corrigé donne une **solution de référence** pour Factura v2 : ce n'est pas
@@ -50,7 +58,7 @@ factura-v2/
 
 ## B.2 Jalons — corrigé
 
-### **PB.1** — Mono-repo sur Gitea, hooks et convention
+### <a id="pb-1"></a>**[PB.1](README.md#pb-1)** — Mono-repo sur Gitea, hooks et convention
 
 *Versionner `~/factura-v2`, le pousser sur Gitea, installer des hooks
 `pre-commit` qui bloquent secrets et fautes de lint, et un hook `commit-msg`
@@ -246,55 +254,57 @@ curl -fsS -u mathieu -X POST \
 `README.md` reçoit une section « Comment vérifier » (`make lint`, le chemin
 des checks) et un tableau « qui fait quoi » (toi : infra, devs : `app/`).
 
-::: pourquoi
-**Un hook local par `language: script` plutôt que commitlint** : commitlint
-demande Node et une configuration, pour vérifier une expression régulière.
-Le script Bash est lu par tout le monde, testé par shellcheck (il est dans
-`tools/`), et il tourne sans réseau. `stages: [commit-msg]` fait que
-pre-commit l'installe dans `.git/hooks/commit-msg` et l'appelle avec le
-fichier du message en argument — c'est le contrat de Git.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Un hook local par `language: script` plutôt que commitlint** : commitlint
+> demande Node et une configuration, pour vérifier une expression régulière.
+> Le script Bash est lu par tout le monde, testé par shellcheck (il est dans
+> `tools/`), et il tourne sans réseau. `stages: [commit-msg]` fait que
+> pre-commit l'installe dans `.git/hooks/commit-msg` et l'appelle avec le
+> fichier du message en argument — c'est le contrat de Git.
+>
+> **gitleaks en hook ET dans la CI (PB.6)** : le hook protège le poste du dev
+> consciencieux ; la CI protège contre `git commit --no-verify` et contre le
+> collègue qui n'a pas installé les hooks. Les règles par défaut ne reconnaissent pas un token Proxmox (`@` et `!` cassent `generic-api-key`) : le `.gitleaks.toml` fourni ajoute une règle `proxmox-api-token`, et met en
+> liste blanche les `vault.yml` (leur contenu chiffré ressemble à de
+> l'entropie, donc à un secret), `devpass` (mot de passe de démonstration de
+> `compose.yaml`) et l'UUID nul du faux token de `tofu validate` (PB.6). La règle : la liste blanche décrit des **chemins** ou des
+> **valeurs de démo connues**, jamais un motif large comme `password`.
+>
+> **`tofu fmt -check` en hook `system`** : il utilise le binaire du poste
+> (pas de dépôt de hooks à télécharger) ; il ne corrige pas, il refuse, pour
+> que le dev lance `tofu fmt` lui-même et voie ce qui change.
+>
+> **Cinq commits au lieu d'un** : `git bisect`, `git revert` et la revue
+> travaillent sur des commits ; un commit « tout le projet » n'est ni
+> révocable ni lisible. Le type en tête (`infra`, `ci`, `docs`) permet plus
+> tard de générer un changelog (`git log --grep='^feat'`) et de faire
+> tourner des règles (une PR `infra(...)` demande une relecture de l'admin).
 
-**gitleaks en hook ET dans la CI (PB.6)** : le hook protège le poste du dev
-consciencieux ; la CI protège contre `git commit --no-verify` et contre le
-collègue qui n'a pas installé les hooks. Les règles par défaut ne reconnaissent pas un token Proxmox (`@` et `!` cassent `generic-api-key`) : le `.gitleaks.toml` fourni ajoute une règle `proxmox-api-token`, et met en
-liste blanche les `vault.yml` (leur contenu chiffré ressemble à de
-l'entropie, donc à un secret), `devpass` (mot de passe de démonstration de
-`compose.yaml`) et l'UUID nul du faux token de `tofu validate` (PB.6). La règle : la liste blanche décrit des **chemins** ou des
-**valeurs de démo connues**, jamais un motif large comme `password`.
-
-**`tofu fmt -check` en hook `system`** : il utilise le binaire du poste
-(pas de dépôt de hooks à télécharger) ; il ne corrige pas, il refuse, pour
-que le dev lance `tofu fmt` lui-même et voie ce qui change.
-
-**Cinq commits au lieu d'un** : `git bisect`, `git revert` et la revue
-travaillent sur des commits ; un commit « tout le projet » n'est ni
-révocable ni lisible. Le type en tête (`infra`, `ci`, `docs`) permet plus
-tard de générer un changelog (`git log --grep='^feat'`) et de faire
-tourner des règles (une PR `infra(...)` demande une relecture de l'admin).
-:::
-
-::: piege
-* `pre-commit install` seul n'installe **pas** le hook `commit-msg` :
-  sans `--hook-type commit-msg`, `update stuff` passe. Le check regarde
-  `.git/hooks/commit-msg`.
-* Le hook `ansible-lint` de pre-commit tourne dans un venv isolé, sans
-  les collections installées sur le poste : `additional_dependencies`
-  doit contenir `ansible-core`, et le `.ansible-lint` exclut `app/`,
-  `infra/`, `k8s/` (sinon il lit les manifestes k8s comme des playbooks).
-* Un secret commité puis « supprimé » au commit suivant est **toujours dans
-  l'historique** (`git log -p`, `gitleaks detect`). La seule réponse est
-  la révocation du secret ; la réécriture d'historique (`git filter-repo`)
-  ne fait que nettoyer les traces. Le check lance `gitleaks detect` sur
-  tout l'historique : un secret ancien fait échouer PB.1 même si `HEAD`
-  est propre.
-* `yamllint --strict` transforme les avertissements en erreurs : la clé
-  `on:` des workflows déclenche `truthy` — le `.yamllint` fourni autorise
-  `on` (`allowed-values: ["true", "false", "on"]`), ne l'enlève pas.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `pre-commit install` seul n'installe **pas** le hook `commit-msg` :
+>   sans `--hook-type commit-msg`, `update stuff` passe. Le check regarde
+>   `.git/hooks/commit-msg`.
+> * Le hook `ansible-lint` de pre-commit tourne dans un venv isolé, sans
+>   les collections installées sur le poste : `additional_dependencies`
+>   doit contenir `ansible-core`, et le `.ansible-lint` exclut `app/`,
+>   `infra/`, `k8s/` (sinon il lit les manifestes k8s comme des playbooks).
+> * Un secret commité puis « supprimé » au commit suivant est **toujours dans
+>   l'historique** (`git log -p`, `gitleaks detect`). La seule réponse est
+>   la révocation du secret ; la réécriture d'historique (`git filter-repo`)
+>   ne fait que nettoyer les traces. Le check lance `gitleaks detect` sur
+>   tout l'historique : un secret ancien fait échouer PB.1 même si `HEAD`
+>   est propre.
+> * `yamllint --strict` transforme les avertissements en erreurs : la clé
+>   `on:` des workflows déclenche `truthy` — le `.yamllint` fourni autorise
+>   `on` (`allowed-values: ["true", "false", "on"]`), ne l'enlève pas.
 
 ---
 
-### **PB.2** — OpenTofu, cloud-init, deux environnements identiques
+### <a id="pb-2"></a>**[PB.2](README.md#pb-2)** — OpenTofu, cloud-init, deux environnements identiques
 
 *Une configuration OpenTofu (provider bpg/proxmox) qui crée `web` et `db`
 d'un environnement depuis le template 9000, appliquée dans deux workspaces
@@ -725,75 +735,77 @@ Temps mesuré pour référence (PB.9) : `apply` staging complet **3 min 40 s**
 (clone plein 2 × 40 s, boot + cloud-init `package_update` +
 `qemu-guest-agent` ≈ 1 min 30 par VM, en parallèle). Note-le dans le journal.
 
-::: pourquoi
-**Un workspace par environnement, un seul code** : le workspace ne change
-que le fichier d'état (`terraform.tfstate.d/<ws>/`). Le nom des VM, le nom
-des snippets et le chemin de l'inventaire dérivent de `terraform.workspace`,
-donc deux environnements ne peuvent pas se marcher dessus, et un
-troisième (`k3s`, PB.10) coûte un `.tfvars`. La `precondition` sur
-`default` ferme la porte à l'accident classique : `tofu apply` lancé avant
-`workspace select`, qui créerait `factura-default-web`.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Un workspace par environnement, un seul code** : le workspace ne change
+> que le fichier d'état (`terraform.tfstate.d/<ws>/`). Le nom des VM, le nom
+> des snippets et le chemin de l'inventaire dérivent de `terraform.workspace`,
+> donc deux environnements ne peuvent pas se marcher dessus, et un
+> troisième (`k3s`, PB.10) coûte un `.tfvars`. La `precondition` sur
+> `default` ferme la porte à l'accident classique : `tofu apply` lancé avant
+> `workspace select`, qui créerait `factura-default-web`.
+>
+> **`for_each` sur une `map(object)` avec `optional()`** : la clé (`web`,
+> `db`) est stable, donc retirer `db` ne recrée pas `web` (ce que `count`
+> ferait). Les `optional(type, défaut)` gardent les `.tfvars` minimaux :
+> tout ce qui est commun est un défaut dans `variables.tf`, tout ce qui
+> diffère est dans `envs/`. C'est ce qui rend le `diff` de deux lignes
+> possible. Les `validation` refusent un VMID hors de la plage réservée
+> **avant** de parler à Proxmox.
+>
+> **Un snippet par VM, rendu par `templatefile`** : `--cicustom` remplace le
+> user-data généré par Proxmox, donc `user_account` n'a plus d'effet (d'où
+> son `ignore_changes`). `ip_config` et `dns`, eux, vont dans le
+> `network-config` que Proxmox génère toujours : c'est pourquoi on garde l'IP
+> dans le HCL et l'utilisateur dans le snippet. Le `file_name` contient le
+> nom de la VM : deux VM avec le même snippet auraient le même `hostname`.
+>
+> **Le user-data minimal** : cloud-init ne rejoue les modules *per-instance*
+> qu'au premier boot. Tout ce qu'on y met est **non rejouable** sans
+> recréer la VM ; tout ce qu'Ansible fait est rejouable à volonté. Le
+> partage des rôles est donc : cloud-init pose l'identité (hostname, compte,
+> clé, agent) ; Ansible fait le reste. `package_upgrade: true` ajouterait
+> 2 à 5 minutes au boot et une dépendance au miroir Ubuntu du jour : c'est
+> `unattended-upgrades` (PB.3) qui gère les mises à jour, dans le temps.
+>
+> **Le token en `TF_VAR_`** : il n'est ni dans le code, ni dans un fichier
+> du dépôt, ni dans un output. Il finit quand même dans l'état (`sensitive`
+> masque l'affichage, pas le JSON) : c'est la raison pour laquelle
+> `*.tfstate` et `terraform.tfstate.d/` sont ignorés par Git, et l'argument
+> du bonus « backend distant chiffré ».
 
-**`for_each` sur une `map(object)` avec `optional()`** : la clé (`web`,
-`db`) est stable, donc retirer `db` ne recrée pas `web` (ce que `count`
-ferait). Les `optional(type, défaut)` gardent les `.tfvars` minimaux :
-tout ce qui est commun est un défaut dans `variables.tf`, tout ce qui
-diffère est dans `envs/`. C'est ce qui rend le `diff` de deux lignes
-possible. Les `validation` refusent un VMID hors de la plage réservée
-**avant** de parler à Proxmox.
-
-**Un snippet par VM, rendu par `templatefile`** : `--cicustom` remplace le
-user-data généré par Proxmox, donc `user_account` n'a plus d'effet (d'où
-son `ignore_changes`). `ip_config` et `dns`, eux, vont dans le
-`network-config` que Proxmox génère toujours : c'est pourquoi on garde l'IP
-dans le HCL et l'utilisateur dans le snippet. Le `file_name` contient le
-nom de la VM : deux VM avec le même snippet auraient le même `hostname`.
-
-**Le user-data minimal** : cloud-init ne rejoue les modules *per-instance*
-qu'au premier boot. Tout ce qu'on y met est **non rejouable** sans
-recréer la VM ; tout ce qu'Ansible fait est rejouable à volonté. Le
-partage des rôles est donc : cloud-init pose l'identité (hostname, compte,
-clé, agent) ; Ansible fait le reste. `package_upgrade: true` ajouterait
-2 à 5 minutes au boot et une dépendance au miroir Ubuntu du jour : c'est
-`unattended-upgrades` (PB.3) qui gère les mises à jour, dans le temps.
-
-**Le token en `TF_VAR_`** : il n'est ni dans le code, ni dans un fichier
-du dépôt, ni dans un output. Il finit quand même dans l'état (`sensitive`
-masque l'affichage, pas le JSON) : c'est la raison pour laquelle
-`*.tfstate` et `terraform.tfstate.d/` sont ignorés par Git, et l'argument
-du bonus « backend distant chiffré ».
-:::
-
-::: piege
-* `Error: ... failed to upload snippet ... permission denied` : le
-  provider n'a pas pu se connecter en SSH au nœud. Vérifie `ssh
-  root@10.10.10.1 true` depuis `lab-adm` **avec l'agent chargé** (le
-  bloc `ssh { agent = true }` lit `SSH_AUTH_SOCK`) et que `local` accepte
-  les snippets (`pvesm status`, `pvesm set local --content ...,snippets`).
-* Plan non vide après apply : trois coupables sur bpg. `mac_address`
-  (Proxmox en génère une, le code n'en donne pas), `user_account` (ignoré
-  à cause du snippet mais lu dans la config), et `disk.size` si le
-  template a un disque de 20 Go et que tu demandes 20 : mets une valeur
-  strictement supérieure ou identique au template, jamais inférieure.
-  Ajoute à `ignore_changes` seulement ce que tu as **compris**, et écris
-  pourquoi dans le journal : c'est noté. `manage_etc_hosts: true` : cloud-init régénère `/etc/hosts` **à chaque boot** depuis son gabarit, et le bloc `ANSIBLE FACTURA` du rôle `common` disparaît au premier redémarrage (`changed=1` au passage suivant, et `lab-ops` ne résout plus). `localhost` ne gère que la ligne `127.0.1.1`.
-* `cloud-init status` → `error` avec `Invalid cloud-config` : le rendu du
-  template contient une clé `${...}` non fournie, ou la première ligne n'est
-  pas exactement `#cloud-config` (sans espace). `cloud-init schema
-  --config-file` sur `/var/lib/cloud/instance/user-data.txt` dit tout.
-* Le provider attend l'IP via l'agent QEMU : si le template 9000 a été
-  créé sans `--agent enabled=1`, ou si le user-data n'installe pas
-  `qemu-guest-agent`, `apply` bloque 5 minutes puis échoue. Avec `agent {
-  timeout = "5m" }` l'échec est explicite au lieu de l'attente par défaut
-  (15 min).
-* `tofu destroy` dans le mauvais workspace détruit le mauvais
-  environnement. Le `Makefile` fait toujours `workspace select $(ENV)`
-  avant : utilise-le (`make infra-plan ENV=prod`), pas `tofu` à la main.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `Error: ... failed to upload snippet ... permission denied` : le
+>   provider n'a pas pu se connecter en SSH au nœud. Vérifie `ssh
+>   root@10.10.10.1 true` depuis `lab-adm` **avec l'agent chargé** (le
+>   bloc `ssh { agent = true }` lit `SSH_AUTH_SOCK`) et que `local` accepte
+>   les snippets (`pvesm status`, `pvesm set local --content ...,snippets`).
+> * Plan non vide après apply : trois coupables sur bpg. `mac_address`
+>   (Proxmox en génère une, le code n'en donne pas), `user_account` (ignoré
+>   à cause du snippet mais lu dans la config), et `disk.size` si le
+>   template a un disque de 20 Go et que tu demandes 20 : mets une valeur
+>   strictement supérieure ou identique au template, jamais inférieure.
+>   Ajoute à `ignore_changes` seulement ce que tu as **compris**, et écris
+>   pourquoi dans le journal : c'est noté. `manage_etc_hosts: true` : cloud-init régénère `/etc/hosts` **à chaque boot** depuis son gabarit, et le bloc `ANSIBLE FACTURA` du rôle `common` disparaît au premier redémarrage (`changed=1` au passage suivant, et `lab-ops` ne résout plus). `localhost` ne gère que la ligne `127.0.1.1`.
+> * `cloud-init status` → `error` avec `Invalid cloud-config` : le rendu du
+>   template contient une clé `${...}` non fournie, ou la première ligne n'est
+>   pas exactement `#cloud-config` (sans espace). `cloud-init schema
+>   --config-file` sur `/var/lib/cloud/instance/user-data.txt` dit tout.
+> * Le provider attend l'IP via l'agent QEMU : si le template 9000 a été
+>   créé sans `--agent enabled=1`, ou si le user-data n'installe pas
+>   `qemu-guest-agent`, `apply` bloque 5 minutes puis échoue. Avec `agent {
+>   timeout = "5m" }` l'échec est explicite au lieu de l'attente par défaut
+>   (15 min).
+> * `tofu destroy` dans le mauvais workspace détruit le mauvais
+>   environnement. Le `Makefile` fait toujours `workspace select $(ENV)`
+>   avant : utilise-le (`make infra-plan ENV=prod`), pas `tofu` à la main.
 
 ---
 
-### **PB.3** — Baseline Ansible
+### <a id="pb-3"></a>**[PB.3](README.md#pb-3)** — Baseline Ansible
 
 *Transformer les procédures manuelles du projet A (comptes, SSH, ufw, NTP,
 mises à jour, node_exporter, journaux) en rôles Ansible appliqués aux quatre
@@ -1607,81 +1619,83 @@ le staging, `docker run -d -p 9999:80 nginx:1.27-alpine` puis depuis
 `firewall_docker_rules`, rejoue, `curl` expire. Retire la règle et le
 conteneur. Journal.
 
-::: pourquoi
-**Les listes de règles dans `group_vars`, pas dans le rôle** : le rôle
-`firewall` est réutilisable tel quel pour `k3s` (PB.10), pour `lab-ops` ou
-pour le projet suivant. Ansible ne **fusionne pas** les listes entre
-`group_vars/all` et `group_vars/web` (la plus précise remplace l'autre),
-d'où deux variables `firewall_rules_common` + `firewall_rules_group` que le
-rôle concatène. `hash_behaviour=merge` ferait la même chose de façon
-implicite et globale : déconseillé, et interdit par `ansible-lint`.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Les listes de règles dans `group_vars`, pas dans le rôle** : le rôle
+> `firewall` est réutilisable tel quel pour `k3s` (PB.10), pour `lab-ops` ou
+> pour le projet suivant. Ansible ne **fusionne pas** les listes entre
+> `group_vars/all` et `group_vars/web` (la plus précise remplace l'autre),
+> d'où deux variables `firewall_rules_common` + `firewall_rules_group` que le
+> rôle concatène. `hash_behaviour=merge` ferait la même chose de façon
+> implicite et globale : déconseillé, et interdit par `ansible-lint`.
+>
+> **`DOCKER-USER`** : Docker écrit ses règles de NAT dans `PREROUTING` et de
+> filtrage dans `FORWARD` (chaîne `DOCKER`), après avoir sauté dans
+> `DOCKER-USER`. ufw ne travaille que dans `INPUT` (`ufw-user-input`), donc
+> un paquet destiné à un port publié est DNATé vers le conteneur, traverse
+> `FORWARD` et n'est jamais vu par les règles ufw. `DOCKER-USER` est le point
+> d'accroche officiel : vide par défaut, évalué en premier, jamais réécrit
+> par Docker. Le motif `--ctorigdstport` compare le **port d'origine** (avant
+> DNAT), donc les règles parlent des ports publiés (5432, 8081), pas des
+> ports internes. `! -i ens18 -j RETURN` laisse passer le trafic entre
+> conteneurs et le trafic sortant. Publier sur `10.10.10.22:5432` en plus
+> (PB.5) réduit la surface (pas de 0.0.0.0) mais ne filtre pas la source :
+> c'est un plus, pas un substitut.
+>
+> **`validate: /usr/sbin/sshd -t -f %s` sur le template** : Ansible écrit
+> le rendu dans un fichier temporaire, lance `sshd -t` dessus, et ne remplace
+> le fichier réel que si la commande renvoie 0. Un mot-clé inconnu ou une
+> faute de frappe ne coupe jamais SSH — l'équivalent du `sshd -t &&
+> systemctl restart` du projet A, mais impossible à oublier.
+>
+> **`50-cloud-init.conf` supprimé** : sur les images cloud Ubuntu, cloud-init
+> dépose un fragment `PasswordAuthentication no` (bien) mais un fragment
+> concurrent peut réactiver le mot de passe selon l'ordre lexical. Un seul
+> fragment, sous notre contrôle, et `sshd -T` (config effective) pour
+> vérifier — c'est ce que fait le check.
+>
+> **Promtail avec `docker_sd_configs`** : lire le socket Docker donne les
+> journaux de tous les conteneurs avec leurs labels Compose (service,
+> projet), sans dépendre des chemins `/var/lib/docker/containers/*`. Le
+> compte `promtail` dans `docker` a un accès équivalent à root sur l'hôte
+> (le socket) : l'unité systemd durcie limite les dégâts (`ProtectSystem=
+> strict`, pas de home, mémoire bornée). Sur k3s (PB.10), pas de socket :
+> `promtail_scrape_pods` bascule sur `/var/log/pods` avec le parseur `cri`.
+>
+> **`live-restore: true`** : un redémarrage du démon Docker (mise à jour du
+> paquet, restart du rôle) ne tue pas les conteneurs. C'est ce qui permet
+> de rejouer la baseline en journée sans coupure de Factura.
 
-**`DOCKER-USER`** : Docker écrit ses règles de NAT dans `PREROUTING` et de
-filtrage dans `FORWARD` (chaîne `DOCKER`), après avoir sauté dans
-`DOCKER-USER`. ufw ne travaille que dans `INPUT` (`ufw-user-input`), donc
-un paquet destiné à un port publié est DNATé vers le conteneur, traverse
-`FORWARD` et n'est jamais vu par les règles ufw. `DOCKER-USER` est le point
-d'accroche officiel : vide par défaut, évalué en premier, jamais réécrit
-par Docker. Le motif `--ctorigdstport` compare le **port d'origine** (avant
-DNAT), donc les règles parlent des ports publiés (5432, 8081), pas des
-ports internes. `! -i ens18 -j RETURN` laisse passer le trafic entre
-conteneurs et le trafic sortant. Publier sur `10.10.10.22:5432` en plus
-(PB.5) réduit la surface (pas de 0.0.0.0) mais ne filtre pas la source :
-c'est un plus, pas un substitut.
-
-**`validate: /usr/sbin/sshd -t -f %s` sur le template** : Ansible écrit
-le rendu dans un fichier temporaire, lance `sshd -t` dessus, et ne remplace
-le fichier réel que si la commande renvoie 0. Un mot-clé inconnu ou une
-faute de frappe ne coupe jamais SSH — l'équivalent du `sshd -t &&
-systemctl restart` du projet A, mais impossible à oublier.
-
-**`50-cloud-init.conf` supprimé** : sur les images cloud Ubuntu, cloud-init
-dépose un fragment `PasswordAuthentication no` (bien) mais un fragment
-concurrent peut réactiver le mot de passe selon l'ordre lexical. Un seul
-fragment, sous notre contrôle, et `sshd -T` (config effective) pour
-vérifier — c'est ce que fait le check.
-
-**Promtail avec `docker_sd_configs`** : lire le socket Docker donne les
-journaux de tous les conteneurs avec leurs labels Compose (service,
-projet), sans dépendre des chemins `/var/lib/docker/containers/*`. Le
-compte `promtail` dans `docker` a un accès équivalent à root sur l'hôte
-(le socket) : l'unité systemd durcie limite les dégâts (`ProtectSystem=
-strict`, pas de home, mémoire bornée). Sur k3s (PB.10), pas de socket :
-`promtail_scrape_pods` bascule sur `/var/log/pods` avec le parseur `cri`.
-
-**`live-restore: true`** : un redémarrage du démon Docker (mise à jour du
-paquet, restart du rôle) ne tue pas les conteneurs. C'est ce qui permet
-de rejouer la baseline en journée sans coupure de Factura.
-:::
-
-::: piege
-* `changed=1` sur `blockinfile` `/etc/hosts` à chaque passage : le
-  bloc contient une liste non triée (`groups[...]` n'a pas d'ordre
-  garanti). Le `| sort` est là pour ça. Même chose pour tout template
-  qui itère sur un `dict` ou un `set`.
-* `unarchive` avec `remote_src` et sans `creates:` retélécharge le zip à
-  chaque run et marque `changed`. Le `creates:` sur le binaire rend la
-  tâche idempotente ; changer `promtail_version` demande alors de
-  supprimer l'ancien binaire (ou d'inclure la version dans le nom —
-  amélioration possible).
-* `community.general.ufw` avec `to_port: 22` (entier) déclenche un
-  `changed` permanent sur certaines versions : `| string`.
-* Le paquet Ubuntu `prometheus-node-exporter` lit `ARGS` dans
-  `/etc/default/prometheus-node-exporter` ; une ligne `ARGS=` sur deux
-  lignes sans `\` casse le service silencieusement (`systemctl status`
-  montre `exit-code`).
-* `AllowUsers mathieu deploy` sans `deploy` : le runner CI ne pourra plus
-  se connecter à PB.7 et le message sera un laconique « Permission denied
-  (publickey) ». `sshd -T | grep allowusers` avant de chercher côté clé.
-* L'ordre des rôles compte : `common` crée le groupe `docker` et
-  `/srv/factura` avant `docker` ; `firewall` ouvre 9100 avant que
-  `node_exporter` écoute. Inverser fait passer le premier run mais pas
-  le check.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `changed=1` sur `blockinfile` `/etc/hosts` à chaque passage : le
+>   bloc contient une liste non triée (`groups[...]` n'a pas d'ordre
+>   garanti). Le `| sort` est là pour ça. Même chose pour tout template
+>   qui itère sur un `dict` ou un `set`.
+> * `unarchive` avec `remote_src` et sans `creates:` retélécharge le zip à
+>   chaque run et marque `changed`. Le `creates:` sur le binaire rend la
+>   tâche idempotente ; changer `promtail_version` demande alors de
+>   supprimer l'ancien binaire (ou d'inclure la version dans le nom —
+>   amélioration possible).
+> * `community.general.ufw` avec `to_port: 22` (entier) déclenche un
+>   `changed` permanent sur certaines versions : `| string`.
+> * Le paquet Ubuntu `prometheus-node-exporter` lit `ARGS` dans
+>   `/etc/default/prometheus-node-exporter` ; une ligne `ARGS=` sur deux
+>   lignes sans `\` casse le service silencieusement (`systemctl status`
+>   montre `exit-code`).
+> * `AllowUsers mathieu deploy` sans `deploy` : le runner CI ne pourra plus
+>   se connecter à PB.7 et le message sera un laconique « Permission denied
+>   (publickey) ». `sshd -T | grep allowusers` avant de chercher côté clé.
+> * L'ordre des rôles compte : `common` crée le groupe `docker` et
+>   `/srv/factura` avant `docker` ; `firewall` ouvre 9100 avant que
+>   `node_exporter` écoute. Inverser fait passer le premier run mais pas
+>   le check.
 
 ---
 
-### **PB.4** — Conteneurisation et stack Compose de dev
+### <a id="pb-4"></a>**[PB.4](README.md#pb-4)** — Conteneurisation et stack Compose de dev
 
 *Images `factura-api` et `factura-worker` multi-stage, non-root, avec
 healthcheck et version injectée au build, de moins de 250 Mo, scannées par
@@ -1932,68 +1946,70 @@ demandera en entretien) :
 | `CMD [...]` forme exec | PID 1 = gunicorn, reçoit `SIGTERM`, arrêt gracieux |
 | `--access-logfile -` | une ligne d'accès par requête sur stdout (texte, pas JSON), pour promtail |
 
-::: pourquoi
-**Multi-stage avec un venv** : `pip install` produit des fichiers dans
-`site-packages` et des dépendances de build (`gcc`, en-têtes) qu'on ne
-veut pas en prod. Copier `/venv` d'un étage à l'autre ramène exactement les
-paquets Python, rien d'autre ; la base `slim` (≈ 120 Mo) + venv (≈ 55 Mo) +
-app donne 170 Mo, contre 1,1 Go pour `FROM python` + `COPY .`. Moins de
-paquets, c'est aussi moins de CVE à scanner : la moitié des HIGH du
-`Dockerfile` des devs venaient de `gcc` et `perl` de l'image complète.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Multi-stage avec un venv** : `pip install` produit des fichiers dans
+> `site-packages` et des dépendances de build (`gcc`, en-têtes) qu'on ne
+> veut pas en prod. Copier `/venv` d'un étage à l'autre ramène exactement les
+> paquets Python, rien d'autre ; la base `slim` (≈ 120 Mo) + venv (≈ 55 Mo) +
+> app donne 170 Mo, contre 1,1 Go pour `FROM python` + `COPY .`. Moins de
+> paquets, c'est aussi moins de CVE à scanner : la moitié des HIGH du
+> `Dockerfile` des devs venaient de `gcc` et `perl` de l'image complète.
+>
+> **uid 10001 et pas 1000** : 1000 est le premier utilisateur humain de
+> n'importe quelle distribution ; si un volume hôte est monté, les fichiers
+> créés par le conteneur appartiennent à `mathieu`. Un uid haut et fixe évite
+> la collision et sera repris tel quel dans `securityContext.runAsUser` (PB.10)
+> — Kubernetes refuse `runAsNonRoot` si l'image ne dit pas quel uid elle
+> utilise.
+>
+> **Forme exec du `CMD`** : `CMD gunicorn ...` (forme shell) lance `/bin/sh
+> -c "gunicorn ..."`, le PID 1 est `sh`, qui ne transmet pas `SIGTERM`.
+> `docker stop` attend 10 s puis `SIGKILL` : les requêtes en cours sont
+> perdues, et le bleu/vert de PB.7 devient un « presque sans coupure ». Avec
+> la forme exec, Gunicorn est PID 1, reçoit `SIGTERM`, ferme l'écoute, finit
+> les requêtes en cours (`--graceful-timeout 20`) et sort.
+>
+> **Le healthcheck dans l'image et non seulement dans Compose** : Compose,
+> Swarm, Nomad et `docker run` le lisent ; Kubernetes l'**ignore** (il a ses
+> probes). Le mettre dans l'image documente « comment savoir si je vais
+> bien » là où l'app vit ; `--start-period` évite les faux `unhealthy`
+> pendant que Gunicorn charge Flask et psycopg.
+>
+> **`--ignore-unfixed`** : une CVE sans correctif disponible ne peut pas être
+> corrigée par un rebuild ; la faire bloquer la CI produit un pipeline rouge
+> en permanence que tout le monde apprend à ignorer. On la **liste**
+> (journal) et on la suit ; on bloque sur ce qu'on peut corriger.
 
-**uid 10001 et pas 1000** : 1000 est le premier utilisateur humain de
-n'importe quelle distribution ; si un volume hôte est monté, les fichiers
-créés par le conteneur appartiennent à `mathieu`. Un uid haut et fixe évite
-la collision et sera repris tel quel dans `securityContext.runAsUser` (PB.10)
-— Kubernetes refuse `runAsNonRoot` si l'image ne dit pas quel uid elle
-utilise.
-
-**Forme exec du `CMD`** : `CMD gunicorn ...` (forme shell) lance `/bin/sh
--c "gunicorn ..."`, le PID 1 est `sh`, qui ne transmet pas `SIGTERM`.
-`docker stop` attend 10 s puis `SIGKILL` : les requêtes en cours sont
-perdues, et le bleu/vert de PB.7 devient un « presque sans coupure ». Avec
-la forme exec, Gunicorn est PID 1, reçoit `SIGTERM`, ferme l'écoute, finit
-les requêtes en cours (`--graceful-timeout 20`) et sort.
-
-**Le healthcheck dans l'image et non seulement dans Compose** : Compose,
-Swarm, Nomad et `docker run` le lisent ; Kubernetes l'**ignore** (il a ses
-probes). Le mettre dans l'image documente « comment savoir si je vais
-bien » là où l'app vit ; `--start-period` évite les faux `unhealthy`
-pendant que Gunicorn charge Flask et psycopg.
-
-**`--ignore-unfixed`** : une CVE sans correctif disponible ne peut pas être
-corrigée par un rebuild ; la faire bloquer la CI produit un pipeline rouge
-en permanence que tout le monde apprend à ignorer. On la **liste**
-(journal) et on la suit ; on bloque sur ce qu'on peut corriger.
-:::
-
-::: piege
-* `ENV PATH=/venv/bin:$PATH` avant `COPY --from=builder` : l'ordre des
-  instructions ne change rien ici, mais oublier cette ligne fait tourner
-  le `python` système, sans Flask : `ModuleNotFoundError` au démarrage,
-  `healthy` jamais atteint.
-* `depends_on: condition: service_healthy` sans `healthcheck` sur le
-  service visé : Compose refuse de démarrer (« no healthcheck »). D'où le
-  healthcheck ajouté sur redis.
-* `docker compose down` sans `-v` garde le volume `pgdata` : `init.sql` ne
-  rejoue **jamais** (le script d'init ne tourne que sur un répertoire de
-  données vide). « J'ai changé init.sql et rien ne change » = ce piège.
-* `docker compose config` montre les valeurs interpolées : si
-  `DB_PASSWORD` est défini dans ton shell, il l'emporte sur le `.env` et
-  sur le défaut — la stack de dev prend alors un mot de passe que tu n'as
-  pas mis dans `init` de PostgreSQL... qui a été initialisé avec un autre.
-  `down -v` et on recommence.
-* Le `HEALTHCHECK` en Python avec `urlopen(...).status==200` : sur une 503
-  (`/health` dégradé) `urlopen` lève `HTTPError` — l'exception fait sortir
-  avec un code non nul, c'est bien le comportement voulu. Sur `/version`,
-  l'API répond 200 même sans base : le healthcheck de l'image dit « le
-  processus répond », pas « la plateforme va bien ». C'est `/health` (et
-  blackbox, PB.8) qui dit le second.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `ENV PATH=/venv/bin:$PATH` avant `COPY --from=builder` : l'ordre des
+>   instructions ne change rien ici, mais oublier cette ligne fait tourner
+>   le `python` système, sans Flask : `ModuleNotFoundError` au démarrage,
+>   `healthy` jamais atteint.
+> * `depends_on: condition: service_healthy` sans `healthcheck` sur le
+>   service visé : Compose refuse de démarrer (« no healthcheck »). D'où le
+>   healthcheck ajouté sur redis.
+> * `docker compose down` sans `-v` garde le volume `pgdata` : `init.sql` ne
+>   rejoue **jamais** (le script d'init ne tourne que sur un répertoire de
+>   données vide). « J'ai changé init.sql et rien ne change » = ce piège.
+> * `docker compose config` montre les valeurs interpolées : si
+>   `DB_PASSWORD` est défini dans ton shell, il l'emporte sur le `.env` et
+>   sur le défaut — la stack de dev prend alors un mot de passe que tu n'as
+>   pas mis dans `init` de PostgreSQL... qui a été initialisé avec un autre.
+>   `down -v` et on recommence.
+> * Le `HEALTHCHECK` en Python avec `urlopen(...).status==200` : sur une 503
+>   (`/health` dégradé) `urlopen` lève `HTTPError` — l'exception fait sortir
+>   avec un code non nul, c'est bien le comportement voulu. Sur `/version`,
+>   l'API répond 200 même sans base : le healthcheck de l'image dit « le
+>   processus répond », pas « la plateforme va bien ». C'est `/health` (et
+>   blackbox, PB.8) qui dit le second.
 
 ---
 
-### **PB.5** — Rôle de déploiement Compose, secrets chiffrés, staging puis prod
+### <a id="pb-5"></a>**[PB.5](README.md#pb-5)** — Rôle de déploiement Compose, secrets chiffrés, staging puis prod
 
 *Un rôle `factura_compose` qui dépose la stack sur `web` et `db` d'un
 environnement en tant que `deploy` (sans sudo), secrets dans un vault,
@@ -2590,75 +2606,77 @@ runner, `mathieu` celui du diagnostic. Les deux sont dans `docker`, et
 `lab-adm`, ajoute `-e ansible_user=deploy` dans le `Makefile` (cible
 `deploy`) : le compte de déploiement est `deploy`, point.
 
-::: pourquoi
-**Profils Compose pour la couleur** : un service avec `profiles: [green]`
-n'existe pour Compose que si le profil est actif. `COMPOSE_PROFILES=blue`
-dans `state.env` et `profiles:` du module font qu'un `up -d` ne démarre
-que la couleur active, sans `if` dans le template. Le bleu/vert de PB.7
-active les deux profils le temps de la bascule.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Profils Compose pour la couleur** : un service avec `profiles: [green]`
+> n'existe pour Compose que si le profil est actif. `COMPOSE_PROFILES=blue`
+> dans `state.env` et `profiles:` du module font qu'un `up -d` ne démarre
+> que la couleur active, sans `if` dans le template. Le bleu/vert de PB.7
+> active les deux profils le temps de la bascule.
+>
+> **`state.env` séparé de `.env`** : `.env` est un secret (0600, rendu par
+> Ansible depuis le vault) ; `state.env` est un état mutable (0640, écrit par
+> Ansible **et** par `switch.sh`). Les mélanger ferait réécrire les secrets
+> par un script shell, ou rendrait l'état non idempotent côté Ansible. Le
+> rôle ne réécrit `state.env` qu'au premier déploiement : ensuite c'est le
+> bleu/vert et `switch.sh` qui le font évoluer, et Ansible le **lit**.
+>
+> **Tag vide = ne rien changer** : c'est ce qui rend `--check` et le second
+> passage vides. Sans cette convention, chaque `deploy.yml` sans tag
+> essaierait de déployer « rien » ou `latest`. Et le garde-fou « premier
+> déploiement : tag requis » évite de démarrer une stack avec une image
+> `:none` qui n'existe pas (le `${TAG_BLUE:-none}` du template est là pour
+> que `docker compose config` reste valide, pas pour tourner).
+>
+> **Indirection** `db_password: "{{ vault_db_password }}"` : `grep -r
+> db_password` trouve où la variable est utilisée sans décrypter ; on peut
+> changer la source (vault → gestionnaire de secrets) sans toucher aux
+> rôles ; et `ansible-vault view` sur un fichier de 4 lignes est lisible.
+> Les mots de passe diffèrent entre staging et prod pour qu'une fuite du
+> staging (moins protégé, plus de monde dessus) ne donne pas la prod.
+>
+> **`5432` publié sur `BIND_IP` et filtré par `DOCKER-USER`** : le port est
+> joignable de la VM web seulement — vérifié par les deux `nc`. Le
+> `postgres_exporter` parle à `postgres` par le réseau Compose, jamais par
+> le port publié.
+>
+> **Le worker sans couleur** : deux workers consommant la même file
+> donneraient deux versions traitant des factures en parallèle pendant la
+> bascule. Un seul worker, recréé (3 à 5 s pendant lesquels les jobs
+> attendent dans Redis, `appendonly yes` les protège) : compromis assumé,
+> documenté.
 
-**`state.env` séparé de `.env`** : `.env` est un secret (0600, rendu par
-Ansible depuis le vault) ; `state.env` est un état mutable (0640, écrit par
-Ansible **et** par `switch.sh`). Les mélanger ferait réécrire les secrets
-par un script shell, ou rendrait l'état non idempotent côté Ansible. Le
-rôle ne réécrit `state.env` qu'au premier déploiement : ensuite c'est le
-bleu/vert et `switch.sh` qui le font évoluer, et Ansible le **lit**.
-
-**Tag vide = ne rien changer** : c'est ce qui rend `--check` et le second
-passage vides. Sans cette convention, chaque `deploy.yml` sans tag
-essaierait de déployer « rien » ou `latest`. Et le garde-fou « premier
-déploiement : tag requis » évite de démarrer une stack avec une image
-`:none` qui n'existe pas (le `${TAG_BLUE:-none}` du template est là pour
-que `docker compose config` reste valide, pas pour tourner).
-
-**Indirection** `db_password: "{{ vault_db_password }}"` : `grep -r
-db_password` trouve où la variable est utilisée sans décrypter ; on peut
-changer la source (vault → gestionnaire de secrets) sans toucher aux
-rôles ; et `ansible-vault view` sur un fichier de 4 lignes est lisible.
-Les mots de passe diffèrent entre staging et prod pour qu'une fuite du
-staging (moins protégé, plus de monde dessus) ne donne pas la prod.
-
-**`5432` publié sur `BIND_IP` et filtré par `DOCKER-USER`** : le port est
-joignable de la VM web seulement — vérifié par les deux `nc`. Le
-`postgres_exporter` parle à `postgres` par le réseau Compose, jamais par
-le port publié.
-
-**Le worker sans couleur** : deux workers consommant la même file
-donneraient deux versions traitant des factures en parallèle pendant la
-bascule. Un seul worker, recréé (3 à 5 s pendant lesquels les jobs
-attendent dans Redis, `appendonly yes` les protège) : compromis assumé,
-documenté.
-:::
-
-::: piege
-* `docker_compose_v2` avec `pull: always` rend chaque run `changed`
-  (il tente le pull même si rien ne change). `pull: missing` en régime
-  normal ; le bleu/vert fait un `docker_image_pull` explicite du tag
-  demandé.
-* `no_log: true` sur le template `.env` masque aussi le `--diff` : en
-  `--check --diff`, tu ne verras pas qu'un mot de passe a changé, juste
-  `changed`. C'est voulu : la sortie va dans les journaux du runner.
-* `redis-cli -a` dans le healthcheck : la variable doit être échappée en
-  `$$REDIS_PASSWORD` pour que Compose ne l'interpole pas dans le
-  fichier (sinon le mot de passe apparaît en clair dans `docker inspect`
-  du healthcheck — il y est de toute façon via `command`, d'où le
-  `0640` sur `compose.yaml` et l'idée d'un `redis.conf` monté en secret
-  pour aller plus loin).
-* nginx et un upstream absent : `upstream { server api-green:8000; }`
-  avec `api-green` non démarré fait échouer `nginx -t` (« host not found
-  in upstream »). C'est pourquoi `active.conf` ne pointe que sur la
-  couleur qui tourne et que les blocs 8081/8082 utilisent `set $x` +
-  `resolver` : nginx résout au moment de la requête, et une couleur
-  éteinte donne un 502 propre au lieu d'empêcher nginx de démarrer.
-* Un `ansible-vault encrypt` sur un fichier déjà commité en clair laisse
-  le secret dans l'historique. Ici, les `vault.yml` naissent chiffrés ;
-  si tu as commité une version claire « pour tester », la seule réponse
-  est de changer les mots de passe (staging comme prod).
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `docker_compose_v2` avec `pull: always` rend chaque run `changed`
+>   (il tente le pull même si rien ne change). `pull: missing` en régime
+>   normal ; le bleu/vert fait un `docker_image_pull` explicite du tag
+>   demandé.
+> * `no_log: true` sur le template `.env` masque aussi le `--diff` : en
+>   `--check --diff`, tu ne verras pas qu'un mot de passe a changé, juste
+>   `changed`. C'est voulu : la sortie va dans les journaux du runner.
+> * `redis-cli -a` dans le healthcheck : la variable doit être échappée en
+>   `$$REDIS_PASSWORD` pour que Compose ne l'interpole pas dans le
+>   fichier (sinon le mot de passe apparaît en clair dans `docker inspect`
+>   du healthcheck — il y est de toute façon via `command`, d'où le
+>   `0640` sur `compose.yaml` et l'idée d'un `redis.conf` monté en secret
+>   pour aller plus loin).
+> * nginx et un upstream absent : `upstream { server api-green:8000; }`
+>   avec `api-green` non démarré fait échouer `nginx -t` (« host not found
+>   in upstream »). C'est pourquoi `active.conf` ne pointe que sur la
+>   couleur qui tourne et que les blocs 8081/8082 utilisent `set $x` +
+>   `resolver` : nginx résout au moment de la requête, et une couleur
+>   éteinte donne un 502 propre au lieu d'empêcher nginx de démarrer.
+> * Un `ansible-vault encrypt` sur un fichier déjà commité en clair laisse
+>   le secret dans l'historique. Ici, les `vault.yml` naissent chiffrés ;
+>   si tu as commité une version claire « pour tester », la seule réponse
+>   est de changer les mots de passe (staging comme prod).
 
 ---
 
-### **PB.6** — Pipeline d'intégration continue
+### <a id="pb-6"></a>**[PB.6](README.md#pb-6)** — Pipeline d'intégration continue
 
 *`.gitea/workflows/ci.yaml` : `lint`, `test`, `build` chaînés sur le runner
 `ops-host`, images poussées avec un tag `sha-<7>` (et `vX.Y.Z` sur un tag
@@ -2901,72 +2919,74 @@ première fois puis 10 s avec le cache, `push` ≈ 20 s), `lint` 55 s
 conteneur jetable). Pistes : cache pip par un volume monté, `--cache-from`
 sur l'image précédente, `ansible-lint` sur les fichiers modifiés seulement.
 
-::: pourquoi
-**Runner en mode hôte** : les jobs tournent sous `runner` dans un shell
-de `lab-ops`, avec ses binaires et son socket Docker. C'est ce qui rend
-possible `docker build` sans Docker-in-Docker, `ansible-playbook` avec les
-collections installées et le cache trivy persistant. Le prix : un job
-peut lire ce qu'un autre a laissé (d'où `rm -f` en `always()` et `docker
-logout`), et tout ce qui manque dans le `PATH` de `runner` fait échouer le
-job avec « command not found » — le premier step `which ...` diagnostique
-ça en une ligne.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Runner en mode hôte** : les jobs tournent sous `runner` dans un shell
+> de `lab-ops`, avec ses binaires et son socket Docker. C'est ce qui rend
+> possible `docker build` sans Docker-in-Docker, `ansible-playbook` avec les
+> collections installées et le cache trivy persistant. Le prix : un job
+> peut lire ce qu'un autre a laissé (d'où `rm -f` en `always()` et `docker
+> logout`), et tout ce qui manque dans le `PATH` de `runner` fait échouer le
+> job avec « command not found » — le premier step `which ...` diagnostique
+> ça en une ligne.
+>
+> **`sha-<7>` toujours, `vX.Y.Z` en plus** : le SHA identifie le commit, la
+> version identifie l'intention humaine. Une image existe **une fois**,
+> construite sur le commit ; le tag de version est un alias posé sur la même
+> image (`docker tag` + `push`, pas de rebuild), ce que le registre
+> confirme par un digest identique. C'est le principe « construire une
+> fois, promouvoir ensuite ». Et parce qu'un tag est **mutable** (INC-B1),
+> le job publie le digest en `outputs` : c'est le seul identifiant que
+> personne ne peut déplacer.
+>
+> **Scan avant push** : une image vulnérable qui a atteint le registre est
+> déjà « disponible » pour un `deploy.yml` lancé à la main. Bloquer avant
+> le push garantit que tout ce qui est dans le registre a passé le scan du
+> jour de sa construction — pas celui d'aujourd'hui, d'où le bonus d'un
+> scan périodique du registre.
+>
+> **Secrets par `env:`** : `${{ secrets.X }}` est substitué dans le texte du
+> script avant exécution ; dans `run:` il apparaît en clair dans le journal
+> si le step a `set -x` ou si la commande échoue avec son texte. Par `env:`
+> la valeur est dans l'environnement du processus, lue par `"$VAR"`, et le
+> masquage du runner s'applique.
+>
+> **`tofu validate` avec un faux token** : `validate` ne contacte pas
+> Proxmox mais la `validation` de la variable exige le format ; un token
+> au bon format et faux passe la validation sans donner accès à rien.
+> `-backend=false` évite de chercher un état qui n'existe pas sur le runner.
+>
+> **`pull_request` sans push** : une PR d'un collègue (ou d'un compte
+> compromis) ne doit pas pouvoir écrire dans le registre. Les conditions
+> `if: gitea.event_name != 'pull_request'` sur login/push/digests le
+> garantissent ; `lint` et `test` donnent quand même le verdict.
 
-**`sha-<7>` toujours, `vX.Y.Z` en plus** : le SHA identifie le commit, la
-version identifie l'intention humaine. Une image existe **une fois**,
-construite sur le commit ; le tag de version est un alias posé sur la même
-image (`docker tag` + `push`, pas de rebuild), ce que le registre
-confirme par un digest identique. C'est le principe « construire une
-fois, promouvoir ensuite ». Et parce qu'un tag est **mutable** (INC-B1),
-le job publie le digest en `outputs` : c'est le seul identifiant que
-personne ne peut déplacer.
-
-**Scan avant push** : une image vulnérable qui a atteint le registre est
-déjà « disponible » pour un `deploy.yml` lancé à la main. Bloquer avant
-le push garantit que tout ce qui est dans le registre a passé le scan du
-jour de sa construction — pas celui d'aujourd'hui, d'où le bonus d'un
-scan périodique du registre.
-
-**Secrets par `env:`** : `${{ secrets.X }}` est substitué dans le texte du
-script avant exécution ; dans `run:` il apparaît en clair dans le journal
-si le step a `set -x` ou si la commande échoue avec son texte. Par `env:`
-la valeur est dans l'environnement du processus, lue par `"$VAR"`, et le
-masquage du runner s'applique.
-
-**`tofu validate` avec un faux token** : `validate` ne contacte pas
-Proxmox mais la `validation` de la variable exige le format ; un token
-au bon format et faux passe la validation sans donner accès à rien.
-`-backend=false` évite de chercher un état qui n'existe pas sur le runner.
-
-**`pull_request` sans push** : une PR d'un collègue (ou d'un compte
-compromis) ne doit pas pouvoir écrire dans le registre. Les conditions
-`if: gitea.event_name != 'pull_request'` sur login/push/digests le
-garantissent ; `lint` et `test` donnent quand même le verdict.
-:::
-
-::: piege
-* Le contexte du statut requis s'appelle `ci / build` (nom du workflow,
-  espace, barre, espace, nom du job). Un autre libellé et la PR reste
-  bloquée pour toujours sur « en attente du statut ».
-* `actions/upload-artifact@v4` demande une API que Gitea 1.22 n'a pas
-  encore partout : `@v3` marche. Vérifie la version de ton Gitea.
-* `gitea.ref_type` vaut `tag` sur un push de tag ; `GITHUB_REF_NAME` vaut
-  alors `v2.0.0`. Sur un push de branche, `ref_type` vaut `branch`. Tester
-  `startsWith(gitea.ref, 'refs/tags/')` marche aussi.
-* `concurrency` avec `cancel-in-progress` annule le run précédent de la
-  même référence : deux pushes rapprochés sur `main` n'en déploient qu'un.
-  Sur un tag, chaque tag est sa propre référence.
-* `docker build` sans `--pull` réutilise une base `python:3.12-slim` vieille
-  de trois mois présente sur `lab-ops` : le scan trouve des HIGH que la
-  base à jour n'a plus. `--pull` coûte quelques secondes.
-* Le job `build` tourne aussi sur les PR (sans push) : c'est le
-  contexte `ci / build` qui est requis, il doit donc exister sur les PR.
-  Si tu mets `if: != pull_request` sur tout le job, la PR n'a jamais de
-  statut `ci / build` et n'est jamais fusionnable.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Le contexte du statut requis s'appelle `ci / build` (nom du workflow,
+>   espace, barre, espace, nom du job). Un autre libellé et la PR reste
+>   bloquée pour toujours sur « en attente du statut ».
+> * `actions/upload-artifact@v4` demande une API que Gitea 1.22 n'a pas
+>   encore partout : `@v3` marche. Vérifie la version de ton Gitea.
+> * `gitea.ref_type` vaut `tag` sur un push de tag ; `GITHUB_REF_NAME` vaut
+>   alors `v2.0.0`. Sur un push de branche, `ref_type` vaut `branch`. Tester
+>   `startsWith(gitea.ref, 'refs/tags/')` marche aussi.
+> * `concurrency` avec `cancel-in-progress` annule le run précédent de la
+>   même référence : deux pushes rapprochés sur `main` n'en déploient qu'un.
+>   Sur un tag, chaque tag est sa propre référence.
+> * `docker build` sans `--pull` réutilise une base `python:3.12-slim` vieille
+>   de trois mois présente sur `lab-ops` : le scan trouve des HIGH que la
+>   base à jour n'a plus. `--pull` coûte quelques secondes.
+> * Le job `build` tourne aussi sur les PR (sans push) : c'est le
+>   contexte `ci / build` qui est requis, il doit donc exister sur les PR.
+>   Si tu mets `if: != pull_request` sur tout le job, la PR n'a jamais de
+>   statut `ci / build` et n'est jamais fusionnable.
 
 ---
 
-### **PB.7** — Livraison continue : staging automatique, prod promue, bleu/vert
+### <a id="pb-7"></a>**[PB.7](README.md#pb-7)** — Livraison continue : staging automatique, prod promue, bleu/vert
 
 *Push sur `main` → staging à jour ; `cd-prod.yaml` lancé à la main avec un
 tag `vX.Y.Z` (déjà en staging) → prod sans coupure ; smoke, rollback
@@ -3428,73 +3448,75 @@ RPO 24 h (sauvegarde 02:30), RTO mesuré : voir docs/rebuild-<date>.log.
   tools/rebuild.sh prod v2.1.0
 ```
 
-::: pourquoi
-**La couleur inactive reçoit le nouveau tag, l'ancienne reste en vie** :
-c'est ce qui donne un retour arrière en 5 secondes (`switch.sh`), sans
-pull ni démarrage. Le coût est une deuxième instance d'API en mémoire
-(≈ 60 Mo ici) : dérisoire face à un redémarrage raté à 18 h.
+> [!NOTE]
+> **Pourquoi**
+>
+> **La couleur inactive reçoit le nouveau tag, l'ancienne reste en vie** :
+> c'est ce qui donne un retour arrière en 5 secondes (`switch.sh`), sans
+> pull ni démarrage. Le coût est une deuxième instance d'API en mémoire
+> (≈ 60 Mo ici) : dérisoire face à un redémarrage raté à 18 h.
+>
+> **`nginx -s reload` et pas `restart`** : le reload lance de nouveaux
+> workers avec la nouvelle configuration et laisse les anciens finir leurs
+> connexions, puis les arrête. Aucun `accept()` n'est raté : le socket
+> d'écoute est partagé. Un `restart` ferme le socket pendant quelques
+> centaines de millisecondes : la boucle `curl` de la preuve verrait des
+> `connection refused`. La variable `switched` distingue les deux cas
+> d'échec : avant la bascule (rien à défaire côté trafic) et après (il
+> faut rebasculer).
+>
+> **Trois garde-fous avant la prod** : le format (`v9.9.9` passe, mais
+> `sha-xxx` ou `latest` non — on ne promeut que des versions nommées), la
+> présence de l'image (le tag existe dans le registre : sinon le pull
+> échouerait sur la VM de prod, en plein déploiement), et « le staging
+> tourne ce tag » : on promeut **ce qui a été testé**, jamais autre chose.
+> Les trois échouent vite, avant toute action sur la prod.
+>
+> **La CI n'écrit pas dans Git** : un commit automatique de
+> `deployments.log` crée des boucles (push → CI → push), des conflits, et
+> brouille l'historique. La trace vit dans Gitea (release avec le digest,
+> run archivé) et sur la VM (`switch.log`). `git log` reste l'histoire du
+> code, pas celle des déploiements.
+>
+> **Inventaire CI versionné plutôt que `tofu output`** : `tofu output` a
+> besoin de l'état, qui est local à `lab-adm` ; l'exposer au runner
+> impliquerait un backend distant (bonus) et un token Proxmox sur `lab-ops`.
+> Le fichier versionné est explicite, revu en PR, et `check-inventory.sh`
+> détecte la divergence des deux côtés (sur `lab-adm` : diff avec le
+> généré ; en CI : hostname réel).
 
-**`nginx -s reload` et pas `restart`** : le reload lance de nouveaux
-workers avec la nouvelle configuration et laisse les anciens finir leurs
-connexions, puis les arrête. Aucun `accept()` n'est raté : le socket
-d'écoute est partagé. Un `restart` ferme le socket pendant quelques
-centaines de millisecondes : la boucle `curl` de la preuve verrait des
-`connection refused`. La variable `switched` distingue les deux cas
-d'échec : avant la bascule (rien à défaire côté trafic) et après (il
-faut rebasculer).
-
-**Trois garde-fous avant la prod** : le format (`v9.9.9` passe, mais
-`sha-xxx` ou `latest` non — on ne promeut que des versions nommées), la
-présence de l'image (le tag existe dans le registre : sinon le pull
-échouerait sur la VM de prod, en plein déploiement), et « le staging
-tourne ce tag » : on promeut **ce qui a été testé**, jamais autre chose.
-Les trois échouent vite, avant toute action sur la prod.
-
-**La CI n'écrit pas dans Git** : un commit automatique de
-`deployments.log` crée des boucles (push → CI → push), des conflits, et
-brouille l'historique. La trace vit dans Gitea (release avec le digest,
-run archivé) et sur la VM (`switch.log`). `git log` reste l'histoire du
-code, pas celle des déploiements.
-
-**Inventaire CI versionné plutôt que `tofu output`** : `tofu output` a
-besoin de l'état, qui est local à `lab-adm` ; l'exposer au runner
-impliquerait un backend distant (bonus) et un token Proxmox sur `lab-ops`.
-Le fichier versionné est explicite, revu en PR, et `check-inventory.sh`
-détecte la divergence des deux côtés (sur `lab-adm` : diff avec le
-généré ; en CI : hostname réel).
-:::
-
-::: piege
-* `meta: end_host` quand la couleur active tourne déjà le tag : sans ça,
-  relancer `cd-prod` avec le même tag redéploie inutilement sur l'autre
-  couleur et bascule — deux runs identiques feraient un ping-pong.
-* `recreate: always` sur la couleur cible : sans lui, si `api-green`
-  existe déjà (arrêtée, avec un ancien tag), Compose peut la redémarrer
-  sans recréer... et `/version` renvoie l'ancien tag, le `until` expire,
-  le `rescue` conclut à un rollback pour rien.
-* `until:` avec `direct.json.version` : si `/version` renvoie autre chose
-  que du JSON (502 de nginx en HTML pendant le démarrage), `direct.json`
-  n'existe pas et l'expression lève une erreur au lieu de réessayer. La
-  condition `direct.status == 200 and (...)` court-circuite : sur un 502,
-  `status != 200` suffit à continuer d'attendre.
-* Le `rescue` s'exécute aussi sur un timeout de `wait:` du module
-  Compose. Il ne s'exécute **pas** si l'échec vient d'un `set_fact`
-  (pas de tâche exécutée) ou d'un `end_host`. Et une erreur **dans** le
-  `rescue` termine le play avec l'erreur du rescue, pas celle d'origine :
-  d'où `failed_when: false` sur l'arrêt de la couleur.
-* `switch.sh` à la main pour revenir en arrière ne touche pas au worker :
-  il tourne avec le nouveau tag pendant que l'API répond l'ancien. Si le
-  format des jobs a changé entre les deux, c'est un problème. Le runbook
-  demande de relancer un déploiement avec l'ancien tag juste après.
-* `curl -w '%header{docker-content-digest}'` : le `Accept` doit lister le
-  type de manifeste OCI **et** Docker v2, sinon le registre renvoie le
-  digest d'une conversion, différent de celui que `docker inspect` a
-  publié. Compare les deux dans le journal : ils doivent coïncider.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `meta: end_host` quand la couleur active tourne déjà le tag : sans ça,
+>   relancer `cd-prod` avec le même tag redéploie inutilement sur l'autre
+>   couleur et bascule — deux runs identiques feraient un ping-pong.
+> * `recreate: always` sur la couleur cible : sans lui, si `api-green`
+>   existe déjà (arrêtée, avec un ancien tag), Compose peut la redémarrer
+>   sans recréer... et `/version` renvoie l'ancien tag, le `until` expire,
+>   le `rescue` conclut à un rollback pour rien.
+> * `until:` avec `direct.json.version` : si `/version` renvoie autre chose
+>   que du JSON (502 de nginx en HTML pendant le démarrage), `direct.json`
+>   n'existe pas et l'expression lève une erreur au lieu de réessayer. La
+>   condition `direct.status == 200 and (...)` court-circuite : sur un 502,
+>   `status != 200` suffit à continuer d'attendre.
+> * Le `rescue` s'exécute aussi sur un timeout de `wait:` du module
+>   Compose. Il ne s'exécute **pas** si l'échec vient d'un `set_fact`
+>   (pas de tâche exécutée) ou d'un `end_host`. Et une erreur **dans** le
+>   `rescue` termine le play avec l'erreur du rescue, pas celle d'origine :
+>   d'où `failed_when: false` sur l'arrêt de la couleur.
+> * `switch.sh` à la main pour revenir en arrière ne touche pas au worker :
+>   il tourne avec le nouveau tag pendant que l'API répond l'ancien. Si le
+>   format des jobs a changé entre les deux, c'est un problème. Le runbook
+>   demande de relancer un déploiement avec l'ancien tag juste après.
+> * `curl -w '%header{docker-content-digest}'` : le `Accept` doit lister le
+>   type de manifeste OCI **et** Docker v2, sinon le registre renvoie le
+>   digest d'une conversion, différent de celui que `docker inspect` a
+>   publié. Compare les deux dans le journal : ils doivent coïncider.
 
 ---
 
-### **PB.8** — Observabilité : métriques, journaux, alertes, SLO
+### <a id="pb-8"></a>**[PB.8](README.md#pb-8)** — Observabilité : métriques, journaux, alertes, SLO
 
 *Déployer par Ansible sur `lab-ops` la pile Prometheus, Alertmanager,
 Grafana, Loki, blackbox et un récepteur de webhook ; scraper tout ; règles
@@ -4231,84 +4253,86 @@ fait de facture à 3 h du matin : 99,5 % couvre le besoin réel, et laisse
 un budget pour déployer souvent. On revoit le SLO si le besoin change.
 ```
 
-::: pourquoi
-**Alerter sur le burn rate et pas sur le CPU** : « CPU > 80 % » est une
-cause possible parmi cent, et souvent sans effet utilisateur. Le taux de
-5xx **est** l'effet utilisateur. Les deux fenêtres (longue pour la
-signification statistique, courte pour la fraîcheur) évitent les deux
-défauts classiques : alerter sur un pic de 30 s, et alerter une heure
-après la fin de l'incident. Les seuils 14,4 et 6 viennent du SRE
-Workbook : ils correspondent à « consomme 2 % du budget en 1 h » et
-« 5 % en 6 h », soit un incident qui, s'il durait, épuiserait le budget
-mensuel en 2 jours ou en 5 jours.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Alerter sur le burn rate et pas sur le CPU** : « CPU > 80 % » est une
+> cause possible parmi cent, et souvent sans effet utilisateur. Le taux de
+> 5xx **est** l'effet utilisateur. Les deux fenêtres (longue pour la
+> signification statistique, courte pour la fraîcheur) évitent les deux
+> défauts classiques : alerter sur un pic de 30 s, et alerter une heure
+> après la fin de l'incident. Les seuils 14,4 et 6 viennent du SRE
+> Workbook : ils correspondent à « consomme 2 % du budget en 1 h » et
+> « 5 % en 6 h », soit un incident qui, s'il durait, épuiserait le budget
+> mensuel en 2 jours ou en 5 jours.
+>
+> **Règles d'enregistrement** : la même expression sert au dashboard, à
+> l'alerte et au check ; Prometheus la calcule une fois toutes les 15 s au
+> lieu de la recalculer à chaque affichage ; et le nom
+> `factura:http_errors:ratio_rate5m` (niveau:métrique:opération) dit ce
+> qu'il contient. La version `increase(...[30d])` du budget restant
+> compte réellement les requêtes du mois, là que `sum_over_time` d'un ratio
+> donnait une moyenne de ratios (fausse quand le trafic varie).
+>
+> **Watchdog** : une alerte toujours `firing`, routée sans attente. Si
+> elle cesse d'arriver dans `alerts.log`, ce n'est pas que tout va bien :
+> c'est que la chaîne est cassée. C'est la seule façon de superviser la
+> supervision sans second système.
+>
+> **`FacturaBackupTooOld` avec `absent()`** : une alerte qui dépend d'une
+> métrique posée par un script est muette si le script ne tourne jamais
+> (métrique absente = pas de série = pas d'alerte). `or absent(...)` fait
+> que « aucune sauvegarde n'a jamais eu lieu » alerte aussi. C'est
+> pourquoi l'alerte est `firing` dès PB.8 : elle prouve qu'elle marche.
+>
+> **Un sink de webhook plutôt que Slack** : le lab n'a pas d'Internet
+> garanti ; un fichier `alerts.log` est vérifiable par le check et
+> lisible avec `tail -f`. La configuration Alertmanager est exactement
+> celle qu'on aurait avec Slack (`slack_configs` à la place de
+> `webhook_configs`).
+>
+> **Grafana provisionné par fichiers** : un dashboard cliqué dans l'UI
+> disparaît avec le volume ; un JSON versionné se relit, se revoit en PR
+> et se redéploie par `monitoring.yml`. `allowUiUpdates: false` empêche
+> qu'une modification à la souris diverge du dépôt.
 
-**Règles d'enregistrement** : la même expression sert au dashboard, à
-l'alerte et au check ; Prometheus la calcule une fois toutes les 15 s au
-lieu de la recalculer à chaque affichage ; et le nom
-`factura:http_errors:ratio_rate5m` (niveau:métrique:opération) dit ce
-qu'il contient. La version `increase(...[30d])` du budget restant
-compte réellement les requêtes du mois, là que `sum_over_time` d'un ratio
-donnait une moyenne de ratios (fausse quand le trafic varie).
-
-**Watchdog** : une alerte toujours `firing`, routée sans attente. Si
-elle cesse d'arriver dans `alerts.log`, ce n'est pas que tout va bien :
-c'est que la chaîne est cassée. C'est la seule façon de superviser la
-supervision sans second système.
-
-**`FacturaBackupTooOld` avec `absent()`** : une alerte qui dépend d'une
-métrique posée par un script est muette si le script ne tourne jamais
-(métrique absente = pas de série = pas d'alerte). `or absent(...)` fait
-que « aucune sauvegarde n'a jamais eu lieu » alerte aussi. C'est
-pourquoi l'alerte est `firing` dès PB.8 : elle prouve qu'elle marche.
-
-**Un sink de webhook plutôt que Slack** : le lab n'a pas d'Internet
-garanti ; un fichier `alerts.log` est vérifiable par le check et
-lisible avec `tail -f`. La configuration Alertmanager est exactement
-celle qu'on aurait avec Slack (`slack_configs` à la place de
-`webhook_configs`).
-
-**Grafana provisionné par fichiers** : un dashboard cliqué dans l'UI
-disparaît avec le volume ; un JSON versionné se relit, se revoit en PR
-et se redéploie par `monitoring.yml`. `allowUiUpdates: false` empêche
-qu'une modification à la souris diverge du dépôt.
-:::
-
-::: piege
-* Les ports : la pile du module 26 publie Prometheus, Alertmanager et Loki sur 9090, 9093 et 3100 (et Grafana sur 3000, celui de Gitea); si
-  `/opt/observabilite` tourne encore, le `up -d` échoue avec « port is
-  already allocated ». Le playbook l'arrête d'abord.
-* `promtool check rules` sur `alerts.yml` : deux alertes du même nom
-  (`FacturaErrorBudgetBurn` en `critical` et `warning`) sont légales et
-  voulues — c'est l'inhibition qui les articule (`equal: [alertname,
-  env]`). Deux règles avec **exactement** les mêmes labels seraient
-  fusionnées : la sévérité les distingue.
-* Le job `factura-api` a quatre cibles dont, en régime normal, une par
-  env est **éteinte** (la couleur inactive après un rollback, ou avant
-  le premier bleu/vert) : `up == 0` et `InstanceDown` se déclencheraient.
-  Solution retenue : après un déploiement réussi, les deux couleurs
-  tournent (l'ancienne reste en vie). Après le test de rollback de PB.7, la couleur en échec est arrêtée : redéploie un tag valide avant `check_PB_08.sh`, qui exige toutes les cibles `up`. Si tu préfères éteindre l'ancienne,
-  ajoute `unless on (instance) ...` ou un `job!="factura-api"` à
-  `InstanceDown` et surveille l'API par blackbox seulement.
-* `fail_if_body_not_matches_regexp` sur `"status":"ok"` : `/health`
-  répond 200 avec `status: ok` ou 503 avec `degraded`. Sans le regexp,
-  un 503 fait déjà échouer la sonde (`valid_status_codes: [200]`) ; le
-  regexp est là pour le jour où quelqu'un met `/health` en 200
-  permanent.
-* Loki 3 refuse les lignes plus vieilles que `reject_old_samples_max_age`
-  une VM dont l'horloge retarde (chrony pas encore synchronisé au
-  premier boot) voit ses premières lignes rejetées, promtail affiche
-  `entry too far behind`. Ce n'est pas une panne, c'est PB.3 qui n'a pas
-  encore tourné.
-* La sonde blackbox depuis le conteneur : `10.10.10.21` est joignable
-  parce que `lab-ops` est dans le `/24` et que le port 80 est ouvert au
-  réseau. Les ports 8081/8082 sont ouverts à `10.10.10.14` — la source
-  vue par la VM est l'IP de `lab-ops` (SNAT Docker), donc le scrape
-  passe. Sans ces règles (`firewall_docker_rules`, car ce sont des ports publiés par Docker), `up == 0` sur `factura-api`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Les ports : la pile du module 26 publie Prometheus, Alertmanager et Loki sur 9090, 9093 et 3100 (et Grafana sur 3000, celui de Gitea); si
+>   `/opt/observabilite` tourne encore, le `up -d` échoue avec « port is
+>   already allocated ». Le playbook l'arrête d'abord.
+> * `promtool check rules` sur `alerts.yml` : deux alertes du même nom
+>   (`FacturaErrorBudgetBurn` en `critical` et `warning`) sont légales et
+>   voulues — c'est l'inhibition qui les articule (`equal: [alertname,
+>   env]`). Deux règles avec **exactement** les mêmes labels seraient
+>   fusionnées : la sévérité les distingue.
+> * Le job `factura-api` a quatre cibles dont, en régime normal, une par
+>   env est **éteinte** (la couleur inactive après un rollback, ou avant
+>   le premier bleu/vert) : `up == 0` et `InstanceDown` se déclencheraient.
+>   Solution retenue : après un déploiement réussi, les deux couleurs
+>   tournent (l'ancienne reste en vie). Après le test de rollback de PB.7, la couleur en échec est arrêtée : redéploie un tag valide avant `check_PB_08.sh`, qui exige toutes les cibles `up`. Si tu préfères éteindre l'ancienne,
+>   ajoute `unless on (instance) ...` ou un `job!="factura-api"` à
+>   `InstanceDown` et surveille l'API par blackbox seulement.
+> * `fail_if_body_not_matches_regexp` sur `"status":"ok"` : `/health`
+>   répond 200 avec `status: ok` ou 503 avec `degraded`. Sans le regexp,
+>   un 503 fait déjà échouer la sonde (`valid_status_codes: [200]`) ; le
+>   regexp est là pour le jour où quelqu'un met `/health` en 200
+>   permanent.
+> * Loki 3 refuse les lignes plus vieilles que `reject_old_samples_max_age`
+>   une VM dont l'horloge retarde (chrony pas encore synchronisé au
+>   premier boot) voit ses premières lignes rejetées, promtail affiche
+>   `entry too far behind`. Ce n'est pas une panne, c'est PB.3 qui n'a pas
+>   encore tourné.
+> * La sonde blackbox depuis le conteneur : `10.10.10.21` est joignable
+>   parce que `lab-ops` est dans le `/24` et que le port 80 est ouvert au
+>   réseau. Les ports 8081/8082 sont ouverts à `10.10.10.14` — la source
+>   vue par la VM est l'IP de `lab-ops` (SNAT Docker), donc le scrape
+>   passe. Sans ces règles (`firewall_docker_rules`, car ce sont des ports publiés par Docker), `up == 0` sur `factura-api`.
 
 ---
 
-### **PB.9** — Sauvegardes, restauration testée par la CI, reconstruction chronométrée
+### <a id="pb-9"></a>**[PB.9](README.md#pb-9)** — Sauvegardes, restauration testée par la CI, reconstruction chronométrée
 
 *Rôle `pg_backup` (script, timer, rsync vers `lab-ops`, métrique dans le
 textfile collector), `restore.yml`, job CI hebdomadaire de restauration,
@@ -4835,75 +4859,77 @@ RPO < 1 h : réplication logique PostgreSQL vers factura-staging-db
 dumps horaires (`OnCalendar=hourly`, rétention 48 h : 48 × 2 Mo = trivial).
 ```
 
-::: pourquoi
-**Le compte `deploy` sauvegarde, pas root** : le script n'a besoin que du
-socket Docker (groupe `docker`), du répertoire de sauvegarde et du
-textfile collector (groupe `deploy`, `g+w` posé par le rôle
-`node_exporter`). `ProtectSystem=strict` + `ReadWritePaths` dans l'unité
-disent exactement où il peut écrire. Un script de sauvegarde en root avec
-`rsync --delete` mal paramétré est un classique des post-mortems.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Le compte `deploy` sauvegarde, pas root** : le script n'a besoin que du
+> socket Docker (groupe `docker`), du répertoire de sauvegarde et du
+> textfile collector (groupe `deploy`, `g+w` posé par le rôle
+> `node_exporter`). `ProtectSystem=strict` + `ReadWritePaths` dans l'unité
+> disent exactement où il peut écrire. Un script de sauvegarde en root avec
+> `rsync --delete` mal paramétré est un classique des post-mortems.
+>
+> **`rrsync` avec `restrict,from=,command=`** : la clé de `deploy@prod-db`
+> ne peut que faire du rsync dans `/srv/backups/factura/prod/`, depuis
+> `10.10.10.32`, sans shell, sans redirection de port, sans agent. Une VM
+> de prod compromise ne peut ni lire les sauvegardes du staging, ni
+> toucher au reste de `lab-ops`. Le `--delete-after` côté client applique
+> la rétention de 7 jours sur le dépôt distant ; rrsync l'autorise (pas
+> d'option `-ro`).
+>
+> **La métrique écrite atomiquement, et le dernier succès conservé** :
+> `node_exporter` lit le `.prom` à chaque scrape ; un `mv` sur le même
+> système de fichiers est atomique. En cas d'échec, le script réécrit
+> `last_run` mais garde `last_success` : l'alerte se déclenche 26 h après
+> le dernier **succès**, pas après le dernier essai. C'est la sémantique
+> que `FacturaBackupTooOld` attend.
+>
+> **Une restauration hebdomadaire par la CI** : un test de restauration
+> fait par un humain est fait deux fois puis oublié. Un job planifié sur
+> le runner produit un rapport horodaté et un run rouge quand ça casse. Le
+> compte `runner` dans le groupe `backup` (lecture) et `restore-tests` en
+> `0775` : les droits sont posés par `backup.yml`, jamais à la main — un second passage de `backup`.`yml` (`changed` ≠ 0) le verrait.
+>
+> **Détruire la prod pour de vrai** : le seul test qui prouve que
+> l'infrastructure as code est complète. Tout ce qui manquait (un fichier
+> posé à la main, un `switch.log` supposé exister, une clé de sauvegarde
+> à republier) apparaît dans le premier `rebuild.sh staging`. C'est
+> pourquoi l'énoncé impose le staging d'abord.
 
-**`rrsync` avec `restrict,from=,command=`** : la clé de `deploy@prod-db`
-ne peut que faire du rsync dans `/srv/backups/factura/prod/`, depuis
-`10.10.10.32`, sans shell, sans redirection de port, sans agent. Une VM
-de prod compromise ne peut ni lire les sauvegardes du staging, ni
-toucher au reste de `lab-ops`. Le `--delete-after` côté client applique
-la rétention de 7 jours sur le dépôt distant ; rrsync l'autorise (pas
-d'option `-ro`).
-
-**La métrique écrite atomiquement, et le dernier succès conservé** :
-`node_exporter` lit le `.prom` à chaque scrape ; un `mv` sur le même
-système de fichiers est atomique. En cas d'échec, le script réécrit
-`last_run` mais garde `last_success` : l'alerte se déclenche 26 h après
-le dernier **succès**, pas après le dernier essai. C'est la sémantique
-que `FacturaBackupTooOld` attend.
-
-**Une restauration hebdomadaire par la CI** : un test de restauration
-fait par un humain est fait deux fois puis oublié. Un job planifié sur
-le runner produit un rapport horodaté et un run rouge quand ça casse. Le
-compte `runner` dans le groupe `backup` (lecture) et `restore-tests` en
-`0775` : les droits sont posés par `backup.yml`, jamais à la main — un second passage de `backup`.`yml` (`changed` ≠ 0) le verrait.
-
-**Détruire la prod pour de vrai** : le seul test qui prouve que
-l'infrastructure as code est complète. Tout ce qui manquait (un fichier
-posé à la main, un `switch.log` supposé exister, une clé de sauvegarde
-à republier) apparaît dans le premier `rebuild.sh staging`. C'est
-pourquoi l'énoncé impose le staging d'abord.
-:::
-
-::: piege
-* `pg_dump` dans le conteneur passe par la socket Unix locale, en
-  `trust` (image officielle) : pas de mot de passe. Depuis l'hôte via
-  `10.10.10.32:5432`, il en faudrait un — et ufw refuserait la VM
-  elle-même ? Non, `lo`/l'IP locale n'est pas filtrée ; mais rester dans
-  le conteneur évite d'exposer le mot de passe au script.
-* `known_hosts` de `deploy` : la première connexion rsync vers `lab-ops`
-  demande une confirmation interactive, que le timer ne peut pas donner :
-  le service échoue avec `Host key verification failed`. La tâche
-  `known_hosts` du rôle est là pour ça — et après une reconstruction de
-  `lab-ops`, il faudra la rejouer.
-* `--clean --if-exists` sans `--no-owner` : si le dump a été fait par
-  `factura` et restauré par `factura`, pas de problème ; dans le conteneur
-  jetable de la CI, le rôle existe aussi (`POSTGRES_USER=factura`). Avec
-  un autre utilisateur, `pg_restore` râle sur chaque `ALTER OWNER`.
-* Le rapport de restauration compte `factures`, pas les bytes : un dump
-  tronqué qui passe le `sha256` (le hash a été calculé sur le fichier
-  tronqué) serait détecté par le `count(*)` ≠ `.meta`. Le hash protège
-  contre la corruption en transit, le compte contre une sauvegarde faite
-  à moitié.
-* `rebuild.sh` fait `ssh-keygen -R` puis `accept-new` : les nouvelles VM
-  ont de nouvelles clés d'hôte. Mais le runner CI sur `lab-ops` a aussi un
-  `known_hosts` (`ANSIBLE_HOST_KEY_CHECKING=false` dans les workflows
-  le rend indifférent : c'est un compromis de lab, à noter).
-* `RandomizedDelaySec=10min` sur staging et prod : deux rsync simultanés
-  vers `lab-ops` ne se gênent pas, mais deux `pg_dump` sur le même
-  Proxmox à la même seconde doublent le temps ; le décalage aléatoire
-  lisse ça.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `pg_dump` dans le conteneur passe par la socket Unix locale, en
+>   `trust` (image officielle) : pas de mot de passe. Depuis l'hôte via
+>   `10.10.10.32:5432`, il en faudrait un — et ufw refuserait la VM
+>   elle-même ? Non, `lo`/l'IP locale n'est pas filtrée ; mais rester dans
+>   le conteneur évite d'exposer le mot de passe au script.
+> * `known_hosts` de `deploy` : la première connexion rsync vers `lab-ops`
+>   demande une confirmation interactive, que le timer ne peut pas donner :
+>   le service échoue avec `Host key verification failed`. La tâche
+>   `known_hosts` du rôle est là pour ça — et après une reconstruction de
+>   `lab-ops`, il faudra la rejouer.
+> * `--clean --if-exists` sans `--no-owner` : si le dump a été fait par
+>   `factura` et restauré par `factura`, pas de problème ; dans le conteneur
+>   jetable de la CI, le rôle existe aussi (`POSTGRES_USER=factura`). Avec
+>   un autre utilisateur, `pg_restore` râle sur chaque `ALTER OWNER`.
+> * Le rapport de restauration compte `factures`, pas les bytes : un dump
+>   tronqué qui passe le `sha256` (le hash a été calculé sur le fichier
+>   tronqué) serait détecté par le `count(*)` ≠ `.meta`. Le hash protège
+>   contre la corruption en transit, le compte contre une sauvegarde faite
+>   à moitié.
+> * `rebuild.sh` fait `ssh-keygen -R` puis `accept-new` : les nouvelles VM
+>   ont de nouvelles clés d'hôte. Mais le runner CI sur `lab-ops` a aussi un
+>   `known_hosts` (`ANSIBLE_HOST_KEY_CHECKING=false` dans les workflows
+>   le rend indifférent : c'est un compromis de lab, à noter).
+> * `RandomizedDelaySec=10min` sur staging et prod : deux rsync simultanés
+>   vers `lab-ops` ne se gênent pas, mais deux `pg_dump` sur le même
+>   Proxmox à la même seconde doublent le temps ; le décalage aléatoire
+>   lisse ça.
 
 ---
 
-### **PB.10** — L'API sur k3s, et le verdict Compose contre k3s
+### <a id="pb-10"></a>**[PB.10](README.md#pb-10)** — L'API sur k3s, et le verdict Compose contre k3s
 
 *Une VM `factura-k3s` par le workspace `k3s`, k3s installé par Ansible,
 manifestes dans `k8s/` (probes, HPA, Ingress TLS, rolling update), scrape
@@ -5591,69 +5617,71 @@ construit déjà les images, et la migration se fait un environnement à
 la fois.
 ```
 
-::: pourquoi
-**Readiness sur `/health`, liveness sur `/version`** : la readiness
-retire le pod du Service quand la base est injoignable — plus aucun
-trafic ne lui arrive, mais on ne le redémarre pas (redémarrer n'a jamais
-réparé une base). La liveness sur `/version` (qui ne dépend que du
-processus) redémarre le conteneur si Gunicorn est bloqué. Inverser les
-deux (liveness sur `/health`) donne des redémarrages en boucle pendant
-une panne de base : le pire des cas. La `startupProbe` laisse 30 s au
-démarrage sans que la liveness intervienne.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Readiness sur `/health`, liveness sur `/version`** : la readiness
+> retire le pod du Service quand la base est injoignable — plus aucun
+> trafic ne lui arrive, mais on ne le redémarre pas (redémarrer n'a jamais
+> réparé une base). La liveness sur `/version` (qui ne dépend que du
+> processus) redémarre le conteneur si Gunicorn est bloqué. Inverser les
+> deux (liveness sur `/health`) donne des redémarrages en boucle pendant
+> une panne de base : le pire des cas. La `startupProbe` laisse 30 s au
+> démarrage sans que la liveness intervienne.
+>
+> **`maxUnavailable: 0, maxSurge: 1`** : un pod de plus est créé, attend
+> d'être Ready (readiness), puis un ancien est arrêté (`SIGTERM`, 25 s de
+> grâce, Gunicorn finit ses requêtes). Zéro requête perdue, sans rien
+> écrire : c'est exactement ce que le rôle de PB.7 fait en 120 lignes. La
+> comparaison est le cœur de PB.10.
+>
+> **`runAsUser: 10001` + `readOnlyRootFilesystem`** : le uid choisi en
+> PB.4 rend `runAsNonRoot` vérifiable ; le système de fichiers en lecture
+> seule avec un `emptyDir` sur `/tmp` interdit à une faille dans l'API
+> d'écrire ailleurs. `capabilities: drop: [ALL]` : Gunicorn sur 8000 (port \>
+> > 1024) n'en a besoin d'aucune.
+>
+> **Deux Ingress plutôt qu'un** : Traefik écoute sur `web` (80) et
+> `websecure` (443) ; un Ingress par point d'entrée, celui de 80 portant le
+> Middleware de redirection, reste lisible et évite l'annotation qui mélange
+> les deux. Le certificat est un Secret `kubernetes.io/tls` créé par
+> `kubectl`, jamais versionné (comme `secret.yaml`).
+>
+> **Le secret généré par un play, pas par `kubectl create secret` à la
+> main** : la source de vérité reste le vault ; le fichier généré est
+> reproductible, ignoré par Git, et la rotation d'un mot de passe suit le
+> même chemin qu'en Compose (INC-B3).
+>
+> **Empreinte mémoire mesurée** : 900 Mo de plus pour k3s au repos, c'est
+> la moitié de la RAM d'une VM du lab. Sur un hébergeur à 4 Go, c'est le
+> prix d'une VM de plus par an. La recommandation s'appuie sur ce chiffre
+> et sur les lignes de YAML comptées (`wc -l`), pas sur une préférence.
 
-**`maxUnavailable: 0, maxSurge: 1`** : un pod de plus est créé, attend
-d'être Ready (readiness), puis un ancien est arrêté (`SIGTERM`, 25 s de
-grâce, Gunicorn finit ses requêtes). Zéro requête perdue, sans rien
-écrire : c'est exactement ce que le rôle de PB.7 fait en 120 lignes. La
-comparaison est le cœur de PB.10.
-
-**`runAsUser: 10001` + `readOnlyRootFilesystem`** : le uid choisi en
-PB.4 rend `runAsNonRoot` vérifiable ; le système de fichiers en lecture
-seule avec un `emptyDir` sur `/tmp` interdit à une faille dans l'API
-d'écrire ailleurs. `capabilities: drop: [ALL]` : Gunicorn sur 8000 (port \>
-> 1024) n'en a besoin d'aucune.
-
-**Deux Ingress plutôt qu'un** : Traefik écoute sur `web` (80) et
-`websecure` (443) ; un Ingress par point d'entrée, celui de 80 portant le
-Middleware de redirection, reste lisible et évite l'annotation qui mélange
-les deux. Le certificat est un Secret `kubernetes.io/tls` créé par
-`kubectl`, jamais versionné (comme `secret.yaml`).
-
-**Le secret généré par un play, pas par `kubectl create secret` à la
-main** : la source de vérité reste le vault ; le fichier généré est
-reproductible, ignoré par Git, et la rotation d'un mot de passe suit le
-même chemin qu'en Compose (INC-B3).
-
-**Empreinte mémoire mesurée** : 900 Mo de plus pour k3s au repos, c'est
-la moitié de la RAM d'une VM du lab. Sur un hébergeur à 4 Go, c'est le
-prix d'une VM de plus par an. La recommandation s'appuie sur ce chiffre
-et sur les lignes de YAML comptées (`wc -l`), pas sur une préférence.
-:::
-
-::: piege
-* `ImagePullBackOff` avec `401` : `regcred` absent du namespace ou
-  `registries.yaml` non pris en compte (k3s doit être **redémarré**
-  après sa modification, d'où le handler). `x509`/`http: server gave
-  HTTP response` : le `mirrors.endpoint` en `http://` manque.
-* `kubectl top pods` vide pendant la première minute : metrics-server
-  n'a pas encore de données ; l'HPA affiche `<unknown>/60%`. Attendre,
-  ne pas « réparer ».
-* Sans `resources.requests.cpu`, l'HPA ne calcule rien (`unknown`) :
-  l'utilisation est **relative aux requests**, pas à la machine.
-* Le `readOnlyRootFilesystem` casse Gunicorn si `--worker-tmp-dir`
-  pointe sur `/tmp` non monté : d'où le `emptyDir`. Symptôme :
-  `CrashLoopBackOff`, `logs --previous` dit `Read-only file system`.
-* Le port 6443 est ouvert à `lab-adm` seulement ; le kubeconfig
-  rapatrié contient l'IP `10.10.10.41`. Depuis `lab-ops`, `kubectl`
-  échoue : c'est voulu (le runner n'a pas à administrer k3s).
-* `/etc/hosts` de `lab-adm` résout `factura-k3s.lab.local` (setup_P2) ;
-  les autres postes du réseau n'ont pas cette entrée. Pour un test
-  depuis `lab-rhel`, `curl --resolve factura-k3s.lab.local:443:10.10.10.41`.
-* Le StatefulSet avec `local-path` : les données sont sur le disque de
-  `factura-k3s`, dans `/var/lib/rancher/k3s/storage/`. Un `tofu destroy`
-  du workspace `k3s` les perd. Ce n'est pas différent de Compose — mais
-  l'abstraction PVC fait croire le contraire.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `ImagePullBackOff` avec `401` : `regcred` absent du namespace ou
+>   `registries.yaml` non pris en compte (k3s doit être **redémarré**
+>   après sa modification, d'où le handler). `x509`/`http: server gave
+>   HTTP response` : le `mirrors.endpoint` en `http://` manque.
+> * `kubectl top pods` vide pendant la première minute : metrics-server
+>   n'a pas encore de données ; l'HPA affiche `<unknown>/60%`. Attendre,
+>   ne pas « réparer ».
+> * Sans `resources.requests.cpu`, l'HPA ne calcule rien (`unknown`) :
+>   l'utilisation est **relative aux requests**, pas à la machine.
+> * Le `readOnlyRootFilesystem` casse Gunicorn si `--worker-tmp-dir`
+>   pointe sur `/tmp` non monté : d'où le `emptyDir`. Symptôme :
+>   `CrashLoopBackOff`, `logs --previous` dit `Read-only file system`.
+> * Le port 6443 est ouvert à `lab-adm` seulement ; le kubeconfig
+>   rapatrié contient l'IP `10.10.10.41`. Depuis `lab-ops`, `kubectl`
+>   échoue : c'est voulu (le runner n'a pas à administrer k3s).
+> * `/etc/hosts` de `lab-adm` résout `factura-k3s.lab.local` (setup_P2) ;
+>   les autres postes du réseau n'ont pas cette entrée. Pour un test
+>   depuis `lab-rhel`, `curl --resolve factura-k3s.lab.local:443:10.10.10.41`.
+> * Le StatefulSet avec `local-path` : les données sont sur le disque de
+>   `factura-k3s`, dans `/var/lib/rancher/k3s/storage/`. Un `tofu destroy`
+>   du workspace `k3s` les perd. Ce n'est pas différent de Compose — mais
+>   l'abstraction PVC fait croire le contraire.
 
 ---
 
@@ -5663,7 +5691,7 @@ Les scripts `break_PB_0N.sh` tournent sur `lab-adm` avec `sudo` ; ils
 sauvegardent ce qu'ils touchent dans `/root/.breakfix-backup/INC-BN/`.
 Le post-mortem attendu est dans `docs/incidents/INC-BN-<slug>.md`.
 
-### **INC-B1** — « Le pipeline est vert, mais la prod calcule mal la TVA »
+### <a id="inc-b1"></a>**[INC-B1](README.md#inc-b1)** — « Le pipeline est vert, mais la prod calcule mal la TVA »
 
 *La prod répond le bon tag sur `/version`, `git log` n'a rien de neuf, le
 dernier `cd-prod` est vert, et pourtant `montant_ttc` vaut 119,6 pour
@@ -5800,7 +5828,7 @@ et `vault_registry_token` (staging, prod, k3s) mis à jour.
 
 ---
 
-### **INC-B2** — « `tofu plan` veut recréer la base de prod »
+### <a id="inc-b2"></a>**[INC-B2](README.md#inc-b2)** — « `tofu plan` veut recréer la base de prod »
 
 *`make infra-plan ENV=staging` propose une modification de
 `factura-staging-db` ; `ENV=prod` propose de **créer** `factura-prod-db`,
@@ -5910,7 +5938,7 @@ Ajouter l'attribut à `ignore_changes` ou aligner le code sur la réalité
 
 ---
 
-### **INC-B3** — « Le déploiement de prod échoue : vault illisible »
+### <a id="inc-b3"></a>**[INC-B3](README.md#inc-b3)** — « Le déploiement de prod échoue : vault illisible »
 
 *Après un commit « chore(vault): rotation », `ansible-vault view
 group_vars/prod/vault.yml` échoue, `cd-prod` est rouge à l'étape Ansible,
@@ -6030,7 +6058,7 @@ pipeline **avant** la prod, pas pendant).
 
 ---
 
-### **INC-B4** — « Le staging est tombé à midi, personne n'a été prévenu »
+### <a id="inc-b4"></a>**[INC-B4](README.md#inc-b4)** — « Le staging est tombé à midi, personne n'a été prévenu »
 
 *`curl http://10.10.10.21/health` échoue, `FacturaApiDown{env="staging"}`
 est `firing` depuis des heures sur Prometheus, Alertmanager est `up`, et
@@ -6156,3 +6184,9 @@ curl -s http://10.10.10.21/health
 | `factura-backup.timer`, rsync, `restore.md` (PA.7) | rôle `pg_backup`, `restore.yml`, job CI hebdo (PB.9) | la restauration est testée chaque lundi, sans humain |
 | Runbook « deux jours pour tout refaire » (PA.10) | `tools/rebuild.sh` (PB.9) | 13 min 24 s, mesurés, avec les données |
 | Un service, `Restart=on-failure` (PA.3) | Deployment, probes, HPA, rolling update (PB.10) | ce que Kubernetes donne gratuitement — et ce qu'il coûte |
+
+<!-- nav:début -->
+---
+
+[← Module 27](../../modules/27-python-ops/corrige.md) · [Énoncé](README.md) · [Projet C →](../P3-astreinte/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

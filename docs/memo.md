@@ -1,3 +1,7 @@
+<!-- nav:début -->
+[Accueil](../README.md) · [Chapitre 0 — Mise en place](00-mise-en-place.md) · [Parcours](parcours.md) · [Annexes](annexes.md) · **Mémo**
+<!-- nav:fin -->
+
 # Mémo Linux & DevOps
 
 Aide-mémoire du workbook. Une section par module, des commandes prêtes à
@@ -127,21 +131,23 @@ Utilisateur `mathieu` partout, réseau `10.10.10.0/24`, passerelle et DNS
 | `ls /usr/share/doc/nginx/` | README, exemples livrés par le paquet |
 | `tldr tar` | exemples courts (`apt install tldr`) |
 
-::: piege
-* `n=5; echo {1..$n}` : les accolades passent avant `$n`, ça n'itère pas.
-* `rm $f` avec un espace dans le nom : découpage en deux arguments.
-* Créer `~/.bash_profile` coupe le pont `~/.profile` → `~/.bashrc` d'Ubuntu.
-* Un `.bashrc` commence par `case $- in *i*) ;; *) return;; esac` : tout ce
-  qui suit n'existe pas pour cron ni pour `ssh h cmd`.
-* `which` ne voit ni alias ni fonctions : `type` ou `command -v` en script.
-* `2>&1 > f` envoie stderr au terminal, pas dans `f`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `n=5; echo {1..$n}` : les accolades passent avant `$n`, ça n'itère pas.
+> * `rm $f` avec un espace dans le nom : découpage en deux arguments.
+> * Créer `~/.bash_profile` coupe le pont `~/.profile` → `~/.bashrc` d'Ubuntu.
+> * Un `.bashrc` commence par `case $- in *i*) ;; *) return;; esac` : tout ce
+>   qui suit n'existe pas pour cron ni pour `ssh h cmd`.
+> * `which` ne voit ni alias ni fonctions : `type` ou `command -v` en script.
+> * `2>&1 > f` envoie stderr au terminal, pas dans `f`.
 
-::: astuce
-* `sudo !!` — rejoue la commande oubliée sans sudo.
-* `cp /etc/nginx/nginx.conf{,.$(date +%F)}` — sauvegarde datée en un coup.
-* `Alt-.` — reprend le dernier argument, cinq fois plus vite que la souris.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `sudo !!` — rejoue la commande oubliée sans sudo.
+> * `cp /etc/nginx/nginx.conf{,.$(date +%F)}` — sauvegarde datée en un coup.
+> * `Alt-.` — reprend le dernier argument, cinq fois plus vite que la souris.
 
 ---
 
@@ -228,25 +234,28 @@ Utilisateur `mathieu` partout, réseau `10.10.10.0/24`, passerelle et DNS
 | `mount --bind /srv/data /var/www/data` | même contenu à deux endroits |
 | `mount -o remount,ro /srv` | passe en lecture seule |
 
-::: rhel
-Rocky 9 : XFS par défaut (`xfs_info /point`, `xfs_growfs`, jamais de
-réduction), inodes alloués dynamiquement, `tune2fs` sans effet.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky 9 : XFS par défaut (`xfs_info /point`, `xfs_growfs`, jamais de
+> réduction), inodes alloués dynamiquement, `tune2fs` sans effet.
 
-::: piege
-* `find . -delete -name '*.tmp'` efface tout : `-delete` en dernier.
-* `df` plein et `du` bas : fichier supprimé tenu ouvert, `lsof +L1`.
-* `No space left` avec `df` à 60 % : inodes épuisés, `df -i`.
-* `rm gros.log` sur un fichier ouvert ne libère rien : `truncate -s 0`.
-* Un lien symbolique relatif est résolu depuis le répertoire du lien.
-* `/var/run` et `/var/lock` sont des liens vers `/run` : écris `/run`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `find . -delete -name '*.tmp'` efface tout : `-delete` en dernier.
+> * `df` plein et `du` bas : fichier supprimé tenu ouvert, `lsof +L1`.
+> * `No space left` avec `df` à 60 % : inodes épuisés, `df -i`.
+> * `rm gros.log` sur un fichier ouvert ne libère rien : `truncate -s 0`.
+> * Un lien symbolique relatif est résolu depuis le répertoire du lien.
+> * `/var/run` et `/var/lock` sont des liens vers `/run` : écris `/run`.
 
-::: astuce
-* `du -xh --max-depth=1 / | sort -h | tail` — le disque plein en 5 s.
-* `find /var/log -name '*.gz' -mtime +30 -delete` — ménage des rotations.
-* `findmnt --verify` — valide `fstab` avant un reboot.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `du -xh --max-depth=1 / | sort -h | tail` — le disque plein en 5 s.
+> * `find /var/log -name '*.gz' -mtime +30 -delete` — ménage des rotations.
+> * `findmnt --verify` — valide `fstab` avant un reboot.
 
 ---
 
@@ -335,21 +344,23 @@ réduction), inodes alloués dynamiquement, `tune2fs` sans effet.
 | `status` | écarter SELinux / AppArmor |
 | `ls -l /dev/log ; ls -ld /run/x` | sockets et répertoires runtime |
 
-::: piege
-* `chmod -R 755` rend tous les fichiers exécutables : utilise `X`.
-* Neuf fois sur dix, c'est un `x` manquant sur un répertoire parent.
-* Le propriétaire n'est jamais « other » : `chmod 007 f` bloque le
-  propriétaire alors que les autres lisent.
-* Un service systemd n'hérite pas du umask de ton shell (`UMask=`).
-* `chattr +i` sur `/etc/resolv.conf` bloque aussi les mises à jour de paquets.
-* Le masque ACL plafonne : `u:webdev:rwx` avec `mask::r--` donne `r--`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `chmod -R 755` rend tous les fichiers exécutables : utilise `X`.
+> * Neuf fois sur dix, c'est un `x` manquant sur un répertoire parent.
+> * Le propriétaire n'est jamais « other » : `chmod 007 f` bloque le
+>   propriétaire alors que les autres lisent.
+> * Un service systemd n'hérite pas du umask de ton shell (`UMask=`).
+> * `chattr +i` sur `/etc/resolv.conf` bloque aussi les mises à jour de paquets.
+> * Le masque ACL plafonne : `u:webdev:rwx` avec `mask::r--` donne `r--`.
 
-::: astuce
-* `namei -l chemin` — la permission manquante en un coup d'œil.
-* `chmod -R u=rwX,go=rX /var/www/site` — récursif propre.
-* `setfacl -d -m g:dev:rwX /srv/partage` — plus jamais de fichier 644 perdu.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `namei -l chemin` — la permission manquante en un coup d'œil.
+> * `chmod -R u=rwX,go=rX /var/www/site` — récursif propre.
+> * `setfacl -d -m g:dev:rwX /srv/partage` — plus jamais de fichier 644 perdu.
 
 ---
 
@@ -439,25 +450,28 @@ Defaults:karim !authenticate
 | `cat /etc/nsswitch.conf` | ordre des sources `files systemd sss` |
 | `getent passwd \| wc -l` | tous les comptes vus par le système |
 
-::: rhel
-Rocky : groupe admin `wheel` (`usermod -aG wheel x`), `adduser` est un lien
-vers `useradd` (non interactif), `authselect` gère PAM.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky : groupe admin `wheel` (`usermod -aG wheel x`), `adduser` est un lien
+> vers `useradd` (non interactif), `authselect` gère PAM.
 
-::: piege
-* `usermod -G` sans `-a` retire l'utilisateur de tous ses autres groupes.
-* Un nouveau groupe n'est visible qu'après reconnexion (`newgrp`, `exec su -`).
-* `sudo vim`, `less`, `find`, `awk`, `tar` : c'est un shell root délégué.
-* Un fichier `/etc/sudoers.d/` avec un `.` dans le nom est ignoré en silence.
-* `passwd -l` ne bloque pas la clé SSH ; `chage -E` bloque tout.
-* `/etc/skel` ne s'applique qu'à la création avec `-m`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `usermod -G` sans `-a` retire l'utilisateur de tous ses autres groupes.
+> * Un nouveau groupe n'est visible qu'après reconnexion (`newgrp`, `exec su -`).
+> * `sudo vim`, `less`, `find`, `awk`, `tar` : c'est un shell root délégué.
+> * Un fichier `/etc/sudoers.d/` avec un `.` dans le nom est ignoré en silence.
+> * `passwd -l` ne bloque pas la clé SSH ; `chage -E` bloque tout.
+> * `/etc/skel` ne s'applique qu'à la création avec `-m`.
 
-::: astuce
-* `sudo -l -U karim` — audite un compte sans se connecter dedans.
-* `getent passwd sophie` — la seule réponse qui compte avec LDAP/SSSD.
-* `awk -F: '$3>=1000{print $1}' /etc/passwd` — les humains.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `sudo -l -U karim` — audite un compte sans se connecter dedans.
+> * `getent passwd sophie` — la seule réponse qui compte avec LDAP/SSSD.
+> * `awk -F: '$3>=1000{print $1}' /etc/passwd` — les humains.
 
 ---
 
@@ -594,21 +608,23 @@ vers `useradd` (non interactif), `authselect` gère PAM.
 | `base64 -w0 f` / `base64 -d` | encode / décode |
 | `od -c f \| head` / `xxd f \| head` | octets |
 
-::: piege
-* `sort -k2` trie du champ 2 jusqu'à la fin de ligne : `-k2,2`.
-* `uniq` sans `sort` devant ne dédoublonne que les lignes adjacentes.
-* `sed -i` sans suffixe ne sauvegarde rien : `-i.bak` sur la prod.
-* `.*"` est gourmand : il va jusqu'au dernier guillemet.
-* `for (k in tab)` en awk : ordre indéfini, repasse par `sort`.
-* `cut` ne comprend pas le CSV quoté : `awk` ou `python3 -c` avec `csv`.
-* `grep` en BRE : `+ ? { } ( ) |` doivent être échappés, ou `-E`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `sort -k2` trie du champ 2 jusqu'à la fin de ligne : `-k2,2`.
+> * `uniq` sans `sort` devant ne dédoublonne que les lignes adjacentes.
+> * `sed -i` sans suffixe ne sauvegarde rien : `-i.bak` sur la prod.
+> * `.*"` est gourmand : il va jusqu'au dernier guillemet.
+> * `for (k in tab)` en awk : ordre indéfini, repasse par `sort`.
+> * `cut` ne comprend pas le CSV quoté : `awk` ou `python3 -c` avec `csv`.
+> * `grep` en BRE : `+ ? { } ( ) |` doivent être échappés, ou `-E`.
 
-::: astuce
-* `awk '{print $1}' access.log | sort | uniq -c | sort -rn | head` — top IP.
-* `grep -rn --include='*.conf' 'listen' /etc/nginx` — où c'est configuré.
-* `jq -r '.[] | select(.status!="ok") | .name' rapport.json` — les KO.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `awk '{print $1}' access.log | sort | uniq -c | sort -rn | head` — top IP.
+> * `grep -rn --include='*.conf' 'listen' /etc/nginx` — où c'est configuré.
+> * `jq -r '.[] | select(.status!="ok") | .name' rapport.json` — les KO.
 
 ---
 
@@ -719,21 +735,23 @@ set undofile undodir=~/.vim/undo//
 `rsync -a /src /dst/` copie le répertoire ; `rsync -a /src/ /dst/` copie
 son contenu. Le slash final change tout.
 
-::: piege
-* `Ctrl-V ... I # Esc` : sans le `Esc` final, une seule ligne est modifiée.
-* Collage souris sans `:set paste` : indentation en escalier.
-* `tar -czf x.tgz /srv/factura` stocke `srv/factura/...` : utilise `-C`.
-* `tar -xf` d'une archive inconnue peut écraser : `-t` d'abord.
-* `rsync --delete` sans `-n` avant : la destination est nettoyée sans retour.
-* `scp` ne reprend pas un transfert coupé : `rsync -aP`.
-* `.fichier.swp` restant : `vim -r`, puis supprime le swap.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `Ctrl-V ... I # Esc` : sans le `Esc` final, une seule ligne est modifiée.
+> * Collage souris sans `:set paste` : indentation en escalier.
+> * `tar -czf x.tgz /srv/factura` stocke `srv/factura/...` : utilise `-C`.
+> * `tar -xf` d'une archive inconnue peut écraser : `-t` d'abord.
+> * `rsync --delete` sans `-n` avant : la destination est nettoyée sans retour.
+> * `scp` ne reprend pas un transfert coupé : `rsync -aP`.
+> * `.fichier.swp` restant : `vim -r`, puis supprime le swap.
 
-::: astuce
-* `:%s/\s\+$//e` — supprime les espaces en fin de ligne.
-* `rsync -aP --delete -n src/ dest/ | head` — voir ce qui va bouger.
-* `tar -cf - -C /srv factura | ssh lab-db 'tar -xf - -C /srv'` — sans fichier.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `:%s/\s\+$//e` — supprime les espaces en fin de ligne.
+> * `rsync -aP --delete -n src/ dest/ | head` — voir ce qui va bouger.
+> * `tar -cf - -C /srv factura | ssh lab-db 'tar -xf - -C /srv'` — sans fichier.
 
 ---
 
@@ -840,21 +858,23 @@ shift $((OPTIND-1)); : "${ENV:?-e obligatoire}"
 | `getopts` / `getopt` | options courtes / longues |
 | `caller` / `${FUNCNAME[@]}` | pile d'appels |
 
-::: piege
-* `$var` non quoté : découpage et globbing. `"$var"` partout.
-* `for f in $(ls)` casse sur les espaces : glob ou `find -print0`.
-* `cd $rep` sans test : la suite s'exécute ailleurs. `cd -- "$rep" || exit`.
-* `rm -rf "$dir/"` avec `dir` vide = `rm -rf /`. `${dir:?}`.
-* `local v=$(cmd)` masque le code de `cmd`.
-* `set -e` est ignoré dans `if`, `&&`, `||`, et dans les fonctions en condition.
-* `cmd | while read` : les variables modifiées sont perdues (sous-shell).
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `$var` non quoté : découpage et globbing. `"$var"` partout.
+> * `for f in $(ls)` casse sur les espaces : glob ou `find -print0`.
+> * `cd $rep` sans test : la suite s'exécute ailleurs. `cd -- "$rep" || exit`.
+> * `rm -rf "$dir/"` avec `dir` vide = `rm -rf /`. `${dir:?}`.
+> * `local v=$(cmd)` masque le code de `cmd`.
+> * `set -e` est ignoré dans `if`, `&&`, `||`, et dans les fonctions en condition.
+> * `cmd | while read` : les variables modifiées sont perdues (sous-shell).
 
-::: astuce
-* `set -euo pipefail` + `trap ... EXIT` + `mktemp` : les trois lignes de base.
-* `shellcheck s.sh` avant tout commit, non négociable.
-* `while IFS= read -r l; do ...; done < f` — la seule lecture correcte.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `set -euo pipefail` + `trap ... EXIT` + `mktemp` : les trois lignes de base.
+> * `shellcheck s.sh` avant tout commit, non négociable.
+> * `while IFS= read -r l; do ...; done < f` — la seule lecture correcte.
 
 ---
 
@@ -980,22 +1000,24 @@ Codes de `systemctl status` : `203/EXEC` binaire absent, `200/CHDIR`
 répertoire absent, `217/USER` utilisateur inconnu, `226/NAMESPACE`
 isolation impossible.
 
-::: piege
-* `Requires=` sans `After=` lance les deux en parallèle.
-* `Type=simple` ne détecte même pas un binaire absent : `Type=exec`.
-* Édition dans `/usr/lib/systemd/system` : écrasée à la mise à jour.
-  Toujours `systemctl edit` ou `/etc/systemd/system/`.
-* Oublier `daemon-reload` : l'ancienne unité tourne encore.
-* `kill -9` d'abord : pas de ménage, fichiers de verrou, données perdues.
-* `start request repeated too quickly` = `StartLimitBurst`, pas l'appli.
-* Un `D` ne se tue pas ; le problème est le stockage, pas le processus.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `Requires=` sans `After=` lance les deux en parallèle.
+> * `Type=simple` ne détecte même pas un binaire absent : `Type=exec`.
+> * Édition dans `/usr/lib/systemd/system` : écrasée à la mise à jour.
+>   Toujours `systemctl edit` ou `/etc/systemd/system/`.
+> * Oublier `daemon-reload` : l'ancienne unité tourne encore.
+> * `kill -9` d'abord : pas de ménage, fichiers de verrou, données perdues.
+> * `start request repeated too quickly` = `StartLimitBurst`, pas l'appli.
+> * Un `D` ne se tue pas ; le problème est le stockage, pas le processus.
 
-::: astuce
-* `systemctl cat nginx` — la vérité sur ce qui est appliqué.
-* `journalctl -u x -b --no-pager | tail -50` — le crash en clair.
-* `systemd-run --unit=long -p Type=oneshot ./script.sh` — jamais nohup.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `systemctl cat nginx` — la vérité sur ce qui est appliqué.
+> * `journalctl -u x -b --no-pager | tail -50` — le crash en clair.
+> * `systemd-run --unit=long -p Type=oneshot ./script.sh` — jamais nohup.
 
 ---
 
@@ -1055,11 +1077,12 @@ mot de passe root, verrouillé sur Ubuntu) ; Rocky : `rd.break`,
 | `transparent_hugepage=never` | THP off (bases de données) |
 | `break=premount` | shell dans l'initramfs (Ubuntu) |
 
-::: rhel
-`grubby --info=ALL` · `grubby --update-kernel=ALL --args="console=ttyS0"`
-· `grubby --set-default /boot/vmlinuz-...` · entrées BLS dans
-`/boot/loader/entries/` · `grub2-mkconfig -o /boot/grub2/grub.cfg`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> `grubby --info=ALL` · `grubby --update-kernel=ALL --args="console=ttyS0"`
+> · `grubby --set-default /boot/vmlinuz-...` · entrées BLS dans
+> `/boot/loader/entries/` · `grub2-mkconfig -o /boot/grub2/grub.cfg`.
 
 ### Noyaux et initramfs
 
@@ -1080,11 +1103,12 @@ Régénérer l'initrd : racine sur LVM/LUKS/RAID, pilote de stockage,
 `modprobe.d` touché, nouveau noyau. `/etc/initramfs-tools/initramfs.conf` :
 `MODULES=most` (gros, portable) ou `dep` (petit, fragile).
 
-::: rhel
-`dnf install kernel` (garde `installonly_limit=3`) · `dnf remove
---oldinstallonly` · `kernel-core` (vmlinuz) + `kernel-modules` (pilotes) ·
-`dracut -f` · `lsinitrd` · `/etc/dracut.conf.d/` (`hostonly`).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> `dnf install kernel` (garde `installonly_limit=3`) · `dnf remove
+> --oldinstallonly` · `kernel-core` (vmlinuz) + `kernel-modules` (pilotes) ·
+> `dracut -f` · `lsinitrd` · `/etc/dracut.conf.d/` (`hostonly`).
 
 ### Modules
 
@@ -1206,27 +1230,29 @@ Ubuntu : `chrony.service`, `/etc/chrony/` ; Rocky : `chronyd.service`,
 `/etc/chrony.conf`. Slew max 8,3 % ; `makestep 1 3` = saut au démarrage
 seulement. Une VM dérive : steal, pause, snapshot, RTC de l'hôte.
 
-::: piege
-* `/etc/default/grub` édité sans `update-grub` : rien ne change.
-* `/etc/default/grub.d/*.cfg` écrase `/etc/default/grub`.
-* Menu GRUB caché (`TIMEOUT=0`) : dépannage impossible en série.
-* `rm initrd.img-$(uname -r)` « pour faire de la place » : plus de boot.
-* `blacklist` n'interdit pas `modprobe` explicite ; `install /bin/false` oui.
-* `sysctl -p fichier` marche, `--system` est la vérité ; `.conf` obligatoire.
-* `net.netfilter.*` absent tant que `nf_conntrack` n'est pas chargé.
-* Règle udev `61-` minimum pour utiliser `ID_SERIAL` ; `NAME=` bloc ignoré.
-* `date -s` répare TLS mais pas la cause : `chronyc makestep` + service.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `/etc/default/grub` édité sans `update-grub` : rien ne change.
+> * `/etc/default/grub.d/*.cfg` écrase `/etc/default/grub`.
+> * Menu GRUB caché (`TIMEOUT=0`) : dépannage impossible en série.
+> * `rm initrd.img-$(uname -r)` « pour faire de la place » : plus de boot.
+> * `blacklist` n'interdit pas `modprobe` explicite ; `install /bin/false` oui.
+> * `sysctl -p fichier` marche, `--system` est la vérité ; `.conf` obligatoire.
+> * `net.netfilter.*` absent tant que `nf_conntrack` n'est pas chargé.
+> * Règle udev `61-` minimum pour utiliser `ID_SERIAL` ; `NAME=` bloc ignoré.
+> * `date -s` répare TLS mais pas la cause : `chronyc makestep` + service.
 
-::: astuce
-* `grep -r CMDLINE /etc/default/grub*` avant tout diagnostic GRUB.
-* `qm terminal` + `console=ttyS0` avant d'en avoir besoin.
-* `lsinitramfs ... | grep -E 'virtio|lvm|modprobe.d'` après tout changement.
-* `sudo sysctl --system 2>&1 | grep -E '^\*|cannot'` = ordre + erreurs.
-* `udevadm test` avant `udevadm trigger`, toujours ciblé.
-* `journalctl -u systemd-sysctl -b` et `chronyc tracking` dans tout script
-  de conformité.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `grep -r CMDLINE /etc/default/grub*` avant tout diagnostic GRUB.
+> * `qm terminal` + `console=ttyS0` avant d'en avoir besoin.
+> * `lsinitramfs ... | grep -E 'virtio|lvm|modprobe.d'` après tout changement.
+> * `sudo sysctl --system 2>&1 | grep -E '^\*|cannot'` = ordre + erreurs.
+> * `udevadm test` avant `udevadm trigger`, toujours ciblé.
+> * `journalctl -u systemd-sysctl -b` et `chronyc tracking` dans tout script
+>   de conformité.
 
 ---
 
@@ -1338,20 +1364,22 @@ Priorités : `100` installé / backports, `500` dépôt, `990` cible `-t`,
 | `needrestart` / `checkrestart` | services à redémarrer après MAJ |
 | `ls /var/run/reboot-required*` | reboot demandé (noyau) |
 
-::: piege
-* `dpkg was interrupted` : `dpkg --configure -a`, puis `apt -f install`.
-* Répondre `Y` à un conffile écrase ta conf (elle part en `.dpkg-old`).
-* Une clé dans `/etc/apt/trusted.gpg.d/` authentifie tous les dépôts.
-* `pip install` en root casse les paquets système (`externally-managed`).
-* `apt upgrade` laisse un paquet `kept back` : c'est voulu, pas une erreur.
-* Un flux dnf activé masque les autres : `No match for argument`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `dpkg was interrupted` : `dpkg --configure -a`, puis `apt -f install`.
+> * Répondre `Y` à un conffile écrase ta conf (elle part en `.dpkg-old`).
+> * Une clé dans `/etc/apt/trusted.gpg.d/` authentifie tous les dépôts.
+> * `pip install` en root casse les paquets système (`externally-managed`).
+> * `apt upgrade` laisse un paquet `kept back` : c'est voulu, pas une erreur.
+> * Un flux dnf activé masque les autres : `No match for argument`.
 
-::: astuce
-* `apt policy pkg` — d'où viendra la version, et pourquoi.
-* `dpkg -S $(command -v x)` — quel paquet a livré ce binaire.
-* `dnf history undo last` — l'annulation que Debian n'a pas.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `apt policy pkg` — d'où viendra la version, et pourquoi.
+> * `dpkg -S $(command -v x)` — quel paquet a livré ce binaire.
+> * `dnf history undo last` — l'annulation que Debian n'a pas.
 
 ---
 
@@ -1567,27 +1595,29 @@ Loi de Little : `iodepth ≈ IOPS × latence`. `r_await` (`iostat -x`) ≈ `clat
 | `fstrim -av` / `systemctl enable fstrim.timer` | TRIM SSD |
 | `hdparm -tT /dev/sda` | lecture brute |
 
-::: piege
-* `/dev/sdX` dans `fstab` : l'ordre change au boot. `UUID=` ou `/dev/vg/lv`.
-* `fstab` sans `nofail` sur un disque secondaire = boot en mode secours.
-* `lvextend -l 100%FREE` échoue ; c'est `+100%FREE`.
-* `lvreduce` avant `resize2fs` coupe la fin des données.
-* Snapshot LVM plein = invalide, l'origine continue sans lui.
-* `e2fsck` sur un FS monté en écriture corrompt.
-* `%util` 100 % sur un NVMe ne dit rien : regarde `await`.
-* `mdadm --create` pour « réparer » un tableau : c'est `--add` / `--assemble`.
-* RAID dégradé sans `mdmonitor` = personne ne le sait avant le second disque.
-* `soft` sur un NFS en écriture = corruption silencieuse ; `hard` + automount.
-* `umount -l` seul sur un NFS mort ne libère pas les processus en `D` : `-f -l`.
-* iSCSI : `/dev/sdX` dans `fstab` ou `pvcreate` par nom : passe par LVM/`by-path`.
-* `saveconfig` oublié dans `targetcli` : la cible disparaît au redémarrage.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `/dev/sdX` dans `fstab` : l'ordre change au boot. `UUID=` ou `/dev/vg/lv`.
+> * `fstab` sans `nofail` sur un disque secondaire = boot en mode secours.
+> * `lvextend -l 100%FREE` échoue ; c'est `+100%FREE`.
+> * `lvreduce` avant `resize2fs` coupe la fin des données.
+> * Snapshot LVM plein = invalide, l'origine continue sans lui.
+> * `e2fsck` sur un FS monté en écriture corrompt.
+> * `%util` 100 % sur un NVMe ne dit rien : regarde `await`.
+> * `mdadm --create` pour « réparer » un tableau : c'est `--add` / `--assemble`.
+> * RAID dégradé sans `mdmonitor` = personne ne le sait avant le second disque.
+> * `soft` sur un NFS en écriture = corruption silencieuse ; `hard` + automount.
+> * `umount -l` seul sur un NFS mort ne libère pas les processus en `D` : `-f -l`.
+> * iSCSI : `/dev/sdX` dans `fstab` ou `pvcreate` par nom : passe par LVM/`by-path`.
+> * `saveconfig` oublié dans `targetcli` : la cible disparaît au redémarrage.
 
-::: astuce
-* `findmnt --verify && mount -a` — avant tout reboot après `fstab`.
-* `lvextend -r -L +5G /dev/vg/lv` — LV et FS en une commande.
-* `lsblk -f` — la seule vue qui répond à « c'est quoi ce disque ».
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `findmnt --verify && mount -a` — avant tout reboot après `fstab`.
+> * `lvextend -r -L +5G /dev/vg/lv` — LV et FS en une commande.
+> * `lsblk -f` — la seule vue qui répond à « c'est quoi ce disque ».
 
 ---
 
@@ -1720,21 +1750,23 @@ Flags : `[S]` SYN, `[S.]` SYN-ACK, `[.]` ACK, `[P.]` données, `[F.]` FIN,
 | `net.ipv4.ip_unprivileged_port_start=80` | ports bas sans root |
 | `net.ipv6.conf.all.disable_ipv6=1` | dernier recours, pas un réflexe |
 
-::: piege
-* `ip a add` / `ip r add` ne survivent pas au reboot : netplan / nmcli.
-* `netplan apply` par SSH sur une erreur = session perdue : `netplan try`.
-* `127.0.0.1:443` n'est pas `0.0.0.0:443` : le service n'écoute pas dehors.
-* Deux routes par défaut à la même métrique : comportement aléatoire.
-* AAAA avant A : `curl` échoue en v6 alors que v4 marche. `curl -4`.
-* Connexion qui s'établit puis gèle sur du volume : MTU / PMTUD filtré.
-* `dig` ne lit pas `/etc/hosts`, mais le stub `127.0.0.53` le sert : `dig @serveur` pour le DNS seul ; `getent hosts` pour la vue système.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `ip a add` / `ip r add` ne survivent pas au reboot : netplan / nmcli.
+> * `netplan apply` par SSH sur une erreur = session perdue : `netplan try`.
+> * `127.0.0.1:443` n'est pas `0.0.0.0:443` : le service n'écoute pas dehors.
+> * Deux routes par défaut à la même métrique : comportement aléatoire.
+> * AAAA avant A : `curl` échoue en v6 alors que v4 marche. `curl -4`.
+> * Connexion qui s'établit puis gèle sur du volume : MTU / PMTUD filtré.
+> * `dig` ne lit pas `/etc/hosts`, mais le stub `127.0.0.53` le sert : `dig @serveur` pour le DNS seul ; `getent hosts` pour la vue système.
 
-::: astuce
-* `ss -tulpn | grep :443` — qui écoute et sur quelle adresse.
-* `ip route get 9.9.9.9` — la route et l'IP source, en une ligne.
-* `curl -sS -o /dev/null -w '%{http_code}\n' URL` — le smoke test universel.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `ss -tulpn | grep :443` — qui écoute et sur quelle adresse.
+> * `ip route get 9.9.9.9` — la route et l'IP source, en une ligne.
+> * `curl -sS -o /dev/null -w '%{http_code}\n' URL` — le smoke test universel.
 
 ---
 
@@ -2014,33 +2046,35 @@ autoritaire `cluster.local` + forwarder. `.local` = mDNS : déclarer
 SLAAC = préfixe du RA + auto ; DHCPv6 = attribution centrale, la passerelle
 vient toujours du RA.
 
-::: piege
-* `lo` down dans un netns neuf : « Network is unreachable » sur 127.0.0.1.
-* `ip_forward=0` : le routeur jette tout après `prerouting`, sans ICMP ni
-  compteur netfilter.
-* Table dédiée sans la route connectée : le trafic local part à la
-  passerelle (Q13.4).
-* `forward` sans `established,related` : le SYN passe, le SYN-ACK est jeté ;
-  `tcpdump` le voit quand même (capture avant netfilter).
-* DNAT en `prerouting` invisible depuis la machine (→ chaîne `output`) et
-  cassé depuis le LAN de la cible (→ hairpin `masquerade`).
-* `conntrack -F` sur un routeur NAT coupe toutes les sessions.
-* `nft add rule` ajoute **en fin** : après un `drop`, jamais atteint. `insert`.
-* MTU 1500 sur un VXLAN : petits paquets OK, gros paquets fragmentés/jetés.
-* Serial SOA non incrémenté : secondaire jamais à jour, aucune erreur.
-* `listen-on { any; }` de BIND prend toutes les adresses de la VM (dont `10.10.10.53` d'Unbound); `interface: 0.0.0.0` d'Unbound entre en
-  conflit avec `127.0.0.53` : adresses explicites.
-* `tag=10` côté Proxmox **et** `ens18.10` dans la VM = double tag.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `lo` down dans un netns neuf : « Network is unreachable » sur 127.0.0.1.
+> * `ip_forward=0` : le routeur jette tout après `prerouting`, sans ICMP ni
+>   compteur netfilter.
+> * Table dédiée sans la route connectée : le trafic local part à la
+>   passerelle (Q13.4).
+> * `forward` sans `established,related` : le SYN passe, le SYN-ACK est jeté ;
+>   `tcpdump` le voit quand même (capture avant netfilter).
+> * DNAT en `prerouting` invisible depuis la machine (→ chaîne `output`) et
+>   cassé depuis le LAN de la cible (→ hairpin `masquerade`).
+> * `conntrack -F` sur un routeur NAT coupe toutes les sessions.
+> * `nft add rule` ajoute **en fin** : après un `drop`, jamais atteint. `insert`.
+> * MTU 1500 sur un VXLAN : petits paquets OK, gros paquets fragmentés/jetés.
+> * Serial SOA non incrémenté : secondaire jamais à jour, aucune erreur.
+> * `listen-on { any; }` de BIND prend toutes les adresses de la VM (dont `10.10.10.53` d'Unbound); `interface: 0.0.0.0` d'Unbound entre en
+>   conflit avec `127.0.0.53` : adresses explicites.
+> * `tag=10` côté Proxmox **et** `ens18.10` dans la VM = double tag.
 
-::: astuce
-* `ip route get X from S iif I` — la seule preuve d'un policy routing.
-* `nft -c -f` avant `nft -f` ; règle finale `log ... counter drop` explicite.
-* `nft monitor trace` + `meta nftrace set 1` — le `strace` de netfilter.
-* `dig +short SOA zone @ns1` vs `@ns2` — première commande sur un secondaire.
-* `unbound-control list_forwards` — récursif ou forwarder ? en une ligne.
-* `ping -M do -s 1422` sur un VXLAN — test de mise en service d'un tunnel.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `ip route get X from S iif I` — la seule preuve d'un policy routing.
+> * `nft -c -f` avant `nft -f` ; règle finale `log ... counter drop` explicite.
+> * `nft monitor trace` + `meta nftrace set 1` — le `strace` de netfilter.
+> * `dig +short SOA zone @ns1` vs `@ns2` — première commande sur un secondaire.
+> * `unbound-control list_forwards` — récursif ou forwarder ? en une ligne.
+> * `ping -M do -s 1422` sur un VXLAN — test de mise en service d'un tunnel.
 
 ---
 
@@ -2135,22 +2169,24 @@ ClientAliveCountMax 2
 Clé restreinte dans `authorized_keys` :
 `from="10.10.10.14",command="/opt/deploy.sh",no-pty,no-port-forwarding ssh-ed25519 AAAA...`
 
-::: piege
-* `Permission denied (publickey)` : la cause est dans `journalctl -u ssh`
-  côté serveur (droits de `~`, `.ssh`, `authorized_keys`).
-* `50-cloud-init.conf` contient `PasswordAuthentication yes` et gagne.
-* `ForwardAgent yes` : root de la machine distante utilise ta clé.
-* Tunnel sans `ExitOnForwardFailure` : port pris, tunnel absent, silence.
-* `sshd -t` oublié avant reload (Rocky; Ubuntu le fait dans `ExecReload`) : conf invalide, les nouvelles
-  connexions échouent, la session courante survit — ne la ferme pas. Ubuntu 24.04 : `ssh.socket` détient le port; `Port` modifié = `daemon-reload` + `systemctl restart ssh.socket`.
-* Une VM clonée garde les mêmes clés d'hôte : régénère-les.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `Permission denied (publickey)` : la cause est dans `journalctl -u ssh`
+>   côté serveur (droits de `~`, `.ssh`, `authorized_keys`).
+> * `50-cloud-init.conf` contient `PasswordAuthentication yes` et gagne.
+> * `ForwardAgent yes` : root de la machine distante utilise ta clé.
+> * Tunnel sans `ExitOnForwardFailure` : port pris, tunnel absent, silence.
+> * `sshd -t` oublié avant reload (Rocky; Ubuntu le fait dans `ExecReload`) : conf invalide, les nouvelles
+>   connexions échouent, la session courante survit — ne la ferme pas. Ubuntu 24.04 : `ssh.socket` détient le port; `Port` modifié = `daemon-reload` + `systemctl restart ssh.socket`.
+> * Une VM clonée garde les mêmes clés d'hôte : régénère-les.
 
-::: astuce
-* `ssh -G h | grep -i identityfile` — quelle clé sera tentée.
-* `ssh -J lab-adm lab-db` — rebond sans agent forwarding.
-* `sshd -t && systemctl reload ssh` — le réflexe qui sauve la session.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `ssh -G h | grep -i identityfile` — quelle clé sera tentée.
+> * `ssh -J lab-adm lab-db` — rebond sans agent forwarding.
+> * `sshd -t && systemctl reload ssh` — le réflexe qui sauve la session.
 
 ---
 
@@ -2329,37 +2365,39 @@ socket Redis `0700`/groupe `redis`. App locale : `After=postgresql.service
 redis-server.service` + `Wants=` ; app distante : `After=network-online.target`
 et reconnexion applicative.
 
-::: piege
-* Regex `~* \.(json|js|css)$` « pour le cache » : capture `/api/x.json`.
-  Écrire `location ^~ /api/`.
-* Un `add_header` (ou `proxy_set_header`) dans une location **annule** ceux
-  du `server` : HSTS disparaît sur `/api/`.
-* `systemctl restart nginx` sans `nginx -t` : site coupé si la conf est
-  invalide ; `reload` garde l'ancienne.
-* `listen_addresses`, `shared_buffers`, `max_connections` : restart, pas
-  reload ; `pending_restart` le dit.
-* `pg_hba` : première ligne gagnante, pas la plus précise ; `reject` en
-  haut bloque tout.
-* Secret `md5` en base + méthode `scram-sha-256` : `password authentication
-  failed` avec le bon mot de passe (`DETAIL` côté serveur).
-* `pg_wal` plein : **jamais** `rm` ; chercher `archive_command` en échec ou
-  slot inactif.
-* `.pgpass` en `0644` : ignoré ; en cron, `fe_sendauth: no password
-  supplied` et un dump de 0 octet si `> f 2>/dev/null`.
-* `KEYS *` en prod gèle l'instance ; `allkeys-lru` avec une file évince
-  les travaux ; `CONFIG SET` sans `CONFIG REWRITE` disparaît au restart.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Regex `~* \.(json|js|css)$` « pour le cache » : capture `/api/x.json`.
+>   Écrire `location ^~ /api/`.
+> * Un `add_header` (ou `proxy_set_header`) dans une location **annule** ceux
+>   du `server` : HSTS disparaît sur `/api/`.
+> * `systemctl restart nginx` sans `nginx -t` : site coupé si la conf est
+>   invalide ; `reload` garde l'ancienne.
+> * `listen_addresses`, `shared_buffers`, `max_connections` : restart, pas
+>   reload ; `pending_restart` le dit.
+> * `pg_hba` : première ligne gagnante, pas la plus précise ; `reject` en
+>   haut bloque tout.
+> * Secret `md5` en base + méthode `scram-sha-256` : `password authentication
+>   failed` avec le bon mot de passe (`DETAIL` côté serveur).
+> * `pg_wal` plein : **jamais** `rm` ; chercher `archive_command` en échec ou
+>   slot inactif.
+> * `.pgpass` en `0644` : ignoré ; en cron, `fe_sendauth: no password
+>   supplied` et un dump de 0 octet si `> f 2>/dev/null`.
+> * `KEYS *` en prod gèle l'instance ; `allkeys-lru` avec une file évince
+>   les travaux ; `CONFIG SET` sans `CONFIG REWRITE` disparaît au restart.
 
-::: astuce
-* `curl http://127.0.0.1:8001/api/health` direct, puis via nginx : si le
-  direct répond, nginx est coupable.
-* `nginx -T | grep -n location` — la liste réelle des locations.
-* `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state='idle'
-  AND state_change < now()-interval '10 min';` — libère les slots.
-* `sudo -u postgres psql` passe toujours (socket + `peer` + slots réservés).
-* `redis-cli --user admin INFO stats | grep evicted_keys` — le cache est-il
-  trop petit ?
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `curl http://127.0.0.1:8001/api/health` direct, puis via nginx : si le
+>   direct répond, nginx est coupable.
+> * `nginx -T | grep -n location` — la liste réelle des locations.
+> * `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state='idle'
+>   AND state_change < now()-interval '10 min';` — libère les slots.
+> * `sudo -u postgres psql` passe toujours (socket + `peer` + slots réservés).
+> * `redis-cli --user admin INFO stats | grep evicted_keys` — le cache est-il
+>   trop petit ?
 
 ---
 
@@ -2466,28 +2504,31 @@ Réception : `module(load="imtcp") input(type="imtcp" port="10514")`.
 | `nproc` | nombre de cœurs, à comparer à la charge |
 | `dmesg -T \| tail -40` | OOM, erreurs disque, liens réseau |
 
-::: rhel
-Rocky 9 : `/var/log/messages` et `/var/log/secure` à la place de `syslog`
-et `auth.log` ; `dnf install -y sysstat` puis `systemctl enable --now
-sysstat`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky 9 : `/var/log/messages` et `/var/log/secure` à la place de `syslog`
+> et `auth.log` ; `dnf install -y sysstat` puis `systemctl enable --now
+> sysstat`.
 
-::: piege
-* `logrotate` ignore en silence un fichier de conf non `0644 root:root`.
-* `copytruncate` perd les lignes écrites entre la copie et le truncate :
-  préfère `create` + signal HUP quand le démon le supporte.
-* `journalctl --vacuum-*` ne touche pas au fichier actif : `--rotate`
-  d'abord.
-* `Suppressed N messages` dans le journal : le limiteur journald frappe,
-  monte `RateLimitBurst` pour le service ou fais-le moins bavard.
-* `swap used` élevé sans `si/so` : rien à corriger.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `logrotate` ignore en silence un fichier de conf non `0644 root:root`.
+> * `copytruncate` perd les lignes écrites entre la copie et le truncate :
+>   préfère `create` + signal HUP quand le démon le supporte.
+> * `journalctl --vacuum-*` ne touche pas au fichier actif : `--rotate`
+>   d'abord.
+> * `Suppressed N messages` dans le journal : le limiteur journald frappe,
+>   monte `RateLimitBurst` pour le service ou fais-le moins bavard.
+> * `swap used` élevé sans `si/so` : rien à corriger.
 
-::: astuce
-* `journalctl -p err -b --no-pager | tail -30` — les erreurs depuis le boot.
-* `logger -t test -p local0.info ok && journalctl -t test -n1` — chaîne OK ?
-* `vmstat 1 | awk 'NR>2 && $16>20'` — les secondes où `wa` explose.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `journalctl -p err -b --no-pager | tail -30` — les erreurs depuis le boot.
+> * `logger -t test -p local0.info ok && journalctl -t test -n1` — chaîne OK ?
+> * `vmstat 1 | awk 'NR>2 && $16>20'` — les secondes où `wa` explose.
 
 ---
 
@@ -2580,21 +2621,23 @@ WantedBy=timers.target
 `hourly`, `daily`, `weekly`. `OnBootSec=5min` + `OnUnitActiveSec=1h` pour un
 intervalle. `AccuracySec=1s` si l'heure exacte compte (défaut 1 min).
 
-::: piege
-* `%` non échappé dans une crontab : la commande s'arrête là.
-* `\` en fin de ligne : cron ne connaît pas la continuation.
-* `purge-tmp.sh` dans `cron.daily` n'est jamais lancé (`run-parts`).
-* `PATH` de cron = `/usr/bin:/bin` : chemins absolus ou `PATH=` en tête.
-* `> /dev/null 2>&1` sur un job de prod détruit la seule trace d'échec.
-* `systemctl enable x.service` au lieu de `x.timer` : rien ne se lance.
-* `crontab -r` est à une touche de `crontab -e` et ne demande rien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `%` non échappé dans une crontab : la commande s'arrête là.
+> * `\` en fin de ligne : cron ne connaît pas la continuation.
+> * `purge-tmp.sh` dans `cron.daily` n'est jamais lancé (`run-parts`).
+> * `PATH` de cron = `/usr/bin:/bin` : chemins absolus ou `PATH=` en tête.
+> * `> /dev/null 2>&1` sur un job de prod détruit la seule trace d'échec.
+> * `systemctl enable x.service` au lieu de `x.timer` : rien ne se lance.
+> * `crontab -r` est à une touche de `crontab -e` et ne demande rien.
 
-::: astuce
-* `systemd-analyze calendar --iterations=5 "..."` — avant d'écrire le timer.
-* `flock -n /run/lock/x.lock cmd` — jamais deux instances.
-* `systemctl list-timers --all | grep -v n/a` — les timers qui ont déjà tourné.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `systemd-analyze calendar --iterations=5 "..."` — avant d'écrire le timer.
+> * `flock -n /run/lock/x.lock cmd` — jamais deux instances.
+> * `systemctl list-timers --all | grep -v n/a` — les timers qui ont déjà tourné.
 
 ---
 
@@ -2743,22 +2786,24 @@ kernel.yama.ptrace_scope = 1
 fs.protected_symlinks = 1
 ```
 
-::: piege
-* `ufw allow` ajouté après un `deny` large : jamais atteint (premier match).
-* Docker publie ses ports avant ufw : seule `DOCKER-USER` est respectée.
-* `firewall-cmd --add-port` sans `--permanent` : perdu au reboot ; avec
-  `--permanent` sans `--reload` : pas actif.
-* `mv` garde le contexte SELinux d'origine, `cp` prend celui de la cible.
-* `setenforce 0` « pour voir » : note-le, remets `1` avant de partir.
-* fail2ban sans `ignoreip` : tu te bannis en testant.
-* Secret poussé dans Git puis supprimé : il reste dans l'historique, rotation.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `ufw allow` ajouté après un `deny` large : jamais atteint (premier match).
+> * Docker publie ses ports avant ufw : seule `DOCKER-USER` est respectée.
+> * `firewall-cmd --add-port` sans `--permanent` : perdu au reboot ; avec
+>   `--permanent` sans `--reload` : pas actif.
+> * `mv` garde le contexte SELinux d'origine, `cp` prend celui de la cible.
+> * `setenforce 0` « pour voir » : note-le, remets `1` avant de partir.
+> * fail2ban sans `ignoreip` : tu te bannis en testant.
+> * Secret poussé dans Git puis supprimé : il reste dans l'historique, rotation.
 
-::: astuce
-* `nft list ruleset` — la vérité du noyau, quel que soit le frontal.
-* `ausearch -m AVC -ts recent | audit2why` — SELinux expliqué en une ligne.
-* `openssl x509 -in c.pem -noout -checkend 604800 || echo RENOUVELER` — 7 j.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `nft list ruleset` — la vérité du noyau, quel que soit le frontal.
+> * `ausearch -m AVC -ts recent | audit2why` — SELinux expliqué en une ligne.
+> * `openssl x509 -in c.pem -noout -checkend 604800 || echo RENOUVELER` — 7 j.
 
 ---
 
@@ -2854,22 +2899,24 @@ top -b -n1 | head -20   # vue d'ensemble
 | `nginx -t` / `sshd -t` / `named-checkconf` / `apachectl -t` | valide avant reload |
 | `sudo -u postgres psql -c 'select 1'` | test applicatif direct |
 
-::: piege
-* Charge à 40 avec CPU à 2 % : processus en `D`, c'est le stockage.
-* Redémarrer le service avant de collecter : les preuves sont détruites
-  (`journalctl`, `ps`, `ss`, `/proc/PID` d'abord).
-* `strace` sur un serveur chargé multiplie la latence : quelques secondes.
-* `start request repeated too quickly` : `StartLimitBurst`, pas l'appli ;
-  `systemctl reset-failed` puis lis le vrai message au-dessus.
-* Un `sysctl` copié d'un blog sans mesure avant/après : machine divergente.
-* `free` bas n'est pas un problème, `available` bas oui.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Charge à 40 avec CPU à 2 % : processus en `D`, c'est le stockage.
+> * Redémarrer le service avant de collecter : les preuves sont détruites
+>   (`journalctl`, `ps`, `ss`, `/proc/PID` d'abord).
+> * `strace` sur un serveur chargé multiplie la latence : quelques secondes.
+> * `start request repeated too quickly` : `StartLimitBurst`, pas l'appli ;
+>   `systemctl reset-failed` puis lis le vrai message au-dessus.
+> * Un `sysctl` copié d'un blog sans mesure avant/après : machine divergente.
+> * `free` bas n'est pas un problème, `available` bas oui.
 
-::: astuce
-* `dmesg -T | tail -40` — la première commande, toujours.
-* `ps -eo pid,stat,wchan:20,cmd | awk '$2 ~ /D/'` — qui attend le disque.
-* `journalctl -u x -n 100 --no-pager | grep -v -i info` — le signal, pas le bruit.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `dmesg -T | tail -40` — la première commande, toujours.
+> * `ps -eo pid,stat,wchan:20,cmd | awk '$2 ~ /D/'` — qui attend le disque.
+> * `journalctl -u x -n 100 --no-pager | grep -v -i info` — le signal, pas le bruit.
 
 ---
 
@@ -3030,29 +3077,31 @@ snapshot`, `qmrestore`, `qm migrate 9007 pve2 --online --with-local-disks`.
 | `qm agent 9007 ping ; qm guest exec 9007 -- uptime` | agent côté Proxmox |
 | `pct create 9200 local:vztmpl/ubuntu-24.04-standard_...tar.zst --hostname ct1 ...` | LXC Proxmox |
 
-::: piege
-* `virsh list` vide sans erreur : `qemu:///session`. `LIBVIRT_DEFAULT_URI`.
-* `<domain type='qemu'>` = TCG : VM qui « marche » à 100 % de CPU.
-* Base d'un overlay déplacée : `Cannot access backing file`. `rebase -u`.
-* Image dans `/root` : QEMU tourne en `libvirt-qemu`, `/root` est 0700.
-* Snapshot externe sans `blockcommit` : overlay orphelin qui remplit l'hôte,
-  invisible dans `snapshot-list` si `--no-metadata`. `domblklist` dit vrai.
-* `qemu-img info` sans `-U` sur une VM allumée : verrou refusé.
-* `--remove-all-storage` supprime aussi les ISO partagées.
-* Bridge : pas de DHCP sur `10.10.10.0/24` → `network-config` statique.
-* `setvcpus --live` refuse au-delà du maximum : `<vcpu current='1'>4`.
-* `virt-clone` sans sysprep ni nouveau seed : même `machine-id`, mêmes
-  clés d'hôte, Netplan épinglé sur l'ancien MAC.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `virsh list` vide sans erreur : `qemu:///session`. `LIBVIRT_DEFAULT_URI`.
+> * `<domain type='qemu'>` = TCG : VM qui « marche » à 100 % de CPU.
+> * Base d'un overlay déplacée : `Cannot access backing file`. `rebase -u`.
+> * Image dans `/root` : QEMU tourne en `libvirt-qemu`, `/root` est 0700.
+> * Snapshot externe sans `blockcommit` : overlay orphelin qui remplit l'hôte,
+>   invisible dans `snapshot-list` si `--no-metadata`. `domblklist` dit vrai.
+> * `qemu-img info` sans `-U` sur une VM allumée : verrou refusé.
+> * `--remove-all-storage` supprime aussi les ISO partagées.
+> * Bridge : pas de DHCP sur `10.10.10.0/24` → `network-config` statique.
+> * `setvcpus --live` refuse au-delà du maximum : `<vcpu current='1'>4`.
+> * `virt-clone` sans sysprep ni nouveau seed : même `machine-id`, mêmes
+>   clés d'hôte, Netplan épinglé sur l'ancien MAC.
 
-::: astuce
-* `virt-install --osinfo list | grep ubuntu` avant de choisir `--osinfo`.
-* `virsh domifaddr vm --source agent` pour une VM bridgée.
-* `netplan try` avant tout changement de bridge sur une machine distante.
-* `for d in $(virsh list --name); do virsh domblklist $d; done` : une VM
-  dont `vda` n'est pas son fichier de référence a une chaîne ouverte.
-* `virsh -c qemu+ssh://mathieu@10.10.10.16/system list` depuis `lab-adm`.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `virt-install --osinfo list | grep ubuntu` avant de choisir `--osinfo`.
+> * `virsh domifaddr vm --source agent` pour une VM bridgée.
+> * `netplan try` avant tout changement de bridge sur une machine distante.
+> * `for d in $(virsh list --name); do virsh domblklist $d; done` : une VM
+>   dont `vda` n'est pas son fichier de référence a une chaîne ouverte.
+> * `virsh -c qemu+ssh://mathieu@10.10.10.16/system list` depuis `lab-adm`.
 
 ## 21 · Git
 
@@ -3144,21 +3193,23 @@ snapshot`, `qmrestore`, `qm migrate 9007 pve2 --online --with-local-disks`.
 !/logs/.gitkeep
 ```
 
-::: piege
-* Un fichier déjà suivi n'est jamais ignoré : `git rm --cached` d'abord.
-* Pendant un rebase, `HEAD` est la branche de base, « autre » ton commit.
-* `git push --force` écrase les autres ; `--force-with-lease` seulement toi.
-* `reset --hard` et `checkout -- f` détruisent sans passer par le reflog
-  pour les fichiers non commités.
-* `git pull` sans `--rebase` crée des merges parasites.
-* `*.tfstate` commité = mots de passe en clair dans l'historique.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Un fichier déjà suivi n'est jamais ignoré : `git rm --cached` d'abord.
+> * Pendant un rebase, `HEAD` est la branche de base, « autre » ton commit.
+> * `git push --force` écrase les autres ; `--force-with-lease` seulement toi.
+> * `reset --hard` et `checkout -- f` détruisent sans passer par le reflog
+>   pour les fichiers non commités.
+> * `git pull` sans `--rebase` crée des merges parasites.
+> * `*.tfstate` commité = mots de passe en clair dans l'historique.
 
-::: astuce
-* `git log --oneline --graph --all -20` — l'état du dépôt en 3 s.
-* `git add -p` — des commits propres sans effort.
-* `git reflog` — un commit perdu reste récupérable 30 jours (90 si joignable).
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `git log --oneline --graph --all -20` — l'état du dépôt en 3 s.
+> * `git add -p` — des commits propres sans effort.
+> * `git reflog` — un commit perdu reste récupérable 30 jours (90 si joignable).
 
 ---
 
@@ -3273,28 +3324,31 @@ volumes:
   pg-data: {}
 ```
 
-::: rhel
-Rocky 9 : dépôt `download.docker.com/linux/centos/docker-ce.repo` ou Podman
-(`podman-docker`, rootless) ; bind mount avec SELinux : suffixe `:Z`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky 9 : dépôt `download.docker.com/linux/centos/docker-ce.repo` ou Podman
+> (`podman-docker`, rootless) ; bind mount avec SELinux : suffixe `:Z`.
 
-::: piege
-* `latest` n'est pas « la dernière » : seul le digest est immuable.
-* `EXPOSE` ne publie rien ; `-p` si.
-* `CMD ["sh","-c","..."]` ou forme shell : `sh` est PID 1, `stop` attend 10 s
-  puis SIGKILL (137). Forme exec ou `--init`.
-* Bridge par défaut sans DNS : crée un réseau nommé.
-* `-p` contourne ufw : seule la chaîne `DOCKER-USER` est respectée.
-* `.env` interpole le fichier compose ; `env_file:` entre dans le conteneur.
-* `depends_on` sans `condition: service_healthy` = ordre, pas disponibilité.
-* `docker system prune -a --volumes` efface les volumes anonymes ( données).
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `latest` n'est pas « la dernière » : seul le digest est immuable.
+> * `EXPOSE` ne publie rien ; `-p` si.
+> * `CMD ["sh","-c","..."]` ou forme shell : `sh` est PID 1, `stop` attend 10 s
+>   puis SIGKILL (137). Forme exec ou `--init`.
+> * Bridge par défaut sans DNS : crée un réseau nommé.
+> * `-p` contourne ufw : seule la chaîne `DOCKER-USER` est respectée.
+> * `.env` interpole le fichier compose ; `env_file:` entre dans le conteneur.
+> * `depends_on` sans `condition: service_healthy` = ordre, pas disponibilité.
+> * `docker system prune -a --volumes` efface les volumes anonymes ( données).
 
-::: astuce
-* `docker compose config` — ce que compose a vraiment compris.
-* `docker inspect x --format '{{.State.OOMKilled}} {{.State.ExitCode}}'` — 137 ?
-* `docker run --rm -it --pid container:app busybox sh` — shell dans un distroless.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `docker compose config` — ce que compose a vraiment compris.
+> * `docker inspect x --format '{{.State.OOMKilled}} {{.State.ExitCode}}'` — 137 ?
+> * `docker run --rm -it --pid container:app busybox sh` — shell dans un distroless.
 
 ---
 
@@ -3402,22 +3456,24 @@ obligatoires ; `lineinfile` avec `regexp:` ; `template` dès deux lignes ;
 `systemd_service` avec `state: reloaded` en handler, jamais `restarted` en
 tâche.
 
-::: piege
-* `{{ }}` en début de valeur YAML : entre guillemets, sinon erreur de parse.
-* `when:` sans `{{ }}` ; `loop:` avec.
-* Un handler ne tourne qu'en fin de play et pas pour un hôte en échec :
-  `meta: flush_handlers` ou `--force-handlers`.
-* `--check` n'exécute pas `command` : un `register` vide fait planter la
-  tâche suivante, c'est normal.
-* Secret affiché par `-v` : `no_log: true`.
-* `apt: update_cache` sans `cache_valid_time` = `changed` à chaque run.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `{{ }}` en début de valeur YAML : entre guillemets, sinon erreur de parse.
+> * `when:` sans `{{ }}` ; `loop:` avec.
+> * Un handler ne tourne qu'en fin de play et pas pour un hôte en échec :
+>   `meta: flush_handlers` ou `--force-handlers`.
+> * `--check` n'exécute pas `command` : un `register` vide fait planter la
+>   tâche suivante, c'est normal.
+> * Secret affiché par `-v` : `no_log: true`.
+> * `apt: update_cache` sans `cache_valid_time` = `changed` à chaque run.
 
-::: astuce
-* `ansible-playbook site.yml --check --diff --limit lab-web` — avant chaque apply.
-* `ansible-inventory --host lab-db` — les variables telles que résolues.
-* `ansible all -m ping -o` — une ligne par hôte.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `ansible-playbook site.yml --check --diff --limit lab-web` — avant chaque apply.
+> * `ansible-inventory --host lab-db` — les variables telles que résolues.
+> * `ansible all -m ping -o` — une ligne par hôte.
 
 ---
 
@@ -3525,23 +3581,25 @@ qm disk resize 9100 scsi0 20G
 qm template 9100
 ```
 
-::: piege
-* L'état contient les valeurs `sensitive` en clair : backend distant,
-  verrou, jamais dans Git.
-* `count` : retirer l'élément 0 recrée tout. `for_each`.
-* `--cicustom user=` remplace tout le user-data : `--ciuser`, `--sshkeys`
-  sont ignorés.
-* Le per-instance (users, runcmd) ne rejoue que si `instance-id` change.
-* Template cloné avec les mêmes clés SSH d'hôte : `ssh-keygen -A` ou
-  `cloud-init clean`.
-* `tofu apply` sans `plan -out` : ce qui s'applique n'est pas ce qu'on a lu.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * L'état contient les valeurs `sensitive` en clair : backend distant,
+>   verrou, jamais dans Git.
+> * `count` : retirer l'élément 0 recrée tout. `for_each`.
+> * `--cicustom user=` remplace tout le user-data : `--ciuser`, `--sshkeys`
+>   sont ignorés.
+> * Le per-instance (users, runcmd) ne rejoue que si `instance-id` change.
+> * Template cloné avec les mêmes clés SSH d'hôte : `ssh-keygen -A` ou
+>   `cloud-init clean`.
+> * `tofu apply` sans `plan -out` : ce qui s'applique n'est pas ce qu'on a lu.
 
-::: astuce
-* `tofu plan -out p && tofu show -json p | jq '.resource_changes[].change.actions'`.
-* `cloud-init schema --config-file f.yaml` — avant de cloner dix VM.
-* `qm cloudinit dump 9110 user` — ce que Proxmox a vraiment généré.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `tofu plan -out p && tofu show -json p | jq '.resource_changes[].change.actions'`.
+> * `cloud-init schema --config-file f.yaml` — avant de cloner dix VM.
+> * `qm cloudinit dump 9110 user` — ce que Proxmox a vraiment généré.
 
 ---
 
@@ -3633,20 +3691,22 @@ Contexte : `${{ gitea.sha }}`, `gitea.ref`, `gitea.event_name`,
 `failure()`, `always()`. Dans `run:` : `$GITHUB_SHA`, `$GITHUB_REF_NAME`,
 `echo "x=1" » "$GITHUB_OUTPUT"`, `echo "V=1" » "$GITHUB_ENV"`.
 
-::: piege
-* `${{ secrets.X }}` dans `run:` est substitué avant le shell : `env:`.
-* `runs-on: ubuntu-latest` ne veut rien dire sans label correspondant.
-* Un secret encodé (`base64`, découpé) traverse le masquage.
-* `latest` déployé : impossible à reproduire ni à annuler.
-* Rebuild « pour la prod » : ce n'est plus l'image testée.
-* Cache ≠ garantie : un cache corrompu se supprime, pas se débogue.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `${{ secrets.X }}` dans `run:` est substitué avant le shell : `env:`.
+> * `runs-on: ubuntu-latest` ne veut rien dire sans label correspondant.
+> * Un secret encodé (`base64`, découpé) traverse le masquage.
+> * `latest` déployé : impossible à reproduire ni à annuler.
+> * Rebuild « pour la prod » : ce n'est plus l'image testée.
+> * Cache ≠ garantie : un cache corrompu se supprime, pas se débogue.
 
-::: astuce
-* `docker build -t "$IMAGE:${GITHUB_SHA::12}"` — un tag par commit, toujours.
-* `curl -sf URL/version | grep -q "$SHA"` — le smoke test qui prouve la version.
-* `act -l` — liste les jobs sans pousser.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `docker build -t "$IMAGE:${GITHUB_SHA::12}"` — un tag par commit, toujours.
+> * `curl -sf URL/version | grep -q "$SHA"` — le smoke test qui prouve la version.
+> * `act -l` — liste les jobs sans pousser.
 
 ---
 
@@ -3793,22 +3853,24 @@ Alertmanager : `route` → `receiver`, `group_by`, `group_wait: 30s`,
 `group_interval: 5m`, `repeat_interval: 4h`, `inhibit_rules`. Budget
 d'erreur : 99,9 % sur 30 j = 43,2 min. Node Exporter Full = dashboard 1860.
 
-::: piege
-* Secret Kubernetes = base64, pas chiffré : RBAC et chiffrement etcd.
-* Liveness trop agressive : restart en boucle d'une app saine mais lente ;
-  `startupProbe` d'abord.
-* Limite CPU = throttling, limite mémoire = OOMKilled : pose surtout des
-  `requests`.
-* `rate` sur une gauge ou `irate` en alerte : valeurs absurdes.
-* Comparaison PromQL (`> 0.9`) filtre les séries, ne rend pas un booléen.
-* Une alerte sans `for:` ni runbook = bruit ; on alerte sur le symptôme.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Secret Kubernetes = base64, pas chiffré : RBAC et chiffrement etcd.
+> * Liveness trop agressive : restart en boucle d'une app saine mais lente ;
+>   `startupProbe` d'abord.
+> * Limite CPU = throttling, limite mémoire = OOMKilled : pose surtout des
+>   `requests`.
+> * `rate` sur une gauge ou `irate` en alerte : valeurs absurdes.
+> * Comparaison PromQL (`> 0.9`) filtre les séries, ne rend pas un booléen.
+> * Une alerte sans `for:` ni runbook = bruit ; on alerte sur le symptôme.
 
-::: astuce
-* `kubectl get events -A --sort-by=.lastTimestamp | tail -20` — toujours d'abord.
-* `kubectl logs POD --previous` — la vraie cause d'un CrashLoopBackOff.
-* `promtool check config && curl -X POST :9090/-/reload` — reload sans risque.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `kubectl get events -A --sort-by=.lastTimestamp | tail -20` — toujours d'abord.
+> * `kubectl logs POD --previous` — la vraie cause d'un CrashLoopBackOff.
+> * `promtool check config && curl -X POST :9090/-/reload` — reload sans risque.
 
 ---
 
@@ -4039,33 +4101,35 @@ SuccessExitStatus=1 2    # un code verdict n'est pas une panne
 | Long-running, réseau, retries, parallélisme | Python |
 | Un `tar \| ssh` ou un `for` sur `ls` | bash, sans hésiter |
 
-::: piege
-* `subprocess.run("cmd " + fichier, shell=True)` : espace, `;`, `$` dans
-  le nom = commande cassée ou injection. Liste d'arguments, point.
-* Oublier `check=True` : la commande échoue, le script continue et dit OK.
-* `except:` ou `except Exception: pass` : masque l'erreur réseau, attrape
-  aussi `SystemExit` et `KeyboardInterrupt`.
-* `def f(x, acc=[])` : la liste est partagée entre tous les appels.
-* `open(p)` sans `encoding=` : dépend de la locale, donc du timer.
-* `print` pour journaliser : stdout bufferisé, mélangé au résultat.
-* Chemin relatif dans un timer : `WorkingDirectory` ou `Path(__file__)`.
-* `pip install` sans version : le déploiement de mars ≠ celui d'avril.
-* `#!/usr/bin/env python3` sous systemd = le python **système**, sans les
-  paquets du venv : `ExecStart=/chemin/venv/bin/python`.
-* `liste[-0:]` = toute la liste ; `time.time()` pour une durée ; `datetime`
-  naïf comparé à un aware ; YAML lit `true`/`no`/`1.0` comme non-chaînes.
-* Descripteurs jamais fermés (`open()` sans `with`) : `Too many open files`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `subprocess.run("cmd " + fichier, shell=True)` : espace, `;`, `$` dans
+>   le nom = commande cassée ou injection. Liste d'arguments, point.
+> * Oublier `check=True` : la commande échoue, le script continue et dit OK.
+> * `except:` ou `except Exception: pass` : masque l'erreur réseau, attrape
+>   aussi `SystemExit` et `KeyboardInterrupt`.
+> * `def f(x, acc=[])` : la liste est partagée entre tous les appels.
+> * `open(p)` sans `encoding=` : dépend de la locale, donc du timer.
+> * `print` pour journaliser : stdout bufferisé, mélangé au résultat.
+> * Chemin relatif dans un timer : `WorkingDirectory` ou `Path(__file__)`.
+> * `pip install` sans version : le déploiement de mars ≠ celui d'avril.
+> * `#!/usr/bin/env python3` sous systemd = le python **système**, sans les
+>   paquets du venv : `ExecStart=/chemin/venv/bin/python`.
+> * `liste[-0:]` = toute la liste ; `time.time()` pour une durée ; `datetime`
+>   naïf comparé à un aware ; YAML lit `true`/`no`/`1.0` comme non-chaînes.
+> * Descripteurs jamais fermés (`open()` sans `with`) : `Too many open files`.
 
-::: astuce
-* `python3 -m venv v && v/bin/pip install -r requirements.txt` : deux
-  lignes, reproductibles, sans activer.
-* `python3 -m json.tool`, `python3 -m http.server`, `python3 -m calendar` :
-  des outils gratuits.
-* `python3 -X dev script.py` : avertit sur les fichiers non fermés.
-* `ruff check --select ALL --statistics .` pour voir ce que tu ignores.
-* `ls -l /proc/PID/fd | wc -l` : combien de fichiers ouverts, en direct.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `python3 -m venv v && v/bin/pip install -r requirements.txt` : deux
+>   lignes, reproductibles, sans activer.
+> * `python3 -m json.tool`, `python3 -m http.server`, `python3 -m calendar` :
+>   des outils gratuits.
+> * `python3 -X dev script.py` : avertit sur les fichiers non fermés.
+> * `ruff check --select ALL --statistics .` pour voir ce que tu ignores.
+> * `ls -l /proc/PID/fd | wc -l` : combien de fichiers ouverts, en direct.
 
 ---
 
@@ -4116,19 +4180,21 @@ curl -sk -H 'Authorization: PVEAPIToken=terraform@pve!tofu=<uuid>' \
   https://10.10.10.1:8006/api2/json/nodes/pve/qemu | jq '.data[].name'
 ```
 
-::: piege
-* `qm rollback` détruit l'état courant : snapshot avant, pas après.
-* Snapshot avec RAM sur une VM active = long ; sans RAM = comme un reboot.
-* Clone lié (`--full 0`) dépend du template : impossible de le supprimer.
-* `qm set --cicustom` sans le contenu `snippets` activé sur le stockage.
-* Une VM `locked` après une tâche coupée : `qm unlock`, puis vérifie.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `qm rollback` détruit l'état courant : snapshot avant, pas après.
+> * Snapshot avec RAM sur une VM active = long ; sans RAM = comme un reboot.
+> * Clone lié (`--full 0`) dépend du template : impossible de le supprimer.
+> * `qm set --cicustom` sans le contenu `snippets` activé sur le stockage.
+> * Une VM `locked` après une tâche coupée : `qm unlock`, puis vérifie.
 
-::: astuce
-* `qm snapshot 9002 avant-labXX && ...` — le réflexe avant tout lab destructeur.
-* `qm guest exec 9110 -- cloud-init status` — sans SSH.
-* `pvesh get /cluster/resources --type vm` — toutes les VM, tous les nœuds.
-:::
+> [!TIP]
+> **Astuce**
+>
+> * `qm snapshot 9002 avant-labXX && ...` — le réflexe avant tout lab destructeur.
+> * `qm guest exec 9110 -- cloud-init status` — sans SSH.
+> * `pvesh get /cluster/resources --type vm` — toutes les VM, tous les nœuds.
 
 ---
 

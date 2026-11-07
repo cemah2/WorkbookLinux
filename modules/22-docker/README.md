@@ -1,58 +1,88 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 22**  
+[← Module 21](../21-git/README.md) · [Corrigé](corrige.md) · [Module 23 →](../23-ansible/README.md)
+
+<details><summary>Scripts du module (14)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M22.sh`](../../scripts/setup/setup_M22.sh) | prépare le module |
+| [`check_M22_01.sh`](../../scripts/check/check_M22_01.sh) | vérification |
+| [`check_M22_02.sh`](../../scripts/check/check_M22_02.sh) | vérification |
+| [`check_M22_03.sh`](../../scripts/check/check_M22_03.sh) | vérification |
+| [`check_M22_04.sh`](../../scripts/check/check_M22_04.sh) | vérification |
+| [`check_M22_05.sh`](../../scripts/check/check_M22_05.sh) | vérification |
+| [`check_M22_06.sh`](../../scripts/check/check_M22_06.sh) | vérification |
+| [`check_M22_07.sh`](../../scripts/check/check_M22_07.sh) | vérification |
+| [`break_M22_01.sh`](../../scripts/break/break_M22_01.sh) | installe une panne |
+| [`break_M22_02.sh`](../../scripts/break/break_M22_02.sh) | installe une panne |
+| [`break_M22_03.sh`](../../scripts/break/break_M22_03.sh) | installe une panne |
+| [`break_M22_04.sh`](../../scripts/break/break_M22_04.sh) | installe une panne |
+| [`break_M22_05.sh`](../../scripts/break/break_M22_05.sh) | installe une panne |
+| [`break_M22_06.sh`](../../scripts/break/break_M22_06.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 22 — Conteneurs : Docker et Compose
 
 ## 22.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* expliquer ce qu'est **réellement** un conteneur — des namespaces, des
-  cgroups, un système de fichiers en couches et un jeu de capabilities — et le
-  prouver avec `unshare`, `nsenter`, `/proc/PID/ns` et `/sys/fs/cgroup`, sans
-  Docker ;
-* énoncer les conséquences de « un conteneur n'est pas une VM » : noyau
-  partagé, surface d'attaque, PID 1 qui ne se comporte pas comme un processus
-  ordinaire ;
-* installer Docker Engine depuis le dépôt officiel sur Ubuntu 24.04 et Rocky 9,
-  expliquer pourquoi le groupe `docker` équivaut à root, et lancer un démon
-  rootless ;
-* lire une image comme un empilement de couches, distinguer tag et digest,
-  et refuser `latest` en production ;
-* piloter le cycle de vie d'un conteneur (`run`, `stop`, `kill`, `exec`,
-  `logs`, `inspect`, `stats`, `cp`), interpréter les codes de sortie 0, 1,
-  137, 139 et 143, et expliquer pourquoi `docker stop` prend parfois 10 s ;
-* écrire un Dockerfile multi-stage propre : image de base choisie, cache
-  respecté, non-root, `ENTRYPOINT` en forme exec, `HEALTHCHECK`,
-  `.dockerignore`, versions épinglées — et le passer au scanner ;
-* choisir entre volume nommé, bind mount et tmpfs, sauvegarder un volume, et
-  résoudre un « permission denied » dû aux UID ;
-* expliquer le bridge par défaut, les réseaux utilisateur et leur DNS, la
-  publication de ports par iptables, et pourquoi `ufw` ne protège pas un port
-  publié par Docker ;
-* décrire une pile complète en `compose.yaml` (proxy, application, base,
-  cache) avec `healthcheck`, `depends_on` conditionnel, secrets, profils et
-  fichier d'override ;
-* monter un registre privé, y pousser une image, et le sécuriser en TLS ;
-* exploiter au quotidien : rotation des journaux, `docker system df`,
-  `/var/lib/docker` plein, redémarrage au boot, durcissement (`cap-drop`,
-  `read-only`, `no-new-privileges`, jamais `docker.sock` dans un conteneur) ;
-* décrire ce qu'il y a **sous** Docker — les trois spécifications OCI, la
-  chaîne `dockerd` → `containerd` → `containerd-shim-runc-v2` → `runc` — et
-  lancer un conteneur avec `runc` seul à partir d'un bundle OCI, sans démon ;
-* situer l'écosystème : `ctr`, `nerdctl`, `crictl` et la CRI (pourquoi
-  Kubernetes n'a plus besoin de Docker), `skopeo` pour copier et inspecter une
-  image sans démon, `buildah`/Podman rootless, `dive` pour lire les couches ;
-* lire un conteneur depuis l'hôte : ses namespaces (`lsns`, `/proc/PID/ns`,
-  `nsenter`), son cgroup v2 (`memory.max`, `cpu.max`, `pids.max`, `io.max`)
-  modifié à chaud par `docker update`, son overlayfs (`LowerDir`, `UpperDir`,
-  copy-on-write, whiteouts), ses capabilities, son profil seccomp et AppArmor,
-  et le remappage d'UID (`userns-remap`).
-
-Temps estimé : 11 h
-Prérequis : modules 08 (processus, signaux, systemd, cgroups), 12 et 13 (réseau,
-iptables/nftables), 03 (permissions et UID). Kubernetes est au module 26 et
-l'intégration continue au module 25 : ici on ne construit et n'exploite que
-des conteneurs sur une machine.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * expliquer ce qu'est **réellement** un conteneur — des namespaces, des
+>   cgroups, un système de fichiers en couches et un jeu de capabilities — et le
+>   prouver avec `unshare`, `nsenter`, `/proc/PID/ns` et `/sys/fs/cgroup`, sans
+>   Docker ;
+> * énoncer les conséquences de « un conteneur n'est pas une VM » : noyau
+>   partagé, surface d'attaque, PID 1 qui ne se comporte pas comme un processus
+>   ordinaire ;
+> * installer Docker Engine depuis le dépôt officiel sur Ubuntu 24.04 et Rocky 9,
+>   expliquer pourquoi le groupe `docker` équivaut à root, et lancer un démon
+>   rootless ;
+> * lire une image comme un empilement de couches, distinguer tag et digest,
+>   et refuser `latest` en production ;
+> * piloter le cycle de vie d'un conteneur (`run`, `stop`, `kill`, `exec`,
+>   `logs`, `inspect`, `stats`, `cp`), interpréter les codes de sortie 0, 1,
+>   137, 139 et 143, et expliquer pourquoi `docker stop` prend parfois 10 s ;
+> * écrire un Dockerfile multi-stage propre : image de base choisie, cache
+>   respecté, non-root, `ENTRYPOINT` en forme exec, `HEALTHCHECK`,
+>   `.dockerignore`, versions épinglées — et le passer au scanner ;
+> * choisir entre volume nommé, bind mount et tmpfs, sauvegarder un volume, et
+>   résoudre un « permission denied » dû aux UID ;
+> * expliquer le bridge par défaut, les réseaux utilisateur et leur DNS, la
+>   publication de ports par iptables, et pourquoi `ufw` ne protège pas un port
+>   publié par Docker ;
+> * décrire une pile complète en `compose.yaml` (proxy, application, base,
+>   cache) avec `healthcheck`, `depends_on` conditionnel, secrets, profils et
+>   fichier d'override ;
+> * monter un registre privé, y pousser une image, et le sécuriser en TLS ;
+> * exploiter au quotidien : rotation des journaux, `docker system df`,
+>   `/var/lib/docker` plein, redémarrage au boot, durcissement (`cap-drop`,
+>   `read-only`, `no-new-privileges`, jamais `docker.sock` dans un conteneur) ;
+> * décrire ce qu'il y a **sous** Docker — les trois spécifications OCI, la
+>   chaîne `dockerd` → `containerd` → `containerd-shim-runc-v2` → `runc` — et
+>   lancer un conteneur avec `runc` seul à partir d'un bundle OCI, sans démon ;
+> * situer l'écosystème : `ctr`, `nerdctl`, `crictl` et la CRI (pourquoi
+>   Kubernetes n'a plus besoin de Docker), `skopeo` pour copier et inspecter une
+>   image sans démon, `buildah`/Podman rootless, `dive` pour lire les couches ;
+> * lire un conteneur depuis l'hôte : ses namespaces (`lsns`, `/proc/PID/ns`,
+>   `nsenter`), son cgroup v2 (`memory.max`, `cpu.max`, `pids.max`, `io.max`)
+>   modifié à chaud par `docker update`, son overlayfs (`LowerDir`, `UpperDir`,
+>   copy-on-write, whiteouts), ses capabilities, son profil seccomp et AppArmor,
+>   et le remappage d'UID (`userns-remap`).
+>
+> **Temps estimé** : 11 h
+>
+> **Prérequis** : modules 08 (processus, signaux, systemd, cgroups), 12 et 13 (réseau,
+> iptables/nftables), 03 (permissions et UID). Kubernetes est au module 26 et
+> l'intégration continue au module 25 : ici on ne construit et n'exploite que
+> des conteneurs sur une machine.
 
 ---
 
@@ -96,12 +126,13 @@ sudo apt install -y /tmp/dive.deb
 (L22.1) : `runc --version`, `ctr version`. `crictl` se télécharge depuis les
 *releases* GitHub de `kubernetes-sigs/cri-tools` (E22.17).
 
-::: rhel
-Sur `lab-rhel` : `sudo dnf install -y dnf-plugins-core util-linux jq
-libcap openssl httpd-tools`. Podman est déjà installé sur Rocky 9
-(`podman --version`) ; Docker CE s'installe depuis le dépôt CentOS de Docker
-(L22.1, variante).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel` : `sudo dnf install -y dnf-plugins-core util-linux jq
+> libcap openssl httpd-tools`. Podman est déjà installé sur Rocky 9
+> (`podman --version`) ; Docker CE s'installe depuis le dépôt CentOS de Docker
+> (L22.1, variante).
 
 Préparation du terrain (idempotent) :
 
@@ -135,12 +166,13 @@ https://aquasecurity.github.io/trivy-repo/deb generic main" \
 sudo apt update && sudo apt install -y trivy
 ```
 
-::: attention
-Les Break & Fix remplissent le disque de `lab-ops`, lancent des conteneurs en
-boucle et modifient `/etc/docker/daemon.json`. Prends le snapshot. Et retiens
-dès maintenant : **tout membre du groupe `docker` est root sur la machine**
-(QO22.6) — sur `lab-ops` c'est acceptable, sur un serveur partagé non.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Les Break & Fix remplissent le disque de `lab-ops`, lancent des conteneurs en
+> boucle et modifient `/etc/docker/daemon.json`. Prends le snapshot. Et retiens
+> dès maintenant : **tout membre du groupe `docker` est root sur la machine**
+> (QO22.6) — sur `lab-ops` c'est acceptable, sur un serveur partagé non.
 
 ---
 
@@ -231,7 +263,9 @@ restent les mêmes : ce qui change, c'est un démon de moins et `crictl` à la
 place de `docker ps` sur un nœud. Sur `lab-ops`, le paquet `containerd.io` de
 Docker livre `/etc/containerd/config.toml` avec `disabled_plugins = ["cri"]`.
 
-@fig(conteneur-pile): La chaîne d'un `docker run` : CLI, `dockerd`, `containerd`, un shim par conteneur, `runc` qui crée namespaces et cgroup puis disparaît ; à côté, `crictl`/`nerdctl` parlent à containerd sans `dockerd`, comme le kubelet.
+<p align="center"><img src="../../assets/figures/conteneur-pile.svg" alt="Schéma : conteneur-pile"></p>
+
+*Figure — La chaîne d'un `docker run` : CLI, `dockerd`, `containerd`, un shim par conteneur, `runc` qui crée namespaces et cgroup puis disparaît ; à côté, `crictl`/`nerdctl` parlent à containerd sans `dockerd`, comme le kubelet.*
 
 Mécanismes noyau, vus de l'hôte (`ID` = `docker inspect --format '{{.Id}}'`) :
 
@@ -252,7 +286,9 @@ docker run --cap-drop ALL --cap-add NET_BIND_SERVICE … capsh --print
 # daemon.json "userns-remap": "default" : root = 1er subuid de dockremap
 ```
 
-@fig(overlayfs-couches): overlayfs : les couches d'image en lecture seule empilées, une couche d'écriture par conteneur, la vue fusionnée montée sur `/` ; modifier un fichier le copie dans l'upper, le supprimer pose un whiteout.
+<p align="center"><img src="../../assets/figures/overlayfs-couches.svg" alt="Schéma : overlayfs-couches"></p>
+
+*Figure — overlayfs : les couches d'image en lecture seule empilées, une couche d'écriture par conteneur, la vue fusionnée montée sur `/` ; modifier un fichier le copie dans l'upper, le supprimer pose un whiteout.*
 
 ### Installation et démon
 
@@ -281,15 +317,16 @@ docker info ; docker version ; systemctl status docker containerd
 }
 ```
 
-::: rhel
-Rocky 9 : `sudo dnf config-manager --add-repo
-https://download.docker.com/linux/centos/docker-ce.repo` puis le même
-`dnf install`, `systemctl enable --now docker`, et `firewall-cmd
---add-port=8080/tcp --permanent`. Alternative native : **Podman**
-(`podman run`, `podman compose`, rootless par défaut, sans démon, `alias
-docker=podman` via le paquet `podman-docker`). Sur bind mount avec SELinux :
-suffixe `:Z` (`-v /srv/data:/data:Z`).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky 9 : `sudo dnf config-manager --add-repo
+> https://download.docker.com/linux/centos/docker-ce.repo` puis le même
+> `dnf install`, `systemctl enable --now docker`, et `firewall-cmd
+> --add-port=8080/tcp --permanent`. Alternative native : **Podman**
+> (`podman run`, `podman compose`, rootless par défaut, sans démon, `alias
+> docker=podman` via le paquet `podman-docker`). Sur bind mount avec SELinux :
+> suffixe `:Z` (`-v /srv/data:/data:Z`).
 
 ### Images
 
@@ -409,7 +446,9 @@ Publier un port ajoute des règles `iptables` dans les chaînes `DOCKER`
 (`nat` et `filter`) **avant** celles d'`ufw` : seule la chaîne `DOCKER-USER`
 est respectée.
 
-@fig(docker-reseau): Le réseau d'un conteneur : bridge utilisateur avec DNS interne, publication de port par DNAT dans la chaîne DOCKER (avant `ufw`), chaîne DOCKER-USER pour tes règles, et `--network host` qui court-circuite tout.
+<p align="center"><img src="../../assets/figures/docker-reseau.svg" alt="Schéma : docker-reseau"></p>
+
+*Figure — Le réseau d'un conteneur : bridge utilisateur avec DNS interne, publication de port par DNAT dans la chaîne DOCKER (avant `ufw`), chaîne DOCKER-USER pour tes règles, et `--network host` qui court-circuite tout.*
 
 ### Compose v2
 
@@ -443,7 +482,7 @@ docker run --rm -it --pid container:app --network container:app \
 
 ## 22.3 Quiz — QCM
 
-**Q22.1** — Sur `lab-ops`, `docker run -d --name web -p 8080:80 nginx:1.28-alpine`
+<a id="q22-1"></a>**[Q22.1](corrige.md#q22-1)** — Sur `lab-ops`, `docker run -d --name web -p 8080:80 nginx:1.28-alpine`
 réussit. Un collègue relance exactement la même commande. Que se passe-t-il ?
 
 a) un second conteneur `web` démarre, Docker choisit un autre port
@@ -453,7 +492,7 @@ c) le premier conteneur est remplacé par le second
 d) la commande échoue sur `Bind for 0.0.0.0:8080 failed: port is already
    allocated` avant même de vérifier le nom
 
-**Q22.2** — `time docker stop app` met exactement 10 secondes, et
+<a id="q22-2"></a>**[Q22.2](corrige.md#q22-2)** — `time docker stop app` met exactement 10 secondes, et
 `docker inspect app --format '{{.State.ExitCode}}'` renvoie `137`. Le
 Dockerfile se termine par `CMD python3 app.py`. Explication ?
 
@@ -464,7 +503,7 @@ b) la forme shell de `CMD` fait de `/bin/sh -c` le PID 1 ; il ne relaie pas
 c) Python n'attrape jamais `SIGTERM`, il faut toujours `docker kill`
 d) `137` signifie que l'application a planté pendant l'arrêt
 
-**Q22.3** — `docker ps` affiche pour un conteneur lancé avec
+<a id="q22-3"></a>**[Q22.3](corrige.md#q22-3)** — `docker ps` affiche pour un conteneur lancé avec
 `--restart always` : `Restarting (0) 2 seconds ago`. Qu'en déduis-tu ?
 **Deux réponses correctes.**
 
@@ -476,7 +515,7 @@ c) `docker logs app` montrera les sorties de toutes les tentatives, et
    `docker inspect --format '{{.RestartCount}}'` compte les relances
 d) le conteneur a été tué par l'OOM killer
 
-**Q22.4** — Tu as fait `sudo ufw deny 8080/tcp` sur `lab-ops`. Depuis
+<a id="q22-4"></a>**[Q22.4](corrige.md#q22-4)** — Tu as fait `sudo ufw deny 8080/tcp` sur `lab-ops`. Depuis
 `lab-adm`, `curl http://10.10.10.14:8080` répond quand même, alors que le port
 est publié par `docker run -p 8080:80`. Pourquoi ?
 
@@ -487,7 +526,7 @@ b) Docker insère ses règles de DNAT et de `FORWARD` dans ses propres chaînes
 c) le port 8080 est ouvert par `docker-proxy` qui contourne le noyau
 d) `ufw` doit être redémarré après chaque `docker run`
 
-**Q22.5** — Dockerfile :
+<a id="q22-5"></a>**[Q22.5](corrige.md#q22-5)** — Dockerfile :
 
 ```dockerfile
 FROM python:3.12-slim-bookworm
@@ -506,7 +545,7 @@ b) copier d'abord `requirements.txt` seul, faire le `pip install`, puis
 c) mettre `RUN pip install` avant `WORKDIR`
 d) utiliser `ADD` au lieu de `COPY`, qui gère le cache
 
-**Q22.6** — Différence entre `ARG` et `ENV` dans un Dockerfile ?
+<a id="q22-6"></a>**[Q22.6](corrige.md#q22-6)** — Différence entre `ARG` et `ENV` dans un Dockerfile ?
 
 a) aucune, `ARG` est l'ancienne syntaxe
 b) `ARG` est une variable de build fournie par `--build-arg`, absente du
@@ -515,7 +554,7 @@ b) `ARG` est une variable de build fournie par `--build-arg`, absente du
 c) `ENV` n'existe qu'au build, `ARG` persiste
 d) `ARG` est chiffrée, `ENV` non
 
-**Q22.7** — Deux conteneurs lancés sans option réseau : `app` et `redis`.
+<a id="q22-7"></a>**[Q22.7](corrige.md#q22-7)** — Deux conteneurs lancés sans option réseau : `app` et `redis`.
 Dans `app`, `getent hosts redis` ne renvoie rien. Cause ?
 
 a) il faut ajouter `--link redis` (méthode recommandée)
@@ -526,7 +565,7 @@ c) Redis n'a pas publié son port avec `-p 6379:6379`
 d) les deux conteneurs sont dans des namespaces réseau différents et ne
    peuvent pas communiquer
 
-**Q22.8** — L'image `postgres:16-alpine` contient des fichiers dans
+<a id="q22-8"></a>**[Q22.8](corrige.md#q22-8)** — L'image `postgres:16-alpine` contient des fichiers dans
 `/var/lib/postgresql/data`. Tu montes ce chemin. Dans quel cas le contenu de
 l'image est-il **copié** dans le montage au premier démarrage ?
 
@@ -535,7 +574,7 @@ b) avec un volume nommé vide `-v pg-data:/var/lib/postgresql/data`
 c) dans les deux cas
 d) dans aucun cas, le montage masque toujours le contenu
 
-**Q22.9** — `docker run -d --memory 64m --name gourmand factura-api:1.0`, puis
+<a id="q22-9"></a>**[Q22.9](corrige.md#q22-9)** — `docker run -d --memory 64m --name gourmand factura-api:1.0`, puis
 `curl 'localhost:8080/fuite?mo=100'`. Ensuite `docker ps -a` montre
 `Exited (137)`. Qu'est-ce qui le confirme sans ambiguïté ?
 
@@ -545,7 +584,7 @@ b) `docker inspect gourmand --format '{{.State.OOMKilled}}'` renvoie `true`,
 c) `docker stats` affiche 100 %
 d) le code 137 suffit : il signifie toujours OOM
 
-**Q22.10** — Hier, `docker pull nginx` a ramené `nginx:latest`. Aujourd'hui
+<a id="q22-10"></a>**[Q22.10](corrige.md#q22-10)** — Hier, `docker pull nginx` a ramené `nginx:latest`. Aujourd'hui
 `docker run -d nginx` démarre. Quelle version tourne ?
 
 a) la dernière publiée sur Docker Hub : `run` vérifie toujours le registre
@@ -555,7 +594,7 @@ b) celle téléchargée hier : `latest` est un tag comme un autre, `run` utilise
 c) une version aléatoire parmi celles en cache
 d) `latest` n'est pas un tag valide pour `run`
 
-**Q22.11** — Un dev demande `-v /var/run/docker.sock:/var/run/docker.sock`
+<a id="q22-11"></a>**[Q22.11](corrige.md#q22-11)** — Un dev demande `-v /var/run/docker.sock:/var/run/docker.sock`
 pour son conteneur de CI. **Deux réponses correctes.**
 
 a) c'est sans risque tant que le conteneur tourne en `--user 1000`
@@ -566,7 +605,7 @@ c) c'est l'équivalent exact d'ajouter l'utilisateur au groupe `docker` : accès
    root sans mot de passe
 d) Docker refuse ce montage sans `--privileged`
 
-**Q22.12** — Dans un `compose.yaml`, `app` déclare
+<a id="q22-12"></a>**[Q22.12](corrige.md#q22-12)** — Dans un `compose.yaml`, `app` déclare
 `depends_on: [db]` (forme courte). Au `docker compose up`, `app` plante avec
 `connection refused` vers `db`, puis fonctionne après un `restart`. Pourquoi ?
 
@@ -577,7 +616,7 @@ b) il manque `links:`
 c) `db` doit être déclaré avant `app` dans le fichier
 d) `app` doit publier le port de `db`
 
-**Q22.13** — Dans le répertoire du `compose.yaml`, un fichier `.env` contient
+<a id="q22-13"></a>**[Q22.13](corrige.md#q22-13)** — Dans le répertoire du `compose.yaml`, un fichier `.env` contient
 `POSTGRES_PASSWORD=secret`. Le service `db` ne reçoit pas cette variable.
 Pourquoi ?
 
@@ -588,7 +627,7 @@ b) `.env` sert à l'**interpolation** des `${VAR}` dans le fichier Compose, pas
 c) les variables de `.env` sont réservées aux `build:`
 d) Compose ne lit `.env` qu'avec `--env-file`
 
-**Q22.14** — `docker exec -it app sh` répond `OCI runtime exec failed: …
+<a id="q22-14"></a>**[Q22.14](corrige.md#q22-14)** — `docker exec -it app sh` répond `OCI runtime exec failed: …
 exec: "sh": executable file not found in $PATH`. Quelles approches permettent
 d'inspecter le conteneur ? **Deux réponses correctes.**
 
@@ -599,7 +638,7 @@ c) `sudo` `nsenter -t $(docker inspect app --format '{{.State.Pid}}') -n ss -tln
    depuis l'hôte, avec les binaires de l'hôte
 d) `docker exec -it --shell app`
 
-**Q22.15** — `/var/lib/docker/containers/` pèse 9 Go sur `lab-ops`, à cause
+<a id="q22-15"></a>**[Q22.15](corrige.md#q22-15)** — `/var/lib/docker/containers/` pèse 9 Go sur `lab-ops`, à cause
 d'un fichier `*-json.log` d'un seul conteneur. Tu ajoutes `max-size` dans
 `daemon.json` et redémarres Docker. **Deux réponses correctes.**
 
@@ -611,7 +650,7 @@ c) en attendant, `truncate -s 0` sur le fichier libère l'espace sans arrêter l
    conteneur
 d) il faut passer au driver `syslog`, `json-file` ne sait pas tourner
 
-**Q22.16** — `docker run -d -p 127.0.0.1:8080:80 nginx:1.28-alpine`. Que
+<a id="q22-16"></a>**[Q22.16](corrige.md#q22-16)** — `docker run -d -p 127.0.0.1:8080:80 nginx:1.28-alpine`. Que
 donne `curl http://10.10.10.14:8080` depuis `lab-adm` ?
 
 a) une réponse normale
@@ -621,7 +660,7 @@ b) `Connection refused` : le port n'est publié que sur la boucle locale de
 c) une redirection vers 127.0.0.1
 d) un timeout, car `ufw` bloque
 
-**Q22.17** — Un conteneur lancé avec `--cap-drop ALL --user 10001` échoue
+<a id="q22-17"></a>**[Q22.17](corrige.md#q22-17)** — Un conteneur lancé avec `--cap-drop ALL --user 10001` échoue
 avec `chown: changing ownership of '/data': Operation not permitted`. Cause ?
 
 a) `--user` interdit toujours `chown`
@@ -631,7 +670,7 @@ b) `chown` sur un fichier qu'on ne possède pas requiert `CAP_CHOWN` ; toutes
 c) il faut `--privileged`
 d) `/data` est en lecture seule
 
-**Q22.18** — `docker rmi factura-api:1.0` répond `conflict: unable to remove
+<a id="q22-18"></a>**[Q22.18](corrige.md#q22-18)** — `docker rmi factura-api:1.0` répond `conflict: unable to remove
 repository reference "factura-api:1.0" (must force) - container 3f2a… is using
 its referenced image`. Le conteneur `3f2a…` est **arrêté**. Que fais-tu ?
 
@@ -642,7 +681,7 @@ b) `docker rm 3f2a` puis `docker rmi` : un conteneur, même arrêté, référenc
 c) `docker system prune -a --volumes` immédiatement
 d) redémarrer Docker
 
-**Q22.19** — Sur `lab-ops`, le conteneur `web` tourne depuis une heure.
+<a id="q22-19"></a>**[Q22.19](corrige.md#q22-19)** — Sur `lab-ops`, le conteneur `web` tourne depuis une heure.
 `pgrep -a runc` ne renvoie rien, et `ps -o ppid= -p $(docker inspect web
 --format '{{.State.Pid}}')` donne le PID d'un `containerd-shim-runc-v2`.
 Qu'en déduis-tu ? **Deux réponses correctes.**
@@ -655,7 +694,7 @@ c) le père du conteneur n'est ni `dockerd` ni `containerd` : arrêter
 d) le shim est le fils de `dockerd`, donc `systemctl stop docker` tue
    toujours tous les conteneurs
 
-**Q22.20** — Un collègue affirme : « Depuis que Kubernetes a retiré Docker,
+<a id="q22-20"></a>**[Q22.20](corrige.md#q22-20)** — Un collègue affirme : « Depuis que Kubernetes a retiré Docker,
 nos images construites avec `docker build` ne fonctionnent plus sur les
 nœuds. » Que lui réponds-tu ?
 
@@ -668,7 +707,7 @@ c) c'est vrai pour les images Alpine seulement
 d) Kubernetes n'exécute plus que des images au format `oci:` produites par
    `skopeo`
 
-**Q22.21** — `docker update --memory 32m --memory-swap 32m gourmand` alors
+<a id="q22-21"></a>**[Q22.21](corrige.md#q22-21)** — `docker update --memory 32m --memory-swap 32m gourmand` alors
 que le conteneur utilise 50 Mo de RSS (`memory.current`). Que se passe-t-il
 sur un hôte en cgroups v2 ?
 
@@ -679,7 +718,7 @@ b) la limite est écrite dans `memory.max` ; le noyau tente de récupérer des
 c) le conteneur est mis en pause jusqu'à ce que son usage redescende
 d) la limite ne s'appliquera qu'au prochain `docker restart`
 
-**Q22.22** — Dans le conteneur `web` (`nginx:1.28-alpine`), tu ajoutes une
+<a id="q22-22"></a>**[Q22.22](corrige.md#q22-22)** — Dans le conteneur `web` (`nginx:1.28-alpine`), tu ajoutes une
 ligne à `/etc/nginx/nginx.conf` (fichier de 650 octets d'une couche
 d'image), puis tu supprimes `/etc/nginx/conf.d/default.conf`. Que trouve-t-on
 dans l'`UpperDir` du conteneur ? **Deux réponses correctes.**
@@ -696,96 +735,78 @@ d) rien : les modifications d'un conteneur sont écrites dans l'image
 
 ## 22.4 Quiz — questions ouvertes
 
-**QO22.1** — *On te demande en entretien* : « Quelle est la différence entre
+<a id="qo22-1"></a>**[QO22.1](corrige.md#qo22-1)** — *On te demande en entretien* : « Quelle est la différence entre
 un conteneur et une machine virtuelle ? » Réponds sans citer une seule commande
 Docker : nomme les mécanismes noyau impliqués, ce que chacun isole ou limite,
 et déduis-en trois conséquences concrètes pour la sécurité, la performance et
 l'exploitation.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO22.2** — *On te demande en entretien* : « `ENTRYPOINT` ou `CMD` ? Forme
+<a id="qo22-2"></a>**[QO22.2](corrige.md#qo22-2)** — *On te demande en entretien* : « `ENTRYPOINT` ou `CMD` ? Forme
 exec ou forme shell ? » Explique comment les deux se combinent, ce que
 `docker run image arg` remplace, ce qui devient PID 1 dans chaque forme, et
 pourquoi ce PID 1 change le comportement de `docker stop`. Termine par le rôle
 de `--init`.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO22.3** — Décris le fonctionnement du cache de build : ce qui invalide une
+<a id="qo22-3"></a>**[QO22.3](corrige.md#qo22-3)** — Décris le fonctionnement du cache de build : ce qui invalide une
 couche, ce qui se propage, pourquoi `COPY . .` en tête de Dockerfile est un
 contresens, ce qu'apporte un build multi-stage, et comment tu vérifies la
 taille de chaque couche d'une image produite.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO22.4** — Un conteneur « ne démarre pas ». Déroule ta méthode de diagnostic
+<a id="qo22-4"></a>**[QO22.4](corrige.md#qo22-4)** — Un conteneur « ne démarre pas ». Déroule ta méthode de diagnostic
 dans l'ordre, avec pour chaque étape la commande et **ce que tu cherches** :
 état et code de sortie, journaux, configuration effective, image sans shell,
 port déjà pris, dépendance absente, permissions sur un montage, limite
 mémoire. Distingue les codes 0, 1, 125, 137, 139, 143.
 
-::: repondre
-lignes: 14
-:::
+<!-- repondre: 14 -->
 
-**QO22.5** — Explique le trajet d'un paquet TCP de `lab-adm` vers un conteneur
+<a id="qo22-5"></a>**[QO22.5](corrige.md#qo22-5)** — Explique le trajet d'un paquet TCP de `lab-adm` vers un conteneur
 qui a publié `-p 8080:80` sur `lab-ops` : chaînes `iptables` traversées,
 DNAT, rôle de `docker-proxy`, et pourquoi `ufw` n'a pas son mot à dire.
 Donne ensuite deux façons correctes de restreindre l'accès à ce port.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO22.6** — *On te demande en entretien* : « Pourquoi dit-on que le groupe
+<a id="qo22-6"></a>**[QO22.6](corrige.md#qo22-6)** — *On te demande en entretien* : « Pourquoi dit-on que le groupe
 `docker` équivaut à root ? » Donne la commande en une ligne qui le prouve,
 puis explique ce que change le mode rootless (où tourne le démon, comment les
 UID sont projetés, ce qui ne marche plus). Cite enfin cinq options de
 `docker run` qui réduisent la surface d'attaque d'un conteneur et ce que
 chacune empêche.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO22.7** — Un développeur monte `~/projet/data` dans son conteneur et obtient
+<a id="qo22-7"></a>**[QO22.7](corrige.md#qo22-7)** — Un développeur monte `~/projet/data` dans son conteneur et obtient
 `PermissionError: [Errno 13] Permission denied`. Explique ce qui se passe au
 niveau des UID entre l'hôte et le conteneur, pourquoi un volume nommé n'aurait
 pas posé le problème, et donne trois corrections possibles avec leurs
 inconvénients.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO22.8** — Dans une pile Compose (proxy, app, base, cache), explique ce que
+<a id="qo22-8"></a>**[QO22.8](corrige.md#qo22-8)** — Dans une pile Compose (proxy, app, base, cache), explique ce que
 fait précisément `docker compose down` par rapport à `stop`, ce que `-v`
 détruit, comment tu mets à jour **uniquement** l'image de `app` sans couper les
 autres services, et comment tu fais démarrer la pile au boot de la machine sans
 écrire d'unité systemd.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO22.9** — Trivy remonte 41 CVE sur ton image, dont 3 `CRITICAL` dans
+<a id="qo22-9"></a>**[QO22.9](corrige.md#qo22-9)** — Trivy remonte 41 CVE sur ton image, dont 3 `CRITICAL` dans
 `libssl3` de l'image de base et 1 `HIGH` dans une bibliothèque Python.
 Décris ta démarche de décision : ce que tu vérifies pour chaque CVE, ce qui
 justifie d'ignorer une alerte, ce qui impose un rebuild, et pourquoi
 `--ignore-unfixed` est à la fois utile et dangereux.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO22.10** — *On te demande en entretien* : « Raconte-moi ce qui se passe
+<a id="qo22-10"></a>**[QO22.10](corrige.md#qo22-10)** — *On te demande en entretien* : « Raconte-moi ce qui se passe
 entre le moment où je tape `docker run nginx` et celui où le processus
 `nginx` tourne. » Nomme chaque composant traversé (CLI, démon, `containerd`,
 shim, `runc`), ce que chacun fait et ce qu'il ne fait pas, quelle
@@ -794,11 +815,9 @@ pourquoi le père du processus final n'est pas `dockerd`. Termine en
 expliquant où se placent `ctr`, `nerdctl`, `crictl`, Podman et `skopeo` dans
 ce schéma, et pourquoi Kubernetes n'a plus besoin de Docker.
 
-::: repondre
-lignes: 14
-:::
+<!-- repondre: 14 -->
 
-**QO22.11** — Décris les couches de défense en profondeur d'un conteneur
+<a id="qo22-11"></a>**[QO22.11](corrige.md#qo22-11)** — Décris les couches de défense en profondeur d'un conteneur
 Docker par défaut, de la plus externe à la plus interne : namespaces,
 capabilities, profil seccomp, profil AppArmor, `no-new-privileges`, système
 de fichiers en lecture seule, user namespace (`userns-remap`). Pour chacune :
@@ -807,9 +826,7 @@ la vérifies depuis l'hôte ou depuis le conteneur, et l'option qui la
 désactive. Explique ce que `--privileged` supprime d'un coup, et pourquoi
 `userns-remap` n'est pas activé par défaut malgré son intérêt.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
 ---
 
@@ -820,101 +837,101 @@ Docker fera pour toi. À partir de E22.3, il te faut Docker installé (lab
 L22.1) et l'image `nginx:1.28-alpine` lancée sous le nom `web` avec le port
 8080 publié. Tout se passe sur `lab-ops` sauf mention contraire.
 
-**E22.1** — Sans Docker, lance un shell qui est **PID 1** de son propre
+<a id="e22-1"></a>**[E22.1](corrige.md#e22-1)** — Sans Docker, lance un shell qui est **PID 1** de son propre
 namespace PID, avec un `/proc` cohérent, et un hostname `conteneur-test` qui
 n'affecte pas `lab-ops`. Prouve les trois points depuis l'intérieur (`ps`,
 `hostname`) et depuis un second terminal sur l'hôte (`hostname`, `lsns`,
 `ls -l /proc/PID/ns` comparé à ton shell). Recommence sans `sudo` et explique
 ce qui rend cela possible.
 
-**E22.2** — Toujours sans Docker, exécute
+<a id="e22-2"></a>**[E22.2](corrige.md#e22-2)** — Toujours sans Docker, exécute
 `python3 -c 'b = bytearray(200 * 1024 * 1024); input()'` dans un cgroup
 limité à 64 Mo de mémoire **et sans swap**. Montre que le processus est tué,
 retrouve la preuve dans le fichier `memory.events` du cgroup et dans
 `journalctl -k`, puis donne l'équivalent avec `systemd-run`.
 
-**E22.3** — Retrouve, depuis l'hôte, le PID du processus `nginx` maître du
+<a id="e22-3"></a>**[E22.3](corrige.md#e22-3)** — Retrouve, depuis l'hôte, le PID du processus `nginx` maître du
 conteneur `web`. Affiche ses namespaces, montre lesquels diffèrent de ceux de
 ton shell, affiche son cgroup, et liste les ports en écoute **dans** son
 namespace réseau sans `docker exec`. Termine par la commande `lsns` qui liste
 tous les namespaces réseau de la machine avec le premier processus de chacun.
 
-**E22.4** — Affiche les capabilities effectives du PID 1 du conteneur `web`,
+<a id="e22-4"></a>**[E22.4](corrige.md#e22-4)** — Affiche les capabilities effectives du PID 1 du conteneur `web`,
 décode-les en clair, et compare avec un conteneur lancé avec `--cap-drop ALL`
 puis avec `--cap-drop ALL --cap-add NET_BIND_SERVICE`. Dis laquelle des
 capabilities par défaut permet à `nginx` d'écouter sur 80 en root.
 
-**E22.5** — Pour l'image `nginx:1.28-alpine` : affiche son digest, le nombre
+<a id="e22-5"></a>**[E22.5](corrige.md#e22-5)** — Pour l'image `nginx:1.28-alpine` : affiche son digest, le nombre
 de couches, la taille de chaque couche et l'instruction qui l'a produite.
 Télécharge ensuite la même image **par digest** et prouve avec `docker images`
 qu'aucun octet n'a été téléchargé et qu'il s'agit du même ID d'image.
 
-**E22.6** — Lance un conteneur `alpine:3.20` interactif limité à 64 Mo de
+<a id="e22-6"></a>**[E22.6](corrige.md#e22-6)** — Lance un conteneur `alpine:3.20` interactif limité à 64 Mo de
 mémoire, un demi-cœur et 50 processus, et prouve les trois limites **depuis
 l'intérieur** du conteneur en lisant les fichiers du cgroup. Puis, depuis
 l'hôte, retrouve le même cgroup sous `/sys/fs/cgroup/system.slice/`.
 
-**E22.7** — Chronomètre `docker stop` sur trois conteneurs : `sleep 3600`
+<a id="e22-7"></a>**[E22.7](corrige.md#e22-7)** — Chronomètre `docker stop` sur trois conteneurs : `sleep 3600`
 lancé tel quel, le même avec `--init`, et `sh -c 'sleep 3600; echo fin'`.
 Relève pour chacun la durée et le code de sortie, et explique les trois
 résultats en une phrase chacun. Produis ensuite un conteneur qui sort en
 `139` et un autre en `1`.
 
-**E22.8** — Sur le conteneur `web`, en une commande chacune et sans `grep` ni
+<a id="e22-8"></a>**[E22.8](corrige.md#e22-8)** — Sur le conteneur `web`, en une commande chacune et sans `grep` ni
 `jq` quand `--format` suffit : son adresse IP, sa politique de redémarrage, la
 liste de ses montages (source et destination), la commande complète qui a
 servi à le lancer, et les 20 dernières lignes de journal des cinq dernières
 minutes horodatées. Copie enfin `/etc/nginx/conf.d/default.conf` du
 conteneur vers `~/lab22/rapports/` sans `docker exec`.
 
-**E22.9** — Dans `~/lab22/bin/entrypoint-test/`, écris un Dockerfile de
+<a id="e22-9"></a>**[E22.9](corrige.md#e22-9)** — Dans `~/lab22/bin/entrypoint-test/`, écris un Dockerfile de
 trois lignes à base d'`alpine:3.20` dont `docker run --rm IMAGE` affiche
 `bonjour monde` et `docker run --rm IMAGE lab-ops` affiche `bonjour lab-ops`.
 Puis remplace l'`ENTRYPOINT` par sa forme shell, reconstruis, et explique ce
 que devient `CMD`. Montre enfin comment lancer `sh` dans cette image malgré
 l'`ENTRYPOINT`.
 
-**E22.10** — Écris un Dockerfile qui prend un argument de build `VERSION`
+<a id="e22-10"></a>**[E22.10](corrige.md#e22-10)** — Écris un Dockerfile qui prend un argument de build `VERSION`
 (valeur par défaut `dev`), le stocke dans la variable d'environnement
 `APP_VERSION` de l'image et l'écrit dans `/version.txt`. Construis avec
 `VERSION=1.2`, puis prouve trois choses : `APP_VERSION` est visible dans
 l'image, `VERSION` n'y est pas, et pourtant `docker history` révèle sa valeur.
 Conclus sur ce qu'on ne doit **jamais** passer en `--build-arg`.
 
-**E22.11** — Dans `~/lab22/api/`, construis l'image avec le Dockerfile de la
+<a id="e22-11"></a>**[E22.11](corrige.md#e22-11)** — Dans `~/lab22/api/`, construis l'image avec le Dockerfile de la
 question Q22.5 (copie de tout le contexte avant `pip install`). Modifie un
 commentaire dans `app.py`, reconstruis, et relève dans la sortie
 `--progress=plain` les étapes rejouées. Corrige l'ordre des instructions,
 refais la même modification et montre que `pip install` sort de `CACHED`.
 Chronomètre les deux reconstructions.
 
-**E22.12** — Crée un volume `factura-data`, écris-y un fichier depuis un
+<a id="e22-12"></a>**[E22.12](corrige.md#e22-12)** — Crée un volume `factura-data`, écris-y un fichier depuis un
 conteneur, supprime le conteneur, prouve que le fichier survit dans un second
 conteneur. Sauvegarde ce volume dans `~/lab22/rapports/factura-data.tgz` sans
 arrêter quoi que ce soit ni utiliser `sudo`, puis restaure l'archive dans un
 nouveau volume `factura-data-copie` et vérifie le contenu.
 
-**E22.13** — Avec `alpine:3.20`, `--user 10001:10001` et un bind mount de
+<a id="e22-13"></a>**[E22.13](corrige.md#e22-13)** — Avec `alpine:3.20`, `--user 10001:10001` et un bind mount de
 `/srv/factura-docker/data` sur `/data`, tente de créer un fichier. Note
 l'erreur exacte. Corrige **côté hôte**, sans `chmod 777`, crée le fichier,
 puis affiche depuis l'hôte à qui il appartient en numérique et en nom. Explique
 la ligne obtenue.
 
-**E22.14** — Crée le réseau `factura-net`. Lance `cache` (`redis:7-alpine`)
+<a id="e22-14"></a>**[E22.14](corrige.md#e22-14)** — Crée le réseau `factura-net`. Lance `cache` (`redis:7-alpine`)
 dessus et prouve depuis un conteneur du même réseau que le nom `cache` se
 résout, que le serveur DNS utilisé est `127.0.0.11`, et que le même test
 échoue depuis un conteneur du bridge par défaut. Affiche ensuite les règles
 `iptables` (table `nat` et chaîne `DOCKER`) créées par la publication du port
 8080 de `web`.
 
-**E22.15** — Lance un conteneur qui écrit des lignes de journal sans pause
+<a id="e22-15"></a>**[E22.15](corrige.md#e22-15)** — Lance un conteneur qui écrit des lignes de journal sans pause
 (`yes` fait l'affaire), avec une rotation à 1 Mo sur 2 fichiers configurée
 **pour ce seul conteneur**. Après 10 s, montre les fichiers de journal côté
 hôte, leur taille, et prouve que `docker logs` ne renvoie plus l'intégralité
 de l'historique. Donne la ligne `daemon.json` qui rendrait cette rotation
 globale, puis arrête et supprime ce conteneur.
 
-**E22.16** — Dans un second terminal, laisse tourner `docker events`. Dans le
+<a id="e22-16"></a>**[E22.16](corrige.md#e22-16)** — Dans un second terminal, laisse tourner `docker events`. Dans le
 premier, crée puis supprime un conteneur et un volume. Relève les événements
 produits. Puis affiche l'occupation disque de Docker par catégorie, avec le
 détail par image, et explique la différence entre les colonnes `SIZE`,
@@ -924,7 +941,7 @@ Les cinq exercices suivants regardent **sous** Docker. Ils supposent `web`
 lancé et les outils de §22.1 (`skopeo`, `umoci`, `dive`, `apparmor-utils`)
 installés.
 
-**E22.17** — Reconstitue la chaîne d'exécution du conteneur `web` depuis
+<a id="e22-17"></a>**[E22.17](corrige.md#e22-17)** — Reconstitue la chaîne d'exécution du conteneur `web` depuis
 l'hôte : le PID du conteneur, son père, le père de son père, jusqu'à PID 1.
 Montre par quelle socket `dockerd` parle à `containerd`, prouve qu'aucun
 processus `runc` ne tourne, et liste avec `ctr` ce que `containerd` connaît
@@ -936,7 +953,7 @@ l'erreur, active ce qu'il faut dans `/etc/containerd/config.toml`, et montre
 que `crictl ps` ne voit **pas** les conteneurs Docker. Conclus en une ligne
 sur ce que ferait un kubelet sur cette machine.
 
-**E22.18** — Sans lancer `docker pull` ni utiliser le démon : affiche le
+<a id="e22-18"></a>**[E22.18](corrige.md#e22-18)** — Sans lancer `docker pull` ni utiliser le démon : affiche le
 digest, l'architecture, le nombre de couches et les variables d'environnement
 de `nginx:1.28-alpine` telles qu'elles sont sur Docker Hub, puis les cinq
 derniers tags publiés du dépôt `nginx` qui contiennent `alpine`. Copie
@@ -948,7 +965,7 @@ Docker affiche. Déballe l'image en bundle OCI avec `umoci` et vérifie que
 relève la couche qui pèse le plus et l'instruction qui l'a créée, et la note
 d'efficacité.
 
-**E22.19** — Affiche les chemins `LowerDir`, `UpperDir`, `WorkDir` et
+<a id="e22-19"></a>**[E22.19](corrige.md#e22-19)** — Affiche les chemins `LowerDir`, `UpperDir`, `WorkDir` et
 `MergedDir` du conteneur `web`, compte les couches inférieures et montre la
 ligne de `mount` correspondante. Depuis l'intérieur, ajoute une ligne à
 `/etc/nginx/nginx.conf` et supprime `/etc/nginx/conf.d/default.conf`. Depuis
@@ -959,7 +976,7 @@ dans `LowerDir`), et la suppression a produit un *whiteout*. Confirme avec
 voit le fichier d'origine. Explique en deux phrases pourquoi une base de
 données ne doit jamais écrire dans la couche du conteneur.
 
-**E22.20** — Lance `factura-api:1.0` sous le nom `elastique` avec 64 Mo de
+<a id="e22-20"></a>**[E22.20](corrige.md#e22-20)** — Lance `factura-api:1.0` sous le nom `elastique` avec 64 Mo de
 mémoire sans swap, un demi-cœur, 30 processus et 2 Mo/s d'écriture sur le
 disque de `lab-ops`, en faisant en sorte que le conteneur **survive** à la
 mort de l'API (indice : qu'est-ce qui doit être PID 1 ?). Depuis l'hôte, lis
@@ -973,7 +990,7 @@ cœur entier et les PID à 100, et prouve que les fichiers du cgroup ont changé
 lire si l'API avait été PID 1. Dis enfin quelle limite `docker update` ne
 sait **pas** modifier à chaud.
 
-**E22.21** — Dans un conteneur `alpine:3.20` lancé sans option, affiche avec
+<a id="e22-21"></a>**[E22.21](corrige.md#e22-21)** — Dans un conteneur `alpine:3.20` lancé sans option, affiche avec
 `capsh --print` (paquet `libcap` dans l'image) les capabilities courantes et
 le *bounding set*, la valeur de `Seccomp` dans `/proc/1/status`, et le
 profil AppArmor dans `/proc/1/attr/current`. Montre trois refus dus à trois
@@ -990,15 +1007,15 @@ c'est la seule capability restante et que `NoNewPrivs` vaut 1.
 
 ## 22.6 Labs ★★
 
-### **L22.1** — Installer Docker Engine proprement sur `lab-ops`
+### <a id="l22-1"></a>**[L22.1](corrige.md#l22-1)** — Installer Docker Engine proprement sur `lab-ops`
 
-::: contexte
-`lab-ops` va héberger le registre, le runner CI et le monitoring des modules
-suivants. On te demande une installation **reproductible** de Docker Engine
-depuis le dépôt officiel, un démon configuré dès le départ (journaux bornés,
-registre local) et un compte de service pour les futurs pipelines. La variante
-Rocky et le mode rootless font partie du ticket.
-:::
+> **Contexte**
+>
+> `lab-ops` va héberger le registre, le runner CI et le monitoring des modules
+> suivants. On te demande une installation **reproductible** de Docker Engine
+> depuis le dépôt officiel, un démon configuré dès le départ (journaux bornés,
+> registre local) et un compte de service pour les futurs pipelines. La variante
+> Rocky et le mode rootless font partie du ticket.
 
 1. Vérifie qu'aucun Docker n'est déjà présent (`docker.io`, snap `docker`,
    `podman-docker`). Si oui, retire-le et note ce qui resterait dans
@@ -1028,36 +1045,38 @@ Rocky et le mode rootless font partie du ticket.
    utilisateur porte le processus `dockerd` et pourquoi le port 80 aurait été
    refusé.
 
-::: rhel
-Sur `lab-rhel` : `sudo dnf config-manager --add-repo
-https://download.docker.com/linux/centos/docker-ce.repo`, le même `dnf
-install`, `sudo systemctl enable --now docker`, puis `sudo firewall-cmd
---add-port=8080/tcp --permanent && sudo firewall-cmd --reload`. Compare
-ensuite avec Podman déjà présent : `podman run -d -p 8080:80
-docker.io/library/nginx:1.28-alpine` sans `sudo`, `podman ps`, et
-`ps -o user,pid,args -C conmon`. Note deux différences visibles.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel` : `sudo dnf config-manager --add-repo
+> https://download.docker.com/linux/centos/docker-ce.repo`, le même `dnf
+> install`, `sudo systemctl enable --now docker`, puis `sudo firewall-cmd
+> --add-port=8080/tcp --permanent && sudo firewall-cmd --reload`. Compare
+> ensuite avec Podman déjà présent : `podman run -d -p 8080:80
+> docker.io/library/nginx:1.28-alpine` sans `sudo`, `podman ps`, et
+> `ps -o user,pid,args -C conmon`. Note deux différences visibles.
 
-::: check
-Critère de succès : `docker-ce` installé depuis le dépôt Docker, service actif
-et activé, `daemon.json` valide avec rotation et registre, `mathieu` dans le
-groupe `docker`, plugins Compose v2 et buildx fonctionnels, rapport rédigé.
-
-```bash
-bash check_M22_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `docker-ce` installé depuis le dépôt Docker, service actif
+> et activé, `daemon.json` valide avec rotation et registre, `mathieu` dans le
+> groupe `docker`, plugins Compose v2 et buildx fonctionnels, rapport rédigé.
+>
+> ```bash
+> bash check_M22_01.sh
+> ```
 
 ---
 
-### **L22.2** — Du Dockerfile de Kevin à une image livrable
+### <a id="l22-2"></a>**[L22.2](corrige.md#l22-2)** — Du Dockerfile de Kevin à une image livrable
 
-::: contexte
-L'équipe précédente a laissé `~/lab22/mauvaise/` : « ça marche sur le poste
-de Kevin ». L'image fait 1,2 Go, contient un mot de passe, tourne en root et
-met 10 s à s'arrêter. On te demande un audit écrit, puis une image propre de
-`~/lab22/api/`, scannée, et la preuve que les défauts sont corrigés.
-:::
+> **Contexte**
+>
+> L'équipe précédente a laissé `~/lab22/mauvaise/` : « ça marche sur le poste
+> de Kevin ». L'image fait 1,2 Go, contient un mot de passe, tourne en root et
+> met 10 s à s'arrêter. On te demande un audit écrit, puis une image propre de
+> `~/lab22/api/`, scannée, et la preuve que les défauts sont corrigés.
 
 1. Construis l'image de Kevin telle quelle (`docker build -t factura-api:kevin
    ~/lab22/mauvaise`). Relève : sa taille, le temps de build, ce que
@@ -1086,33 +1105,35 @@ met 10 s à s'arrêter. On te demande un audit écrit, puis une image propre de
 6. Ajoute un étage `debug` (avec `sh`, `curl`, `procps`) constructible par
    `--target debug`, sans que la cible par défaut change.
 
-::: astuce
-`docker build --progress=plain --no-cache . 2>&1 | grep -E '^#[0-9]+ '` liste
-les étapes ; `docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}'`
-dit où partent les mégaoctets. Un `RUN apt-get install` sans nettoyage dans la
-**même** couche coûte 40 Mo de listes de paquets à vie.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `docker build --progress=plain --no-cache . 2>&1 | grep -E '^#[0-9]+ '` liste
+> les étapes ; `docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}'`
+> dit où partent les mégaoctets. Un `RUN apt-get install` sans nettoyage dans la
+> **même** couche coûte 40 Mo de listes de paquets à vie.
 
-::: check
-Critère de succès : image `factura-api:1.0` sous 150 Mo, non-root, avec
-healthcheck et `ENTRYPOINT` exec, qui s'arrête proprement, sans secret ni
-fichier de données, `.dockerignore` et audit présents.
-
-```bash
-bash check_M22_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : image `factura-api:1.0` sous 150 Mo, non-root, avec
+> healthcheck et `ENTRYPOINT` exec, qui s'arrête proprement, sans secret ni
+> fichier de données, `.dockerignore` et audit présents.
+>
+> ```bash
+> bash check_M22_02.sh
+> ```
 
 ---
 
-### **L22.3** — Données, UID et réseau : faire tourner l'API pour de vrai
+### <a id="l22-3"></a>**[L22.3](corrige.md#l22-3)** — Données, UID et réseau : faire tourner l'API pour de vrai
 
-::: contexte
-L'API doit conserver ses compteurs de visites entre deux déploiements, lire
-un cache Redis, et n'être joignable que depuis `lab-adm`. Le répertoire hôte
-`/srv/factura-docker/data` a été créé par l'équipe système en `root:root`.
-Tu utilises l'image `factura-api:1.0` du lab précédent.
-:::
+> **Contexte**
+>
+> L'API doit conserver ses compteurs de visites entre deux déploiements, lire
+> un cache Redis, et n'être joignable que depuis `lab-adm`. Le répertoire hôte
+> `/srv/factura-docker/data` a été créé par l'équipe système en `root:root`.
+> Tu utilises l'image `factura-api:1.0` du lab précédent.
 
 1. Lance l'API avec `DATA_DIR=/data` et le volume nommé `factura-data` sur
    `/data`. Appelle `/visites` trois fois, supprime le conteneur, relance,
@@ -1143,34 +1164,36 @@ Tu utilises l'image `factura-api:1.0` du lab précédent.
    `~/lab22/rapports/stockage.md`, avec le tableau volume / bind / tmpfs et
    le cas d'usage de chacun.
 
-::: attention
-Une règle `iptables` ajoutée à la main disparaît au redémarrage, et Docker
-recrée ses propres chaînes à chaque démarrage du démon. La règle de l'étape 5
-doit donc vivre dans un fichier rejoué au boot : dis lequel dans le rapport.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Une règle `iptables` ajoutée à la main disparaît au redémarrage, et Docker
+> recrée ses propres chaînes à chaque démarrage du démon. La règle de l'étape 5
+> doit donc vivre dans un fichier rejoué au boot : dis lequel dans le rapport.
 
-::: check
-Critère de succès : volume `factura-data` peuplé, `/srv/factura-docker/data`
-écrivable par l'UID 10001 sans être ouvert à tous, `cache` et
-`factura-visites` sur `factura-net`, API durcie et publiée sur 8000,
-règle `DOCKER-USER` limitant l'accès à `10.10.10.10`.
-
-```bash
-bash check_M22_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : volume `factura-data` peuplé, `/srv/factura-docker/data`
+> écrivable par l'UID 10001 sans être ouvert à tous, `cache` et
+> `factura-visites` sur `factura-net`, API durcie et publiée sur 8000,
+> règle `DOCKER-USER` limitant l'accès à `10.10.10.10`.
+>
+> ```bash
+> bash check_M22_03.sh
+> ```
 
 ---
 
-### **L22.4** — La pile complète en Compose : proxy, API, PostgreSQL, Redis
+### <a id="l22-4"></a>**[L22.4](corrige.md#l22-4)** — La pile complète en Compose : proxy, API, PostgreSQL, Redis
 
-::: contexte
-Le développeur veut « un `docker compose up` et tout marche » : nginx en
-frontal sur 8080, l'API derrière, PostgreSQL pour `/clients`, Redis pour
-`/compteur`, et un mot de passe de base qui n'apparaît **nulle part** dans
-`docker inspect`. L'environnement de dev doit pouvoir monter le code source
-sans modifier le fichier principal.
-:::
+> **Contexte**
+>
+> Le développeur veut « un `docker compose up` et tout marche » : nginx en
+> frontal sur 8080, l'API derrière, PostgreSQL pour `/clients`, Redis pour
+> `/compteur`, et un mot de passe de base qui n'apparaît **nulle part** dans
+> `docker inspect`. L'environnement de dev doit pouvoir monter le code source
+> sans modifier le fichier principal.
 
 Tout se fait dans `~/lab22/compose/`.
 
@@ -1210,35 +1233,37 @@ Tout se fait dans `~/lab22/compose/`.
    `~/lab22/rapports/compose.md` la différence entre `stop`, `down`,
    `down -v`, et ce qui a fait revenir la pile au boot.
 
-::: astuce
-`docker compose config` affiche le fichier **résolu** : variables
-interpolées, override fusionné, profils filtrés. C'est ce que Compose exécute
-réellement — relis-le avant chaque `up` dès que tu utilises plusieurs
-fichiers.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `docker compose config` affiche le fichier **résolu** : variables
+> interpolées, override fusionné, profils filtrés. C'est ce que Compose exécute
+> réellement — relis-le avant chaque `up` dès que tu utilises plusieurs
+> fichiers.
 
-::: check
-Critère de succès : la pile `factura` tourne, `/clients` et `/compteur`
-répondent via `:8080`, les quatre services sont `healthy` ou dépendent de
-services `healthy`, le mot de passe n'apparaît pas dans l'environnement de
-`app`, le profil `debug` est inactif par défaut, `compose.override.yaml` et
-`compose.prod.yaml` sont valides.
-
-```bash
-bash check_M22_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : la pile `factura` tourne, `/clients` et `/compteur`
+> répondent via `:8080`, les quatre services sont `healthy` ou dépendent de
+> services `healthy`, le mot de passe n'apparaît pas dans l'environnement de
+> `app`, le profil `debug` est inactif par défaut, `compose.override.yaml` et
+> `compose.prod.yaml` sont valides.
+>
+> ```bash
+> bash check_M22_04.sh
+> ```
 
 ---
 
-### **L22.5** — Un registre privé sur `lab-ops`
+### <a id="l22-5"></a>**[L22.5](corrige.md#l22-5)** — Un registre privé sur `lab-ops`
 
-::: contexte
-Les images ne doivent plus transiter par Docker Hub ni par des `docker save`
-envoyés en pièce jointe. On te demande un registre sur `lab-ops`, d'abord en
-clair pour comprendre, puis avec TLS et authentification, consultable depuis
-`lab-adm` et utilisable par Podman sur `lab-rhel`.
-:::
+> **Contexte**
+>
+> Les images ne doivent plus transiter par Docker Hub ni par des `docker save`
+> envoyés en pièce jointe. On te demande un registre sur `lab-ops`, d'abord en
+> clair pour comprendre, puis avec TLS et authentification, consultable depuis
+> `lab-adm` et utilisable par Podman sur `lab-rhel`.
 
 Tout se fait dans `~/lab22/registre/`.
 
@@ -1268,29 +1293,30 @@ Tout se fait dans `~/lab22/registre/`.
    mot de passe, et ce qui manque encore pour la production (au moins trois
    points).
 
-::: check
-Critère de succès : `registre` en TLS avec authentification sur 5000, image
-`lab-ops.lab.local:5000/factura-api` présente dans le catalogue, `docker
-login` réussi depuis `lab-ops`, certificat de confiance déposé au bon endroit,
-`insecure-registries` retiré, rapport rédigé.
-
-```bash
-bash check_M22_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `registre` en TLS avec authentification sur 5000, image
+> `lab-ops.lab.local:5000/factura-api` présente dans le catalogue, `docker
+> login` réussi depuis `lab-ops`, certificat de confiance déposé au bon endroit,
+> `insecure-registries` retiré, rapport rédigé.
+>
+> ```bash
+> bash check_M22_05.sh
+> ```
 
 ---
 
-### **L22.6** — Reconstruire Docker à la main : namespaces, cgroups, overlayfs, runc
+### <a id="l22-6"></a>**[L22.6](corrige.md#l22-6)** — Reconstruire Docker à la main : namespaces, cgroups, overlayfs, runc
 
-::: contexte
-Un architecte veut « comprendre ce qu'on achète » avant de valider Docker
-sur le parc, et un candidat a affirmé en entretien que « Docker, c'est juste
-un `chroot` ». On te demande une démonstration reproductible sur `lab-ops` :
-lancer la même image Alpine **sans le démon Docker**, uniquement avec
-`runc`, un montage overlay et un cgroup, puis mettre le résultat côte à côte
-avec un `docker run` équivalent, mécanisme par mécanisme.
-:::
+> **Contexte**
+>
+> Un architecte veut « comprendre ce qu'on achète » avant de valider Docker
+> sur le parc, et un candidat a affirmé en entretien que « Docker, c'est juste
+> un `chroot` ». On te demande une démonstration reproductible sur `lab-ops` :
+> lancer la même image Alpine **sans le démon Docker**, uniquement avec
+> `runc`, un montage overlay et un cgroup, puis mettre le résultat côte à côte
+> avec un `docker run` équivalent, mécanisme par mécanisme.
 
 Tout se fait dans `~/lab22/manuel/`. Docker sert **uniquement** à obtenir le
 système de fichiers de l'image à l'étape 1 (variante sans Docker :
@@ -1343,45 +1369,49 @@ système de fichiers de l'image à l'étape 1 (variante sans Docker :
    1 à 5, le tableau de l'étape 6, et une réponse en cinq lignes au
    candidat qui parle de `chroot`.
 
-::: attention
-L'overlay de l'étape 2 est monté par root sur un répertoire de ton `$HOME`.
-`umount ~/lab22/manuel/merged` avant tout `rm -rf`, sinon tu supprimes le
-contenu **à travers** le montage. Et un `runc run` laissé en état `stopped`
-bloque le nom : `runc delete manuel`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> L'overlay de l'étape 2 est monté par root sur un répertoire de ton `$HOME`.
+> `umount ~/lab22/manuel/merged` avant tout `rm -rf`, sinon tu supprimes le
+> contenu **à travers** le montage. Et un `runc run` laissé en état `stopped`
+> bloque le nom : `runc delete manuel`.
 
-::: astuce
-`runc spec` produit un `config.json` minimal : trois capabilities, pas de
-seccomp, pas d'AppArmor, racine en lecture seule, hostname `runc`. C'est
-exactement la liste de ce que Docker ajoute par-dessus — et donc la réponse
-à l'architecte. `runc spec --rootless` génère la variante avec user
-namespace, utilisable sans `sudo`.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `runc spec` produit un `config.json` minimal : trois capabilities, pas de
+> seccomp, pas d'AppArmor, racine en lecture seule, hostname `runc`. C'est
+> exactement la liste de ce que Docker ajoute par-dessus — et donc la réponse
+> à l'architecte. `runc spec --rootless` génère la variante avec user
+> namespace, utilisable sans `sudo`.
 
-::: check
-Critère de succès : `lower/` contient le rootfs Alpine, `upper/etc/motd`
-contient le marqueur et `upper/etc/alpine-release` est un whiteout,
-`config.json` est un bundle valide avec le cgroup, la limite mémoire et le
-hostname demandés, le conteneur `docker-manuel` existe avec les mêmes
-limites, `userns-remap` a été retiré, rapport rédigé.
-
-```bash
-sudo bash check_M22_07.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `lower/` contient le rootfs Alpine, `upper/etc/motd`
+> contient le marqueur et `upper/etc/alpine-release` est un whiteout,
+> `config.json` est un bundle valide avec le cgroup, la limite mémoire et le
+> hostname demandés, le conteneur `docker-manuel` existe avec les mêmes
+> limites, `userns-remap` a été retiré, rapport rédigé.
+>
+> ```bash
+> sudo bash check_M22_07.sh
+> ```
 
 ---
 
 ## 22.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9005 avant-bf22`. Le snapshot de
-secours reste `snap-clean` (`qm rollback 9005 snap-clean`), mais l'utiliser
-vaut échec de l'exercice. Les scripts supposent Docker installé (L22.1) et
-construisent une image `factura-bf:base` au premier lancement.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9005 avant-bf22`. Le snapshot de
+> secours reste `snap-clean` (`qm rollback 9005 snap-clean`), mais l'utiliser
+> vaut échec de l'exercice. Les scripts supposent Docker installé (L22.1) et
+> construisent une image `factura-bf:base` au premier lancement.
 
-### **BF22.1** — « L'API legacy redémarre toute seule et met 10 s à s'arrêter »
+### <a id="bf22-1"></a>**[BF22.1](corrige.md#bf22-1)** — « L'API legacy redémarre toute seule et met 10 s à s'arrêter »
 
 ```bash
 sudo bash break_M22_01.sh
@@ -1402,11 +1432,9 @@ de façon que le conteneur tourne indéfiniment et s'arrête en moins de 2 s
 avec le code `0`, et citer deux autres façons d'obtenir le même résultat sans
 réécrire le script.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF22.2** — « /visites renvoie une erreur 500 depuis la migration »
+### <a id="bf22-2"></a>**[BF22.2](corrige.md#bf22-2)** — « /visites renvoie une erreur 500 depuis la migration »
 
 ```bash
 sudo bash break_M22_02.sh
@@ -1425,11 +1453,9 @@ changer le chemin de données.
 l'hôte de la façon la plus restrictive possible, sans redémarrer le
 conteneur, et expliquer pourquoi un volume nommé n'aurait pas eu ce problème.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF22.3** — « Le port est publié mais personne n'y accède »
+### <a id="bf22-3"></a>**[BF22.3](corrige.md#bf22-3)** — « Le port est publié mais personne n'y accède »
 
 ```bash
 sudo bash break_M22_03.sh
@@ -1449,11 +1475,9 @@ pourquoi le test local passait (quel chemin prend un paquet vers
 `127.0.0.1:8003` par rapport à un paquet venant de `lab-adm`), et dire où une
 telle règle aurait dû être documentée.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF22.4** — « Plus rien ne se lance : no space left on device »
+### <a id="bf22-4"></a>**[BF22.4](corrige.md#bf22-4)** — « Plus rien ne se lance : no space left on device »
 
 ```bash
 sudo bash break_M22_04.sh
@@ -1472,11 +1496,9 @@ sous `/var/lib/docker/`, agrandir le disque, supprimer les images du module.
 libérer l'espace par une commande Docker, et proposer deux mesures pour que
 ça ne se reproduise pas (dont une limite chiffrée).
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF22.5** — « L'API ne trouve plus Redis »
+### <a id="bf22-5"></a>**[BF22.5](corrige.md#bf22-5)** — « L'API ne trouve plus Redis »
 
 ```bash
 sudo bash break_M22_05.sh
@@ -1495,11 +1517,9 @@ en dur dans `REDIS_URL`, recréer les conteneurs.
 connectivité IP fonctionne, corriger **sans recréer** les conteneurs, et
 dire comment il aurait fallu les lancer.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF22.6** — « Le traitement par lots n'avance plus, et on ne peut même plus entrer dedans »
+### <a id="bf22-6"></a>**[BF22.6](corrige.md#bf22-6)** — « Le traitement par lots n'avance plus, et on ne peut même plus entrer dedans »
 
 ```bash
 sudo bash break_M22_06.sh
@@ -1521,23 +1541,21 @@ la corriger à chaud pour que les lots se terminent, dire d'où venait la
 valeur initiale (indice : `docker inspect`), et proposer une méthode chiffrée
 pour dimensionner cette limite avant la mise en production.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 22.8 Défi du module ★★★
 
-**D22 — Conteneuriser et livrer `factura-api` 2.0**
+<a id="d22"></a>**[D22](corrige.md#d22) — Conteneuriser et livrer `factura-api` 2.0**
 
-::: contexte
-La version 2.0 de l'API part en préproduction sur `lab-ops`. On te demande
-la chaîne complète : image durcie, scan bloquant, publication dans le registre
-privé, déploiement Compose depuis le registre, script de livraison et runbook.
-Un collègue qui n'a pas fait le module doit pouvoir relivrer la 2.1 en
-lançant un seul script.
-:::
+> **Contexte**
+>
+> La version 2.0 de l'API part en préproduction sur `lab-ops`. On te demande
+> la chaîne complète : image durcie, scan bloquant, publication dans le registre
+> privé, déploiement Compose depuis le registre, script de livraison et runbook.
+> Un collègue qui n'a pas fait le module doit pouvoir relivrer la 2.1 en
+> lançant un seul script.
 
 Cahier des charges :
 
@@ -1585,11 +1603,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M22_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M22_06.sh
+> ```
 
 ---
 
@@ -1630,3 +1649,9 @@ Pour aller plus loin :
 * Reconstruis `factura-api` sur une base *distroless*
   (`gcr.io/distroless/python3-debian12`) : mesure la taille et le nombre de
   CVE, puis essaie de la déboguer avec la technique de Q22.14.
+
+<!-- nav:début -->
+---
+
+[← Module 21](../21-git/README.md) · [Corrigé](corrige.md) · [Module 23 →](../23-ansible/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

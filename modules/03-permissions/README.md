@@ -1,36 +1,61 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie I — Fondamentaux du shell et du système de fichiers › **Module 03**  
+[← Module 02](../02-filesystem-fhs/README.md) · [Corrigé](corrige.md) · [Module 04 →](../04-users-groups-sudo/README.md)
+
+<details><summary>Scripts du module (9)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M03.sh`](../../scripts/setup/setup_M03.sh) | prépare le module |
+| [`check_M03_01.sh`](../../scripts/check/check_M03_01.sh) | vérification |
+| [`check_M03_02.sh`](../../scripts/check/check_M03_02.sh) | vérification |
+| [`check_M03_03.sh`](../../scripts/check/check_M03_03.sh) | vérification |
+| [`check_M03_04.sh`](../../scripts/check/check_M03_04.sh) | vérification |
+| [`check_M03_05.sh`](../../scripts/check/check_M03_05.sh) | vérification |
+| [`break_M03_01.sh`](../../scripts/break/break_M03_01.sh) | installe une panne |
+| [`break_M03_02.sh`](../../scripts/break/break_M03_02.sh) | installe une panne |
+| [`break_M03_03.sh`](../../scripts/break/break_M03_03.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 03 — Permissions, ACL et droits spéciaux
 
 ## 3.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* lire une ligne de `ls -l` champ par champ et donner la signification exacte de
-  `r`, `w`, `x` **sur un fichier et sur un répertoire**, sans confondre les deux ;
-* traduire dans les deux sens entre notation symbolique et octale, et poser un
-  `chmod` récursif correct qui ne rend pas les fichiers exécutables (`X` majuscule
-  ou `find -type`) ;
-* calculer le mode réel d'un fichier ou d'un répertoire à partir d'un `umask`
-  donné, et savoir **où** un umask se définit pour un shell, un service systemd
-  ou une session PAM ;
-* expliquer le rôle du SUID, du SGID (sur fichier **et** sur répertoire) et du
-  sticky bit, et dire pourquoi `/tmp` est en `1777` ;
-* trouver les binaires SUID d'un système, juger lesquels sont légitimes, et
-  décrire un scénario réel d'escalade de privilèges par un SUID ;
-* poser une ACL POSIX propre (`setfacl`, ACL par défaut sur répertoire, masque
-  effectif) et dire quand une ACL est la bonne réponse plutôt qu'un groupe ;
-* rendre un fichier immuable avec `chattr +i`, forcer un journal en append-only
-  avec `+a`, et diagnostiquer un `lsattr` ;
-* remplacer un SUID par une **capability** (`setcap cap_net_bind_service`) et
-  expliquer pourquoi c'est plus sûr ;
-* durcir les droits d'un secret (clé SSH, `/etc/shadow`, secret d'app) au niveau
-  qu'un démon exige pour démarrer ;
-* mener un diagnostic « permission denied » de bout en bout : chemin complet,
-  `namei -l`, groupes de l'utilisateur, et écarter SELinux/AppArmor.
-
-Temps estimé : 5 h
-Prérequis : module 01 (shell, quoting), module 02 (FHS, `find`, types de fichiers).
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * lire une ligne de `ls -l` champ par champ et donner la signification exacte de
+>   `r`, `w`, `x` **sur un fichier et sur un répertoire**, sans confondre les deux ;
+> * traduire dans les deux sens entre notation symbolique et octale, et poser un
+>   `chmod` récursif correct qui ne rend pas les fichiers exécutables (`X` majuscule
+>   ou `find -type`) ;
+> * calculer le mode réel d'un fichier ou d'un répertoire à partir d'un `umask`
+>   donné, et savoir **où** un umask se définit pour un shell, un service systemd
+>   ou une session PAM ;
+> * expliquer le rôle du SUID, du SGID (sur fichier **et** sur répertoire) et du
+>   sticky bit, et dire pourquoi `/tmp` est en `1777` ;
+> * trouver les binaires SUID d'un système, juger lesquels sont légitimes, et
+>   décrire un scénario réel d'escalade de privilèges par un SUID ;
+> * poser une ACL POSIX propre (`setfacl`, ACL par défaut sur répertoire, masque
+>   effectif) et dire quand une ACL est la bonne réponse plutôt qu'un groupe ;
+> * rendre un fichier immuable avec `chattr +i`, forcer un journal en append-only
+>   avec `+a`, et diagnostiquer un `lsattr` ;
+> * remplacer un SUID par une **capability** (`setcap cap_net_bind_service`) et
+>   expliquer pourquoi c'est plus sûr ;
+> * durcir les droits d'un secret (clé SSH, `/etc/shadow`, secret d'app) au niveau
+>   qu'un démon exige pour démarrer ;
+> * mener un diagnostic « permission denied » de bout en bout : chemin complet,
+>   `namei -l`, groupes de l'utilisateur, et écarter SELinux/AppArmor.
+>
+> **Temps estimé** : 5 h
+>
+> **Prérequis** : module 01 (shell, quoting), module 02 (FHS, `find`, types de fichiers).
 
 ---
 
@@ -55,19 +80,21 @@ sudo apt install -y nginx acl attr libcap2-bin
 `acl` fournit `getfacl`/`setfacl`, `attr` fournit `getfattr`, `libcap2-bin`
 fournit `getcap`/`setcap`. `namei` est déjà là (paquet `util-linux`).
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y nginx acl attr libcap`. Le service nginx
-tourne sous l'utilisateur `nginx` (et non `www-data`), et sa racine par défaut est
-`/usr/share/nginx/html`. Adapte les noms d'utilisateur et les chemins dans tout le
-module en conséquence.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y nginx acl attr libcap`. Le service nginx
+> tourne sous l'utilisateur `nginx` (et non `www-data`), et sa racine par défaut est
+> `/usr/share/nginx/html`. Adapte les noms d'utilisateur et les chemins dans tout le
+> module en conséquence.
 
-::: attention
-Les ACL supposent un système de fichiers qui les supporte.
-Sur Ubuntu 24.04 et Rocky 9, ext4 et XFS les activent d'office (l'option `acl` est implicite et n'apparaît même plus dans `mount`), tu n'as rien à
-faire. Sur un montage exotique (NFS ancien, certains systèmes de fichiers réseau), `setfacl` échouera
-avec `Operation not supported` : c'est un diagnostic à connaître, pas un bug.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Les ACL supposent un système de fichiers qui les supporte.
+> Sur Ubuntu 24.04 et Rocky 9, ext4 et XFS les activent d'office (l'option `acl` est implicite et n'apparaît même plus dans `mount`), tu n'as rien à
+> faire. Sur un montage exotique (NFS ancien, certains systèmes de fichiers réseau), `setfacl` échouera
+> avec `Operation not supported` : c'est un diagnostic à connaître, pas un bug.
 
 Préparation du terrain de jeu (idempotent, à relancer sans crainte) :
 
@@ -110,7 +137,9 @@ quelque part pour exécuter).
 | `w` | modifier le contenu | créer/supprimer/renommer des entrées |
 | `x` | exécuter | **traverser** : entrer, accéder à un fichier par son nom |
 
-@fig(perm-bits): Les 12 bits de mode, la lecture octale de `4755`, et ce que `r`, `w`, `x` veulent dire sur un fichier et sur un répertoire.
+<p align="center"><img src="../../assets/figures/perm-bits.svg" alt="Schéma : perm-bits"></p>
+
+*Figure — Les 12 bits de mode, la lecture octale de `4755`, et ce que `r`, `w`, `x` veulent dire sur un fichier et sur un répertoire.*
 
 Conséquences qui piègent tout le monde :
 
@@ -252,7 +281,7 @@ sur le fichier lui-même. `namei -l` est l'outil qui le montre d'un coup d'œil.
 
 ## 3.3 Quiz — QCM
 
-**Q3.1** — Un fichier est en `-rw-r--r--`, propriétaire `mathieu`, groupe `dev`.
+<a id="q3-1"></a>**[Q3.1](corrige.md#q3-1)** — Un fichier est en `-rw-r--r--`, propriétaire `mathieu`, groupe `dev`.
 L'utilisateur `mathieu` est membre du groupe `dev`. Quels droits `mathieu` a-t-il
 réellement sur ce fichier ?
 
@@ -261,7 +290,7 @@ b) `r--`, parce qu'il est membre du groupe `dev`
 c) `rw-r--`, l'union des deux
 d) aucun, il faut choisir une catégorie explicitement
 
-**Q3.2** — Un répertoire `docs/` est en `r--r--r--` (444) et t'appartient. Que se
+<a id="q3-2"></a>**[Q3.2](corrige.md#q3-2)** — Un répertoire `docs/` est en `r--r--r--` (444) et t'appartient. Que se
 passe-t-il quand tu tapes `ls -l docs/` ?
 
 a) la liste détaillée s'affiche normalement
@@ -269,7 +298,7 @@ b) les noms s'affichent, mais chaque ligne donne `Permission denied` sur les dé
 c) `Permission denied` immédiat, rien ne s'affiche
 d) `ls` liste et affiche tout : `r` suffit pour un répertoire
 
-**Q3.3** — Un fichier `secret.txt` est en `r--r--r--` (444). Il est dans un
+<a id="q3-3"></a>**[Q3.3](corrige.md#q3-3)** — Un fichier `secret.txt` est en `r--r--r--` (444). Il est dans un
 répertoire `/data` qui t'appartient et sur lequel tu as `rwx`. Peux-tu le supprimer ?
 
 a) non, le fichier est en lecture seule
@@ -277,7 +306,7 @@ b) non, il faut au moins `w` sur le fichier
 c) oui, la suppression dépend du `w` sur le répertoire, pas sur le fichier
 d) oui, mais seulement avec `rm -f`
 
-**Q3.4** — `umask` vaut `027`. Tu crées un fichier avec `touch f` et un répertoire
+<a id="q3-4"></a>**[Q3.4](corrige.md#q3-4)** — `umask` vaut `027`. Tu crées un fichier avec `touch f` et un répertoire
 avec `mkdir d`. Quels sont leurs modes ?
 
 a) `f` en 640, `d` en 750
@@ -285,7 +314,7 @@ b) `f` en 750, `d` en 640
 c) `f` en 639, `d` en 750
 d) `f` en 644, `d` en 755
 
-**Q3.5** — Tu veux donner les droits `755` aux répertoires et `644` aux fichiers
+<a id="q3-5"></a>**[Q3.5](corrige.md#q3-5)** — Tu veux donner les droits `755` aux répertoires et `644` aux fichiers
 d'une arborescence web, en une seule commande `chmod`. Laquelle ?
 
 a) `chmod -R 755 /var/www/site`
@@ -293,7 +322,7 @@ b) `chmod -R 644 /var/www/site`
 c) `chmod -R u=rwX,go=rX /var/www/site`
 d) `chmod -R a+rwx /var/www/site`
 
-**Q3.6** — Sur `lab-web`, `ls -l /usr/bin/passwd` affiche
+<a id="q3-6"></a>**[Q3.6](corrige.md#q3-6)** — Sur `lab-web`, `ls -l /usr/bin/passwd` affiche
 `-rwsr-xr-x 1 root root`. Que signifie le `s` et pourquoi est-il là ?
 
 a) sticky bit : le binaire reste en mémoire
@@ -301,7 +330,7 @@ b) SGID : passwd s'exécute avec le groupe root
 c) SUID : passwd s'exécute avec l'UID root, pour écrire dans `/etc/shadow`
 d) une ACL étendue est présente
 
-**Q3.7** — Le répertoire `/srv/partage` est en `drwxrws---` (2770), groupe
+<a id="q3-7"></a>**[Q3.7](corrige.md#q3-7)** — Le répertoire `/srv/partage` est en `drwxrws---` (2770), groupe
 `facturation`. Un membre du groupe y crée un fichier. Quel sera son **groupe** ?
 
 a) le groupe primaire de l'utilisateur
@@ -309,21 +338,21 @@ b) `facturation`, hérité du répertoire grâce au SGID
 c) `root`
 d) aucun groupe tant qu'on ne fait pas `chgrp`
 
-**Q3.8** — Pourquoi `/tmp` est-il en `drwxrwxrwt` (1777) et pas simplement `777` ?
+<a id="q3-8"></a>**[Q3.8](corrige.md#q3-8)** — Pourquoi `/tmp` est-il en `drwxrwxrwt` (1777) et pas simplement `777` ?
 
 a) le `t` (sticky) autorise tout le monde à écrire
 b) le `t` empêche un utilisateur de supprimer les fichiers des autres
 c) le `t` rend les fichiers exécutables par défaut
 d) le `t` est un vestige sans effet sur Linux moderne
 
-**Q3.9** — Tu lances `find / -perm -4000 -type f 2>/dev/null`. Que cherches-tu ?
+<a id="q3-9"></a>**[Q3.9](corrige.md#q3-9)** — Tu lances `find / -perm -4000 -type f 2>/dev/null`. Que cherches-tu ?
 
 a) les fichiers modifiés il y a 4000 minutes
 b) les fichiers dont le mode est exactement 4000
 c) tous les fichiers ayant au moins le bit SUID positionné
 d) les fichiers appartenant à l'UID 4000
 
-**Q3.10** — `getfacl /srv/factura` montre :
+<a id="q3-10"></a>**[Q3.10](corrige.md#q3-10)** — `getfacl /srv/factura` montre :
 
 ```text
 user::rwx
@@ -340,7 +369,7 @@ b) non : le masque `r--` plafonne son droit effectif à `r--`
 c) oui, mais seulement en lecture
 d) impossible à dire sans voir `other`
 
-**Q3.11** — Tu veux que **tous les nouveaux fichiers** créés dans `/srv/data`
+<a id="q3-11"></a>**[Q3.11](corrige.md#q3-11)** — Tu veux que **tous les nouveaux fichiers** créés dans `/srv/data`
 donnent automatiquement `rX` au groupe `webdev`, sans avoir à relancer `setfacl`
 après chaque création. Quelle commande ?
 
@@ -349,7 +378,7 @@ b) `setfacl -R -m g:webdev:rX /srv/data`
 c) `setfacl -d -m g:webdev:rX /srv/data`
 d) `chmod g+rX /srv/data`
 
-**Q3.12** — `chattr +i /etc/resolv.conf` a été posé. Tu es root. Que se passe-t-il
+<a id="q3-12"></a>**[Q3.12](corrige.md#q3-12)** — `chattr +i /etc/resolv.conf` a été posé. Tu es root. Que se passe-t-il
 si tu tentes `echo "nameserver 9.9.9.9" > /etc/resolv.conf` ?
 
 a) ça marche, root ignore tous les attributs
@@ -357,7 +386,7 @@ b) `Operation not permitted`, il faut d'abord `chattr -i`
 c) ça marche mais un warning s'affiche
 d) le fichier est vidé mais pas réécrit
 
-**Q3.13** — Une application doit écouter sur le port 80 sans tourner en root.
+<a id="q3-13"></a>**[Q3.13](corrige.md#q3-13)** — Une application doit écouter sur le port 80 sans tourner en root.
 Quelle est la solution la plus sûre sur Linux moderne ?
 
 a) `chmod u+s /opt/app/api` (SUID root)
@@ -365,7 +394,7 @@ b) lancer le service en root et ne rien changer
 c) `setcap cap_net_bind_service=+ep /opt/app/api`
 d) `chown root:root` et `chmod 4755`
 
-**Q3.14** — `ssh` refuse ta clé et journalise
+<a id="q3-14"></a>**[Q3.14](corrige.md#q3-14)** — `ssh` refuse ta clé et journalise
 `Permissions 0644 for '~/.ssh/id_ed25519' are too open`. Pourquoi ?
 
 a) la clé est corrompue
@@ -373,7 +402,7 @@ b) ssh exige que la clé privée soit lisible seulement par son propriétaire (6
 c) il manque le bit d'exécution sur la clé
 d) le problème vient de `~/.ssh` qui doit être en 777
 
-**Q3.15** — Tu diagnostiques un `Permission denied` sur
+<a id="q3-15"></a>**[Q3.15](corrige.md#q3-15)** — Tu diagnostiques un `Permission denied` sur
 `/srv/factura/exports/rapport.csv` alors que le fichier est bien en `644`.
 Quel est l'outil le plus direct pour trouver la cause ?
 
@@ -382,14 +411,14 @@ b) `namei -l /srv/factura/exports/rapport.csv`
 c) `chmod 777 /srv/factura/exports/rapport.csv`
 d) `stat rapport.csv`
 
-**Q3.16** — Un répertoire est en `drwxr-x---+`. Que t'apprend le `+` final ?
+<a id="q3-16"></a>**[Q3.16](corrige.md#q3-16)** — Un répertoire est en `drwxr-x---+`. Que t'apprend le `+` final ?
 
 a) le répertoire est un point de montage
 b) une ACL POSIX étendue est présente
 c) le sticky bit est actif
 d) le répertoire contient des sous-répertoires
 
-**Q3.17** — `ls -l` montre un binaire en `-rwSr--r--`. Que signifie le `S`
+<a id="q3-17"></a>**[Q3.17](corrige.md#q3-17)** — `ls -l` montre un binaire en `-rwSr--r--`. Que signifie le `S`
 **majuscule** ?
 
 a) SUID actif et le fichier est exécutable par le propriétaire
@@ -397,7 +426,7 @@ b) SUID positionné mais **sans** bit `x` sur le propriétaire (donc inopérant/
 c) sticky bit sur un fichier
 d) une capability est attachée
 
-**Q3.18** — Tu crées un fichier via un service systemd qui n'a pas de directive
+<a id="q3-18"></a>**[Q3.18](corrige.md#q3-18)** — Tu crées un fichier via un service systemd qui n'a pas de directive
 `UMask=`. Ton shell interactif est configuré avec `umask 077`. Quel umask
 s'applique au fichier créé par le service ?
 
@@ -410,73 +439,57 @@ d) `027`, la valeur de `/etc/login.defs`
 
 ## 3.4 Quiz — questions ouvertes
 
-**QO3.1** — Explique, en raisonnant sur les trois triades, pourquoi le propriétaire
+<a id="qo3-1"></a>**[QO3.1](corrige.md#qo3-1)** — Explique, en raisonnant sur les trois triades, pourquoi le propriétaire
 d'un fichier en `---rwxrwx` (mode 077) ne peut ni le lire ni le modifier alors que
 n'importe quel membre du groupe ou tiers le peut. Quel principe général cela
 illustre-t-il ?
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
-**QO3.2** — On te donne `umask 007`. Détaille le calcul complet du mode d'un fichier
+<a id="qo3-2"></a>**[QO3.2](corrige.md#qo3-2)** — On te donne `umask 007`. Détaille le calcul complet du mode d'un fichier
 et d'un répertoire nouvellement créés, en montrant l'opération bit à bit. Puis
 explique pourquoi un umask **ne peut jamais** ajouter le bit `x` à un fichier créé
 par `touch` ou une redirection.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO3.3** — *On te demande en entretien* : « Quelle est la différence entre SGID sur
+<a id="qo3-3"></a>**[QO3.3](corrige.md#qo3-3)** — *On te demande en entretien* : « Quelle est la différence entre SGID sur
 un fichier et SGID sur un répertoire ? Donne un cas d'usage réel du second. »
 Réponds comme en entretien.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO3.4** — Explique le rôle du **masque** dans une ACL POSIX. Pourquoi peut-on
+<a id="qo3-4"></a>**[QO3.4](corrige.md#qo3-4)** — Explique le rôle du **masque** dans une ACL POSIX. Pourquoi peut-on
 avoir une entrée `u:webdev:rwx` qui n'accorde en réalité que `r--` ? Comment
 `setfacl` recalcule-t-il le masque, et comment forcer une valeur ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO3.5** — *On te demande en entretien* : « Un binaire est en SUID root et tu y
+<a id="qo3-5"></a>**[QO3.5](corrige.md#qo3-5)** — *On te demande en entretien* : « Un binaire est en SUID root et tu y
 trouves une vulnérabilité. Décris précisément ce qu'un attaquant local peut en
 faire, et pourquoi une capability aurait limité les dégâts. »
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO3.6** — Compare deux façons de partager en écriture un répertoire entre trois
+<a id="qo3-6"></a>**[QO3.6](corrige.md#qo3-6)** — Compare deux façons de partager en écriture un répertoire entre trois
 utilisateurs : (a) un groupe Unix + SGID + `chmod g+w`, et (b) des ACL POSIX. Dans
 quel cas chacune est la bonne réponse ? Cite une limite concrète de la solution par
 groupe que les ACL résolvent.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO3.7** — Décris ta démarche complète, dans l'ordre, face à un utilisateur qui
+<a id="qo3-7"></a>**[QO3.7](corrige.md#qo3-7)** — Décris ta démarche complète, dans l'ordre, face à un utilisateur qui
 signale `Permission denied` en lisant un fichier dont il jure qu'il est en `644`.
 Nomme chaque commande et ce que tu cherches dans sa sortie, jusqu'à écarter
 AppArmor/SELinux.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO3.8** — À quoi servent `chattr +i` et `chattr +a` ? Donne un cas d'usage
+<a id="qo3-8"></a>**[QO3.8](corrige.md#qo3-8)** — À quoi servent `chattr +i` et `chattr +a` ? Donne un cas d'usage
 opérationnel de chacun, et explique le piège que `+i` peut créer pour une mise à
 jour de paquet ou un déploiement automatisé.
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
 ---
 
@@ -484,70 +497,70 @@ lignes: 6
 
 Sauf mention contraire, travaille dans `~/lab03/` sur `lab-web`.
 
-**E3.1** — Sans exécuter la commande, prédis le mode octal résultant, puis vérifie :
+<a id="e3-1"></a>**[E3.1](corrige.md#e3-1)** — Sans exécuter la commande, prédis le mode octal résultant, puis vérifie :
 tu pars d'un fichier `600` et tu appliques `chmod g+r,o+r` ; puis sur le résultat
 `chmod g=u` ; puis `chmod o=`.
 
-**E3.2** — Crée un répertoire `~/lab03/prive` accessible **uniquement** à toi
+<a id="e3-2"></a>**[E3.2](corrige.md#e3-2)** — Crée un répertoire `~/lab03/prive` accessible **uniquement** à toi
 (personne d'autre ne doit pouvoir ni lister ni traverser), et un répertoire
 `~/lab03/depot` que les membres de ton groupe peuvent traverser et lire mais pas
 modifier. Donne les modes octaux exacts.
 
-**E3.3** — Dans `~/lab03/mixte` (fourni par le setup, il contient des `.sh` et des
+<a id="e3-3"></a>**[E3.3](corrige.md#e3-3)** — Dans `~/lab03/mixte` (fourni par le setup, il contient des `.sh` et des
 `.txt` mélangés), mets tous les répertoires en `755` et tous les fichiers en `644`
 sans rendre les `.txt` exécutables, **sans** utiliser `find`. Puis refais-le avec
 `find`. Compare les deux commandes.
 
-**E3.4** — Le répertoire `~/lab03/lecture` est en `r-xr-xr-x`. Tu constates que tu
+<a id="e3-4"></a>**[E3.4](corrige.md#e3-4)** — Le répertoire `~/lab03/lecture` est en `r-xr-xr-x`. Tu constates que tu
 peux lire les fichiers dont tu connais le nom et que `ls` fonctionne. Retire
 maintenant le `r` pour ne garder que `x` (mode `111`) et montre par deux commandes
 que tu peux toujours `cat lecture/connu.txt` mais plus lister le contenu.
 
-**E3.5** — Affiche, pour `/srv/factura/exports/rapport.csv`, les droits de **chaque**
+<a id="e3-5"></a>**[E3.5](corrige.md#e3-5)** — Affiche, pour `/srv/factura/exports/rapport.csv`, les droits de **chaque**
 composant du chemin depuis la racine, en une seule commande.
 
-**E3.6** — Positionne le SGID sur `~/lab03/partage` (groupe `facturation`), puis
+<a id="e3-6"></a>**[E3.6](corrige.md#e3-6)** — Positionne le SGID sur `~/lab03/partage` (groupe `facturation`), puis
 crée un fichier dedans et prouve qu'il hérite du groupe `facturation` et non de ton
 groupe primaire.
 
-**E3.7** — Reproduis en local le comportement de `/tmp` : crée `~/lab03/commun`,
+<a id="e3-7"></a>**[E3.7](corrige.md#e3-7)** — Reproduis en local le comportement de `/tmp` : crée `~/lab03/commun`,
 mode `1777`, puis explique (en une phrase, dans un fichier `~/lab03/commun-note.txt`)
 ce que le sticky bit empêche exactement.
 
-**E3.8** — Liste tous les binaires SUID de `lab-web`, triés, et compte-les. Repère
+<a id="e3-8"></a>**[E3.8](corrige.md#e3-8)** — Liste tous les binaires SUID de `lab-web`, triés, et compte-les. Repère
 dans la liste `passwd`, `sudo`, `mount` et explique en une ligne chacun pourquoi il
 est légitimement SUID (fichier `~/lab03/suid-note.txt`).
 
-**E3.9** — Sur `/srv/factura/exports`, donne à l'utilisateur `webdev` (qui n'est ni
+<a id="e3-9"></a>**[E3.9](corrige.md#e3-9)** — Sur `/srv/factura/exports`, donne à l'utilisateur `webdev` (qui n'est ni
 propriétaire ni dans le groupe) le droit de lire et traverser, **sans** le mettre
 dans un groupe et sans toucher aux bits `other`. Vérifie avec `getfacl`.
 
-**E3.10** — Sur `/srv/factura/incoming`, pose une ACL **par défaut** telle que tout
+<a id="e3-10"></a>**[E3.10](corrige.md#e3-10)** — Sur `/srv/factura/incoming`, pose une ACL **par défaut** telle que tout
 nouveau fichier créé par le groupe `facturation` soit lisible et modifiable par le
 groupe `webdev`. Crée ensuite un fichier de test et vérifie qu'il hérite bien de
 l'ACL.
 
-**E3.11** — Reproduis d'abord la situation : `sudo setfacl -m u:webdev:rwx,m::r` `/srv/factura/exports`. L'ACL donne maintenant `u:webdev:rwx` mais `getfacl`
+<a id="e3-11"></a>**[E3.11](corrige.md#e3-11)** — Reproduis d'abord la situation : `sudo setfacl -m u:webdev:rwx,m::r` `/srv/factura/exports`. L'ACL donne maintenant `u:webdev:rwx` mais `getfacl`
 affiche `#effective:r--`. Corrige le masque pour que `webdev` obtienne réellement
 ses droits en écriture, sans retoucher son entrée nominale.
 
-**E3.12** — Rends le fichier `~/lab03/immuable.conf` impossible à modifier ou
+<a id="e3-12"></a>**[E3.12](corrige.md#e3-12)** — Rends le fichier `~/lab03/immuable.conf` impossible à modifier ou
 supprimer, même par root. Prouve-le avec une tentative d'écriture, puis lève la
 protection.
 
-**E3.13** — Fais du fichier `~/lab03/audit.log` un journal **append-only** : montre
+<a id="e3-13"></a>**[E3.13](corrige.md#e3-13)** — Fais du fichier `~/lab03/audit.log` un journal **append-only** : montre
 qu'on peut y ajouter une ligne avec `»` mais qu'on ne peut ni le vider avec `>` ni
 le supprimer.
 
-**E3.14** — Copie `/bin/sleep` en `~/lab03/bindtest`, puis donne-lui la capability
+<a id="e3-14"></a>**[E3.14](corrige.md#e3-14)** — Copie `/bin/sleep` en `~/lab03/bindtest`, puis donne-lui la capability
 `cap_net_bind_service` (effective + permitted) et vérifie avec `getcap`. Retire-la
 ensuite proprement.
 
-**E3.15** — Durcis les droits de `~/lab03/secrets/` : le répertoire en `700`, le
+<a id="e3-15"></a>**[E3.15](corrige.md#e3-15)** — Durcis les droits de `~/lab03/secrets/` : le répertoire en `700`, le
 fichier `~/lab03/secrets/id_ed25519` en `600`, et `~/lab03/secrets/config` en `644`.
 Explique en une ligne pourquoi une clé privée en `644` fait refuser `ssh`.
 
-**E3.16** — Configure ton shell pour que **tout nouveau fichier** que tu crées soit
+<a id="e3-16"></a>**[E3.16](corrige.md#e3-16)** — Configure ton shell pour que **tout nouveau fichier** que tu crées soit
 en `640` et tout nouveau répertoire en `750`, de façon persistante entre sessions.
 Donne la valeur de umask et le fichier où tu la poses.
 
@@ -555,15 +568,15 @@ Donne la valeur de umask et le fichier où tu la poses.
 
 ## 3.6 Labs ★★
 
-### **L3.1** — Répertoire partagé pour l'équipe facturation
+### <a id="l3-1"></a>**[L3.1](corrige.md#l3-1)** — Répertoire partagé pour l'équipe facturation
 
-::: contexte
-L'équipe facturation (utilisateurs `mathieu`, `webdev`, plus un compte de service
-`facturation`) doit collaborer sur `/srv/factura/exports`. Aujourd'hui chacun crée
-des fichiers que les autres ne peuvent pas modifier, parce que le groupe n'est pas
-hérité et que les droits par défaut excluent le groupe. On te demande un partage
-propre où tout fichier déposé est immédiatement modifiable par tout le groupe.
-:::
+> **Contexte**
+>
+> L'équipe facturation (utilisateurs `mathieu`, `webdev`, plus un compte de service
+> `facturation`) doit collaborer sur `/srv/factura/exports`. Aujourd'hui chacun crée
+> des fichiers que les autres ne peuvent pas modifier, parce que le groupe n'est pas
+> hérité et que les droits par défaut excluent le groupe. On te demande un partage
+> propre où tout fichier déposé est immédiatement modifiable par tout le groupe.
 
 1. Crée (ou réutilise) le groupe `facturation` et vérifie que `mathieu` et `webdev`
    en sont membres (`id mathieu`).
@@ -576,26 +589,27 @@ propre où tout fichier déposé est immédiatement modifiable par tout le group
    le modifier sans intervention manuelle.
 5. Vérifie que `other` n'a **aucun** accès, pas même la traversée.
 
-::: check
-Critère de succès : un fichier créé par n'importe quel membre du groupe est en
-groupe `facturation` et modifiable par les autres membres, `other` est exclu.
-
-```bash
-sudo bash check_M03_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : un fichier créé par n'importe quel membre du groupe est en
+> groupe `facturation` et modifiable par les autres membres, `other` est exclu.
+>
+> ```bash
+> sudo bash check_M03_01.sh
+> ```
 
 ---
 
-### **L3.2** — Accès en lecture seule pour un auditeur, sans le mettre dans le groupe
+### <a id="l3-2"></a>**[L3.2](corrige.md#l3-2)** — Accès en lecture seule pour un auditeur, sans le mettre dans le groupe
 
-::: contexte
-Un auditeur externe (compte `webdev` dans ce lab) doit **lire** l'arborescence
-`/srv/factura` — traverser les répertoires, lire les fichiers — mais tu n'as pas le
-droit de l'ajouter au groupe `facturation` (règle de séparation des tâches), et tu
-ne veux surtout pas ouvrir les bits `other`. C'est le cas d'école où les ACL sont la
-bonne réponse.
-:::
+> **Contexte**
+>
+> Un auditeur externe (compte `webdev` dans ce lab) doit **lire** l'arborescence
+> `/srv/factura` — traverser les répertoires, lire les fichiers — mais tu n'as pas le
+> droit de l'ajouter au groupe `facturation` (règle de séparation des tâches), et tu
+> ne veux surtout pas ouvrir les bits `other`. C'est le cas d'école où les ACL sont la
+> bonne réponse.
 
 1. Si tu as fait L3.1, `webdev` est membre de `facturation` : retire-le d'abord (`sudo gpasswd -d webdev facturation`), c'est un auditeur externe dans ce scénario. Constate ensuite l'état initial : `sudo -u webdev ls /srv/factura/exports` échoue.
 2. Pose une ACL sur `/srv/factura` et son contenu qui donne à l'utilisateur
@@ -608,26 +622,27 @@ bonne réponse.
 5. Rédige dans `~/lab03/rapports/acl-audit.md` (au moins 8 lignes) : pourquoi une
    ACL et pas un groupe ici, et quel serait le risque d'avoir mis `o+rX` à la place.
 
-::: check
-Critère de succès : `sudo -u webdev cat` fonctionne sur un fichier d'exports,
-`sudo -u webdev touch` échoue, `getfacl` montre l'entrée `user:webdev` et une entrée
-`default:user:webdev`, `other` est à `---`.
-
-```bash
-sudo bash check_M03_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `sudo -u webdev cat` fonctionne sur un fichier d'exports,
+> `sudo -u webdev touch` échoue, `getfacl` montre l'entrée `user:webdev` et une entrée
+> `default:user:webdev`, `other` est à `---`.
+>
+> ```bash
+> sudo bash check_M03_02.sh
+> ```
 
 ---
 
-### **L3.3** — Audit des binaires SUID/SGID
+### <a id="l3-3"></a>**[L3.3](corrige.md#l3-3)** — Audit des binaires SUID/SGID
 
-::: contexte
-Un audit de sécurité te demande l'inventaire des binaires SUID et SGID de `lab-web`,
-et de justifier chacun ou de le signaler. Le setup a déposé un binaire SUID
-volontairement suspect (`/usr/local/bin/factura-backup`, SUID root) pour te faire
-travailler l'œil.
-:::
+> **Contexte**
+>
+> Un audit de sécurité te demande l'inventaire des binaires SUID et SGID de `lab-web`,
+> et de justifier chacun ou de le signaler. Le setup a déposé un binaire SUID
+> volontairement suspect (`/usr/local/bin/factura-backup`, SUID root) pour te faire
+> travailler l'œil.
 
 1. Produis dans `~/lab03/rapports/suid-inventaire.txt` la liste complète des
    fichiers SUID **et** SGID du système, avec leurs droits (`ls -l`), triée.
@@ -641,25 +656,26 @@ travailler l'œil.
    supprimer, et vérifie qu'il n'apparaît plus dans un `find -perm -4000`.
 5. Vérifie que tu n'as pas cassé les SUID légitimes au passage.
 
-::: check
-Critère de succès : `factura-backup` n'a plus le bit SUID, l'inventaire est écrit et
-non vide, et `passwd`/`sudo`/`mount` sont toujours SUID.
-
-```bash
-sudo bash check_M03_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `factura-backup` n'a plus le bit SUID, l'inventaire est écrit et
+> non vide, et `passwd`/`sudo`/`mount` sont toujours SUID.
+>
+> ```bash
+> sudo bash check_M03_03.sh
+> ```
 
 ---
 
-### **L3.4** — Un service qui écoute sur le port 80 sans être root
+### <a id="l3-4"></a>**[L3.4](corrige.md#l3-4)** — Un service qui écoute sur le port 80 sans être root
 
-::: contexte
-Une petite API interne (`/usr/local/bin/factura-api`, un binaire fourni par le
-setup) doit écouter sur le port 80. Le dev l'a d'abord fait tourner en root
-« parce que sinon ça ne bind pas ». On te demande de la faire tourner sous un
-compte non privilégié tout en gardant le port 80, avec la méthode moderne.
-:::
+> **Contexte**
+>
+> Une petite API interne (`/usr/local/bin/factura-api`, un binaire fourni par le
+> setup) doit écouter sur le port 80. Le dev l'a d'abord fait tourner en root
+> « parce que sinon ça ne bind pas ». On te demande de la faire tourner sous un
+> compte non privilégié tout en gardant le port 80, avec la méthode moderne.
 
 1. Lance l'API en tant qu'utilisateur non root et constate l'échec de bind sur le
    port 80 (`Permission denied`, réservé aux ports < 1024). Sur `lab-web`, nginx occupe déjà ce port : arrête-le le temps du lab (`sudo systemctl stop nginx`) et relance-le à la fin, sinon tu obtiendras `Address already in use`.
@@ -672,26 +688,28 @@ compte non privilégié tout en gardant le port 80, avec la méthode moderne.
 5. Documente dans `~/lab03/rapports/capability.md` la différence de surface d'attaque
    entre SUID root et cette capability.
 
-::: check
-Critère de succès : `getcap /usr/local/bin/factura-api` montre `cap_net_bind_service`,
-le binaire n'a **pas** le bit SUID, et le rapport existe.
-
-```bash
-sudo bash check_M03_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `getcap /usr/local/bin/factura-api` montre `cap_net_bind_service`,
+> le binaire n'a **pas** le bit SUID, et le rapport existe.
+>
+> ```bash
+> sudo bash check_M03_04.sh
+> ```
 
 ---
 
 ## 3.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf03`. Le snapshot de secours
-reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec de
-l'exercice : l'objectif est de réparer, pas de rembobiner.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9002 avant-bf03`. Le snapshot de secours
+> reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec de
+> l'exercice : l'objectif est de réparer, pas de rembobiner.
 
-### **BF3.1** — « nginx renvoie 403 sur tout le site »
+### <a id="bf3-1"></a>**[BF3.1](corrige.md#bf3-1)** — « nginx renvoie 403 sur tout le site »
 
 ```bash
 sudo bash break_M03_01.sh
@@ -709,11 +727,9 @@ composant du chemin qui bloque, corriger **au bon niveau et avec le bon mode**, 
 expliquer pourquoi des fichiers en `644` ne suffisent pas si un répertoire parent
 perd son bit `x`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF3.2** — « Impossible d'écrire dans le dépôt d'exports, et le groupe ne suit plus »
+### <a id="bf3-2"></a>**[BF3.2](corrige.md#bf3-2)** — « Impossible d'écrire dans le dépôt d'exports, et le groupe ne suit plus »
 
 ```bash
 sudo bash break_M03_02.sh
@@ -730,11 +746,9 @@ répertoire existe toujours et ils ont bien le droit d'y créer des fichiers.
 identifier ce qui a été retiré (un bit spécial et/ou une ACL), et énoncer la règle
 qui garantit qu'un fichier déposé reste modifiable par tout le groupe.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF3.3** — « resolv.conf revient toujours et le déploiement échoue »
+### <a id="bf3-3"></a>**[BF3.3](corrige.md#bf3-3)** — « resolv.conf revient toujours et le déploiement échoue »
 
 ```bash
 sudo bash break_M03_03.sh
@@ -751,23 +765,21 @@ pipeline.
 **Objectif** : rendre le fichier modifiable, expliquer pourquoi **root lui-même**
 était bloqué, et dire dans quel cas légitime on pose ce type de protection.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 3.8 Défi du module ★★★
 
-**D3 — Durcissement des permissions d'un service applicatif**
+<a id="d3"></a>**[D3](corrige.md#d3) — Durcissement des permissions d'un service applicatif**
 
-::: contexte
-On te confie le durcissement de l'application `factura` sur `lab-web` avant sa mise
-en production. Tu produis un script d'audit + de remédiation et un rapport. Le
-service tourne sous le compte `facturation`, sert des fichiers via nginx depuis
-`/var/www/factura`, lit sa conf dans `/etc/factura`, écrit ses exports dans
-`/srv/factura/exports` et garde des secrets dans `/etc/factura/secrets`.
-:::
+> **Contexte**
+>
+> On te confie le durcissement de l'application `factura` sur `lab-web` avant sa mise
+> en production. Tu produis un script d'audit + de remédiation et un rapport. Le
+> service tourne sous le compte `facturation`, sert des fichiers via nginx depuis
+> `/var/www/factura`, lit sa conf dans `/etc/factura`, écrit ses exports dans
+> `/srv/factura/exports` et garde des secrets dans `/etc/factura/secrets`.
 
 Cahier des charges :
 
@@ -797,11 +809,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-sudo bash check_M03_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> sudo bash check_M03_05.sh
+> ```
 
 ---
 
@@ -832,3 +845,9 @@ Pour aller plus loin :
 * Compare le modèle POSIX vu ici avec le contrôle d'accès obligatoire de SELinux
   (module 18) : discretionary vs mandatory, qui décide, et pourquoi les deux
   coexistent.
+
+<!-- nav:début -->
+---
+
+[← Module 02](../02-filesystem-fhs/README.md) · [Corrigé](corrige.md) · [Module 04 →](../04-users-groups-sudo/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

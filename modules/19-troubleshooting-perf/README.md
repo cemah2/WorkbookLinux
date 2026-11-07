@@ -1,49 +1,82 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie III — Exploitation, sécurité et incidents › **Module 19**  
+[← Module 18](../18-securite/README.md) · [Corrigé](corrige.md) · [Projet A →](../../projets/P1-factura/README.md)
+
+<details><summary>Scripts du module (17)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M19.sh`](../../scripts/setup/setup_M19.sh) | prépare le module |
+| [`setup_M19_perf.sh`](../../scripts/setup/setup_M19_perf.sh) | prépare le module |
+| [`check_M19_01.sh`](../../scripts/check/check_M19_01.sh) | vérification |
+| [`check_M19_02.sh`](../../scripts/check/check_M19_02.sh) | vérification |
+| [`check_M19_03.sh`](../../scripts/check/check_M19_03.sh) | vérification |
+| [`check_M19_04.sh`](../../scripts/check/check_M19_04.sh) | vérification |
+| [`check_M19_05.sh`](../../scripts/check/check_M19_05.sh) | vérification |
+| [`check_M19_06.sh`](../../scripts/check/check_M19_06.sh) | vérification |
+| [`check_M19_07.sh`](../../scripts/check/check_M19_07.sh) | vérification |
+| [`break_M19_01.sh`](../../scripts/break/break_M19_01.sh) | installe une panne |
+| [`break_M19_02.sh`](../../scripts/break/break_M19_02.sh) | installe une panne |
+| [`break_M19_03.sh`](../../scripts/break/break_M19_03.sh) | installe une panne |
+| [`break_M19_04.sh`](../../scripts/break/break_M19_04.sh) | installe une panne |
+| [`break_M19_05.sh`](../../scripts/break/break_M19_05.sh) | installe une panne |
+| [`break_M19_06.sh`](../../scripts/break/break_M19_06.sh) | installe une panne |
+| [`break_M19_07.sh`](../../scripts/break/break_M19_07.sh) | installe une panne |
+| [`break_M19_08.sh`](../../scripts/break/break_M19_08.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 19 — Dépannage, performance et gestion d'incident
 
 ## 19.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* conduire un diagnostic **méthodique** : formuler le symptôme, délimiter le
-  périmètre, poser une hypothèse falsifiable, la tester, conclure — et ne changer
-  qu'une chose à la fois en gardant une trace de ce que j'ai fait ;
-* appliquer la méthode **USE** (Utilization, Saturation, Errors) et les **quatre
-  signaux dorés** à une machine et à un service, et dire quelle métrique manque ;
-* dérouler la **checklist des 60 premières secondes** sur un serveur malade et
-  extraire de chaque sortie l'information qui oriente la suite ;
-* distinguer charge élevée, CPU saturé, attente d'E/S (`%wa`) et vol de CPU
-  (`%st`) sur une VM Proxmox, et remonter jusqu'au processus responsable ;
-* diagnostiquer une fuite mémoire, un thrash de swap et un passage de l'OOM
-  killer en lisant la trace de `dmesg` et en expliquant le score retenu ;
-* traiter un disque plein dont l'espace est retenu par un **fichier supprimé
-  encore ouvert**, un épuisement d'inodes, un disque lent (`await`, `%util`) et
-  un système de fichiers repassé en lecture seule après erreur d'E/S ;
-* instruire un service qui ne démarre pas, démarre sans répondre, répond
-  lentement ou redémarre en boucle, avec `strace`, `lsof`, `/proc/PID/*` et
-  `gdb` quand il le faut, en connaissant le coût de chaque outil ;
-* remonter une machine qui ne redémarre plus (GRUB, initramfs, `fstab`, mode
-  `emergency`, `chroot` depuis un live) et analyser un boot lent ;
-* mesurer avant d'optimiser : établir une baseline, comparer avant/après, et
-  refuser toute optimisation non mesurée ;
-* lire chaque outil de mesure **colonne par colonne** : `vmstat` (`r`, `b`,
-  `si`, `so`, `wa`), `iostat -xz` (`r/s`, `w/s`, `rkB/s`, `await`, `aqu-sz`,
-  `%util`), `free`, `/proc/meminfo`, `slabtop`, `mpstat -P ALL`,
-  `pidstat -d -r -u`, `iotop -oPa`, `sar` historique, et les indicateurs PSI
-  de `/proc/pressure/*` ;
-* profiler un processus CPU avec `perf top`, `perf record -g` / `perf
-  report`, `perf trace`, `ltrace` et `/proc/PID/wchan`, et prouver un gain
-  par une mesure avant/après ;
-* tenir un incident de bout en bout : rôles, communication, arbitrage entre
-  rétablir et comprendre, **préservation des preuves**, post-mortem blameless,
-  cinq pourquoi, runbook et escalade.
-
-Temps estimé : 11 h (le module de synthèse de toute la partie système)
-Prérequis : l'ensemble de la partie système, en particulier le module 08
-(processus, signaux, systemd), le module des journaux, celui du stockage et le
-module 12 (réseau). Ce module n'enseigne presque rien de neuf : il apprend à
-s'en servir sous pression.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * conduire un diagnostic **méthodique** : formuler le symptôme, délimiter le
+>   périmètre, poser une hypothèse falsifiable, la tester, conclure — et ne changer
+>   qu'une chose à la fois en gardant une trace de ce que j'ai fait ;
+> * appliquer la méthode **USE** (Utilization, Saturation, Errors) et les **quatre
+>   signaux dorés** à une machine et à un service, et dire quelle métrique manque ;
+> * dérouler la **checklist des 60 premières secondes** sur un serveur malade et
+>   extraire de chaque sortie l'information qui oriente la suite ;
+> * distinguer charge élevée, CPU saturé, attente d'E/S (`%wa`) et vol de CPU
+>   (`%st`) sur une VM Proxmox, et remonter jusqu'au processus responsable ;
+> * diagnostiquer une fuite mémoire, un thrash de swap et un passage de l'OOM
+>   killer en lisant la trace de `dmesg` et en expliquant le score retenu ;
+> * traiter un disque plein dont l'espace est retenu par un **fichier supprimé
+>   encore ouvert**, un épuisement d'inodes, un disque lent (`await`, `%util`) et
+>   un système de fichiers repassé en lecture seule après erreur d'E/S ;
+> * instruire un service qui ne démarre pas, démarre sans répondre, répond
+>   lentement ou redémarre en boucle, avec `strace`, `lsof`, `/proc/PID/*` et
+>   `gdb` quand il le faut, en connaissant le coût de chaque outil ;
+> * remonter une machine qui ne redémarre plus (GRUB, initramfs, `fstab`, mode
+>   `emergency`, `chroot` depuis un live) et analyser un boot lent ;
+> * mesurer avant d'optimiser : établir une baseline, comparer avant/après, et
+>   refuser toute optimisation non mesurée ;
+> * lire chaque outil de mesure **colonne par colonne** : `vmstat` (`r`, `b`,
+>   `si`, `so`, `wa`), `iostat -xz` (`r/s`, `w/s`, `rkB/s`, `await`, `aqu-sz`,
+>   `%util`), `free`, `/proc/meminfo`, `slabtop`, `mpstat -P ALL`,
+>   `pidstat -d -r -u`, `iotop -oPa`, `sar` historique, et les indicateurs PSI
+>   de `/proc/pressure/*` ;
+> * profiler un processus CPU avec `perf top`, `perf record -g` / `perf
+>   report`, `perf trace`, `ltrace` et `/proc/PID/wchan`, et prouver un gain
+>   par une mesure avant/après ;
+> * tenir un incident de bout en bout : rôles, communication, arbitrage entre
+>   rétablir et comprendre, **préservation des preuves**, post-mortem blameless,
+>   cinq pourquoi, runbook et escalade.
+>
+> **Temps estimé** : 11 h (le module de synthèse de toute la partie système)
+>
+> **Prérequis** : l'ensemble de la partie système, en particulier le module 08
+> (processus, signaux, systemd), le module des journaux, celui du stockage et le
+> module 12 (réseau). Ce module n'enseigne presque rien de neuf : il apprend à
+> s'en servir sous pression.
 
 ---
 
@@ -80,14 +113,15 @@ sudo sed -i 's/^ENABLED=.*/ENABLED="true"/' /etc/default/sysstat
 sudo systemctl enable --now sysstat
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y sysstat procps-ng psmisc lsof strace ltrace
-gdb tcpdump iproute smartmontools conntrack-tools bind-utils curl perf
-stress-ng fio`. La collecte `sar` est pilotée par
-`sysstat-collect.timer` et `sysstat-summary.timer` :
-`sudo systemctl enable --now sysstat-collect.timer`. Les données vivent dans
-`/var/log/sa/` (Ubuntu : `/var/log/sysstat/`).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y sysstat procps-ng psmisc lsof strace ltrace
+> gdb tcpdump iproute smartmontools conntrack-tools bind-utils curl perf
+> stress-ng fio`. La collecte `sar` est pilotée par
+> `sysstat-collect.timer` et `sysstat-summary.timer` :
+> `sudo systemctl enable --now sysstat-collect.timer`. Les données vivent dans
+> `/var/log/sa/` (Ubuntu : `/var/log/sysstat/`).
 
 Préparation du terrain (idempotent) :
 
@@ -107,19 +141,21 @@ systemctl is-active vitrine-api.service
 curl -s http://10.10.10.11:8080/sante
 ```
 
-::: attention
-Ce module casse **volontairement et lourdement** `lab-web` : mémoire saturée,
-disque plein, système de fichiers en lecture seule, ports épuisés. Le snapshot
-`avant-lab19` n'est pas une formalité. Ne joue jamais ces scripts sur une
-machine qui sert à autre chose.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Ce module casse **volontairement et lourdement** `lab-web` : mémoire saturée,
+> disque plein, système de fichiers en lecture seule, ports épuisés. Le snapshot
+> `avant-lab19` n'est pas une formalité. Ne joue jamais ces scripts sur une
+> machine qui sert à autre chose.
 
-::: astuce
-Garde deux sessions SSH ouvertes sur `lab-web` en permanence pendant les Break &
-Fix. Quand une machine part en swap ou épuise ses descripteurs, ouvrir une
-nouvelle session devient impossible — celle qui est déjà ouverte, elle, tient.
-C'est la première règle de survie de l'astreinte.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Garde deux sessions SSH ouvertes sur `lab-web` en permanence pendant les Break &
+> Fix. Quand une machine part en swap ou épuise ses descripteurs, ouvrir une
+> nouvelle session devient impossible — celle qui est déjà ouverte, elle, tient.
+> C'est la première règle de survie de l'astreinte.
 
 ---
 
@@ -140,7 +176,9 @@ Trois règles non négociables : **une seule modification à la fois** (sinon on
 sait plus ce qui a corrigé), **on note tout** (heure, commande, résultat), et
 **on remet en place** ce qu'on a changé pour rien.
 
-@fig(diag-use): La boucle de diagnostic, du symptôme au post-mortem, et la grille USE (Utilisation, Saturation, Erreurs) par ressource avec l'outil qui la mesure.
+<p align="center"><img src="../../assets/figures/diag-use.svg" alt="Schéma : diag-use"></p>
+
+*Figure — La boucle de diagnostic, du symptôme au post-mortem, et la grille USE (Utilisation, Saturation, Erreurs) par ressource avec l'outil qui la mesure.*
 
 ### USE et les quatre signaux dorés
 
@@ -347,7 +385,7 @@ c'est l'outil de la production. `lsof`, `ss`, `/proc` sont gratuits.
 
 ## 19.3 Quiz — QCM
 
-**Q19.1** — Sur `lab-web`, `uptime` affiche `load average: 38.12, 36.40, 22.05`
+<a id="q19-1"></a>**[Q19.1](corrige.md#q19-1)** — Sur `lab-web`, `uptime` affiche `load average: 38.12, 36.40, 22.05`
 et `mpstat -P ALL 1 3` donne un `%idle` moyen de 96 %. Que conclus-tu ?
 
 a) la charge est mal calculée sur les VM, il faut l'ignorer
@@ -356,7 +394,7 @@ b) les processus sont majoritairement en état `D`, attente d'E/S : regarde le
 c) le CPU est saturé mais `mpstat` ne compte pas le temps noyau
 d) il y a trop de processus en état `Z`
 
-**Q19.2** — `vmstat 1` sur une machine qui rame :
+<a id="q19-2"></a>**[Q19.2](corrige.md#q19-2)** — `vmstat 1` sur une machine qui rame :
 
 ```text
  r  b   swpd   free   buff  cache   si   so    bi    bo   us sy id wa st
@@ -370,7 +408,7 @@ b) le CPU est saturé par du calcul utilisateur
 c) sept processus sont bloqués en attente d'E/S, cohérent avec `wa` à 85
 d) la mémoire est saine, `free` est simplement bas
 
-**Q19.3** — `mpstat -P ALL 1` sur une VM Proxmox affiche `%st` à 24 %.
+<a id="q19-3"></a>**[Q19.3](corrige.md#q19-3)** — `mpstat -P ALL 1` sur une VM Proxmox affiche `%st` à 24 %.
 Que signifie cette colonne, et qui doit agir ?
 
 a) le temps passé en appels système : c'est l'application qui doit être corrigée
@@ -379,7 +417,7 @@ b) le temps où la VM voulait du CPU mais où l'hyperviseur l'a donné à quelqu
 c) le temps de vol de cache L3 par les autres VM : il faut épingler les vCPU
 d) le temps d'attente disque de l'hôte : il faut changer le stockage
 
-**Q19.4** — `free -m` affiche `total 3924`, `used 1184`, `free 118`,
+<a id="q19-4"></a>**[Q19.4](corrige.md#q19-4)** — `free -m` affiche `total 3924`, `used 1184`, `free 118`,
 `buff/cache 2860`, `available 2740`. Faut-il ajouter de la RAM ?
 
 a) oui, `free` est à 118 Mo
@@ -387,7 +425,7 @@ b) oui, `buff/cache` occupe plus de 70 % de la RAM
 c) non, `available` est à 2740 Mo : le cache sera rendu à la demande
 d) impossible à dire sans `vmstat`
 
-**Q19.5** — Dans `dmesg -T`, tu lis :
+<a id="q19-5"></a>**[Q19.5](corrige.md#q19-5)** — Dans `dmesg -T`, tu lis :
 
 ```text
 [Fri Sep 18 14:22:07 2026] vitrine-api invoked oom-killer:
@@ -403,7 +441,7 @@ b) `vitrine-api` est forcément la victime désignée
 c) la victime est le processus 2244, ici le même, mais ce n'est pas garanti
 d) `oom_score_adj=0` signifie que le processus était protégé
 
-**Q19.6** — `df -h /var` affiche 100 % utilisé, `du -xsh /var` affiche 3,2 Go
+<a id="q19-6"></a>**[Q19.6](corrige.md#q19-6)** — `df -h /var` affiche 100 % utilisé, `du -xsh /var` affiche 3,2 Go
 sur une partition de 20 Go. Quelle commande tranche ?
 
 a) `du -x --max-depth=1 /var | sort -h`
@@ -411,7 +449,7 @@ b) `lsof +L1`
 c) `df -i /var`
 d) `find /var -size +1G`
 
-**Q19.7** — Tu as trouvé le coupable : `nginx` garde ouvert
+<a id="q19-7"></a>**[Q19.7](corrige.md#q19-7)** — Tu as trouvé le coupable : `nginx` garde ouvert
 `/var/log/nginx/access.log (deleted)` de 16 Go. Interdiction de redémarrer
 `nginx` en pleine journée. Comment récupères-tu l'espace ? **Deux réponses.**
 
@@ -420,7 +458,7 @@ b) `truncate -s 0 /proc/<pid>/fd/<n>` où `n` est le descripteur repéré par `l
 c) `: > /proc/<pid>/fd/<n>` depuis un shell root
 d) `echo 3 > /proc/sys/vm/drop_caches`
 
-**Q19.8** — `iostat -xz 1` donne pour `sdb` : `r_await 0.4`, `w_await 480.2`,
+<a id="q19-8"></a>**[Q19.8](corrige.md#q19-8)** — `iostat -xz 1` donne pour `sdb` : `r_await 0.4`, `w_await 480.2`,
 `aqu-sz 12.8`, `%util 99.9`. Interprétation ?
 
 a) le disque est en panne, il faut le remplacer immédiatement
@@ -429,7 +467,7 @@ b) le disque est saturé en écriture : file d'attente longue et latence
 c) `%util` à 100 % prouve la saturation sur tous les types de stockage
 d) le problème est le contrôleur, pas le disque
 
-**Q19.9** — Un service web log `Cannot assign requested address` sur ses appels
+<a id="q19-9"></a>**[Q19.9](corrige.md#q19-9)** — Un service web log `Cannot assign requested address` sur ses appels
 sortants vers l'API interne, alors que le réseau fonctionne. Cause la plus
 probable ?
 
@@ -438,7 +476,7 @@ b) la plage de ports éphémères est épuisée (beaucoup de sockets en `TIME_WA
 c) le pare-feu bloque les connexions sortantes
 d) la MTU est mal réglée
 
-**Q19.10** — `dmesg` affiche `nf_conntrack: table full, dropping packet`. Quel
+<a id="q19-10"></a>**[Q19.10](corrige.md#q19-10)** — `dmesg` affiche `nf_conntrack: table full, dropping packet`. Quel
 est l'effet observé côté utilisateur et la première mesure ?
 
 a) tout tombe d'un coup ; il faut redémarrer le réseau
@@ -447,7 +485,7 @@ b) des connexions **nouvelles** échouent ou traînent pendant que les anciennes
 c) la latence augmente uniformément ; on augmente la MTU
 d) seuls les paquets UDP sont perdus ; on désactive le pare-feu
 
-**Q19.11** — `systemctl status vitrine-api` affiche
+<a id="q19-11"></a>**[Q19.11](corrige.md#q19-11)** — `systemctl status vitrine-api` affiche
 `Failed with result 'start-limit-hit'` et
 `start request repeated too quickly`. Que fais-tu **en premier** ?
 
@@ -457,7 +495,7 @@ b) j'augmente `StartLimitBurst` pour que ça passe
 c) je passe `Restart=no` et je considère l'incident clos
 d) je réinstalle le paquet
 
-**Q19.12** — Tu dois savoir pourquoi un processus est bloqué depuis 10 minutes
+<a id="q19-12"></a>**[Q19.12](corrige.md#q19-12)** — Tu dois savoir pourquoi un processus est bloqué depuis 10 minutes
 sans consommer de CPU. Quelle séquence est la plus pertinente, et la moins
 risquée pour la production ?
 
@@ -467,7 +505,7 @@ b) `cat /proc/PID/status` (état), `/proc/PID/wchan`, `/proc/PID/stack`, puis
 c) `kill -QUIT PID` pour obtenir un core dump
 d) `gdb -p PID` interactif en premier, c'est le plus complet
 
-**Q19.13** — Le service démarre puis `curl http://127.0.0.1:8080/` répond
+<a id="q19-13"></a>**[Q19.13](corrige.md#q19-13)** — Le service démarre puis `curl http://127.0.0.1:8080/` répond
 `Connection refused`, alors que `systemctl is-active` dit `active (running)`.
 Quelle commande t'oriente le plus vite ? **Deux réponses.**
 
@@ -476,7 +514,7 @@ b) `journalctl -u vitrine-api -n 50 --no-pager`
 c) `ping 127.0.0.1`
 d) `systemctl cat vitrine-api`
 
-**Q19.14** — Une application ouvre de plus en plus de connexions et finit par
+<a id="q19-14"></a>**[Q19.14](corrige.md#q19-14)** — Une application ouvre de plus en plus de connexions et finit par
 logguer `Too many open files`. Où lis-tu la limite **réellement appliquée** au
 processus en cours d'exécution ?
 
@@ -485,7 +523,7 @@ b) `/etc/security/limits.conf`
 c) `cat /proc/<pid>/limits`
 d) `sysctl fs.file-max`
 
-**Q19.15** — Après une coupure d'alimentation, `lab-db` s'arrête au démarrage sur
+<a id="q19-15"></a>**[Q19.15](corrige.md#q19-15)** — Après une coupure d'alimentation, `lab-db` s'arrête au démarrage sur
 `You are in emergency mode` et le journal mentionne
 `Failed to mount /srv/data`. Une entrée de `fstab` pointe un disque retiré.
 Quelle correction évite que le problème se reproduise ?
@@ -495,7 +533,7 @@ b) ajouter `nofail` (et un `x-systemd.device-timeout=` court) à l'entrée
 c) passer le montage en `noauto` et monter à la main après chaque boot
 d) désactiver `systemd-fsck-root.service`
 
-**Q19.16** — `systemd-analyze blame` place `cloud-init.service` en tête avec
+<a id="q19-16"></a>**[Q19.16](corrige.md#q19-16)** — `systemd-analyze blame` place `cloud-init.service` en tête avec
 32 s. Que peux-tu en conclure ?
 
 a) c'est lui qui a rallongé le boot de 32 s
@@ -504,7 +542,7 @@ b) rien directement : il a duré 32 s, mais seul `systemd-analyze
 c) il faut le désactiver
 d) le boot a duré au moins 32 s multipliés par le nombre d'unités
 
-**Q19.17** — Le site est tombé. Le responsable d'astreinte demande un
+<a id="q19-17"></a>**[Q19.17](corrige.md#q19-17)** — Le site est tombé. Le responsable d'astreinte demande un
 redémarrage immédiat du serveur. Que fais-tu avant ? **Trois réponses.**
 
 a) je copie les journaux de la fenêtre de l'incident hors de la machine
@@ -512,7 +550,7 @@ b) je capture `ps auxf`, `ss -tanp`, `free -m`, `dmesg -T` dans un fichier
 c) je lance un `strace` de 30 minutes pour être sûr
 d) j'annonce l'heure du redémarrage et j'horodate la décision
 
-**Q19.18** — Dans un post-mortem blameless, laquelle de ces formulations est
+<a id="q19-18"></a>**[Q19.18](corrige.md#q19-18)** — Dans un post-mortem blameless, laquelle de ces formulations est
 acceptable ?
 
 a) « Mathieu a poussé une conf non testée »
@@ -521,7 +559,7 @@ b) « Un changement de configuration est parti en production sans passage par la
 c) « L'équipe réseau n'a pas fait son travail »
 d) « Erreur humaine, rappel des consignes effectué »
 
-**Q19.19** — `iostat -xz 1` sur `lab-db` pendant une sauvegarde :
+<a id="q19-19"></a>**[Q19.19](corrige.md#q19-19)** — `iostat -xz 1` sur `lab-db` pendant une sauvegarde :
 
 ```text
 Device   r/s   rkB/s  r_await  w/s    wkB/s  w_await  aqu-sz  %util
@@ -539,7 +577,7 @@ b) non : `w_await` à 3 ms et `aqu-sz` < 1 disent que les requêtes sont
 c) oui : `wareq-sz` manque, donc les écritures sont aléatoires
 d) impossible à dire sans `sar`
 
-**Q19.20** — `cat /proc/pressure/memory` sur `lab-web` :
+<a id="q19-20"></a>**[Q19.20](corrige.md#q19-20)** — `cat /proc/pressure/memory` sur `lab-web` :
 
 ```text
 some avg10=38.20 avg60=27.90 avg300=9.14 total=48213345
@@ -555,7 +593,7 @@ b) pendant 21 % des dix dernières secondes, **toutes** les tâches
 c) 21 % des processus sont en attente mémoire
 d) la ligne `full` est toujours nulle pour la mémoire, la sortie est corrompue
 
-**Q19.21** — `perf record -g -p $(pidof vitrine-api) -- sleep 10` puis
+<a id="q19-21"></a>**[Q19.21](corrige.md#q19-21)** — `perf record -g -p $(pidof vitrine-api) -- sleep 10` puis
 `perf report` montrent 71 % du temps dans `_PyEval_EvalFrameDefault` et le
 reste dans `libc`. Que fais-tu pour trouver la fonction **Python** coupable ?
 **Deux réponses correctes.**
@@ -568,7 +606,7 @@ c) croiser avec un profileur au niveau du langage (`python3 -m cProfile -s
    tottime`), qui compte par fonction Python mais avec un surcoût plus fort
 d) utiliser `strace -c`, qui donne le temps par fonction Python
 
-**Q19.22** — `vmstat 1` sur `lab-web` : `r` = 9 en continu, `b` = 0,
+<a id="q19-22"></a>**[Q19.22](corrige.md#q19-22)** — `vmstat 1` sur `lab-web` : `r` = 9 en continu, `b` = 0,
 `wa` = 0, `us` = 92, `sy` = 6, `st` = 0. `mpstat -P ALL 1` montre les deux
 vCPU à 100 %. Le disque est calme. Quel est le goulot et quelle commande
 donne le coupable ?
@@ -584,105 +622,85 @@ d) l'hyperviseur ; `%st`
 
 ## 19.4 Quiz — questions ouvertes
 
-**QO19.1** — Décris ta méthode de diagnostic en six étapes, telle que tu
+<a id="qo19-1"></a>**[QO19.1](corrige.md#qo19-1)** — Décris ta méthode de diagnostic en six étapes, telle que tu
 l'appliquerais à ce ticket : « depuis ce matin le site est lent ». Pour chaque
 étape, donne la question que tu poses ou la commande que tu lances, et surtout
 **ce que tu fais du résultat**. Insiste sur la délimitation : quelles quatre
 questions permettent de réduire le périmètre avant même de se connecter ?
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO19.2** — Explique la différence entre USE et les quatre signaux dorés, avec
+<a id="qo19-2"></a>**[QO19.2](corrige.md#qo19-2)** — Explique la différence entre USE et les quatre signaux dorés, avec
 un exemple concret où les deux méthodes donnent des conclusions différentes sur
 le même incident. Dans quel cas USE est-il aveugle ? Dans quel cas les signaux
 dorés le sont-ils ?
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO19.3** — *On te demande en entretien* : « Tu te connectes sur un serveur de
+<a id="qo19-3"></a>**[QO19.3](corrige.md#qo19-3)** — *On te demande en entretien* : « Tu te connectes sur un serveur de
 production qui rame, tu as 60 secondes avant que le client te rappelle. Tu tapes
 quoi, dans quel ordre, et qu'est-ce que tu regardes dans chaque sortie ? »
 Réponds comme en entretien : la liste des commandes et, pour chacune, **une
 phrase** sur l'information recherchée.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO19.4** — Un processus `java` a un RSS qui monte de 40 Mo par heure depuis
+<a id="qo19-4"></a>**[QO19.4](corrige.md#qo19-4)** — Un processus `java` a un RSS qui monte de 40 Mo par heure depuis
 trois jours. Décris comment tu prouves qu'il s'agit d'une fuite et non d'un
 cache qui se remplit normalement, quelles données tu collectes pour le
 développeur, et ce que tu mets en place pour que l'incident ne réveille personne
 à 3 h du matin en attendant le correctif.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO19.5** — Explique le fonctionnement de l'OOM killer : à quel moment il se
+<a id="qo19-5"></a>**[QO19.5](corrige.md#qo19-5)** — Explique le fonctionnement de l'OOM killer : à quel moment il se
 déclenche, comment le score d'une tâche est calculé, ce que font
 `oom_score_adj` et `MemoryMax=` d'une unité systemd, et pourquoi la victime
 n'est presque jamais le vrai coupable. Termine par ce que tu changerais sur une
 machine où l'OOM killer a tué la base de données au lieu de l'application.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO19.6** — *On te demande en entretien* : « `df` dit 100 %, `du` dit 40 %.
+<a id="qo19-6"></a>**[QO19.6](corrige.md#qo19-6)** — *On te demande en entretien* : « `df` dit 100 %, `du` dit 40 %.
 Explique-moi ce qui se passe et comment tu récupères l'espace sans redémarrer le
 service. » Réponds, puis explique ce qui se passerait si tu avais fait un
 `rm` du fichier de log au lieu d'un `truncate`.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO19.7** — Compare `strace`, `perf top` et les compteurs de `/proc` du point de
+<a id="qo19-7"></a>**[QO19.7](corrige.md#qo19-7)** — Compare `strace`, `perf top` et les compteurs de `/proc` du point de
 vue du coût en production : ce que chacun observe, ce qu'il rate, ce qu'il
 coûte, et dans quel ordre tu les emploies sur un serveur qui sert encore du
 trafic. Donne la commande exacte que tu utiliserais pour ne pas dépasser dix
 secondes d'observation avec `strace`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO19.8** — Un service répond en 5,1 s au lieu de 40 ms. `top` montre le
+<a id="qo19-8"></a>**[QO19.8](corrige.md#qo19-8)** — Un service répond en 5,1 s au lieu de 40 ms. `top` montre le
 processus à 0,2 % de CPU. Décris ta démarche complète pour prouver que le temps
 est passé dans une dépendance externe, puis pour dire **laquelle**. Cite au
 moins trois outils et ce que tu attends de chacun.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO19.9** — On te confie la gestion d'un incident majeur : le site est
+<a id="qo19-9"></a>**[QO19.9](corrige.md#qo19-9)** — On te confie la gestion d'un incident majeur : le site est
 inaccessible depuis 10 minutes, quatre personnes sont sur le pont, la direction
 demande des nouvelles toutes les 15 minutes. Décris l'organisation que tu mets
 en place (rôles, canal, cadence), comment tu arbitres entre « rétablir tout de
 suite » et « comprendre d'abord », et la liste exacte des preuves que tu fais
 collecter avant tout redémarrage.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO19.10** — Explique la méthode des cinq pourquoi sur cet incident réel :
+<a id="qo19-10"></a>**[QO19.10](corrige.md#qo19-10)** — Explique la méthode des cinq pourquoi sur cet incident réel :
 « le site a été indisponible 40 minutes parce que le disque `/var` était plein ».
 Déroule les cinq niveaux, puis dis à quel niveau se situe l'action corrective
 qui empêche vraiment la récidive — et pourquoi s'arrêter au premier niveau
 (« on a purgé les logs ») garantit que ça recommencera.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO19.11** — *On te demande en entretien* : « Un service Python répond
+<a id="qo19-11"></a>**[QO19.11](corrige.md#qo19-11)** — *On te demande en entretien* : « Un service Python répond
 lentement, `top` montre son processus à 100 % d'un cœur. Déroule ta
 démarche de profilage jusqu'à la correction, en respectant "mesurer avant
 d'optimiser". » Décris : la baseline que tu poses (quoi, comment, où tu la
@@ -692,9 +710,7 @@ quand `perf` ne montre que `_PyEval_EvalFrameDefault`, comment tu passes de
 « la fonction chaude » à « la ligne coupable », le critère qui prouve que
 la correction est bonne, et ce que tu refuses de faire.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
 ---
 
@@ -704,84 +720,84 @@ Ces exercices se font sur `lab-web`, machine saine (aucun Break & Fix en cours).
 Plusieurs demandent de provoquer une charge : `stress-ng` et le générateur
 `vitrine-charge.sh` installé par le setup sont là pour ça.
 
-**E19.1** — Lance une charge CPU sur deux cœurs pendant 60 s, puis prouve, en
+<a id="e19-1"></a>**[E19.1](corrige.md#e19-1)** — Lance une charge CPU sur deux cœurs pendant 60 s, puis prouve, en
 deux commandes seulement, que la charge moyenne monte **à cause du CPU** et non
 d'une attente d'E/S.
 
-**E19.2** — Provoque une charge d'E/S (`stress-ng --hdd 2 --timeout 60s`) et
+<a id="e19-2"></a>**[E19.2](corrige.md#e19-2)** — Provoque une charge d'E/S (`stress-ng --hdd 2 --timeout 60s`) et
 montre, sortie à l'appui, que la charge moyenne monte alors que `%idle` reste
 élevé. Identifie la colonne de `vmstat` et l'état de `ps` qui expliquent l'écart.
 
-**E19.3** — Écris la commande qui affiche les dix processus les plus gourmands en
+<a id="e19-3"></a>**[E19.3](corrige.md#e19-3)** — Écris la commande qui affiche les dix processus les plus gourmands en
 CPU et, séparément, les dix plus gros consommateurs de mémoire résidente, avec
 PID, utilisateur, RSS en Mo et ligne de commande complète.
 
-**E19.4** — Un processus consomme 100 % d'un cœur. Trouve-le, puis détermine
+<a id="e19-4"></a>**[E19.4](corrige.md#e19-4)** — Un processus consomme 100 % d'un cœur. Trouve-le, puis détermine
 **dans quelle fonction** il brûle le temps, d'abord avec `perf top -p PID`, puis
 avec cinq captures successives de sa pile noyau.
 
-**E19.5** — Affiche, pour le processus principal de `vitrine-api` : son état, son
+<a id="e19-5"></a>**[E19.5](corrige.md#e19-5)** — Affiche, pour le processus principal de `vitrine-api` : son état, son
 RSS, son nombre de threads, sa limite effective de descripteurs, le nombre de
 descripteurs réellement ouverts et ses variables d'environnement. Une commande
 par information, toutes depuis `/proc`.
 
-**E19.6** — Mesure la quantité de mémoire réellement disponible pour une nouvelle
+<a id="e19-6"></a>**[E19.6](corrige.md#e19-6)** — Mesure la quantité de mémoire réellement disponible pour une nouvelle
 application, puis vide le cache de pages et mesure de nouveau. Explique l'écart
 entre `free` et `available` avant et après.
 
-**E19.7** — Détecte en une commande si la machine **swappe activement** en ce
+<a id="e19-7"></a>**[E19.7](corrige.md#e19-7)** — Détecte en une commande si la machine **swappe activement** en ce
 moment (et pas simplement si du swap est utilisé). Donne ensuite la commande qui
 classe les processus par quantité de mémoire swappée.
 
-**E19.8** — Sur la partition `/srv/vitrine/data`, affiche successivement :
+<a id="e19-8"></a>**[E19.8](corrige.md#e19-8)** — Sur la partition `/srv/vitrine/data`, affiche successivement :
 l'espace occupé, le nombre d'inodes libres, les cinq répertoires les plus gros,
 et la liste des fichiers supprimés encore ouverts par un processus.
 
-**E19.9** — Provoque une activité disque soutenue avec `fio` pendant 30 s et
+<a id="e19-9"></a>**[E19.9](corrige.md#e19-9)** — Provoque une activité disque soutenue avec `fio` pendant 30 s et
 relève, pendant ce temps, `await` et `%util` du périphérique concerné. Note la
 valeur de repos et la valeur en charge : c'est ta première baseline.
 
-**E19.10** — Attache `strace` au processus `vitrine-api` pendant exactement
+<a id="e19-10"></a>**[E19.10](corrige.md#e19-10)** — Attache `strace` au processus `vitrine-api` pendant exactement
 dix secondes, en comptant les appels système par type et en suivant les fils
 d'exécution. Donne ensuite la variante qui n'affiche que les appels liés au
 réseau, avec leur durée.
 
-**E19.11** — Le processus `vitrine-api` est-il bloqué ou occupé ? Réponds avec
+<a id="e19-11"></a>**[E19.11](corrige.md#e19-11)** — Le processus `vitrine-api` est-il bloqué ou occupé ? Réponds avec
 trois sources différentes : son état dans `ps`, le compteur de changements de
 contexte de `/proc`, et sa pile noyau.
 
-**E19.12** — Liste tous les fichiers et sockets ouverts par `vitrine-api`, puis
+<a id="e19-12"></a>**[E19.12](corrige.md#e19-12)** — Liste tous les fichiers et sockets ouverts par `vitrine-api`, puis
 tous les processus qui tiennent un fichier ouvert sur `/srv/vitrine/data`
 (utile avant un `umount` qui refuse).
 
-**E19.13** — Affiche les sockets en écoute avec le processus propriétaire, puis
+<a id="e19-13"></a>**[E19.13](corrige.md#e19-13)** — Affiche les sockets en écoute avec le processus propriétaire, puis
 le résumé des états de sockets de la machine, puis le nombre de connexions en
 `TIME_WAIT`. Compare avec la taille de la plage de ports éphémères.
 
-**E19.14** — Un processus est figé et ne répond plus à `SIGTERM`. Récupère les
+<a id="e19-14"></a>**[E19.14](corrige.md#e19-14)** — Un processus est figé et ne répond plus à `SIGTERM`. Récupère les
 piles d'appels de **tous ses threads** en une commande `gdb` non interactive,
 dans un fichier daté. Précise l'effet de cette commande sur le processus.
 
-**E19.15** — Établis la baseline de latence de `vitrine-api` : 200 requêtes,
+<a id="e19-15"></a>**[E19.15](corrige.md#e19-15)** — Établis la baseline de latence de `vitrine-api` : 200 requêtes,
 temps de réponse moyen, médian et maximal, avec `curl` et un format de sortie
 personnalisé. Range le résultat dans `~/lab19/rapports/baseline.txt`.
 
-**E19.16** — Affiche l'historique de charge et d'E/S de la journée précédente
+<a id="e19-16"></a>**[E19.16](corrige.md#e19-16)** — Affiche l'historique de charge et d'E/S de la journée précédente
 avec `sar`, puis l'activité mémoire entre 9 h et 11 h aujourd'hui. Si `sar` n'a
 rien collecté, explique en une ligne ce qu'il faut corriger.
 
-**E19.17** — Donne les trois commandes qui répondent à : combien de temps a duré
+<a id="e19-17"></a>**[E19.17](corrige.md#e19-17)** — Donne les trois commandes qui répondent à : combien de temps a duré
 le dernier démarrage, quelles unités ont été les plus lentes, et lesquelles
 étaient sur le chemin critique.
 
-**E19.18** — Capture pendant 20 secondes, dans un fichier `.pcap`, uniquement le
+<a id="e19-18"></a>**[E19.18](corrige.md#e19-18)** — Capture pendant 20 secondes, dans un fichier `.pcap`, uniquement le
 trafic DNS sortant de `lab-web`, puis affiche les requêtes restées sans réponse.
 
 Les six exercices suivants prennent chacun **un** outil sur une charge
 connue. Prépare-la avec `sudo bash ~/workbook/scripts/setup/setup_M19_perf.sh`
 (il dépose `~/lab19/perf/` : le script du lab L19.6 et ses données).
 
-**E19.19** — Lance en arrière-plan `stress-ng --hdd 1 --hdd-bytes 512M
+<a id="e19-19"></a>**[E19.19](corrige.md#e19-19)** — Lance en arrière-plan `stress-ng --hdd 1 --hdd-bytes 512M
 --timeout 90s` dans `/srv/vitrine/data` **et** `fio --name=lect
 --rw=randread --bs=4k --size=200M --runtime=90 --time_based
 --directory=/srv/vitrine/data`. Avec `iotop` en mode non interactif, sur
@@ -790,7 +806,7 @@ processus et non par thread, avec le **cumul** depuis le lancement. Dis
 lequel écrit, lequel lit, et confirme avec `pidstat -d 1 3`. Explique la
 différence entre les colonnes `DISK READ`/`DISK WRITE` et `SWAPIN`/`IO>`.
 
-**E19.20** — Pendant la même charge, relève cinq secondes d'`iostat -xz 1`
+<a id="e19-20"></a>**[E19.20](corrige.md#e19-20)** — Pendant la même charge, relève cinq secondes d'`iostat -xz 1`
 sur le disque de `/srv/vitrine/data`. Remplis un tableau avec `r/s`, `w/s`,
 `rkB/s`, `wkB/s`, `r_await`, `w_await`, `rareq-sz`, `aqu-sz` et `%util`,
 puis réponds : quel type d'E/S fait `fio` (taille moyenne de requête), quel
@@ -798,7 +814,7 @@ type fait `stress-ng`, laquelle des deux latences est la plus mauvaise et
 pourquoi, et si `%util` à 100 % signifie ici « saturé ». Compare avec la
 valeur au repos de E19.9.
 
-**E19.21** — Lance `stress-ng --cpu 1 --timeout 60s` (**un** seul worker).
+<a id="e19-21"></a>**[E19.21](corrige.md#e19-21)** — Lance `stress-ng --cpu 1 --timeout 60s` (**un** seul worker).
 Montre avec `mpstat -P ALL 1 3` qu'un seul vCPU est occupé et que la
 moyenne `all` ment, puis avec `pidstat -u -r 1 3` le processus responsable,
 son `%usr`/`%system` et son RSS. Relance avec `--cpu 2` et montre la
@@ -806,7 +822,7 @@ différence. Lis ensuite `/proc/pressure/cpu` dans les deux cas et explique
 pourquoi `some` monte avec deux workers alors que `%idle` était déjà bas
 avec un.
 
-**E19.22** — Lance `stress-ng --vm 2 --vm-bytes 75% --vm-keep --timeout
+<a id="e19-22"></a>**[E19.22](corrige.md#e19-22)** — Lance `stress-ng --vm 2 --vm-bytes 75% --vm-keep --timeout
 60s`. Avec `vmstat 1` (colonnes `r`, `b`, `si`, `so`, `wa`, `free`), `free
 -m` et `/proc/pressure/memory` (`some` et `full`), documente ce qui se
 passe seconde par seconde : à quel moment `available` s'effondre, quand
@@ -814,7 +830,7 @@ passe seconde par seconde : à quel moment `available` s'effondre, quand
 la charge moyenne pendant ce temps. Conclus sur l'ordre dans lequel ces
 quatre indicateurs réagissent.
 
-**E19.23** — Machine au repos : lis `/proc/meminfo` et réconcilie ses
+<a id="e19-23"></a>**[E19.23](corrige.md#e19-23)** — Machine au repos : lis `/proc/meminfo` et réconcilie ses
 lignes avec `free -m` (`total`, `used`, `free`, `shared`, `buff/cache`,
 `available`), à 5 % près. Affiche les cinq caches noyau les plus gros avec
 `slabtop`, en une commande non interactive, et dis lesquels sont
@@ -823,7 +839,7 @@ récupérables. Crée 100 000 fichiers vides dans `/var/tmp/inodes-test`
 d'inodes, vérifie avec `df -i`), relis `Slab`, `SReclaimable` et le premier
 cache de `slabtop`, puis vide les caches et relis. Supprime les fichiers.
 
-**E19.24** — Sur le processus `vitrine-api` en charge (`vitrine-charge.sh
+<a id="e19-24"></a>**[E19.24](corrige.md#e19-24)** — Sur le processus `vitrine-api` en charge (`vitrine-charge.sh
 /produits 5 60`) : donne, avec `perf trace -s` pendant cinq secondes, le
 résumé des appels système par type et leur durée ; avec `/proc/PID/wchan` et
 `ps -o wchan` cinq fois de suite, la fonction noyau dans laquelle il attend ;
@@ -835,14 +851,14 @@ mesurée en parallèle avec `curl -w '%{time_total}'`.
 
 ## 19.6 Labs ★★
 
-### **L19.1** — Les 60 premières secondes (INC-3301)
+### <a id="l19-1"></a>**[L19.1](corrige.md#l19-1)** — Les 60 premières secondes (INC-3301)
 
-::: contexte
-06 h 12, ton téléphone sonne. Le supervision dit : « lab-web ne répond plus
-correctement ». Aucune autre information. Tu as accès SSH. Ton chef d'astreinte
-veut un point dans cinq minutes : est-ce le CPU, la mémoire, le disque, le
-réseau ou l'application ? Cette première réponse conditionne qui on réveille.
-:::
+> **Contexte**
+>
+> 06 h 12, ton téléphone sonne. Le supervision dit : « lab-web ne répond plus
+> correctement ». Aucune autre information. Tu as accès SSH. Ton chef d'astreinte
+> veut un point dans cinq minutes : est-ce le CPU, la mémoire, le disque, le
+> réseau ou l'application ? Cette première réponse conditionne qui on réveille.
 
 Prépare d'abord le terrain : demande à un collègue (ou à toi-même depuis
 `lab-ops`) de lancer l'un des générateurs suivants sans te dire lequel :
@@ -869,30 +885,32 @@ sudo stress-ng --vm 2 --vm-bytes 700M --timeout 300s &   # piste C
 5. Refais l'exercice avec une autre piste. Ton `triage.sh` doit permettre de
    trancher sans le modifier.
 
-::: astuce
-Un bon script de triage capture **aussi** ce qui semble normal : l'absence
-d'anomalie sur trois ressources est ce qui rend la quatrième convaincante.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Un bon script de triage capture **aussi** ce qui semble normal : l'absence
+> d'anomalie sur trois ressources est ce qui rend la quatrième convaincante.
 
-::: check
-Critère de succès : `triage.sh` produit un rapport complet en moins de 30 s, et
-`triage.md` conclut sur la bonne ressource avec les preuves recopiées.
-
-```bash
-bash check_M19_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `triage.sh` produit un rapport complet en moins de 30 s, et
+> `triage.md` conclut sur la bonne ressource avec les preuves recopiées.
+>
+> ```bash
+> bash check_M19_01.sh
+> ```
 
 ---
 
-### **L19.2** — Mémoire : fuite, OOM, et garde-fou (INC-3312)
+### <a id="l19-2"></a>**[L19.2](corrige.md#l19-2)** — Mémoire : fuite, OOM, et garde-fou (INC-3312)
 
-::: contexte
-`vitrine-api` a été tué deux nuits de suite vers 4 h. L'équipe de dev jure que
-« l'application ne fuit pas ». On te demande la preuve, et surtout une mesure
-qui évite que l'incident se reproduise **avant** que le correctif applicatif
-arrive, dans trois semaines.
-:::
+> **Contexte**
+>
+> `vitrine-api` a été tué deux nuits de suite vers 4 h. L'équipe de dev jure que
+> « l'application ne fuit pas ». On te demande la preuve, et surtout une mesure
+> qui évite que l'incident se reproduise **avant** que le correctif applicatif
+> arrive, dans trois semaines.
 
 1. Active le mode fuite de l'application de démonstration :
 
@@ -920,32 +938,34 @@ arrive, dans trois semaines.
    commentée ligne à ligne, le garde-fou posé, et ce que tu demandes exactement
    au développeur (quelles données tu lui fournis).
 
-::: attention
-Cette manipulation met réellement la VM sous pression mémoire. Garde une session
-SSH ouverte : si la machine devient injoignable, tu devras passer par la console
-Proxmox (`qm terminal 9002`).
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Cette manipulation met réellement la VM sous pression mémoire. Garde une session
+> SSH ouverte : si la machine devient injoignable, tu devras passer par la console
+> Proxmox (`qm terminal 9002`).
 
-::: check
-Critère de succès : `rss.csv` montre une croissance monotone, `oom.md` contient
-la trace et son analyse, et `systemctl show vitrine-api -p MemoryMax` renvoie
-268435456.
-
-```bash
-bash check_M19_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `rss.csv` montre une croissance monotone, `oom.md` contient
+> la trace et son analyse, et `systemctl show vitrine-api -p MemoryMax` renvoie
+> 268435456.
+>
+> ```bash
+> bash check_M19_02.sh
+> ```
 
 ---
 
-### **L19.3** — Disque : plein, lent, ou en erreur (INC-3327)
+### <a id="l19-3"></a>**[L19.3](corrige.md#l19-3)** — Disque : plein, lent, ou en erreur (INC-3327)
 
-::: contexte
-Trois tickets arrivent le même jour sur le stockage. Le premier dit « plus
-possible d'écrire », le deuxième « l'export nocturne met 4 h au lieu de 20 min »,
-le troisième « le service a basculé en lecture seule ». On te demande une
-procédure unique de qualification du stockage, applicable aux trois.
-:::
+> **Contexte**
+>
+> Trois tickets arrivent le même jour sur le stockage. Le premier dit « plus
+> possible d'écrire », le deuxième « l'export nocturne met 4 h au lieu de 20 min »,
+> le troisième « le service a basculé en lecture seule ». On te demande une
+> procédure unique de qualification du stockage, applicable aux trois.
 
 1. Écris `~/lab19/bin/verif-disque.sh` qui, pour un point de montage passé en
    argument, affiche et évalue : le taux d'occupation, le taux d'inodes, la
@@ -974,33 +994,35 @@ procédure unique de qualification du stockage, applicable aux trois.
 5. Consigne le tout dans `~/lab19/rapports/disque.md`, avec pour chacun des
    trois tickets : la commande qui tranche, le diagnostic, et le correctif.
 
-::: rhel
-Sur Rocky 9, `lsof +L1` est identique, mais l'option `-x` de `du` s'impose
-encore plus : `/sys/fs/cgroup` et les montages `overlay` de conteneurs faussent
-les totaux. `smartctl -a /dev/sda` demande le paquet `smartmontools`, absent par
-défaut.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur Rocky 9, `lsof +L1` est identique, mais l'option `-x` de `du` s'impose
+> encore plus : `/sys/fs/cgroup` et les montages `overlay` de conteneurs faussent
+> les totaux. `smartctl -a /dev/sda` demande le paquet `smartmontools`, absent par
+> défaut.
 
-::: check
-Critère de succès : `verif-disque.sh /srv/vitrine/data` détecte le fichier
-supprimé et sort en 2, l'espace est récupéré sans tuer le processus, et
-`disque.md` traite les trois tickets.
-
-```bash
-bash check_M19_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `verif-disque.sh /srv/vitrine/data` détecte le fichier
+> supprimé et sort en 2, l'espace est récupéré sans tuer le processus, et
+> `disque.md` traite les trois tickets.
+>
+> ```bash
+> bash check_M19_03.sh
+> ```
 
 ---
 
-### **L19.4** — Une application lente : trouver où part le temps (INC-3340)
+### <a id="l19-4"></a>**[L19.4](corrige.md#l19-4)** — Une application lente : trouver où part le temps (INC-3340)
 
-::: contexte
-« Le site met 5 secondes à afficher la page produits, c'était instantané hier. »
-Le développeur répond que son code n'a pas changé et que « ça doit être le
-réseau ». Le processus consomme 0,3 % de CPU. Tu dois démontrer, chiffres à
-l'appui, où passent les 5 secondes, avant la réunion de 14 h.
-:::
+> **Contexte**
+>
+> « Le site met 5 secondes à afficher la page produits, c'était instantané hier. »
+> Le développeur répond que son code n'a pas changé et que « ça doit être le
+> réseau ». Le processus consomme 0,3 % de CPU. Tu dois démontrer, chiffres à
+> l'appui, où passent les 5 secondes, avant la réunion de 14 h.
 
 1. Mesure d'abord, discute ensuite : établis la latence réelle de l'endpoint
    `/produits` sur 50 requêtes (moyenne, médiane, p95), et compare-la à celle de
@@ -1022,33 +1044,35 @@ l'appui, où passent les 5 secondes, avant la réunion de 14 h.
 7. Vérifie après correctif : la latence doit revenir au niveau de la baseline de
    E19.15. Joins la comparaison avant/après.
 
-::: astuce
-`curl -w '@format.txt' -o /dev/null -s URL` avec un fichier de format contenant
-`%{time_namelookup} %{time_connect} %{time_starttransfer} %{time_total}` est
-l'outil le plus rapide pour isoler une phase. Utilisé sur 50 requêtes, il donne
-une distribution, pas une anecdote.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `curl -w '@format.txt' -o /dev/null -s URL` avec un fichier de format contenant
+> `%{time_namelookup} %{time_connect} %{time_starttransfer} %{time_total}` est
+> l'outil le plus rapide pour isoler une phase. Utilisé sur 50 requêtes, il donne
+> une distribution, pas une anecdote.
 
-::: check
-Critère de succès : `latence.md` décompose les 5 s avec les mesures, désigne la
-résolution DNS, et la latence mesurée après correctif est revenue sous 200 ms.
-
-```bash
-bash check_M19_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `latence.md` décompose les 5 s avec les mesures, désigne la
+> résolution DNS, et la latence mesurée après correctif est revenue sous 200 ms.
+>
+> ```bash
+> bash check_M19_04.sh
+> ```
 
 ---
 
-### **L19.5** — Conduire l'incident, pas seulement le réparer (INC-3355)
+### <a id="l19-5"></a>**[L19.5](corrige.md#l19-5)** — Conduire l'incident, pas seulement le réparer (INC-3355)
 
-::: contexte
-Vendredi 17 h 40. Le site est inaccessible. Tu es la première personne
-connectée ; deux collègues arrivent sur le canal, le responsable produit demande
-des nouvelles, et quelqu'un propose déjà de « redémarrer la VM, ça remarchera ».
-Tu prends le rôle de responsable d'incident. La panne technique n'est qu'une
-partie du travail.
-:::
+> **Contexte**
+>
+> Vendredi 17 h 40. Le site est inaccessible. Tu es la première personne
+> connectée ; deux collègues arrivent sur le canal, le responsable produit demande
+> des nouvelles, et quelqu'un propose déjà de « redémarrer la VM, ça remarchera ».
+> Tu prends le rôle de responsable d'incident. La panne technique n'est qu'une
+> partie du travail.
 
 Fais déclencher par un collègue **une** panne au hasard parmi les Break & Fix du
 module (`sudo bash break_M19_0X.sh`), sans te dire laquelle.
@@ -1140,37 +1164,39 @@ Ce qui a rallongé la résolution sans être la cause.
 Journaux, captures, liens vers les tickets et le canal de l'incident.
 ```
 
-::: attention
-Règle blameless : la chronologie et la cause racine ne contiennent **aucun nom
-de personne**. On décrit des décisions prises avec les informations disponibles à
-l'instant T, et on corrige le système qui a rendu l'erreur possible. Un
-post-mortem qui conclut par « rappel des consignes » n'a produit aucune action
-corrective.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Règle blameless : la chronologie et la cause racine ne contiennent **aucun nom
+> de personne**. On décrit des décisions prises avec les informations disponibles à
+> l'instant T, et on corrige le système qui a rendu l'erreur possible. Un
+> post-mortem qui conclut par « rappel des consignes » n'a produit aucune action
+> corrective.
 
-::: check
-Critère de succès : le journal de bord est horodaté et continu, le répertoire de
-preuves contient les huit captures avant réparation, le post-mortem est rempli
-sans nom de personne avec cinq pourquoi et trois actions datées, et le service
-est rétabli.
-
-```bash
-bash check_M19_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le journal de bord est horodaté et continu, le répertoire de
+> preuves contient les huit captures avant réparation, le post-mortem est rempli
+> sans nom de personne avec cinq pourquoi et trois actions datées, et le service
+> est rétabli.
+>
+> ```bash
+> bash check_M19_05.sh
+> ```
 
 ---
 
-### **L19.6** — Profiler avant d'optimiser (INC-3362)
+### <a id="l19-6"></a>**[L19.6](corrige.md#l19-6)** — Profiler avant d'optimiser (INC-3362)
 
-::: contexte
-Le rapport de TVA mensuel (`rapport-tva.py`) est passé de « quelques
-secondes » à plusieurs secondes par tranche de 40 000 factures, et le
-volume double l'an prochain. Le développeur propose de « réécrire en Go ».
-Avant de valider trois semaines de travail, on te demande de trouver **où**
-part le temps, de le prouver avec `perf`, et de mesurer ce qu'une
-correction ciblée apporte — chiffres à l'appui.
-:::
+> **Contexte**
+>
+> Le rapport de TVA mensuel (`rapport-tva.py`) est passé de « quelques
+> secondes » à plusieurs secondes par tranche de 40 000 factures, et le
+> volume double l'an prochain. Le développeur propose de « réécrire en Go ».
+> Avant de valider trois semaines de travail, on te demande de trouver **où**
+> part le temps, de le prouver avec `perf`, et de mesurer ce qu'une
+> correction ciblée apporte — chiffres à l'appui.
 
 Tout se passe dans `~/lab19/perf/` (déposé par `setup_M19_perf.sh`) :
 `rapport-tva.py`, `factures.csv` (40 000 lignes), `clients.csv` (6 000
@@ -1207,44 +1233,47 @@ lignes). La copie de référence intouchable est dans `/opt/vitrine/perf/`.
    développeur sur la réécriture en Go (avec ce qu'il faudrait mesurer pour
    la justifier un jour).
 
-::: astuce
-`perf report` interactif : `Entrée` sur une ligne déplie les appelants
-(`--no-children` trie par temps propre, `--children` par temps cumulé). Si
-`perf` répond `WARNING: Kernel address maps (/proc/{kallsyms,modules}) are
-restricted`, ajoute `sudo`. Si `python3 -X perf` ne change rien, vérifie
-`python3 -c 'import sys; print(sys.version)'` (≥ 3.12) et que
-`/tmp/perf-PID.map` a été écrit.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `perf report` interactif : `Entrée` sur une ligne déplie les appelants
+> (`--no-children` trie par temps propre, `--children` par temps cumulé). Si
+> `perf` répond `WARNING: Kernel address maps (/proc/{kallsyms,modules}) are
+> restricted`, ajoute `sudo`. Si `python3 -X perf` ne change rien, vérifie
+> `python3 -c 'import sys; print(sys.version)'` (≥ 3.12) et que
+> `/tmp/perf-PID.map` a été écrit.
 
-::: check
-Critère de succès : `perf-avant.txt` et `perf-apres.txt` présents, sortie du
-script corrigé identique à la référence, temps d'exécution divisé par au
-moins 5, `profilage.md` nomme la fonction chaude et le gain.
-
-```bash
-bash check_M19_07.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `perf-avant.txt` et `perf-apres.txt` présents, sortie du
+> script corrigé identique à la référence, temps d'exécution divisé par au
+> moins 5, `profilage.md` nomme la fonction chaude et le gain.
+>
+> ```bash
+> bash check_M19_07.sh
+> ```
 
 ---
 
 ## 19.7 Break & Fix ★★★
 
-::: attention
-Avant **chaque** Break & Fix : `qm snapshot 9002 avant-bf19-XX`. Le rollback
-`qm rollback 9002 snap-clean` reste le filet de sécurité, mais l'utiliser vaut
-échec : l'objectif est de réparer une machine qu'on ne peut pas rembobiner, ce
-qui est exactement la situation en production.
-
-Discipline imposée pour les huit pannes : tu ouvres un fichier de notes, tu y
-écris l'heure, chaque commande et ce que tu en déduis. À la fin, tu dois pouvoir
-reconstituer ta démarche. C'est ce qui est évalué, autant que la réparation.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant **chaque** Break & Fix : `qm snapshot 9002 avant-bf19-XX`. Le rollback
+> `qm rollback 9002 snap-clean` reste le filet de sécurité, mais l'utiliser vaut
+> échec : l'objectif est de réparer une machine qu'on ne peut pas rembobiner, ce
+> qui est exactement la situation en production.
+>
+> Discipline imposée pour les huit pannes : tu ouvres un fichier de notes, tu y
+> écris l'heure, chaque commande et ce que tu en déduis. À la fin, tu dois pouvoir
+> reconstituer ta démarche. C'est ce qui est évalué, autant que la réparation.
 
 Toutes les pannes s'appliquent à `lab-web`. Chaque script sauvegarde ce qu'il
 casse dans `/root/.breakfix-backup/` — n'y regarde pas avant d'avoir trouvé.
 
-### **BF19.1** — « L'application meurt toutes les nuits »
+### <a id="bf19-1"></a>**[BF19.1](corrige.md#bf19-1)** — « L'application meurt toutes les nuits »
 
 ```bash
 sudo bash break_M19_01.sh
@@ -1262,11 +1291,9 @@ trace complète dans le journal du noyau, expliquer pourquoi c'est **ce**
 processus qui a été choisi, rétablir un service stable sans correctif applicatif,
 et dire ce que tu transmets au développeur.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF19.2** — « Passé 200 utilisateurs, tout casse »
+### <a id="bf19-2"></a>**[BF19.2](corrige.md#bf19-2)** — « Passé 200 utilisateurs, tout casse »
 
 ```bash
 sudo bash break_M19_02.sh
@@ -1285,11 +1312,9 @@ appliquée au processus (pas celle de ton shell), dire d'où vient cette limite,
 la corriger durablement au bon endroit, et expliquer comment tu aurais détecté la
 dérive avant l'incident.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF19.3** — « Plus un octet de libre, mais le disque est vide »
+### <a id="bf19-3"></a>**[BF19.3](corrige.md#bf19-3)** — « Plus un octet de libre, mais le disque est vide »
 
 ```bash
 sudo bash break_M19_03.sh
@@ -1307,11 +1332,9 @@ tuer un processus.
 le descripteur responsables, récupérer l'espace **sans tuer personne**, vérifier
 que l'application réécrit, et proposer la mesure qui empêche la récidive.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF19.4** — « Le serveur rame, on ne voit rien dans le top »
+### <a id="bf19-4"></a>**[BF19.4](corrige.md#bf19-4)** — « Le serveur rame, on ne voit rien dans le top »
 
 ```bash
 sudo bash break_M19_04.sh
@@ -1328,11 +1351,9 @@ prouver qu'il est bien la cause (et non une conséquence), dire d'où il a été
 lancé et par quoi il est maintenu en vie, le neutraliser proprement et
 durablement, puis vérifier le retour à la latence de baseline.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF19.5** — « Les appels vers l'API interne échouent une fois sur deux »
+### <a id="bf19-5"></a>**[BF19.5](corrige.md#bf19-5)** — « Les appels vers l'API interne échouent une fois sur deux »
 
 ```bash
 sudo bash break_M19_05.sh
@@ -1351,11 +1372,9 @@ temporairement et tu perdrais la preuve).
 durablement, et expliquer pourquoi un redémarrage aurait « réglé » le problème
 pendant une heure.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF19.6** — « Tout est lent, exactement lent »
+### <a id="bf19-6"></a>**[BF19.6](corrige.md#bf19-6)** — « Tout est lent, exactement lent »
 
 ```bash
 sudo bash break_M19_06.sh
@@ -1373,11 +1392,9 @@ code applicatif.
 passent avec deux outils indépendants, identifier le composant responsable,
 corriger, et expliquer pourquoi la régularité du délai était l'indice principal.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF19.7** — « Le service tourne mais n'écrit plus rien »
+### <a id="bf19-7"></a>**[BF19.7](corrige.md#bf19-7)** — « Le service tourne mais n'écrit plus rien »
 
 ```bash
 sudo bash break_M19_07.sh
@@ -1397,11 +1414,9 @@ noyau ce qui a provoqué le basculement, expliquer le rôle de l'option
 `remount,rw` ne suffira pas, dis pourquoi), vérifier l'intégrité, et énoncer ce
 qu'il faut surveiller pour être prévenu la prochaine fois.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF19.8** — « Le service clignote »
+### <a id="bf19-8"></a>**[BF19.8](corrige.md#bf19-8)** — « Le service clignote »
 
 ```bash
 sudo bash break_M19_08.sh
@@ -1423,22 +1438,20 @@ tenir en place, corriger, et expliquer le rôle exact de `Restart=`,
 `RestartSec=`, `StartLimitIntervalSec=` et `StartLimitBurst=` dans ce que tu as
 observé. Précise qui a arrêté le service : l'application, ou systemd ?
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
 ---
 
 ## 19.8 Défi du module ★★★
 
-**D19 — Examen blanc : cinq pannes, 90 minutes**
+<a id="d19"></a>**[D19](corrige.md#d19) — Examen blanc : cinq pannes, 90 minutes**
 
-::: contexte
-Dernière étape de la partie système. Tu es en situation d'examen : cinq pannes
-tirées au sort sont appliquées à `lab-web`, en même temps, sans indication.
-Tu as 90 minutes chrono. Un correcteur (un collègue, ou le script de
-vérification) juge le résultat **et** ta trace écrite.
-:::
+> **Contexte**
+>
+> Dernière étape de la partie système. Tu es en situation d'examen : cinq pannes
+> tirées au sort sont appliquées à `lab-web`, en même temps, sans indication.
+> Tu as 90 minutes chrono. Un correcteur (un collègue, ou le script de
+> vérification) juge le résultat **et** ta trace écrite.
 
 **Mise en place** (par le correcteur, ou par toi sans regarder la sortie) :
 
@@ -1498,24 +1511,26 @@ laquelle a corrigé.
 Seuil de réussite : **70 points**. En dessous de 50, refais les Break & Fix un
 par un avant de retenter.
 
-::: astuce
-Stratégie recommandée : 10 minutes de triage global **avant** toute réparation
-(checklist des 60 secondes, `systemctl --failed`, `dmesg -T`, `df -h`, `df -i`,
-`journalctl -p err -b`), pour dresser la liste des symptômes. Répare ensuite du
-plus bloquant au moins bloquant. Une panne de disque plein ou de système de
-fichiers en lecture seule empêche de diagnostiquer les autres : traite-la en
-premier.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Stratégie recommandée : 10 minutes de triage global **avant** toute réparation
+> (checklist des 60 secondes, `systemctl --failed`, `dmesg -T`, `df -h`, `df -i`,
+> `journalctl -p err -b`), pour dresser la liste des symptômes. Répare ensuite du
+> plus bloquant au moins bloquant. Une panne de disque plein ou de système de
+> fichiers en lecture seule empêche de diagnostiquer les autres : traite-la en
+> premier.
 
-::: check
-```bash
-bash check_M19_06.sh
-```
-
-Le script vérifie l'état sain de la machine sur les huit axes de panne et la
-présence des livrables. Il affiche un score indicatif : le barème complet
-demande une relecture humaine du journal.
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M19_06.sh
+> ```
+>
+> Le script vérifie l'état sain de la machine sur les huit axes de panne et la
+> présence des livrables. Il affiche un score indicatif : le barème complet
+> demande une relecture humaine du journal.
 
 ---
 
@@ -1555,3 +1570,9 @@ Pour aller plus loin :
   « 62 % du temps est passé dans cette fonction de sérialisation ».
 * Rédige le runbook des huit pannes de ce module dans le wiki de ton équipe. Un
   runbook qu'on n'a pas écrit soi-même ne sert à personne à 4 h du matin.
+
+<!-- nav:début -->
+---
+
+[← Module 18](../18-securite/README.md) · [Corrigé](corrige.md) · [Projet A →](../../projets/P1-factura/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

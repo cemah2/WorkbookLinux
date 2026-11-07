@@ -1,44 +1,71 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 23**  
+[← Module 22](../22-docker/README.md) · [Corrigé](corrige.md) · [Module 24 →](../24-iac-terraform/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M23.sh`](../../scripts/setup/setup_M23.sh) | prépare le module |
+| [`check_M23_01.sh`](../../scripts/check/check_M23_01.sh) | vérification |
+| [`check_M23_02.sh`](../../scripts/check/check_M23_02.sh) | vérification |
+| [`check_M23_03.sh`](../../scripts/check/check_M23_03.sh) | vérification |
+| [`check_M23_04.sh`](../../scripts/check/check_M23_04.sh) | vérification |
+| [`check_M23_05.sh`](../../scripts/check/check_M23_05.sh) | vérification |
+| [`check_M23_06.sh`](../../scripts/check/check_M23_06.sh) | vérification |
+| [`break_M23_01.sh`](../../scripts/break/break_M23_01.sh) | installe une panne |
+| [`break_M23_02.sh`](../../scripts/break/break_M23_02.sh) | installe une panne |
+| [`break_M23_03.sh`](../../scripts/break/break_M23_03.sh) | installe une panne |
+| [`break_M23_04.sh`](../../scripts/break/break_M23_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 23 — Ansible : automatiser le parc
 
 ## 23.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* expliquer ce que veut dire *agentless*, *push par SSH*, *idempotent* et
-  *déclaratif*, et dire en une phrase quand je prends Ansible plutôt qu'un
-  script bash, et Terraform plutôt qu'Ansible ;
-* installer `ansible-core` avec `pipx` sur Ubuntu 24.04, écrire un
-  `ansible.cfg` de projet et justifier chacune de ses clés ;
-* décrire un parc dans un inventaire INI ou YAML avec groupes, `children`,
-  `group_vars`/`host_vars`, et le vérifier avec `ansible-inventory` ;
-* lancer des commandes ad hoc (`ping`, `command`, `shell`, `setup`) avec
-  `-b`, `--limit`, et lire une sortie `CHANGED`/`SUCCESS`/`FAILED`/
-  `UNREACHABLE` ;
-* écrire un playbook complet : `hosts`, `become`, `vars`, `tasks`,
-  `handlers`, `tags`, et le piloter avec `--check --diff`, `--limit`,
-  `--start-at-task`, `-v` ;
-* choisir le bon module (et son FQCN) pour chaque besoin, et reconnaître
-  les trois modules qui cassent l'idempotence si on ne les encadre pas
-  (`command`, `shell`, `lineinfile`) ;
-* écrire un template Jinja2 avec filtres, conditions, boucles, facts et
-  variables magiques (`hostvars`, `groups`, `inventory_hostname`) ;
-* contrôler le flux : `when`, `loop`, `register`, `until`, `block/rescue/
-  always`, `run_once`, `delegate_to`, `serial`, `max_fail_percentage` ;
-* structurer un rôle, citer l'ordre de précédence des variables, et gérer
-  les dépendances externes avec `requirements.yml` ;
-* protéger des secrets avec `ansible-vault` sans jamais les faire fuir dans
-  les journaux (`no_log`) ;
-* valider un dépôt d'infra avec `ansible-lint` et `yamllint`, et diagnostiquer
-  les six erreurs qui reviennent toujours : `UNREACHABLE`, `Missing sudo
-  password`, Python absent, handler muet, tâche non idempotente, vault
-  indéchiffrable.
-
-Temps estimé : 9 h
-Prérequis : module 07 (bash, `set -euo pipefail`, codes de sortie), module 14
-(SSH : clés, `known_hosts`, agent), module 10 (apt/dnf), module 08 (systemd).
-Le module 21 (Git) est un plus pour le défi.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * expliquer ce que veut dire *agentless*, *push par SSH*, *idempotent* et
+>   *déclaratif*, et dire en une phrase quand je prends Ansible plutôt qu'un
+>   script bash, et Terraform plutôt qu'Ansible ;
+> * installer `ansible-core` avec `pipx` sur Ubuntu 24.04, écrire un
+>   `ansible.cfg` de projet et justifier chacune de ses clés ;
+> * décrire un parc dans un inventaire INI ou YAML avec groupes, `children`,
+>   `group_vars`/`host_vars`, et le vérifier avec `ansible-inventory` ;
+> * lancer des commandes ad hoc (`ping`, `command`, `shell`, `setup`) avec
+>   `-b`, `--limit`, et lire une sortie `CHANGED`/`SUCCESS`/`FAILED`/
+>   `UNREACHABLE` ;
+> * écrire un playbook complet : `hosts`, `become`, `vars`, `tasks`,
+>   `handlers`, `tags`, et le piloter avec `--check --diff`, `--limit`,
+>   `--start-at-task`, `-v` ;
+> * choisir le bon module (et son FQCN) pour chaque besoin, et reconnaître
+>   les trois modules qui cassent l'idempotence si on ne les encadre pas
+>   (`command`, `shell`, `lineinfile`) ;
+> * écrire un template Jinja2 avec filtres, conditions, boucles, facts et
+>   variables magiques (`hostvars`, `groups`, `inventory_hostname`) ;
+> * contrôler le flux : `when`, `loop`, `register`, `until`, `block/rescue/
+>   always`, `run_once`, `delegate_to`, `serial`, `max_fail_percentage` ;
+> * structurer un rôle, citer l'ordre de précédence des variables, et gérer
+>   les dépendances externes avec `requirements.yml` ;
+> * protéger des secrets avec `ansible-vault` sans jamais les faire fuir dans
+>   les journaux (`no_log`) ;
+> * valider un dépôt d'infra avec `ansible-lint` et `yamllint`, et diagnostiquer
+>   les six erreurs qui reviennent toujours : `UNREACHABLE`, `Missing sudo
+>   password`, Python absent, handler muet, tâche non idempotente, vault
+>   indéchiffrable.
+>
+> **Temps estimé** : 9 h
+>
+> **Prérequis** : module 07 (bash, `set -euo pipefail`, codes de sortie), module 14
+> (SSH : clés, `known_hosts`, agent), module 10 (apt/dnf), module 08 (systemd).
+> Le module 21 (Git) est un plus pour le défi.
 
 ---
 
@@ -76,17 +103,18 @@ ansible --version
 Il prépare aussi `~/.ssh/known_hosts` avec les clés des quatre cibles
 (`ssh-keyscan`), pour ne **pas** avoir à désactiver `host_key_checking`.
 
-::: astuce
-`pipx install ansible-core` fournit les binaires et les modules
-`ansible.builtin`. Tout le reste (`community.general`, `ansible.posix`,
-`community.postgresql`, `community.crypto`) vient de collections déclarées
-dans `~/lab23/collections/requirements.yml` et installées par
-`ansible-galaxy collection install -r collections/requirements.yml`.
-L'alternative `pipx install --include-deps ansible` embarque *toutes* les
-collections communautaires (plusieurs centaines de Mo) : pratique pour
-découvrir, à proscrire dans un dépôt d'infra où l'on veut des versions
-épinglées.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `pipx install ansible-core` fournit les binaires et les modules
+> `ansible.builtin`. Tout le reste (`community.general`, `ansible.posix`,
+> `community.postgresql`, `community.crypto`) vient de collections déclarées
+> dans `~/lab23/collections/requirements.yml` et installées par
+> `ansible-galaxy collection install -r collections/requirements.yml`.
+> L'alternative `pipx install --include-deps ansible` embarque *toutes* les
+> collections communautaires (plusieurs centaines de Mo) : pratique pour
+> découvrir, à proscrire dans un dépôt d'infra où l'on veut des versions
+> épinglées.
 
 Vérifie que les cibles répondent avant de commencer les exercices :
 
@@ -104,13 +132,14 @@ module.
 L23.1 n'a pas créé le compte de service `ansible`, ajoute `-K`
 (`--ask-become-pass`) à chaque commande qui utilise `become`.
 
-::: rhel
-Rocky 9 minimal embarque `python3` (3.9) et `sudo`, mais pas toujours
-`python3-libselinux`, dont les modules `copy`/`template`/`file` ont besoin
-sur un système SELinux *enforcing*. Le message est explicite :
-`Aborting, target uses selinux but python bindings (libselinux-python) aren't
-installed!`. Correction : `sudo dnf install -y python3-libselinux`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky 9 minimal embarque `python3` (3.9) et `sudo`, mais pas toujours
+> `python3-libselinux`, dont les modules `copy`/`template`/`file` ont besoin
+> sur un système SELinux *enforcing*. Le message est explicite :
+> `Aborting, target uses selinux but python bindings (libselinux-python) aren't
+> installed!`. Correction : `sudo dnf install -y python3-libselinux`.
 
 ---
 
@@ -134,7 +163,9 @@ sur plus d'une machine. Bascule vers Terraform quand l'objet à gérer est une
 ressource *créée* par une API (VM Proxmox, enregistrement DNS, bucket) dont il
 faut suivre le cycle de vie, y compris la destruction.
 
-@fig(ansible-push): Ansible en mode push : lab-adm ouvre une session SSH par hôte, envoie le module Python, lit le JSON de retour ; un second run sans changement donne `changed=0` — c'est l'idempotence.
+<p align="center"><img src="../../assets/figures/ansible-push.svg" alt="Schéma : ansible-push"></p>
+
+*Figure — Ansible en mode push : lab-adm ouvre une session SSH par hôte, envoie le module Python, lit le JSON de retour ; un second run sans changement donne `changed=0` — c'est l'idempotence.*
 
 ### `ansible.cfg` de projet (le premier trouvé : `ANSIBLE_CONFIG`, `./ansible.cfg`, `~/.ansible.cfg`, `/etc/ansible/ansible.cfg`)
 
@@ -385,7 +416,7 @@ conteneur : `create → converge → idempotence → verify → destroy`.
 
 ## 23.3 Quiz — QCM
 
-**Q23.1** — Une tâche `ansible.builtin.shell: systemctl restart nginx` est
+<a id="q23-1"></a>**[Q23.1](corrige.md#q23-1)** — Une tâche `ansible.builtin.shell: systemctl restart nginx` est
 relancée trois fois de suite sur un hôte sain. Que rapporte Ansible ?
 
 a) `ok` aux trois exécutions, le service tourne déjà
@@ -393,7 +424,7 @@ b) `changed` aux trois exécutions
 c) `changed` la première fois, `ok` ensuite
 d) `failed` : `shell` ne peut pas piloter systemd
 
-**Q23.2** — `ansible db -m ansible.builtin.command -a 'ls /var/lib/postgresql/*/main | wc -l'`
+<a id="q23-2"></a>**[Q23.2](corrige.md#q23-2)** — `ansible db -m ansible.builtin.command -a 'ls /var/lib/postgresql/*/main | wc -l'`
 répond :
 
 ```text
@@ -410,7 +441,7 @@ b) `command` n'invoque pas de shell : ni glob, ni pipe ; il faut `shell`
 c) il manque `-b`
 d) `wc` n'est pas installé sur `lab-db`
 
-**Q23.3** — Ton `ansible.cfg` contient `become = True` dans
+<a id="q23-3"></a>**[Q23.3](corrige.md#q23-3)** — Ton `ansible.cfg` contient `become = True` dans
 `[privilege_escalation]`. `ansible all -m ansible.builtin.ping` renvoie pour
 les quatre hôtes `FAILED! => {"msg": "Missing sudo password"}`. **Deux
 réponses correctes.**
@@ -421,7 +452,7 @@ b) déployer `mathieu ALL=(ALL) NOPASSWD: ALL` dans `/etc/sudoers.d/` sur les
 c) passer `remote_user = root`
 d) mettre `host_key_checking = False`
 
-**Q23.4** — Sur `lab-rhel`, la sortie contient
+<a id="q23-4"></a>**[Q23.4](corrige.md#q23-4)** — Sur `lab-rhel`, la sortie contient
 `"module_stderr": "/bin/sh: /usr/bin/python3: No such file or directory"` et
 `"rc": 127`. Quelle tâche peut **encore** s'exécuter sur cet hôte pour réparer ?
 
@@ -430,7 +461,7 @@ b) `ansible.builtin.raw: dnf install -y python3` avec `gather_facts: false`
 c) `ansible.builtin.package: name=python3`
 d) aucune, il faut passer par la console
 
-**Q23.5** — Un playbook contient :
+<a id="q23-5"></a>**[Q23.5](corrige.md#q23-5)** — Un playbook contient :
 
 ```yaml
   tasks:
@@ -453,7 +484,7 @@ b) le nom du handler est comparé en respectant la casse : `reload` ≠ `Reload`
 c) `notify` n'accepte qu'une liste
 d) le handler doit être déclaré avant les tâches
 
-**Q23.6** — `ansible-inventory --graph` affiche :
+<a id="q23-6"></a>**[Q23.6](corrige.md#q23-6)** — `ansible-inventory --graph` affiche :
 
 ```text
 @all:
@@ -472,14 +503,14 @@ b) la variable est indéfinie : `lab-db` n'est dans aucun groupe `db`
 c) 16, `group_vars` s'applique par nom d'hôte
 d) une erreur de parsing de l'inventaire
 
-**Q23.7** — Quel est l'ordre de précédence **croissant** correct ?
+<a id="q23-7"></a>**[Q23.7](corrige.md#q23-7)** — Quel est l'ordre de précédence **croissant** correct ?
 
 a) `-e` < `host_vars` < `group_vars` < `defaults/main.yml`
 b) `defaults/main.yml` < `group_vars` < `host_vars` < `vars:` du play < `-e`
 c) `group_vars` < `defaults/main.yml` < `-e` < `host_vars`
 d) `host_vars` < `group_vars` < `vars/main.yml` du rôle < `-e`
 
-**Q23.8** — Un play `hosts: web` avec `serial: 1` et `max_fail_percentage: 0`
+<a id="q23-8"></a>**[Q23.8](corrige.md#q23-8)** — Un play `hosts: web` avec `serial: 1` et `max_fail_percentage: 0`
 déploie sur `lab-web` puis `lab-rhel`. La vérification de santé échoue sur
 `lab-web`. Que se passe-t-il ?
 
@@ -488,7 +519,7 @@ b) Ansible arrête le play : `lab-rhel` n'est jamais touché
 c) Ansible relance `lab-web` jusqu'à `retries`
 d) Ansible annule les changements sur `lab-web`
 
-**Q23.9** — Tu veux qu'un rapport listant les noyaux de tous les hôtes soit
+<a id="q23-9"></a>**[Q23.9](corrige.md#q23-9)** — Tu veux qu'un rapport listant les noyaux de tous les hôtes soit
 écrit **une seule fois** sur le nœud de contrôle. **Deux réponses correctes.**
 
 a) `delegate_to: localhost` + `run_once: true`
@@ -497,7 +528,7 @@ c) `ansible.builtin.copy` avec `when: inventory_hostname == ansible_play_hosts[0
    `delegate_to: localhost`
 d) `connection: local` sur chaque hôte
 
-**Q23.10** — Quelle expression Jinja2 produit la liste des adresses IP des
+<a id="q23-10"></a>**[Q23.10](corrige.md#q23-10)** — Quelle expression Jinja2 produit la liste des adresses IP des
 hôtes du groupe `web` ?
 
 a) `{{ groups['web'] | map(attribute='ansible_host') | list }}`
@@ -505,7 +536,7 @@ b) `{{ groups['web'] | map('extract', hostvars, 'ansible_host') | list }}`
 c) `{{ hostvars['web']['ansible_host'] }}`
 d) `{{ web | map('ansible_host') }}`
 
-**Q23.11** — `ansible-playbook site.yml --check --diff` s'arrête sur :
+<a id="q23-11"></a>**[Q23.11](corrige.md#q23-11)** — `ansible-playbook site.yml --check --diff` s'arrête sur :
 
 ```text
 fatal: [lab-web]: FAILED! => {"msg": "The task includes an option with an
@@ -520,7 +551,7 @@ b) en `--check`, `command` n'est pas exécuté : `r` est un résultat *skipped* 
 c) `register` ne fonctionne pas avec `command`
 d) il faut `r.stdout`
 
-**Q23.12** — Quelle tâche est idempotente **et** signale correctement les
+<a id="q23-12"></a>**[Q23.12](corrige.md#q23-12)** — Quelle tâche est idempotente **et** signale correctement les
 changements ?
 
 a) `ansible.builtin.shell: useradd deploy || true`
@@ -529,7 +560,7 @@ c) `ansible.builtin.command: useradd deploy` avec `creates: /home/deploy`
 d) `ansible.builtin.shell: id deploy || useradd deploy` avec
    `changed_when: false`
 
-**Q23.13** — `ansible-vault view group_vars/all/vault.yml` répond
+<a id="q23-13"></a>**[Q23.13](corrige.md#q23-13)** — `ansible-vault view group_vars/all/vault.yml` répond
 `ERROR! Decryption failed (no vault secrets were found that could decrypt)`.
 Que sais-tu avec certitude ?
 
@@ -538,7 +569,7 @@ b) un mot de passe a été fourni, mais aucun ne déchiffre ce fichier
 c) aucun mot de passe n'a été fourni
 d) le fichier est corrompu
 
-**Q23.14** — Une tâche `ansible.builtin.get_url` télécharge
+<a id="q23-14"></a>**[Q23.14](corrige.md#q23-14)** — Une tâche `ansible.builtin.get_url` télécharge
 `node_exporter-1.9.1.linux-amd64.tar.gz` vers `/tmp/ne.tar.gz` avec
 `force: true` (« pour être sûr d'avoir la dernière version »). Elle retélécharge l'archive à chaque exécution. Quelle correction évite ce téléchargement inutile ? **Deux réponses correctes.**
 
@@ -549,7 +580,7 @@ b) retirer `force: true` et garder un `dest` stable : un fichier existant
 c) ajouter `changed_when: false`
 d) remplacer par `ansible.builtin.shell: wget ...`
 
-**Q23.15** — Dans un rôle, `defaults/main.yml` contient `nginx_port: 80` et
+<a id="q23-15"></a>**[Q23.15](corrige.md#q23-15)** — Dans un rôle, `defaults/main.yml` contient `nginx_port: 80` et
 `vars/main.yml` contient `nginx_port: 8080`. Le playbook passe
 `-e nginx_port=443`. Le template reçoit :
 
@@ -558,7 +589,7 @@ b) 8080
 c) 443
 d) une erreur de variable dupliquée
 
-**Q23.16** — `ansible-playbook site.yml` affiche pour `lab-rhel` :
+<a id="q23-16"></a>**[Q23.16](corrige.md#q23-16)** — `ansible-playbook site.yml` affiche pour `lab-rhel` :
 
 ```text
 [WARNING]: Platform linux on host lab-rhel is using the discovered Python
@@ -574,14 +605,14 @@ b) installer Python 3.12 sur Rocky
 c) `gather_facts: false`
 d) `-vvv` pour voir la vraie erreur
 
-**Q23.17** — Quelle affirmation sur `--check` est **fausse** ?
+<a id="q23-17"></a>**[Q23.17](corrige.md#q23-17)** — Quelle affirmation sur `--check` est **fausse** ?
 
 a) `template` et `copy` rapportent `changed` et montrent le diff avec `--diff`
 b) `command`/`shell` sont sautés sauf `check_mode: false`
 c) les handlers notifiés sont exécutés pour de vrai
 d) `apt` interroge le cache sans installer
 
-**Q23.18** — Un play sur `web` contient une tâche avec
+<a id="q23-18"></a>**[Q23.18](corrige.md#q23-18)** — Un play sur `web` contient une tâche avec
 `loop: "{{ groups['db'] }}"` et `delegate_to: "{{ item }}"`. Sur quels
 hôtes cette tâche s'exécute-t-elle, et avec quels facts ?
 
@@ -595,89 +626,71 @@ d) erreur : `delegate_to` n'accepte pas de variable
 
 ## 23.4 Quiz — questions ouvertes
 
-**QO23.1** — Explique mécaniquement ce qui se passe entre
+<a id="qo23-1"></a>**[QO23.1](corrige.md#qo23-1)** — Explique mécaniquement ce qui se passe entre
 `ansible-playbook` et un hôte pour **une** tâche `apt` : connexion, transfert,
 exécution, retour. Où intervient `pipelining`, et pourquoi réduit-il de trois à
 un le nombre de connexions ? Que change `become` dans ce cheminement ?
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO23.2** — *On te demande en entretien* : « Un collègue soutient qu'un
+<a id="qo23-2"></a>**[QO23.2](corrige.md#qo23-2)** — *On te demande en entretien* : « Un collègue soutient qu'un
 script bash avec `set -e` et des `if [ -f ]` est aussi idempotent qu'un
 playbook, et plus simple. Réponds-lui. » Donne une définition opérationnelle
 de l'idempotence, deux cas où bash l'obtient difficilement, et un cas où le
 bash reste le bon choix.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO23.3** — Compare `lineinfile`, `blockinfile` et `template` pour gérer
+<a id="qo23-3"></a>**[QO23.3](corrige.md#qo23-3)** — Compare `lineinfile`, `blockinfile` et `template` pour gérer
 `/etc/ssh/sshd_config.d/50-baseline.conf`. Explique pourquoi une
 configuration gérée par plusieurs `lineinfile` finit divergente, et ce que
 `validate:` apporte à `template`.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO23.4** — Décris précisément le cycle de vie d'un *handler* : quand il est
+<a id="qo23-4"></a>**[QO23.4](corrige.md#qo23-4)** — Décris précisément le cycle de vie d'un *handler* : quand il est
 notifié, quand il s'exécute, combien de fois, ce qui l'empêche de tourner, et
 les deux moyens de forcer son exécution. Donne un cas de production où
 `flush_handlers` est indispensable.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO23.5** — *On te demande en entretien* : « Tu dois mettre à jour 40
+<a id="qo23-5"></a>**[QO23.5](corrige.md#qo23-5)** — *On te demande en entretien* : « Tu dois mettre à jour 40
 frontaux derrière un répartiteur sans interruption de service. Décris le
 playbook. » Cite les mots-clés (`serial`, `max_fail_percentage`,
 `pre_tasks`/`post_tasks`, `delegate_to`, `uri`/`until`,
 `flush_handlers`) et explique le rôle de chacun dans le scénario.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO23.6** — Explique la précédence des variables Ansible en te limitant aux
+<a id="qo23-6"></a>**[QO23.6](corrige.md#qo23-6)** — Explique la précédence des variables Ansible en te limitant aux
 sept niveaux que tu rencontres réellement (défauts de rôle, `group_vars/all`,
 `group_vars/<g>`, `host_vars`, `vars:` du play, `vars/main.yml` du rôle,
 extra vars). Pourquoi un rôle bien conçu ne met-il **rien** d'ajustable dans
 `vars/main.yml` ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO23.7** — Un playbook qui fonctionnait hier répond ce matin
+<a id="qo23-7"></a>**[QO23.7](corrige.md#qo23-7)** — Un playbook qui fonctionnait hier répond ce matin
 `UNREACHABLE` sur `lab-rhel` uniquement. Décris ta démarche de diagnostic
 dans l'ordre (commandes, verbosité, ce que tu cherches), et liste les cinq
 causes les plus fréquentes avec leur signature dans la sortie `-vvv`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO23.8** — Décris l'organisation d'un dépôt d'infra Ansible propre : arbre
+<a id="qo23-8"></a>**[QO23.8](corrige.md#qo23-8)** — Décris l'organisation d'un dépôt d'infra Ansible propre : arbre
 des répertoires, ce qui est chiffré, ce qui est ignoré par Git, ce qui tourne
 en CI avant la fusion. Où ranges-tu le mot de passe du vault, et comment le
 runner CI l'obtient-il sans qu'il apparaisse dans un journal ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO23.9** — Terraform et Ansible sont souvent présentés comme concurrents.
+<a id="qo23-9"></a>**[QO23.9](corrige.md#qo23-9)** — Terraform et Ansible sont souvent présentés comme concurrents.
 Explique ce que chacun modélise (ressource vs état d'une machine), ce qu'est
 l'état Terraform et pourquoi Ansible n'en a pas, et comment les deux
 s'enchaînent pour créer puis configurer une VM Proxmox.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
@@ -688,93 +701,93 @@ répertoire). Chaque playbook doit passer `yamllint` et `ansible-lint` sans
 erreur, et chaque tâche doit avoir un `name` et un FQCN : c'est la règle du
 module. Range tes playbooks dans `~/lab23/playbooks/`.
 
-**E23.1** — Affiche l'arbre de l'inventaire fourni, puis les variables
+<a id="e23-1"></a>**[E23.1](corrige.md#e23-1)** — Affiche l'arbre de l'inventaire fourni, puis les variables
 résolues de `lab-db` au format JSON. Identifie dans cette sortie une variable
 qui vient de `group_vars/all/vars.yml`, une de `group_vars/ubuntu.yml` et une
 définie directement dans `hosts.yml`.
 
-**E23.2** — Récupère l'uptime des quatre hôtes en une commande ad hoc, puis
+<a id="e23-2"></a>**[E23.2](corrige.md#e23-2)** — Récupère l'uptime des quatre hôtes en une commande ad hoc, puis
 le nombre de fichiers `*.conf` dans `/etc`. La première doit fonctionner avec
 `command`, la seconde ne le peut pas : montre l'erreur, explique-la, et
 donne la forme qui marche.
 
-**E23.3** — Sans écrire de playbook, affiche pour chaque hôte uniquement sa
+<a id="e23-3"></a>**[E23.3](corrige.md#e23-3)** — Sans écrire de playbook, affiche pour chaque hôte uniquement sa
 distribution, sa version et sa famille d'OS. Puis, en une commande, le nombre
 de vCPU et la RAM totale.
 
-**E23.4** — Toujours en ad hoc, déploie `/etc/motd` avec le contenu
+<a id="e23-4"></a>**[E23.4](corrige.md#e23-4)** — Toujours en ad hoc, déploie `/etc/motd` avec le contenu
 `Parc géré par Ansible - ne pas modifier à la main` sur les quatre hôtes.
 D'abord en simulation avec diff, puis pour de vrai, puis une troisième fois :
 observe la couleur et le mot-clé de chaque exécution.
 
-**E23.5** — Écris `playbooks/paquets.yml` qui installe `htop`, `vim`, `curl`
+<a id="e23-5"></a>**[E23.5](corrige.md#e23-5)** — Écris `playbooks/paquets.yml` qui installe `htop`, `vim`, `curl`
 et `tree` sur les quatre hôtes, Ubuntu et Rocky compris, **avec un seul
 play et une seule tâche d'installation**. La seconde exécution doit afficher
 `changed=0` partout, et `--check` ne doit pas déclencher de mise à jour du
 cache apt à chaque fois (regarde `cache_valid_time`).
 
-**E23.6** — Définis `ntp_servers` (liste) dans `group_vars/all/vars.yml` avec les
+<a id="e23-6"></a>**[E23.6](corrige.md#e23-6)** — Définis `ntp_servers` (liste) dans `group_vars/all/vars.yml` avec les
 serveurs `0.ubuntu.pool.ntp.org` et `1.ubuntu.pool.ntp.org`, redéfinis-la pour
 le groupe `rhel` avec les pools Rocky, et pour `lab-db` uniquement avec
 `10.10.10.1`. Prouve avec `ansible-inventory --host` puis avec un playbook
 `debug` que chaque hôte reçoit la bonne valeur, et surcharge tout avec `-e`.
 
-**E23.7** — Écris `playbooks/templates/hosts.j2` et `playbooks/hosts.yml` qui génèrent
+<a id="e23-7"></a>**[E23.7](corrige.md#e23-7)** — Écris `playbooks/templates/hosts.j2` et `playbooks/hosts.yml` qui génèrent
 `/etc/hosts` complet sur chaque hôte : en-tête `# Managed by Ansible`,
 loopback, puis une ligne `<ip> <nom>.lab.local <nom>` par hôte de
 l'inventaire, quel que soit le nombre d'hôtes, en lisant `hostvars`. Le
 fichier doit être identique sur les quatre machines et la tâche `ok` à la
 seconde exécution.
 
-**E23.8** — Écris un playbook qui exécute `sha256sum /etc/hosts` sur chaque
+<a id="e23-8"></a>**[E23.8](corrige.md#e23-8)** — Écris un playbook qui exécute `sha256sum /etc/hosts` sur chaque
 hôte, enregistre le résultat, et affiche seulement l'empreinte (pas tout le
 dictionnaire). La tâche ne doit **jamais** rapporter `changed`, et doit
 rapporter `failed` si l'empreinte ne commence pas par un chiffre hexadécimal
 (utilise `failed_when` avec un test regex).
 
-**E23.9** — Ajoute un paramètre noyau `vm.swappiness = 10` sur les hôtes
+<a id="e23-9"></a>**[E23.9](corrige.md#e23-9)** — Ajoute un paramètre noyau `vm.swappiness = 10` sur les hôtes
 Ubuntu de deux façons : d'abord avec `blockinfile` dans
 `/etc/sysctl.d/90-lab.conf` (bloc balisé), puis en remplaçant par le module
 `ansible.posix.sysctl` avec `sysctl_file` et `reload: true`. Compare le
 résultat de `sysctl vm.swappiness` et explique laquelle des deux méthodes
 sait aussi *appliquer* le réglage.
 
-**E23.10** — Écris un playbook qui tente d'installer le paquet inexistant
+<a id="e23-10"></a>**[E23.10](corrige.md#e23-10)** — Écris un playbook qui tente d'installer le paquet inexistant
 `nginx-ultra` dans un `block`, capture l'échec dans `rescue` en affichant
 `ansible_failed_result.msg`, et écrit dans `always` la ligne
 `<hôte> ; <date ISO> ; <ok|echec>` dans `~/lab23/rapports/paquets.log` sur
 le nœud de contrôle. Le play doit se terminer avec `failed=0`.
 
-**E23.11** — Écris un playbook qui, sur `lab-web`, s'assure que le port 22
+<a id="e23-11"></a>**[E23.11](corrige.md#e23-11)** — Écris un playbook qui, sur `lab-web`, s'assure que le port 22
 répond (`wait_for`), puis interroge `http://10.10.10.11/` avec `uri` en
 tolérant l'absence de service : 10 tentatives espacées de 3 secondes, puis
 un `debug` qui affiche `web indisponible` ou le code HTTP. Le play ne doit
 pas échouer si nginx n'est pas installé.
 
-**E23.12** — Produis, en une seule tâche déléguée au nœud de contrôle et
+<a id="e23-12"></a>**[E23.12](corrige.md#e23-12)** — Produis, en une seule tâche déléguée au nœud de contrôle et
 exécutée une seule fois, le fichier `~/lab23/rapports/noyaux.txt` contenant
 une ligne `<hôte> <version de noyau> <distribution>` pour **tous** les hôtes
 du play, à partir des facts déjà collectés.
 
-**E23.13** — Chiffre la valeur `Sup3r-Secret` sous le nom `vault_api_token`
+<a id="e23-13"></a>**[E23.13](corrige.md#e23-13)** — Chiffre la valeur `Sup3r-Secret` sous le nom `vault_api_token`
 avec `encrypt_string`, colle le résultat dans `group_vars/all/vars.yml`, et
 affiche-la en clair avec un playbook `debug`. Relance en `-v` : la valeur
 apparaît-elle ailleurs que dans le message ? Ajoute ce qu'il faut pour qu'un
 `-vvv` ne la montre plus, puis vérifie avec `ansible-vault view` que le
 fichier `group_vars/all/vault.yml` fourni par le setup se déchiffre.
 
-**E23.14** — Sur `playbooks/paquets.yml` étendu d'une tâche `debug` taguée
+<a id="e23-14"></a>**[E23.14](corrige.md#e23-14)** — Sur `playbooks/paquets.yml` étendu d'une tâche `debug` taguée
 `info` : liste les tâches, liste les tags, exécute uniquement le tag `info`,
 tout sauf `info`, uniquement sur `lab-rhel`, et enfin en démarrant à la tâche
 `debug`. Note pour chaque cas le nombre de tâches réellement exécutées.
 
-**E23.15** — Génère le squelette d'un rôle `motd` avec `ansible-galaxy`,
+<a id="e23-15"></a>**[E23.15](corrige.md#e23-15)** — Génère le squelette d'un rôle `motd` avec `ansible-galaxy`,
 supprime les répertoires inutiles, et fais-lui déployer le `/etc/motd` de
 E23.4 avec un texte paramétrable dans `defaults/main.yml`. Ajoute
 `community.general` à `collections/requirements.yml` avec une contrainte de
 version, installe, puis liste les collections présentes avec leur version.
 
-**E23.16** — À partir de cette variable dans `group_vars/all/vars.yml` :
+<a id="e23-16"></a>**[E23.16](corrige.md#e23-16)** — À partir de cette variable dans `group_vars/all/vars.yml` :
 
 ```yaml
 comptes:
@@ -792,15 +805,15 @@ Aucune tâche ne doit boucler.
 
 ## 23.6 Labs ★★
 
-### **L23.1** — Baseline commune du parc
+### <a id="l23-1"></a>**[L23.1](corrige.md#l23-1)** — Baseline commune du parc
 
-::: contexte
-Quatre VM ont été installées à la main par trois personnes différentes. Les
-fuseaux horaires ne concordent pas, `sshd` accepte encore les mots de passe
-sur deux d'entre elles, aucune n'a de pare-feu, et Prometheus (module 26) ne
-voit rien. Ticket : « Appliquer la baseline du service à toutes les machines,
-et garantir qu'une machine réinstallée la reçoit en une commande. »
-:::
+> **Contexte**
+>
+> Quatre VM ont été installées à la main par trois personnes différentes. Les
+> fuseaux horaires ne concordent pas, `sshd` accepte encore les mots de passe
+> sur deux d'entre elles, aucune n'a de pare-feu, et Prometheus (module 26) ne
+> voit rien. Ticket : « Appliquer la baseline du service à toutes les machines,
+> et garantir qu'une machine réinstallée la reçoit en une commande. »
 
 Écris `~/lab23/playbooks/baseline.yml` (un ou plusieurs plays, à toi de
 découper), applicable à `all`, Ubuntu **et** Rocky.
@@ -840,36 +853,38 @@ découper), applicable à `all`, Ubuntu **et** Rocky.
 8. La seconde exécution complète affiche `changed=0` sur les quatre hôtes,
    `--check --diff` ne montre aucun diff, et `ansible-lint` est muet.
 
-::: attention
-Le durcissement de `sshd` et le pare-feu peuvent te couper l'accès si tu te
-trompes. Garde une console Proxmox ouverte, et fais tourner l'étape 5 puis
-l'étape 6 avec `--limit lab-ops` avant `all`. `sshd -t -f %s` dans
-`validate:` refuse un fichier syntaxiquement faux, pas un fichier qui
-t'enferme dehors.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le durcissement de `sshd` et le pare-feu peuvent te couper l'accès si tu te
+> trompes. Garde une console Proxmox ouverte, et fais tourner l'étape 5 puis
+> l'étape 6 avec `--limit lab-ops` avant `all`. `sshd -t -f %s` dans
+> `validate:` refuse un fichier syntaxiquement faux, pas un fichier qui
+> t'enferme dehors.
 
-::: check
-Critère de succès : `ansible all -m ansible.builtin.ping` fonctionne avec
-`remote_user = ansible` sans `-K` ; `sudo sshd -T | grep -i passwordauth`
-répond `no` sur les quatre hôtes ; `curl -s localhost:9100/metrics | head -1`
-répond sur chaque hôte ; la seconde exécution est `changed=0`.
-
-```bash
-bash check_M23_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `ansible all -m ansible.builtin.ping` fonctionne avec
+> `remote_user = ansible` sans `-K` ; `sudo sshd -T | grep -i passwordauth`
+> répond `no` sur les quatre hôtes ; `curl -s localhost:9100/metrics | head -1`
+> répond sur chaque hôte ; la seconde exécution est `changed=0`.
+>
+> ```bash
+> bash check_M23_01.sh
+> ```
 
 ---
 
-### **L23.2** — Frontal nginx : vhost templaté et TLS
+### <a id="l23-2"></a>**[L23.2](corrige.md#l23-2)** — Frontal nginx : vhost templaté et TLS
 
-::: contexte
-L'application « vitrine » doit être servie en HTTPS par `lab-web` et par
-`lab-rhel` (l'équipe veut prouver que la conf est portable). Pas de CA
-interne pour l'instant : certificat auto-signé généré **sur la cible**,
-jamais copié depuis le poste d'admin. Le vhost doit être régénéré à partir de
-variables, pas recopié à la main entre les deux distributions.
-:::
+> **Contexte**
+>
+> L'application « vitrine » doit être servie en HTTPS par `lab-web` et par
+> `lab-rhel` (l'équipe veut prouver que la conf est portable). Pas de CA
+> interne pour l'instant : certificat auto-signé généré **sur la cible**,
+> jamais copié depuis le poste d'admin. Le vhost doit être régénéré à partir de
+> variables, pas recopié à la main entre les deux distributions.
 
 Écris `~/lab23/playbooks/nginx.yml` pour le groupe `web`.
 
@@ -902,37 +917,39 @@ variables, pas recopié à la main entre les deux distributions.
    `validate_certs: false`, qui vérifie le code 200 et la présence de la
    version dans le corps.
 
-::: rhel
-Sur Rocky, nginx est fourni par les dépôts AppStream, ses vhosts vivent dans
-`/etc/nginx/conf.d/*.conf`, il n'y a pas de `sites-enabled`, et le
-`nginx.conf` contient déjà un `server` par défaut sur le port 80 : ne déclare
-pas `default_server` dans ton vhost. SELinux autorise nginx à lire
-`/srv/vitrine` seulement si le contexte est `httpd_sys_content_t` :
-`community.general.sefcontext` + `ansible.builtin.command: restorecon -Rv`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur Rocky, nginx est fourni par les dépôts AppStream, ses vhosts vivent dans
+> `/etc/nginx/conf.d/*.conf`, il n'y a pas de `sites-enabled`, et le
+> `nginx.conf` contient déjà un `server` par défaut sur le port 80 : ne déclare
+> pas `default_server` dans ton vhost. SELinux autorise nginx à lire
+> `/srv/vitrine` seulement si le contexte est `httpd_sys_content_t` :
+> `community.general.sefcontext` + `ansible.builtin.command: restorecon -Rv`.
 
-::: check
-Critère de succès : depuis `lab-adm`,
-`curl -sk -H 'Host: vitrine.lab.local' https://10.10.10.11/` et la même
-commande vers `10.10.10.13` renvoient `vitrine 1.0.0 sur lab-web` /
-`... sur lab-rhel`, et `curl -skI` montre `X-Vitrine-Version: 1.0.0` ; la
-seconde exécution est `changed=0`.
-
-```bash
-bash check_M23_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : depuis `lab-adm`,
+> `curl -sk -H 'Host: vitrine.lab.local' https://10.10.10.11/` et la même
+> commande vers `10.10.10.13` renvoient `vitrine 1.0.0 sur lab-web` /
+> `... sur lab-rhel`, et `curl -skI` montre `X-Vitrine-Version: 1.0.0` ; la
+> seconde exécution est `changed=0`.
+>
+> ```bash
+> bash check_M23_02.sh
+> ```
 
 ---
 
-### **L23.3** — PostgreSQL : instance, base, utilisateur, accès réseau
+### <a id="l23-3"></a>**[L23.3](corrige.md#l23-3)** — PostgreSQL : instance, base, utilisateur, accès réseau
 
-::: contexte
-Les développeurs veulent une base `vitrine` sur `lab-db`, accessible depuis
-`lab-web` avec un compte applicatif dont le mot de passe **n'apparaît nulle
-part en clair** dans le dépôt. La base existante `postgresql@16-main` doit
-rester intacte.
-:::
+> **Contexte**
+>
+> Les développeurs veulent une base `vitrine` sur `lab-db`, accessible depuis
+> `lab-web` avec un compte applicatif dont le mot de passe **n'apparaît nulle
+> part en clair** dans le dépôt. La base existante `postgresql@16-main` doit
+> rester intacte.
 
 Écris `~/lab23/playbooks/postgresql.yml` pour le groupe `db`.
 
@@ -956,37 +973,39 @@ rester intacte.
    `PGPASSWORD` passé par `environment:`, `no_log: true`, qui exécute
    `SELECT 1` et échoue si le résultat n'est pas `1`.
 
-::: astuce
-Les modules `community.postgresql` s'exécutent avec `become_user: postgres`.
-Si tu vois `Failed to set permissions on the temporary files Ansible needs to
-create when becoming an unprivileged user`, c'est que `acl` manque sur la
-cible, ou que `pipelining` est désactivé. Les deux sont dans l'énoncé pour
-une raison.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Les modules `community.postgresql` s'exécutent avec `become_user: postgres`.
+> Si tu vois `Failed to set permissions on the temporary files Ansible needs to
+> create when becoming an unprivileged user`, c'est que `acl` manque sur la
+> cible, ou que `pipelining` est désactivé. Les deux sont dans l'énoncé pour
+> une raison.
 
-::: check
-Critère de succès : depuis `lab-web`,
-`PGPASSWORD=... psql -h 10.10.10.12 -U vitrine_app -d vitrine -c 'select 1'`
-répond ; depuis `lab-adm` la même commande est refusée par `pg_hba` ;
-`grep -rn vault_vitrine_db_password ~/lab23/group_vars` ne montre le nom que
-dans un fichier chiffré et une référence en clair.
-
-```bash
-bash check_M23_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : depuis `lab-web`,
+> `PGPASSWORD=... psql -h 10.10.10.12 -U vitrine_app -d vitrine -c 'select 1'`
+> répond ; depuis `lab-adm` la même commande est refusée par `pg_hba` ;
+> `grep -rn vault_vitrine_db_password ~/lab23/group_vars` ne montre le nom que
+> dans un fichier chiffré et une référence en clair.
+>
+> ```bash
+> bash check_M23_03.sh
+> ```
 
 ---
 
-### **L23.4** — Rolling update avec vérification de santé
+### <a id="l23-4"></a>**[L23.4](corrige.md#l23-4)** — Rolling update avec vérification de santé
 
-::: contexte
-La « vitrine » passe en `2.1.0`. Deux frontaux, zéro interruption : on met à
-jour un hôte à la fois, on vérifie qu'il sert bien la nouvelle version en
-HTTPS **avant** de passer au suivant, et si le premier échoue, on n'abîme pas
-le second. L'astreinte veut aussi que le playbook soit rejouable avec
-n'importe quel numéro de version passé en ligne de commande.
-:::
+> **Contexte**
+>
+> La « vitrine » passe en `2.1.0`. Deux frontaux, zéro interruption : on met à
+> jour un hôte à la fois, on vérifie qu'il sert bien la nouvelle version en
+> HTTPS **avant** de passer au suivant, et si le premier échoue, on n'abîme pas
+> le second. L'astreinte veut aussi que le playbook soit rejouable avec
+> n'importe quel numéro de version passé en ligne de commande.
 
 Écris `~/lab23/playbooks/rolling.yml` pour le groupe `web`.
 
@@ -1011,26 +1030,27 @@ n'importe quel numéro de version passé en ligne de commande.
    manière de faire échouer la santé) et observe que `lab-rhel` n'est pas
    touché après l'échec de `lab-web`. Remets ensuite `2.1.0`.
 
-::: check
-Critère de succès : `curl -sk https://10.10.10.11/` et `.../10.10.10.13/`
-affichent `2.1.0`, `deploiements.log` contient au moins deux lignes pour
-cette version (une par lot), et `ansible-playbook playbooks/rolling.yml
---list-hosts` montre les deux hôtes.
-
-```bash
-bash check_M23_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl -sk https://10.10.10.11/` et `.../10.10.10.13/`
+> affichent `2.1.0`, `deploiements.log` contient au moins deux lignes pour
+> cette version (une par lot), et `ansible-playbook playbooks/rolling.yml
+> --list-hosts` montre les deux hôtes.
+>
+> ```bash
+> bash check_M23_04.sh
+> ```
 
 ---
 
-### **L23.5** — Un rôle `node_exporter` réutilisable
+### <a id="l23-5"></a>**[L23.5](corrige.md#l23-5)** — Un rôle `node_exporter` réutilisable
 
-::: contexte
-Le bloc node_exporter de la baseline va être réutilisé sur un autre projet,
-par une autre équipe, sur Debian 12 et Rocky. Il doit devenir un **rôle** :
-paramétrable, documenté, validé, sans rien qui dépende de ton inventaire.
-:::
+> **Contexte**
+>
+> Le bloc node_exporter de la baseline va être réutilisé sur un autre projet,
+> par une autre équipe, sur Debian 12 et Rocky. Il doit devenir un **rôle** :
+> paramétrable, documenté, validé, sans rien qui dépende de ton inventaire.
 
 1. `ansible-galaxy role init roles/node_exporter`, puis supprime
    `tests/` et `vars/` (rien d'ajustable n'y a sa place ici).
@@ -1053,28 +1073,30 @@ paramétrable, documenté, validé, sans rien qui dépende de ton inventaire.
 7. Prouve l'`argument_specs` : lance avec
    `-e node_exporter_manage_firewall=oui` et note le message d'erreur.
 
-::: check
-Critère de succès : `tree roles/node_exporter` montre la structure attendue,
-`ansible-playbook playbooks/monitoring.yml` est `changed=0` en seconde
-passe, `ansible-lint roles/node_exporter` sort en 0.
-
-```bash
-bash check_M23_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `tree roles/node_exporter` montre la structure attendue,
+> `ansible-playbook playbooks/monitoring.yml` est `changed=0` en seconde
+> passe, `ansible-lint roles/node_exporter` sort en 0.
+>
+> ```bash
+> bash check_M23_05.sh
+> ```
 
 ---
 
 ## 23.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf23`. Les pannes ne
-touchent que `~/lab23/` sur `lab-adm` (BF23.1 déploie aussi sur les cibles,
-mais tout est réversible depuis Ansible). Snapshot de secours : `snap-clean`,
-mais l'utiliser vaut échec, on répare du code.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf23`. Les pannes ne
+> touchent que `~/lab23/` sur `lab-adm` (BF23.1 déploie aussi sur les cibles,
+> mais tout est réversible depuis Ansible). Snapshot de secours : `snap-clean`,
+> mais l'utiliser vaut échec, on répare du code.
 
-### **BF23.1** — « Le playbook de Julien marche, mais il faut le lancer deux fois »
+### <a id="bf23-1"></a>**[BF23.1](corrige.md#bf23-1)** — « Le playbook de Julien marche, mais il faut le lancer deux fois »
 
 ```bash
 sudo bash break_M23_01.sh
@@ -1098,11 +1120,9 @@ les bonnes gardes, pour qu'il réussisse sur `lab-web` **et** `lab-rhel`, soit
 changé, et passe `ansible-lint`. Pour chaque tâche d'origine, note dans un
 commentaire ce qui la rendait fragile ou non idempotente.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF23.2** — « Le groupe db a disparu »
+### <a id="bf23-2"></a>**[BF23.2](corrige.md#bf23-2)** — « Le groupe db a disparu »
 
 ```bash
 sudo bash break_M23_02.sh
@@ -1130,11 +1150,9 @@ corriger, et vérifier avec `ansible-inventory --graph` que `db`, `web`,
 ligne fausse a fait disparaître **tout** l'inventaire, et pas seulement un
 groupe.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF23.3** — « Le vault ne s'ouvre plus »
+### <a id="bf23-3"></a>**[BF23.3](corrige.md#bf23-3)** — « Le vault ne s'ouvre plus »
 
 ```bash
 sudo bash break_M23_03.sh
@@ -1163,11 +1181,9 @@ un accès au fichier, le **rechiffrer avec le mot de passe de l'équipe**
 (`~/lab23/.vault_pass`), remettre `ansible.cfg` en état, et proposer une
 règle pour que ça n'arrive plus.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF23.4** — « On change le vhost, nginx ne bouge pas »
+### <a id="bf23-4"></a>**[BF23.4](corrige.md#bf23-4)** — « On change le vhost, nginx ne bouge pas »
 
 ```bash
 sudo bash break_M23_04.sh
@@ -1190,23 +1206,21 @@ handler de tourner (un par hôte au moins, un commun), corriger chacun, et
 prouver que le handler se déclenche une seule fois par hôte modifié et pas du
 tout quand rien ne change.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 23.8 Défi du module ★★★
 
-**D23 — Le dépôt d'infra de référence**
+<a id="d23"></a>**[D23](corrige.md#d23) — Le dépôt d'infra de référence**
 
-::: contexte
-Tout ce que tu as écrit dans ce module vit dans des playbooks disparates. Le
-service veut **un** dépôt `~/lab23/factura-infra` que n'importe quel membre
-de l'équipe peut cloner, dont une seule commande applique tout le parc, qui
-passe en CI, et dans lequel aucun secret n'est lisible. C'est ce dépôt qui
-sera repris en module 25 pour être exécuté par un pipeline.
-:::
+> **Contexte**
+>
+> Tout ce que tu as écrit dans ce module vit dans des playbooks disparates. Le
+> service veut **un** dépôt `~/lab23/factura-infra` que n'importe quel membre
+> de l'équipe peut cloner, dont une seule commande applique tout le parc, qui
+> passe en CI, et dans lequel aucun secret n'est lisible. C'est ce dépôt qui
+> sera repris en module 25 pour être exécuté par un pipeline.
 
 Cahier des charges :
 
@@ -1254,11 +1268,12 @@ deuxième frontal ?).
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M23_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M23_06.sh
+> ```
 
 ---
 
@@ -1294,3 +1309,9 @@ Pour aller plus loin :
   plus sévère que toi.
 * Remplace ton `sauvegarde.sh` du module 07 par un rôle `backup` et
   compte ce que tu as gagné en lisibilité et perdu en contrôle fin.
+
+<!-- nav:début -->
+---
+
+[← Module 22](../22-docker/README.md) · [Corrigé](corrige.md) · [Module 24 →](../24-iac-terraform/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

@@ -1,460 +1,494 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 23** · corrigé  
+[← Module 22](../22-docker/corrige.md) · [Énoncé](README.md) · [Module 24 →](../24-iac-terraform/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 23 — Corrigé
 
 ## 23.3 Quiz — QCM
 
-**Q23.1** — *`shell: systemctl restart nginx` relancée trois fois sur un hôte
+<a id="q23-1"></a>**[Q23.1](README.md#q23-1)** — *`shell: systemctl restart nginx` relancée trois fois sur un hôte
 sain : que rapporte Ansible ?*
 
 **Réponse : b) `changed` aux trois exécutions**
 
-::: pourquoi
-`command` et `shell` n'ont aucun moyen de savoir si la commande a modifié
-quelque chose : ils lancent un processus, lisent `rc`, `stdout`, `stderr`, et
-c'est tout. Par construction, ils rapportent **toujours** `changed` dès que
-`rc == 0`, et `failed` sinon. Ici `systemctl restart` réussit à chaque fois,
-donc `changed` trois fois — et nginx est réellement redémarré trois fois,
-avec trois coupures de service.
+> [!NOTE]
+> **Pourquoi**
+>
+> `command` et `shell` n'ont aucun moyen de savoir si la commande a modifié
+> quelque chose : ils lancent un processus, lisent `rc`, `stdout`, `stderr`, et
+> c'est tout. Par construction, ils rapportent **toujours** `changed` dès que
+> `rc == 0`, et `failed` sinon. Ici `systemctl restart` réussit à chaque fois,
+> donc `changed` trois fois — et nginx est réellement redémarré trois fois,
+> avec trois coupures de service.
+>
+> Un module « intelligent » comme `ansible.builtin.systemd_service` compare
+> l'état voulu (`state: started`) à l'état réel avant d'agir, et ne rapporte
+> `changed` que s'il a dû agir. Mais même lui, avec `state: restarted`, agit à
+> chaque fois : « redémarré » n'est pas un état, c'est une action. La seule
+> écriture idempotente d'un redémarrage est un *handler*, notifié par la tâche
+> qui change la configuration.
 
-Un module « intelligent » comme `ansible.builtin.systemd_service` compare
-l'état voulu (`state: started`) à l'état réel avant d'agir, et ne rapporte
-`changed` que s'il a dû agir. Mais même lui, avec `state: restarted`, agit à
-chaque fois : « redémarré » n'est pas un état, c'est une action. La seule
-écriture idempotente d'un redémarrage est un *handler*, notifié par la tâche
-qui change la configuration.
-:::
-
-::: piege
-La réponse d) tente : `shell` pilote très bien systemd, c'est justement le
-problème — il le fait sans discernement. Si tu vois un `shell: systemctl
-restart` dans un playbook, c'est un redémarrage de production à chaque
-passage de la CI.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La réponse d) tente : `shell` pilote très bien systemd, c'est justement le
+> problème — il le fait sans discernement. Si tu vois un `shell: systemctl
+> restart` dans un playbook, c'est un redémarrage de production à chaque
+> passage de la CI.
 
 ---
 
-**Q23.2** — *`command -a 'ls /var/lib/postgresql/*/main | wc -l'` échoue avec
+<a id="q23-2"></a>**[Q23.2](README.md#q23-2)** — *`command -a 'ls /var/lib/postgresql/*/main | wc -l'` échoue avec
 `ls: cannot access '|'`.*
 
 **Réponse : b)** `command` n'invoque pas de shell : ni glob, ni pipe.
 
-::: pourquoi
-Le module `command` découpe la chaîne en arguments (comme `shlex.split`) et
-appelle directement `execve()` avec `ls`, `/var/lib/postgresql/*/main`, `|`,
-`wc`, `-l`. Aucun shell n'intervient : l'astérisque n'est pas développé (d'où
-le premier message, le chemin littéral n'existe pas), le `|` est un argument
-comme un autre (d'où le second), et `wc` n'est jamais lancé. Tout ce qui est
-du ressort du shell — glob, pipe, redirection, `$VAR`, `&&`, `~` — exige
-`ansible.builtin.shell`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le module `command` découpe la chaîne en arguments (comme `shlex.split`) et
+> appelle directement `execve()` avec `ls`, `/var/lib/postgresql/*/main`, `|`,
+> `wc`, `-l`. Aucun shell n'intervient : l'astérisque n'est pas développé (d'où
+> le premier message, le chemin littéral n'existe pas), le `|` est un argument
+> comme un autre (d'où le second), et `wc` n'est jamais lancé. Tout ce qui est
+> du ressort du shell — glob, pipe, redirection, `$VAR`, `&&`, `~` — exige
+> `ansible.builtin.shell`.
+>
+> C'est aussi ce qui rend `command` plus sûr : pas d'injection possible via une
+> variable qui contiendrait `; rm -rf /`. La règle : `command` par défaut,
+> `shell` seulement quand tu as besoin d'une fonctionnalité du shell, et dans
+> les deux cas `changed_when`/`creates` pour l'idempotence.
 
-C'est aussi ce qui rend `command` plus sûr : pas d'injection possible via une
-variable qui contiendrait `; rm -rf /`. La règle : `command` par défaut,
-`shell` seulement quand tu as besoin d'une fonctionnalité du shell, et dans
-les deux cas `changed_when`/`creates` pour l'idempotence.
-:::
-
-::: piege
-`-b` (réponse c) n'aurait rien changé : le message n'est pas
-`Permission denied`. Lis toujours le texte de l'erreur avant de sortir
-`sudo` : ici, c'est `'|': No such file or directory` qui trahit l'absence de
-shell.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `-b` (réponse c) n'aurait rien changé : le message n'est pas
+> `Permission denied`. Lis toujours le texte de l'erreur avant de sortir
+> `sudo` : ici, c'est `'|': No such file or directory` qui trahit l'absence de
+> shell.
 
 ---
 
-**Q23.3** — *`become = True` dans `ansible.cfg`, `ping` répond
+<a id="q23-3"></a>**[Q23.3](README.md#q23-3)** — *`become = True` dans `ansible.cfg`, `ping` répond
 `Missing sudo password`. Deux réponses.*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-Avec `become = True`, même un simple `ping` s'exécute via `sudo`. Sur les
-cibles, `mathieu` est dans `sudo`/`wheel` mais sans `NOPASSWD` : `sudo`
-demande un mot de passe, Ansible n'en a pas, et il ne peut pas le demander
-interactivement au milieu d'une connexion SSH sans tty. D'où le message.
+> [!NOTE]
+> **Pourquoi**
+>
+> Avec `become = True`, même un simple `ping` s'exécute via `sudo`. Sur les
+> cibles, `mathieu` est dans `sudo`/`wheel` mais sans `NOPASSWD` : `sudo`
+> demande un mot de passe, Ansible n'en a pas, et il ne peut pas le demander
+> interactivement au milieu d'une connexion SSH sans tty. D'où le message.
+>
+> Deux issues : fournir le mot de passe (`-K`, `--ask-become-pass`, ou la
+> variable `ansible_become_password` — dans un vault) ou ne plus en avoir
+> besoin (`mathieu ALL=(ALL) NOPASSWD: ALL` dans `/etc/sudoers.d/`, ou un
+> compte de service dédié comme celui de L23.1). En production, c'est presque
+> toujours la seconde : un compte `ansible` avec `NOPASSWD`, une clé dédiée, et
+> des journaux `sudo` qui tracent chaque commande.
 
-Deux issues : fournir le mot de passe (`-K`, `--ask-become-pass`, ou la
-variable `ansible_become_password` — dans un vault) ou ne plus en avoir
-besoin (`mathieu ALL=(ALL) NOPASSWD: ALL` dans `/etc/sudoers.d/`, ou un
-compte de service dédié comme celui de L23.1). En production, c'est presque
-toujours la seconde : un compte `ansible` avec `NOPASSWD`, une clé dédiée, et
-des journaux `sudo` qui tracent chaque commande.
-:::
-
-::: piege
-c) `remote_user = root` contourne le problème en ouvrant SSH à root, ce que
-le module 14 et la baseline de ce module interdisent (`PermitRootLogin no`).
-d) `host_key_checking` concerne les clés d'hôte SSH, pas `sudo` : mélanger
-les deux est un classique de l'entretien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) `remote_user = root` contourne le problème en ouvrant SSH à root, ce que
+> le module 14 et la baseline de ce module interdisent (`PermitRootLogin no`).
+> d) `host_key_checking` concerne les clés d'hôte SSH, pas `sudo` : mélanger
+> les deux est un classique de l'entretien.
 
 ---
 
-**Q23.4** — *`/bin/sh: /usr/bin/python3: No such file or directory`,
+<a id="q23-4"></a>**[Q23.4](README.md#q23-4)** — *`/bin/sh: /usr/bin/python3: No such file or directory`,
 `rc: 127` sur `lab-rhel`. Quelle tâche peut encore s'exécuter ?*
 
 **Réponse : b)** `ansible.builtin.raw: dnf install -y python3` avec
 `gather_facts: false`.
 
-::: pourquoi
-Tous les modules Ansible (sauf deux) sont des programmes Python envoyés sur
-la cible et exécutés par `ansible_python_interpreter`. Sans Python, `dnf`,
-`package`, `apt`, `ping`, et même la collecte de facts (`setup`) échouent
-avant de commencer. `rc: 127` est le code « commande introuvable » du shell
-distant : `/bin/sh` n'a pas trouvé `python3`.
-
-Les deux exceptions sont `raw` et `script` : ils envoient une commande brute
-par SSH, sans wrapper Python. Il faut aussi `gather_facts: false` sur le
-play, sinon `setup` est lancé avant la première tâche et échoue. Le play de
-réparation canonique :
-
-```yaml
-- name: Amorcer Python sur les hôtes nus
-  hosts: rhel
-  become: true
-  gather_facts: false
-  tasks:
-    - name: Installer python3 sans module Python
-      ansible.builtin.raw: dnf install -y python3
-      changed_when: true
-```
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Tous les modules Ansible (sauf deux) sont des programmes Python envoyés sur
+> la cible et exécutés par `ansible_python_interpreter`. Sans Python, `dnf`,
+> `package`, `apt`, `ping`, et même la collecte de facts (`setup`) échouent
+> avant de commencer. `rc: 127` est le code « commande introuvable » du shell
+> distant : `/bin/sh` n'a pas trouvé `python3`.
+>
+> Les deux exceptions sont `raw` et `script` : ils envoient une commande brute
+> par SSH, sans wrapper Python. Il faut aussi `gather_facts: false` sur le
+> play, sinon `setup` est lancé avant la première tâche et échoue. Le play de
+> réparation canonique :
+>
+> ```yaml
+> - name: Amorcer Python sur les hôtes nus
+>   hosts: rhel
+>   become: true
+>   gather_facts: false
+>   tasks:
+>     - name: Installer python3 sans module Python
+>       ansible.builtin.raw: dnf install -y python3
+>       changed_when: true
+> ```
 
 ---
 
-**Q23.5** — *Le template change mais nginx n'est jamais rechargé :
+<a id="q23-5"></a>**[Q23.5](README.md#q23-5)** — *Le template change mais nginx n'est jamais rechargé :
 `notify: reload nginx` contre `name: Reload nginx`.*
 
 **Réponse : b)** la comparaison du nom respecte la casse.
 
-::: pourquoi
-`notify` fait correspondre une chaîne au `name` (ou au `listen`) d'un
-handler, par égalité stricte. `reload nginx` et `Reload nginx` sont deux
-chaînes différentes ; la notification part vers un handler qui n'existe pas.
-Le recap montre `changed=1` (le template) et rien d'autre.
+> [!NOTE]
+> **Pourquoi**
+>
+> `notify` fait correspondre une chaîne au `name` (ou au `listen`) d'un
+> handler, par égalité stricte. `reload nginx` et `Reload nginx` sont deux
+> chaînes différentes ; la notification part vers un handler qui n'existe pas.
+> Le recap montre `changed=1` (le template) et rien d'autre.
+>
+> Deux parades : la constante `listen` (plusieurs handlers peuvent écouter le
+> même « topic », et le nom exact du handler devient secondaire), et
+> `ansible-lint`, qui signale un `notify` sans handler correspondant.
 
-Deux parades : la constante `listen` (plusieurs handlers peuvent écouter le
-même « topic », et le nom exact du handler devient secondaire), et
-`ansible-lint`, qui signale un `notify` sans handler correspondant.
-:::
-
-::: piege
-Avec le réglage par défaut (`error_on_missing_handler = True`), un `notify` vers un handler inexistant est une
-erreur fatale (`The requested handler 'reload nginx' was not found` `in either the main handlers list nor in the listening handlers list`) — mais
-seulement si la tâche est `changed`. Si ce réglage est désactivé, ou si le
-template est `ok`, tu ne verras rien. Et non, l'ordre de déclaration
-(réponse d) est indifférent : les handlers sont résolus après l'analyse
-complète du play.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Avec le réglage par défaut (`error_on_missing_handler = True`), un `notify` vers un handler inexistant est une
+> erreur fatale (`The requested handler 'reload nginx' was not found` `in either the main handlers list nor in the listening handlers list`) — mais
+> seulement si la tâche est `changed`. Si ce réglage est désactivé, ou si le
+> template est `ok`, tu ne verras rien. Et non, l'ordre de déclaration
+> (réponse d) est indifférent : les handlers sont résolus après l'analyse
+> complète du play.
 
 ---
 
-**Q23.6** — *`lab-db` est dans `@ungrouped`, `group_vars/db.yml` définit
+<a id="q23-6"></a>**[Q23.6](README.md#q23-6)** — *`lab-db` est dans `@ungrouped`, `group_vars/db.yml` définit
 `pg_version: 16`. Que vaut `pg_version` sur `lab-db` ?*
 
 **Réponse : b)** indéfinie : `lab-db` n'est dans aucun groupe `db`.
 
-::: pourquoi
-`group_vars/<nom>.yml` s'applique aux hôtes membres du groupe `<nom>`, et
-uniquement à eux. Le graphe montre qu'aucun groupe `db` n'existe dans cet
-inventaire : le fichier `group_vars/db.yml` est donc chargé (Ansible ne se
-plaint pas d'un fichier orphelin) mais ne s'applique à personne.
-`ansible-inventory --host lab-db` ne montrera pas `pg_version`, et un
-template qui l'utilise échouera avec `'pg_version' is undefined`.
-
-C'est un cas fréquent après une réorganisation d'inventaire : on renomme un
-groupe, et ses variables restent dans un fichier qui porte l'ancien nom.
-Réflexe : `ansible-inventory --graph` puis `--host` pour vérifier qu'une
-variable arrive bien là où on la croit.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `group_vars/<nom>.yml` s'applique aux hôtes membres du groupe `<nom>`, et
+> uniquement à eux. Le graphe montre qu'aucun groupe `db` n'existe dans cet
+> inventaire : le fichier `group_vars/db.yml` est donc chargé (Ansible ne se
+> plaint pas d'un fichier orphelin) mais ne s'applique à personne.
+> `ansible-inventory --host lab-db` ne montrera pas `pg_version`, et un
+> template qui l'utilise échouera avec `'pg_version' is undefined`.
+>
+> C'est un cas fréquent après une réorganisation d'inventaire : on renomme un
+> groupe, et ses variables restent dans un fichier qui porte l'ancien nom.
+> Réflexe : `ansible-inventory --graph` puis `--host` pour vérifier qu'une
+> variable arrive bien là où on la croit.
 
 ---
 
-**Q23.7** — *Ordre de précédence croissant correct.*
+<a id="q23-7"></a>**[Q23.7](README.md#q23-7)** — *Ordre de précédence croissant correct.*
 
 **Réponse : b)** `defaults/main.yml` < `group_vars` < `host_vars` < `vars:`
 du play < `-e`.
 
-::: pourquoi
-La logique est « du plus général au plus spécifique, puis l'humain qui
-lance ». Les `defaults` d'un rôle sont des valeurs que l'auteur du rôle
-propose et s'attend à voir surchargées. L'inventaire les précise, d'abord
-par groupe, puis par hôte (un hôte est plus spécifique qu'un groupe). Le play
-qui les utilise peut fixer une valeur (`vars:`). Et les extra vars `-e`
-gagnent toujours : c'est le mécanisme prévu pour « cette fois-ci, avec cette
-valeur ».
-
-Entre `group_vars`, l'ordre est `all` d'abord, puis les groupes parents,
-puis les enfants (un enfant surcharge son parent) ; à profondeur égale,
-ordre alphabétique — d'où le conseil de ne pas définir la même variable dans
-deux groupes frères.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La logique est « du plus général au plus spécifique, puis l'humain qui
+> lance ». Les `defaults` d'un rôle sont des valeurs que l'auteur du rôle
+> propose et s'attend à voir surchargées. L'inventaire les précise, d'abord
+> par groupe, puis par hôte (un hôte est plus spécifique qu'un groupe). Le play
+> qui les utilise peut fixer une valeur (`vars:`). Et les extra vars `-e`
+> gagnent toujours : c'est le mécanisme prévu pour « cette fois-ci, avec cette
+> valeur ».
+>
+> Entre `group_vars`, l'ordre est `all` d'abord, puis les groupes parents,
+> puis les enfants (un enfant surcharge son parent) ; à profondeur égale,
+> ordre alphabétique — d'où le conseil de ne pas définir la même variable dans
+> deux groupes frères.
 
 ---
 
-**Q23.8** — *`serial: 1`, `max_fail_percentage: 0`, la santé échoue sur
+<a id="q23-8"></a>**[Q23.8](README.md#q23-8)** — *`serial: 1`, `max_fail_percentage: 0`, la santé échoue sur
 `lab-web`.*
 
 **Réponse : b)** le play s'arrête, `lab-rhel` n'est jamais touché.
 
-::: pourquoi
-`serial: 1` découpe les hôtes du play en lots d'un seul hôte, et rejoue
-**toutes** les tâches du play sur le lot avant de passer au suivant.
-`max_fail_percentage: 0` signifie : si plus de 0 % des hôtes du lot ont
-échoué à la fin du lot, abandonner le play. Avec un lot d'un hôte, le
-moindre échec est 100 % > 0 %. Ansible affiche `NO MORE HOSTS LEFT` et
-passe au recap, où `lab-rhel` n'a même pas d'entrée `ok`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `serial: 1` découpe les hôtes du play en lots d'un seul hôte, et rejoue
+> **toutes** les tâches du play sur le lot avant de passer au suivant.
+> `max_fail_percentage: 0` signifie : si plus de 0 % des hôtes du lot ont
+> échoué à la fin du lot, abandonner le play. Avec un lot d'un hôte, le
+> moindre échec est 100 % > 0 %. Ansible affiche `NO MORE HOSTS LEFT` et
+> passe au recap, où `lab-rhel` n'a même pas d'entrée `ok`.
+>
+> Sans `max_fail_percentage` (ni `any_errors_fatal`), Ansible retire
+> simplement l'hôte en échec et **continue** avec le lot suivant : c'est la
+> réponse a), et c'est ce qu'on ne veut pas dans un rolling update, où un
+> échec doit figer le parc dans un état où il reste des frontaux sains.
 
-Sans `max_fail_percentage` (ni `any_errors_fatal`), Ansible retire
-simplement l'hôte en échec et **continue** avec le lot suivant : c'est la
-réponse a), et c'est ce qu'on ne veut pas dans un rolling update, où un
-échec doit figer le parc dans un état où il reste des frontaux sains.
-:::
-
-::: piege
-Ansible n'annule rien (réponse d) : il n'y a pas de transaction. `lab-web`
-reste dans l'état où l'échec l'a laissé — d'où l'importance de vérifier la
-santé **avant** de passer au suivant et de savoir revenir en arrière (voir
-la stratégie de rollback demandée par D23).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ansible n'annule rien (réponse d) : il n'y a pas de transaction. `lab-web`
+> reste dans l'état où l'échec l'a laissé — d'où l'importance de vérifier la
+> santé **avant** de passer au suivant et de savoir revenir en arrière (voir
+> la stratégie de rollback demandée par D23).
 
 ---
 
-**Q23.9** — *Écrire un rapport une seule fois sur le nœud de contrôle.
+<a id="q23-9"></a>**[Q23.9](README.md#q23-9)** — *Écrire un rapport une seule fois sur le nœud de contrôle.
 Deux réponses.*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-`delegate_to: localhost` déplace l'**exécution** de la tâche sur le nœud de
-contrôle, tout en gardant les variables et facts de l'hôte courant. Sans
-autre précaution, la tâche tourne une fois **par hôte** du play. `run_once:
-true` la limite au premier hôte du lot, et le résultat (`register`) est
-copié vers tous les autres. C'est la forme canonique.
+> [!NOTE]
+> **Pourquoi**
+>
+> `delegate_to: localhost` déplace l'**exécution** de la tâche sur le nœud de
+> contrôle, tout en gardant les variables et facts de l'hôte courant. Sans
+> autre précaution, la tâche tourne une fois **par hôte** du play. `run_once:
+> true` la limite au premier hôte du lot, et le résultat (`register`) est
+> copié vers tous les autres. C'est la forme canonique.
+>
+> c) obtient le même résultat à la main : `when: inventory_hostname == ansible_play_hosts[0]` ne laisse passer que le premier hôte. C'est plus verbeux, mais ça marche
+> et on le voit dans des playbooks anciens (souvent écrit avec `play_hosts`, déprécié).
 
-c) obtient le même résultat à la main : `when: inventory_hostname == ansible_play_hosts[0]` ne laisse passer que le premier hôte. C'est plus verbeux, mais ça marche
-et on le voit dans des playbooks anciens (souvent écrit avec `play_hosts`, déprécié).
-:::
-
-::: piege
-b) `local_action` est l'ancienne syntaxe de `delegate_to: localhost` : seule,
-elle tourne encore N fois. d) `connection: local` sur chaque hôte transforme
-tous les hôtes en « localhost » pour **toutes** les tâches du play, ce qui
-n'a aucun sens ici.
-:::
+> [!WARNING]
+> **Piège**
+>
+> b) `local_action` est l'ancienne syntaxe de `delegate_to: localhost` : seule,
+> elle tourne encore N fois. d) `connection: local` sur chaque hôte transforme
+> tous les hôtes en « localhost » pour **toutes** les tâches du play, ce qui
+> n'a aucun sens ici.
 
 ---
 
-**Q23.10** — *Liste des IP des hôtes du groupe `web`.*
+<a id="q23-10"></a>**[Q23.10](README.md#q23-10)** — *Liste des IP des hôtes du groupe `web`.*
 
 **Réponse : b)**
 `{{ groups['web'] | map('extract', hostvars, 'ansible_host') | list }}`
 
-::: pourquoi
-`groups['web']` est une **liste de noms** d'hôtes (`['lab-web',
-'lab-rhel']`), pas une liste de dictionnaires : `map(attribute=...)` (a) n'a
-rien sur quoi lire un attribut. Les variables d'un hôte vivent dans
-`hostvars[<nom>]`. Le filtre `extract` fait exactement ce pont : pour chaque
-élément `h` de la liste, il renvoie `hostvars[h]['ansible_host']`. Le `|
-list` final matérialise le générateur Jinja2 en liste (sinon tu affiches
-`<generator object ...>`).
-
-Écriture équivalente, plus lisible dans un template :
-
-```jinja
-{% for h in groups['web'] %}
-{{ hostvars[h]['ansible_host'] }}
-{% endfor %}
-```
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `groups['web']` est une **liste de noms** d'hôtes (`['lab-web',
+> 'lab-rhel']`), pas une liste de dictionnaires : `map(attribute=...)` (a) n'a
+> rien sur quoi lire un attribut. Les variables d'un hôte vivent dans
+> `hostvars[<nom>]`. Le filtre `extract` fait exactement ce pont : pour chaque
+> élément `h` de la liste, il renvoie `hostvars[h]['ansible_host']`. Le `|
+> list` final matérialise le générateur Jinja2 en liste (sinon tu affiches
+> `<generator object ...>`).
+>
+> Écriture équivalente, plus lisible dans un template :
+>
+> ```jinja
+> {% for h in groups['web'] %}
+> {{ hostvars[h]['ansible_host'] }}
+> {% endfor %}
+> ```
 
 ---
 
-**Q23.11** — `--check` *: `list`* `object has no element 0` *sur une tâche qui lit `r`*`.stdout_lines[0]` *après `register`*`: r` *d'un `command`.*
+<a id="q23-11"></a>**[Q23.11](README.md#q23-11)** — `--check` *: `list`* `object has no element 0` *sur une tâche qui lit `r`*`.stdout_lines[0]` *après `register`*`: r` *d'un `command`.*
 
 **Réponse : b)** en `--check`, `command` n'est pas exécuté :
 `stdout` est vide et `stdout_lines` une liste vide.
 
-::: pourquoi
-En mode simulation, `command`/`shell` sont sautés (`skipped`), sauf si la
-tâche porte `check_mode: false`. La variable enregistrée existe quand même,
-mais avec le contenu d'un résultat *skipped* : `{"changed": false, "skipped": true, "rc": 0, "stdout": "", "stdout_lines": [], "msg": "Command would have run if not in check mode"}`. La tâche suivante lit
-`r.stdout_lines[0]` → la liste est vide → erreur de variable indéfinie. (Sur un résultat sauté par un `when`, c'est `stdout` lui-même qui manque : `'dict object' has no attribute 'stdout'`.)
-
-Trois façons propres de gérer ça : `check_mode: false` sur le `command` s'il
-est en lecture seule (un `cat`, un `sha256sum`), `when: not ansible_check_mode` sur la tâche consommatrice, ou `r.stdout_lines | first | default('')`. La
-première est la bonne dans 90 % des cas : une commande qui ne modifie rien
-peut tourner en `--check`, et c'est souvent elle qui décide de la suite.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> En mode simulation, `command`/`shell` sont sautés (`skipped`), sauf si la
+> tâche porte `check_mode: false`. La variable enregistrée existe quand même,
+> mais avec le contenu d'un résultat *skipped* : `{"changed": false, "skipped": true, "rc": 0, "stdout": "", "stdout_lines": [], "msg": "Command would have run if not in check mode"}`. La tâche suivante lit
+> `r.stdout_lines[0]` → la liste est vide → erreur de variable indéfinie. (Sur un résultat sauté par un `when`, c'est `stdout` lui-même qui manque : `'dict object' has no attribute 'stdout'`.)
+>
+> Trois façons propres de gérer ça : `check_mode: false` sur le `command` s'il
+> est en lecture seule (un `cat`, un `sha256sum`), `when: not ansible_check_mode` sur la tâche consommatrice, ou `r.stdout_lines | first | default('')`. La
+> première est la bonne dans 90 % des cas : une commande qui ne modifie rien
+> peut tourner en `--check`, et c'est souvent elle qui décide de la suite.
 
 ---
 
-**Q23.12** — *Quelle tâche est idempotente **et** signale correctement les
+<a id="q23-12"></a>**[Q23.12](README.md#q23-12)** — *Quelle tâche est idempotente **et** signale correctement les
 changements ?*
 
 **Réponse : c)** `command: useradd deploy` avec `creates: /home/deploy`.
 
-::: pourquoi
-`creates:` demande à `command` de regarder si le chemin existe **avant**
-d'exécuter : s'il existe, la tâche est `skipped` (ni `changed` ni `failed`)
-et la commande ne tourne pas. Première passe : le home n'existe pas,
-`useradd` tourne, `changed`. Seconde passe : `skipped`. C'est exactement le
-comportement attendu. (`removes:` est le symétrique : n'exécuter que si le
-chemin existe.)
+> [!NOTE]
+> **Pourquoi**
+>
+> `creates:` demande à `command` de regarder si le chemin existe **avant**
+> d'exécuter : s'il existe, la tâche est `skipped` (ni `changed` ni `failed`)
+> et la commande ne tourne pas. Première passe : le home n'existe pas,
+> `useradd` tourne, `changed`. Seconde passe : `skipped`. C'est exactement le
+> comportement attendu. (`removes:` est le symétrique : n'exécuter que si le
+> chemin existe.)
+>
+> a) `|| true` masque l'erreur mais reste `changed` à chaque fois. b)
+> `ignore_errors` laisse la tâche en `failed... ignoring` dans le recap et
+> reste `changed` la première fois seulement par hasard. d) `changed_when:
+> false` ment : la première exécution crée bien l'utilisateur et devrait le
+> dire.
 
-a) `|| true` masque l'erreur mais reste `changed` à chaque fois. b)
-`ignore_errors` laisse la tâche en `failed... ignoring` dans le recap et
-reste `changed` la première fois seulement par hasard. d) `changed_when:
-false` ment : la première exécution crée bien l'utilisateur et devrait le
-dire.
-:::
-
-::: piege
-La vraie bonne réponse en production est `ansible.builtin.user: name=deploy`
-— ce QCM porte sur `command` parce que c'est le cas de BF23.1. Chaque fois
-qu'un module existe pour l'action, `creates`/`changed_when` ne sont qu'un
-pansement.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La vraie bonne réponse en production est `ansible.builtin.user: name=deploy`
+> — ce QCM porte sur `command` parce que c'est le cas de BF23.1. Chaque fois
+> qu'un module existe pour l'action, `creates`/`changed_when` ne sont qu'un
+> pansement.
 
 ---
 
-**Q23.13** — *`Decryption failed (no vault secrets were found that could
+<a id="q23-13"></a>**[Q23.13](README.md#q23-13)** — *`Decryption failed (no vault secrets were found that could
 decrypt)`.*
 
 **Réponse : b)** un mot de passe a été fourni, mais aucun ne déchiffre ce
 fichier.
 
-::: pourquoi
-Ansible a deux messages distincts et il faut les connaître par cœur :
-
-* `Attempting to decrypt but no vault secrets found` : le fichier est
-  chiffré et **aucun** mot de passe n'est disponible (pas de
-  `vault_password_file`, pas de `--ask-vault-pass`, pas de `--vault-id`).
-* `Decryption failed (no vault secrets were found that could decrypt)` :
-  au moins un mot de passe a été chargé, tous ont été essayés, aucun ne
-  convient.
-
-Dans le second cas, le fichier est bien un vault (sinon Ansible ne tenterait
-rien) et il n'est très probablement pas corrompu (le format est vérifié
-avant le déchiffrement). Reste : mauvais mot de passe, ou fichier chiffré
-avec un autre mot de passe que celui de l'équipe — le scénario de BF23.3.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ansible a deux messages distincts et il faut les connaître par cœur :
+>
+> * `Attempting to decrypt but no vault secrets found` : le fichier est
+>   chiffré et **aucun** mot de passe n'est disponible (pas de
+>   `vault_password_file`, pas de `--ask-vault-pass`, pas de `--vault-id`).
+> * `Decryption failed (no vault secrets were found that could decrypt)` :
+>   au moins un mot de passe a été chargé, tous ont été essayés, aucun ne
+>   convient.
+>
+> Dans le second cas, le fichier est bien un vault (sinon Ansible ne tenterait
+> rien) et il n'est très probablement pas corrompu (le format est vérifié
+> avant le déchiffrement). Reste : mauvais mot de passe, ou fichier chiffré
+> avec un autre mot de passe que celui de l'équipe — le scénario de BF23.3.
 
 ---
 
-**Q23.14** — `get_url` *avec `force`*`: true` *retélécharge à chaque fois. Deux corrections.*
+<a id="q23-14"></a>**[Q23.14](README.md#q23-14)** — `get_url` *avec `force`*`: true` *retélécharge à chaque fois. Deux corrections.*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-`get_url` est idempotent par défaut : si `dest` existe, il ne télécharge pas
-(sauf `force: true`, qui retélécharge à chaque passage et ne rapporte `changed` que si le contenu a changé). Retirer `force`
-et garder un `dest` stable suffit à ne plus rien retélécharger. Mais on ne
-sait alors pas si le fichier local est bon.
+> [!NOTE]
+> **Pourquoi**
+>
+> `get_url` est idempotent par défaut : si `dest` existe, il ne télécharge pas
+> (sauf `force: true`, qui retélécharge à chaque passage et ne rapporte `changed` que si le contenu a changé). Retirer `force`
+> et garder un `dest` stable suffit à ne plus rien retélécharger. Mais on ne
+> sait alors pas si le fichier local est bon.
+>
+> `checksum: "sha256:<empreinte>"` (ou `sha256:<URL d'un fichier de sommes>`)
+> ajoute la vérification : le fichier présent est haché **avant** tout
+> téléchargement ; s'il correspond, `ok` sans contact réseau ; sinon
+> téléchargement, puis échec si le fichier reçu ne correspond pas non plus. Ce court-circuit n'existe que **sans** `force: true` (avec `force`, le téléchargement a lieu quoi qu'il arrive) : d'où le « remplacer » de a).
+> C'est la forme demandée dans L23.1 : intégrité **et** idempotence.
 
-`checksum: "sha256:<empreinte>"` (ou `sha256:<URL d'un fichier de sommes>`)
-ajoute la vérification : le fichier présent est haché **avant** tout
-téléchargement ; s'il correspond, `ok` sans contact réseau ; sinon
-téléchargement, puis échec si le fichier reçu ne correspond pas non plus. Ce court-circuit n'existe que **sans** `force: true` (avec `force`, le téléchargement a lieu quoi qu'il arrive) : d'où le « remplacer » de a).
-C'est la forme demandée dans L23.1 : intégrité **et** idempotence.
-:::
-
-::: piege
-c) `changed_when: false` cache le symptôme sans supprimer le téléchargement
-à chaque passage. d) `wget` dans un `shell` perd tout : idempotence,
-checksum, gestion des proxys et des certificats. Le « pour être sûr d'avoir
-la dernière version » est le vrai problème : une version doit être une
-variable épinglée, pas « la dernière ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) `changed_when: false` cache le symptôme sans supprimer le téléchargement
+> à chaque passage. d) `wget` dans un `shell` perd tout : idempotence,
+> checksum, gestion des proxys et des certificats. Le « pour être sûr d'avoir
+> la dernière version » est le vrai problème : une version doit être une
+> variable épinglée, pas « la dernière ».
 
 ---
 
-**Q23.15** — *`defaults/main.yml` : 80, `vars/main.yml` : 8080, `-e
+<a id="q23-15"></a>**[Q23.15](README.md#q23-15)** — *`defaults/main.yml` : 80, `vars/main.yml` : 8080, `-e
 nginx_port=443`.*
 
 **Réponse : c) 443**
 
-::: pourquoi
-Les extra vars sont au sommet de la précédence : elles gagnent sur tout,
-y compris sur `vars/main.yml` du rôle, qui est pourtant lui-même très haut
-(au-dessus de `group_vars`, `host_vars` et des `vars:` du play). Sans `-e`,
-le template aurait reçu 8080, et c'est justement le piège de `vars/main.yml`
-: une valeur qui y est écrite est quasiment impossible à surcharger depuis
-l'inventaire, ce qui rend le rôle inutilisable ailleurs (QO23.6).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les extra vars sont au sommet de la précédence : elles gagnent sur tout,
+> y compris sur `vars/main.yml` du rôle, qui est pourtant lui-même très haut
+> (au-dessus de `group_vars`, `host_vars` et des `vars:` du play). Sans `-e`,
+> le template aurait reçu 8080, et c'est justement le piège de `vars/main.yml`
+> : une valeur qui y est écrite est quasiment impossible à surcharger depuis
+> l'inventaire, ce qui rend le rôle inutilisable ailleurs (QO23.6).
 
 ---
 
-**Q23.16** — *Avertissement « discovered Python interpreter at
+<a id="q23-16"></a>**[Q23.16](README.md#q23-16)** — *Avertissement « discovered Python interpreter at
 /usr/bin/python3.9 » sur `lab-rhel`.*
 
 **Réponse : a)** `interpreter_python = auto_silent` dans `ansible.cfg`, ou
 `ansible_python_interpreter` dans l'inventaire.
 
-::: pourquoi
-Par défaut (`interpreter_python = auto`), Ansible cherche un interpréteur
-Python sur la cible dans une liste de chemins, l'utilise, et t'avertit que
-ce choix pourrait changer si un autre Python était installé. `auto_silent`
-fait la même découverte sans l'avertissement. Fixer
-`ansible_python_interpreter: /usr/bin/python3` dans `group_vars` est encore
-mieux : le chemin est explicite, versionné, et identique d'une exécution à
-l'autre — c'est ce que fait le setup du module dans `ubuntu.yml` et
-`rhel.yml`.
-
-b) installer Python 3.12 ne ferait qu'ajouter un candidat. c)
-`gather_facts: false` cache l'avertissement sur la collecte, mais il
-réapparaît à la première tâche. d) `-vvv` n'est pas une correction.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Par défaut (`interpreter_python = auto`), Ansible cherche un interpréteur
+> Python sur la cible dans une liste de chemins, l'utilise, et t'avertit que
+> ce choix pourrait changer si un autre Python était installé. `auto_silent`
+> fait la même découverte sans l'avertissement. Fixer
+> `ansible_python_interpreter: /usr/bin/python3` dans `group_vars` est encore
+> mieux : le chemin est explicite, versionné, et identique d'une exécution à
+> l'autre — c'est ce que fait le setup du module dans `ubuntu.yml` et
+> `rhel.yml`.
+>
+> b) installer Python 3.12 ne ferait qu'ajouter un candidat. c)
+> `gather_facts: false` cache l'avertissement sur la collecte, mais il
+> réapparaît à la première tâche. d) `-vvv` n'est pas une correction.
 
 ---
 
-**Q23.17** — *Affirmation fausse sur `--check`.*
+<a id="q23-17"></a>**[Q23.17](README.md#q23-17)** — *Affirmation fausse sur `--check`.*
 
 **Réponse : c)** « les handlers notifiés sont exécutés pour de vrai » est
 faux.
 
-::: pourquoi
-En `--check`, toute la chaîne reste en simulation : les tâches qui
-supportent le mode *check* (`template`, `copy`, `file`, `apt`, `user`,
-`systemd_service`...) prédisent `changed` sans agir, les handlers qu'elles
-notifient sont bien déclenchés à la fin du play, mais **eux aussi** en mode
-*check* : un `service: state: reloaded` affiche `changed` sans recharger
-quoi que ce soit.
-
-a), b) et d) sont exactes : `--diff` montre le diff prédit des fichiers,
-`command`/`shell` sont sautés sauf `check_mode: false`, et `apt` compare la
-liste demandée au cache local sans rien installer.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> En `--check`, toute la chaîne reste en simulation : les tâches qui
+> supportent le mode *check* (`template`, `copy`, `file`, `apt`, `user`,
+> `systemd_service`...) prédisent `changed` sans agir, les handlers qu'elles
+> notifient sont bien déclenchés à la fin du play, mais **eux aussi** en mode
+> *check* : un `service: state: reloaded` affiche `changed` sans recharger
+> quoi que ce soit.
+>
+> a), b) et d) sont exactes : `--diff` montre le diff prédit des fichiers,
+> `command`/`shell` sont sautés sauf `check_mode: false`, et `apt` compare la
+> liste demandée au cache local sans rien installer.
 
 ---
 
-**Q23.18** — *Play sur `web`, tâche avec `loop: "{{ groups['db'] }}"` et
+<a id="q23-18"></a>**[Q23.18](README.md#q23-18)** — *Play sur `web`, tâche avec `loop: "{{ groups['db'] }}"` et
 `delegate_to: "{{ item }}"`.*
 
 **Réponse : b)** sur `lab-db`, une fois par hôte du groupe `web`, avec les
 facts et variables de l'hôte `web` courant, sauf les variables de connexion.
 
-::: pourquoi
-`delegate_to` change **où** la tâche s'exécute (la connexion SSH est ouverte
-vers l'hôte délégué, avec ses `ansible_host`, `ansible_user`, `ansible_port`)
-mais pas **pour qui** : `inventory_hostname`, `ansible_facts`, `hostvars`
-et les variables d'inventaire restent celles de l'hôte courant du play.
-Le play tourne sur `lab-web` puis `lab-rhel` ; pour chacun, la boucle
-délègue à chaque hôte de `db` (un seul : `lab-db`). Total : deux exécutions
-sur `lab-db`, l'une « au nom de » `lab-web`, l'autre « au nom de »
-`lab-rhel`.
-
-C'est le patron d'une tâche « déclarer ce frontal dans la conf du
-répartiteur » ou « ouvrir le pare-feu de la base pour ce frontal » : on
-utilise `ansible_facts['default_ipv4']['address']` du frontal, exécuté sur la
-base. Pour obtenir les facts de l'hôte délégué, il faut `delegate_facts:
-true` (et une collecte) ou lire `hostvars[item]`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `delegate_to` change **où** la tâche s'exécute (la connexion SSH est ouverte
+> vers l'hôte délégué, avec ses `ansible_host`, `ansible_user`, `ansible_port`)
+> mais pas **pour qui** : `inventory_hostname`, `ansible_facts`, `hostvars`
+> et les variables d'inventaire restent celles de l'hôte courant du play.
+> Le play tourne sur `lab-web` puis `lab-rhel` ; pour chacun, la boucle
+> délègue à chaque hôte de `db` (un seul : `lab-db`). Total : deux exécutions
+> sur `lab-db`, l'une « au nom de » `lab-web`, l'autre « au nom de »
+> `lab-rhel`.
+>
+> C'est le patron d'une tâche « déclarer ce frontal dans la conf du
+> répartiteur » ou « ouvrir le pare-feu de la base pour ce frontal » : on
+> utilise `ansible_facts['default_ipv4']['address']` du frontal, exécuté sur la
+> base. Pour obtenir les facts de l'hôte délégué, il faut `delegate_facts:
+> true` (et une collecte) ou lire `hostvars[item]`.
 
 ---
 
 ## 23.4 Quiz — questions ouvertes
 
-**QO23.1** — *Mécanique d'une tâche `apt` : connexion, transfert, exécution,
+<a id="qo23-1"></a>**[QO23.1](README.md#qo23-1)** — *Mécanique d'une tâche `apt` : connexion, transfert, exécution,
 retour ; rôle de `pipelining` ; effet de `become`.*
 
 **Réponse**
@@ -489,18 +523,19 @@ retour ; rôle de `pipelining` ; effet de `become`.*
    un utilisateur non-root impose en plus de rendre le fichier temporaire
    lisible par lui (d'où le besoin du paquet `acl`, voir L23.3).
 
-::: pourquoi
-Comprendre ce cheminement explique quatre erreurs du module : `UNREACHABLE`
-(étape 1), `python3: not found` (étape 3, d'où `raw` qui saute
-l'assemblage), `Missing sudo password` (étape 6), et `Failed to set
-permissions on the temporary files` (étape 3 sans pipelining avec
-`become_user` non-root). `-vvv` montre chacune de ces étapes : la commande
-SSH complète, le chemin du temporaire, la ligne `sudo`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Comprendre ce cheminement explique quatre erreurs du module : `UNREACHABLE`
+> (étape 1), `python3: not found` (étape 3, d'où `raw` qui saute
+> l'assemblage), `Missing sudo password` (étape 6), et `Failed to set
+> permissions on the temporary files` (étape 3 sans pipelining avec
+> `become_user` non-root). `-vvv` montre chacune de ces étapes : la commande
+> SSH complète, le chemin du temporaire, la ligne `sudo`.
 
 ---
 
-**QO23.2** — *Entretien : « un script bash avec `set -e` et des `if [ -f ]`
+<a id="qo23-2"></a>**[QO23.2](README.md#qo23-2)** — *Entretien : « un script bash avec `set -e` et des `if [ -f ]`
 est aussi idempotent qu'un playbook ». Réponds.*
 
 **Réponse**
@@ -533,16 +568,17 @@ un algorithme dans du YAML donne des playbooks illisibles. La bonne réponse
 en entretien combine les deux : le script bash pour la logique, un rôle
 Ansible pour le déployer et le planifier.
 
-::: pourquoi
-Ce qu'on teste, c'est la capacité à définir l'idempotence autrement que par
-« ça ne plante pas la deuxième fois ». La différence entre *ne pas échouer*
-et *converger vers un état* est le cœur de la gestion de configuration, et
-`changed=0` en seconde passe en est la preuve mesurable.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qu'on teste, c'est la capacité à définir l'idempotence autrement que par
+> « ça ne plante pas la deuxième fois ». La différence entre *ne pas échouer*
+> et *converger vers un état* est le cœur de la gestion de configuration, et
+> `changed=0` en seconde passe en est la preuve mesurable.
 
 ---
 
-**QO23.3** — *`lineinfile` vs `blockinfile` vs `template` pour
+<a id="qo23-3"></a>**[QO23.3](README.md#qo23-3)** — *`lineinfile` vs `blockinfile` vs `template` pour
 `/etc/ssh/sshd_config.d/50-baseline.conf` ; divergence ; apport de
 `validate:`.*
 
@@ -577,17 +613,18 @@ configuration. C'est un filet contre la faute de frappe ; il ne protège pas
 d'une configuration valide qui t'enferme dehors (`AllowGroups` sans ton
 groupe).
 
-::: pourquoi
-La règle : `lineinfile` pour une ligne dans un fichier que tu ne possèdes
-pas (`/etc/fstab`, `/etc/hosts` d'un autre outil), `blockinfile` pour une
-section dans un fichier partagé, `template` dès que tu possèdes le fichier.
-Le mécanisme `sshd_config.d/` a justement été conçu pour que tu **possèdes**
-un fichier entier sans toucher `sshd_config`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La règle : `lineinfile` pour une ligne dans un fichier que tu ne possèdes
+> pas (`/etc/fstab`, `/etc/hosts` d'un autre outil), `blockinfile` pour une
+> section dans un fichier partagé, `template` dès que tu possèdes le fichier.
+> Le mécanisme `sshd_config.d/` a justement été conçu pour que tu **possèdes**
+> un fichier entier sans toucher `sshd_config`.
 
 ---
 
-**QO23.4** — *Cycle de vie d'un handler.*
+<a id="qo23-4"></a>**[QO23.4](README.md#qo23-4)** — *Cycle de vie d'un handler.*
 
 **Réponse**
 
@@ -616,18 +653,19 @@ qu'après — c'est-à-dire sans contrôle. Autre cas : installer une base,
 modifier `listen_addresses`, notifier un restart, puis créer un utilisateur
 via le réseau : sans flush, la connexion réseau arrive avant le redémarrage.
 
-::: pourquoi
-Le regroupement en fin de play est une optimisation : dix templates qui
-changent ne coûtent qu'un `reload`. Mais cette optimisation a un coût de
-lisibilité — l'ordre réel diffère de l'ordre lu — que `flush_handlers`
-rend explicite. Quand tu lis un playbook, cherche les `notify` et
-demande-toi : « qu'est-ce qui s'exécute entre cette notification et le
-handler ? ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le regroupement en fin de play est une optimisation : dix templates qui
+> changent ne coûtent qu'un `reload`. Mais cette optimisation a un coût de
+> lisibilité — l'ordre réel diffère de l'ordre lu — que `flush_handlers`
+> rend explicite. Quand tu lis un playbook, cherche les `notify` et
+> demande-toi : « qu'est-ce qui s'exécute entre cette notification et le
+> handler ? ».
 
 ---
 
-**QO23.5** — *Entretien : mettre à jour 40 frontaux derrière un répartiteur
+<a id="qo23-5"></a>**[QO23.5](README.md#qo23-5)** — *Entretien : mettre à jour 40 frontaux derrière un répartiteur
 sans interruption.*
 
 **Réponse**
@@ -699,18 +737,19 @@ Rôle de chaque mot-clé dans le scénario :
 * `flush_handlers` : le rechargement doit avoir eu lieu **avant** la
   vérification et avant de remettre l'hôte dans le pool.
 
-::: pourquoi
-Ce que l'entretien mesure, c'est si tu sais que « sans interruption » se
-joue au répartiteur (drain, health check) et pas dans nginx. Un candidat qui
-ne cite que `serial` a compris le mécanisme Ansible mais pas le problème
-d'exploitation. Bonus attendu : la stratégie de rollback (redéployer la
-version N-1 avec le même playbook, `-e app_version=...`), et le fait que
-`serial: 1` sur 40 hôtes est trop lent — d'où les pourcentages.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce que l'entretien mesure, c'est si tu sais que « sans interruption » se
+> joue au répartiteur (drain, health check) et pas dans nginx. Un candidat qui
+> ne cite que `serial` a compris le mécanisme Ansible mais pas le problème
+> d'exploitation. Bonus attendu : la stratégie de rollback (redéployer la
+> version N-1 avec le même playbook, `-e app_version=...`), et le fait que
+> `serial: 1` sur 40 hôtes est trop lent — d'où les pourcentages.
 
 ---
 
-**QO23.6** — *Précédence des variables sur sept niveaux ; pourquoi rien
+<a id="qo23-6"></a>**[QO23.6](README.md#qo23-6)** — *Précédence des variables sur sept niveaux ; pourquoi rien
 d'ajustable dans `vars/main.yml`.*
 
 **Réponse**
@@ -737,17 +776,18 @@ changer (noms internes de paquets par OS, chemins imposés par l'application)
 met **tout** ce qui est ajustable dans `defaults/main.yml`, documenté dans
 `argument_specs.yml`.
 
-::: pourquoi
-La précédence complète d'Ansible compte 22 niveaux ; ces sept couvrent la
-pratique. Le moyen mnémotechnique : « défauts < inventaire (large → précis)
-< play < constantes du rôle < humain ». Et le test : si tu hésites à
-changer une valeur sans toucher au code du rôle, elle est au mauvais
-endroit.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La précédence complète d'Ansible compte 22 niveaux ; ces sept couvrent la
+> pratique. Le moyen mnémotechnique : « défauts < inventaire (large → précis)
+> < play < constantes du rôle < humain ». Et le test : si tu hésites à
+> changer une valeur sans toucher au code du rôle, elle est au mauvais
+> endroit.
 
 ---
 
-**QO23.7** — *`UNREACHABLE` sur `lab-rhel` uniquement, ce matin. Démarche et
+<a id="qo23-7"></a>**[QO23.7](README.md#qo23-7)** — *`UNREACHABLE` sur `lab-rhel` uniquement, ce matin. Démarche et
 cinq causes avec leur signature `-vvv`.*
 
 **Réponse**
@@ -782,19 +822,20 @@ Cinq causes fréquentes et leur signature dans `-vvv` :
 | mauvais utilisateur ou hôte (inventaire, `remote_user`) | `Authenticating to 10.10.10.13:22 as 'ansible'` puis `Permission denied` |
 | SELinux ou droits sur `~/.ssh` côté cible | `Permission denied` ; `journalctl -u sshd` : `bad ownership or modes` |
 
-::: pourquoi
-`UNREACHABLE` signifie « Ansible n'a pas pu obtenir un shell » : c'est
-**toujours** un problème SSH/réseau/compte, jamais un problème de module ou
-de Python (ceux-là donnent `FAILED`). Le réflexe « `ssh -v` à la main avec
-la même clé et le même utilisateur » tranche en dix secondes entre « c'est
-Ansible » et « c'est la machine ». Sur Rocky, ajoute `restorecon -Rv
-~/.ssh` à la liste : un `authorized_keys` copié avec `cp` depuis `/tmp`
-garde le mauvais contexte SELinux et `sshd` refuse de le lire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `UNREACHABLE` signifie « Ansible n'a pas pu obtenir un shell » : c'est
+> **toujours** un problème SSH/réseau/compte, jamais un problème de module ou
+> de Python (ceux-là donnent `FAILED`). Le réflexe « `ssh -v` à la main avec
+> la même clé et le même utilisateur » tranche en dix secondes entre « c'est
+> Ansible » et « c'est la machine ». Sur Rocky, ajoute `restorecon -Rv
+> ~/.ssh` à la liste : un `authorized_keys` copié avec `cp` depuis `/tmp`
+> garde le mauvais contexte SELinux et `sshd` refuse de le lire.
 
 ---
 
-**QO23.8** — *Organisation d'un dépôt d'infra propre ; où va le mot de passe
+<a id="qo23-8"></a>**[QO23.8](README.md#qo23-8)** — *Organisation d'un dépôt d'infra propre ; où va le mot de passe
 du vault ; comment le runner CI l'obtient.*
 
 **Réponse**
@@ -842,18 +883,19 @@ infra/
   manipulent le secret empêche Ansible de le montrer en `-v` ; et pas de
   `set -x` ni d'`echo` du secret dans le script de job.
 
-::: pourquoi
-Un dépôt d'infra se juge à deux questions : « un nouveau peut-il l'appliquer
-en clonant et en lisant le README ? » et « si le dépôt fuit, qu'est-ce qui
-fuit ? ». La réponse à la seconde doit être : des noms de variables et des
-blobs `$ANSIBLE_VAULT`, rien d'exploitable. Le mot de passe lui-même n'a
-qu'un seul lieu de vie durable, le gestionnaire de secrets ; partout
-ailleurs il est transitoire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un dépôt d'infra se juge à deux questions : « un nouveau peut-il l'appliquer
+> en clonant et en lisant le README ? » et « si le dépôt fuit, qu'est-ce qui
+> fuit ? ». La réponse à la seconde doit être : des noms de variables et des
+> blobs `$ANSIBLE_VAULT`, rien d'exploitable. Le mot de passe lui-même n'a
+> qu'un seul lieu de vie durable, le gestionnaire de secrets ; partout
+> ailleurs il est transitoire.
 
 ---
 
-**QO23.9** — *Terraform vs Ansible : ce que chacun modélise, l'état
+<a id="qo23-9"></a>**[QO23.9](README.md#qo23-9)** — *Terraform vs Ansible : ce que chacun modélise, l'état
 Terraform, l'enchaînement pour une VM Proxmox.*
 
 **Réponse**
@@ -890,14 +932,15 @@ Enchaînement pour une VM Proxmox :
 4. Pour supprimer : `terraform destroy -target=...` ; Ansible n'est pas
    impliqué (la machine disparaît, son état avec).
 
-::: pourquoi
-La frontière est : **ce qui a une API de création** → Terraform ; **ce qui
-se configure à l'intérieur** → Ansible. Les cas gris (un utilisateur dans
-une base, un dépôt Git) se tranchent par « qui doit savoir le détruire ».
-Un `provisioner "remote-exec"` Terraform qui lance apt est le signe qu'on
-a mélangé les deux ; un `community.general.proxmox_kvm` qui crée des VM
-sans état pour les détruire, aussi.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La frontière est : **ce qui a une API de création** → Terraform ; **ce qui
+> se configure à l'intérieur** → Ansible. Les cas gris (un utilisateur dans
+> une base, un dépôt Git) se tranchent par « qui doit savoir le détruire ».
+> Un `provisioner "remote-exec"` Terraform qui lance apt est le signe qu'on
+> a mélangé les deux ; un `community.general.proxmox_kvm` qui crée des VM
+> sans état pour les détruire, aussi.
 
 ---
 
@@ -911,7 +954,7 @@ sous `inventory/group_vars/` (à côté de `hosts.yml`, c'est là qu'Ansible les
 cherche) : quand l'énoncé écrit `group_vars/all/vars.yml`, lis
 `inventory/group_vars/all/vars.yml`.
 
-**E23.1** — *Arbre de l'inventaire, variables résolues de `lab-db` en JSON,
+<a id="e23-1"></a>**[E23.1](README.md#e23-1)** — *Arbre de l'inventaire, variables résolues de `lab-db` en JSON,
 provenance de trois variables.*
 
 ```bash
@@ -956,27 +999,29 @@ ansible-inventory --host lab-db
 * de `group_vars/ubuntu.yml` : `sudo_group`, `ansible_python_interpreter` ;
 * de `hosts.yml` : `ansible_host`.
 
-::: pourquoi
-`ansible-inventory` charge l'inventaire exactement comme `ansible-playbook`
-le ferait, `group_vars`/`host_vars` compris, sans se connecter à aucun hôte.
-`--host` affiche les variables **après** fusion de tous les niveaux
-(`all` < `ubuntu` < `db` < host), mais **avant** rendu Jinja2 : c'est
-pourquoi `monitoring_token` apparaît sous sa forme `{{ ... }}`, alors que
-`vault_monitoring_token` est déjà en clair — le vault a été déchiffré au
-chargement grâce à `vault_password_file`. Les variables « magiques »
-(`inventory_hostname`, `group_names`, `groups`) n'apparaissent pas : elles
-sont calculées à l'exécution.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ansible-inventory` charge l'inventaire exactement comme `ansible-playbook`
+> le ferait, `group_vars`/`host_vars` compris, sans se connecter à aucun hôte.
+> `--host` affiche les variables **après** fusion de tous les niveaux
+> (`all` < `ubuntu` < `db` < host), mais **avant** rendu Jinja2 : c'est
+> pourquoi `monitoring_token` apparaît sous sa forme `{{ ... }}`, alors que
+> `vault_monitoring_token` est déjà en clair — le vault a été déchiffré au
+> chargement grâce à `vault_password_file`. Les variables « magiques »
+> (`inventory_hostname`, `group_names`, `groups`) n'apparaissent pas : elles
+> sont calculées à l'exécution.
 
-::: piege
-`--host` ne dit pas **d'où** vient une variable. Quand deux fichiers
-définissent la même clé, seule la valeur gagnante s'affiche. Pour tracer une
-origine, `grep -rn nom_variable inventory/` reste le plus rapide.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--host` ne dit pas **d'où** vient une variable. Quand deux fichiers
+> définissent la même clé, seule la valeur gagnante s'affiche. Pour tracer une
+> origine, `grep -rn nom_variable inventory/` reste le plus rapide.
 
 ---
 
-**E23.2** — *Uptime des quatre hôtes avec `command`, puis nombre de `*.conf`
+<a id="e23-2"></a>**[E23.2](README.md#e23-2)** — *Uptime des quatre hôtes avec `command`, puis nombre de `*.conf`
 dans `/etc` : erreur, explication, forme qui marche.*
 
 ```bash
@@ -1011,22 +1056,23 @@ ansible all -m ansible.builtin.shell \
   -a "find /etc -maxdepth 1 -name '*.conf' | wc -l"
 ```
 
-::: pourquoi
-`command` exécute le binaire directement avec la liste d'arguments
-découpée : le glob `*.conf` n'est pas développé (c'est le shell qui fait
-ça), `|` et `wc` deviennent des noms de fichiers pour `ls` (et `-l` son option « format long »), d'où trois
-messages `cannot access`. `shell` passe la chaîne entière à `/bin/sh -c`,
-qui développe le glob et construit le pipeline.
-
-L'`uptime` passe avec `command` parce qu'il n'a besoin d'aucune
-fonctionnalité du shell. Note que les deux réponses sont `CHANGED` en jaune
-: `command` et `shell` ne savent pas qu'ils n'ont rien modifié. En ad hoc
-c'est sans conséquence ; dans un playbook, ce sera `changed_when: false`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `command` exécute le binaire directement avec la liste d'arguments
+> découpée : le glob `*.conf` n'est pas développé (c'est le shell qui fait
+> ça), `|` et `wc` deviennent des noms de fichiers pour `ls` (et `-l` son option « format long »), d'où trois
+> messages `cannot access`. `shell` passe la chaîne entière à `/bin/sh -c`,
+> qui développe le glob et construit le pipeline.
+>
+> L'`uptime` passe avec `command` parce qu'il n'a besoin d'aucune
+> fonctionnalité du shell. Note que les deux réponses sont `CHANGED` en jaune
+> : `command` et `shell` ne savent pas qu'ils n'ont rien modifié. En ad hoc
+> c'est sans conséquence ; dans un playbook, ce sera `changed_when: false`.
 
 ---
 
-**E23.3** — *Distribution, version, famille d'OS de chaque hôte, puis vCPU et
+<a id="e23-3"></a>**[E23.3](README.md#e23-3)** — *Distribution, version, famille d'OS de chaque hôte, puis vCPU et
 RAM, sans playbook.*
 
 ```bash
@@ -1054,24 +1100,25 @@ lab-db | SUCCESS => {
 }
 ```
 
-::: pourquoi
-`setup` est le module que `gather_facts: true` appelle en début de play. Il
-renvoie plusieurs centaines de clés ; `filter=` accepte une liste de motifs
-`fnmatch` séparés par des virgules (`ansible_distribution*` aurait aussi
-donné `ansible_distribution_release`, `_major_version`...). Les facts sont
-ensuite disponibles dans les playbooks sous deux formes : `ansible_facts
-['distribution']` (forme canonique, sans préfixe) et `ansible_distribution`
-(variable injectée, forme historique). Les deux valent `Rocky` ; la première
-est celle qu'`ansible-lint` préfère.
-
-`ansible_os_family` (`Debian`/`RedHat`) est le fact à utiliser dans les
-`when` : il regroupe Ubuntu et Debian d'un côté, Rocky, Alma, RHEL, Fedora
-de l'autre, ce qui correspond exactement à `apt` contre `dnf`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `setup` est le module que `gather_facts: true` appelle en début de play. Il
+> renvoie plusieurs centaines de clés ; `filter=` accepte une liste de motifs
+> `fnmatch` séparés par des virgules (`ansible_distribution*` aurait aussi
+> donné `ansible_distribution_release`, `_major_version`...). Les facts sont
+> ensuite disponibles dans les playbooks sous deux formes : `ansible_facts
+> ['distribution']` (forme canonique, sans préfixe) et `ansible_distribution`
+> (variable injectée, forme historique). Les deux valent `Rocky` ; la première
+> est celle qu'`ansible-lint` préfère.
+>
+> `ansible_os_family` (`Debian`/`RedHat`) est le fact à utiliser dans les
+> `when` : il regroupe Ubuntu et Debian d'un côté, Rocky, Alma, RHEL, Fedora
+> de l'autre, ce qui correspond exactement à `apt` contre `dnf`.
 
 ---
 
-**E23.4** — *Déployer `/etc/motd` en ad hoc : simulation avec diff, pour de
+<a id="e23-4"></a>**[E23.4](README.md#e23-4)** — *Déployer `/etc/motd` en ad hoc : simulation avec diff, pour de
 vrai, puis une troisième fois.*
 
 ```bash
@@ -1097,24 +1144,25 @@ lab-web | CHANGED => {"changed": true, ...}
 Deuxième, en jaune, `CHANGED` : le fichier est écrit. Troisième, en vert,
 `SUCCESS` avec `"changed": false` : rien à faire.
 
-::: pourquoi
-`copy` calcule le sha1 du contenu voulu et celui du fichier existant : s'ils
-sont égaux et que `owner`/`group`/`mode` correspondent, il ne touche à rien.
-C'est le mécanisme de l'idempotence côté module : comparer avant d'agir.
-En `--check`, `copy` fait cette comparaison mais s'arrête avant l'écriture,
-et `--diff` montre ce qu'il **aurait** écrit. Le code couleur (jaune =
-`changed`, vert = `ok`, rouge = `failed`, rouge vif = `unreachable`, cyan =
-`skipped`) est le même dans les playbooks.
-
-Le `\n` dans `content=` est interprété par l'analyseur `clé=valeur` d'Ansible
-sans lui, `/etc/motd` n'a pas de saut de ligne final et le prompt de
-connexion colle au texte. `mode=0644` est explicite pour ne pas dépendre
-de l'`umask` de la cible (et `ansible-lint` l'exige dans les playbooks).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `copy` calcule le sha1 du contenu voulu et celui du fichier existant : s'ils
+> sont égaux et que `owner`/`group`/`mode` correspondent, il ne touche à rien.
+> C'est le mécanisme de l'idempotence côté module : comparer avant d'agir.
+> En `--check`, `copy` fait cette comparaison mais s'arrête avant l'écriture,
+> et `--diff` montre ce qu'il **aurait** écrit. Le code couleur (jaune =
+> `changed`, vert = `ok`, rouge = `failed`, rouge vif = `unreachable`, cyan =
+> `skipped`) est le même dans les playbooks.
+>
+> Le `\n` dans `content=` est interprété par l'analyseur `clé=valeur` d'Ansible
+> sans lui, `/etc/motd` n'a pas de saut de ligne final et le prompt de
+> connexion colle au texte. `mode=0644` est explicite pour ne pas dépendre
+> de l'`umask` de la cible (et `ansible-lint` l'exige dans les playbooks).
 
 ---
 
-**E23.5** — *`playbooks/paquets.yml` : `htop vim curl tree` sur Ubuntu et
+<a id="e23-5"></a>**[E23.5](README.md#e23-5)** — *`playbooks/paquets.yml` : `htop vim curl tree` sur Ubuntu et
 Rocky, un seul play, une seule tâche d'installation, `changed=0` en seconde
 passe, pas de mise à jour du cache apt à chaque `--check`.*
 
@@ -1151,31 +1199,33 @@ ansible-playbook -K playbooks/paquets.yml --check
 yamllint playbooks/paquets.yml && ansible-lint playbooks/paquets.yml
 ```
 
-::: pourquoi
-`ansible.builtin.package` est un module « générique » : il lit le fact
-`ansible_facts['pkg_mgr']` (`apt` ou `dnf`) et délègue au vrai module. Les
-quatre noms de paquets sont identiques sur Ubuntu et Rocky, ce qui rend la
-tâche unique possible ; dès qu'un nom diffère (`apache2` vs `httpd`, `python3-libselinux` qui n'existe que sur Rocky), il faut une
-variable par famille d'OS.
+> [!NOTE]
+> **Pourquoi**
+>
+> `ansible.builtin.package` est un module « générique » : il lit le fact
+> `ansible_facts['pkg_mgr']` (`apt` ou `dnf`) et délègue au vrai module. Les
+> quatre noms de paquets sont identiques sur Ubuntu et Rocky, ce qui rend la
+> tâche unique possible ; dès qu'un nom diffère (`apache2` vs `httpd`, `python3-libselinux` qui n'existe que sur Rocky), il faut une
+> variable par famille d'OS.
+>
+> `package` ne connaît pas `update_cache`/`cache_valid_time`, qui sont propres
+> à `apt` : d'où la tâche séparée, conditionnée par `pkg_mgr`. `cache_valid
+> _time: 3600` compare l'âge de `/var/lib/apt/lists/` à une heure et ne lance
+> `apt-get update` que si nécessaire — sans elle, la tâche serait `changed` à
+> chaque passage (le cache est « mis à jour ») et briserait le `changed=0`
+> promis. En `--check`, `apt` n'exécute pas la mise à jour mais prédit
+> correctement l'installation en consultant le cache local.
 
-`package` ne connaît pas `update_cache`/`cache_valid_time`, qui sont propres
-à `apt` : d'où la tâche séparée, conditionnée par `pkg_mgr`. `cache_valid
-_time: 3600` compare l'âge de `/var/lib/apt/lists/` à une heure et ne lance
-`apt-get update` que si nécessaire — sans elle, la tâche serait `changed` à
-chaque passage (le cache est « mis à jour ») et briserait le `changed=0`
-promis. En `--check`, `apt` n'exécute pas la mise à jour mais prédit
-correctement l'installation en consultant le cache local.
-:::
-
-::: piege
-Passer une liste à `name:` en une seule tâche est important : `apt` fait
-alors **une** transaction. Avec `loop:` sur la liste, tu obtiens quatre
-transactions, quatre fois plus lent.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Passer une liste à `name:` en une seule tâche est important : `apt` fait
+> alors **une** transaction. Avec `loop:` sur la liste, tu obtiens quatre
+> transactions, quatre fois plus lent.
 
 ---
 
-**E23.6** — *`ntp_servers` : liste dans `group_vars/all`, redéfinie pour
+<a id="e23-6"></a>**[E23.6](README.md#e23-6)** — *`ntp_servers` : liste dans `group_vars/all`, redéfinie pour
 `rhel` et pour `lab-db` ; preuve par `ansible-inventory --host`, par un
 playbook `debug`, puis surcharge par `-e`.*
 
@@ -1221,22 +1271,23 @@ ansible-playbook playbooks/ntp-debug.yml \
   -e '{"ntp_servers": ["10.10.10.99"]}'                    # partout
 ```
 
-::: pourquoi
-Trois niveaux, trois portées : `group_vars/all` touche tout le monde,
-`group_vars/rhel` surcharge pour les membres de `rhel` (plus spécifique
-qu'`all`), `host_vars/lab-db` surcharge pour un seul hôte (plus spécifique
-qu'un groupe). `lab-db` est aussi dans `ubuntu`, mais `ubuntu.yml` ne
-définit pas `ntp_servers`, donc rien ne se dispute. L'extra var `-e` passe
-au-dessus de tout.
-
-Pour une **liste** en `-e`, la forme `clé=valeur` ne convient pas
-(`-e ntp_servers=10.10.10.99` donne la **chaîne** `"10.10.10.99"`, et
-`join` la découperait en caractères) : on passe du JSON, ou `-e @fichier.yml`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois niveaux, trois portées : `group_vars/all` touche tout le monde,
+> `group_vars/rhel` surcharge pour les membres de `rhel` (plus spécifique
+> qu'`all`), `host_vars/lab-db` surcharge pour un seul hôte (plus spécifique
+> qu'un groupe). `lab-db` est aussi dans `ubuntu`, mais `ubuntu.yml` ne
+> définit pas `ntp_servers`, donc rien ne se dispute. L'extra var `-e` passe
+> au-dessus de tout.
+>
+> Pour une **liste** en `-e`, la forme `clé=valeur` ne convient pas
+> (`-e ntp_servers=10.10.10.99` donne la **chaîne** `"10.10.10.99"`, et
+> `join` la découperait en caractères) : on passe du JSON, ou `-e @fichier.yml`.
 
 ---
 
-**E23.7** — *`/etc/hosts` complet généré par template à partir de
+<a id="e23-7"></a>**[E23.7](README.md#e23-7)** — *`/etc/hosts` complet généré par template à partir de
 `hostvars`, identique sur les quatre hôtes, `ok` en seconde passe.*
 
 ```jinja
@@ -1277,30 +1328,32 @@ ansible-playbook -K playbooks/hosts.yml          # ok=1 changed=0
 ansible all -m ansible.builtin.command -a 'md5sum /etc/hosts'  # 4 fois le même
 ```
 
-::: pourquoi
-`groups['all']` est la liste des noms d'hôtes de l'inventaire ; `hostvars[h]`
-donne accès aux variables de chacun, y compris `ansible_host`, **sans**
-collecte de facts (d'où `gather_facts: false` possible : tout vient de
-l'inventaire). Le `| sort` fixe l'ordre : sans lui, l'ordre est celui de
-l'inventaire, stable en pratique mais pas garanti. Le fichier ne contient
-rien de propre à l'hôte (pas de ligne `127.0.1.1 <hostname>`), donc il est
-identique partout — et le nom de chaque machine se résout par sa vraie IP
-grâce à la boucle. `template` compare le rendu au fichier présent :
-seconde passe `ok`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `groups['all']` est la liste des noms d'hôtes de l'inventaire ; `hostvars[h]`
+> donne accès aux variables de chacun, y compris `ansible_host`, **sans**
+> collecte de facts (d'où `gather_facts: false` possible : tout vient de
+> l'inventaire). Le `| sort` fixe l'ordre : sans lui, l'ordre est celui de
+> l'inventaire, stable en pratique mais pas garanti. Le fichier ne contient
+> rien de propre à l'hôte (pas de ligne `127.0.1.1 <hostname>`), donc il est
+> identique partout — et le nom de chaque machine se résout par sa vraie IP
+> grâce à la boucle. `template` compare le rendu au fichier présent :
+> seconde passe `ok`.
 
-::: piege
-Le fichier de template commence par un commentaire `#` : c'est du texte pour
-Jinja2, pas une directive. En revanche un `{#` ouvre un commentaire Jinja2
-— évite d'écrire `{# ` par accident dans un fichier de conf. Et
-`lab-adm` n'est pas dans l'inventaire : si les cibles doivent le résoudre,
-ajoute-le comme hôte (sans le mettre dans les groupes de déploiement) ou
-comme ligne fixe dans le template.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le fichier de template commence par un commentaire `#` : c'est du texte pour
+> Jinja2, pas une directive. En revanche un `{#` ouvre un commentaire Jinja2
+> — évite d'écrire `{# ` par accident dans un fichier de conf. Et
+> `lab-adm` n'est pas dans l'inventaire : si les cibles doivent le résoudre,
+> ajoute-le comme hôte (sans le mettre dans les groupes de déploiement) ou
+> comme ligne fixe dans le template.
 
 ---
 
-**E23.8** — *`sha256sum /etc/hosts` sur chaque hôte, afficher seulement
+<a id="e23-8"></a>**[E23.8](README.md#e23-8)** — *`sha256sum /etc/hosts` sur chaque hôte, afficher seulement
 l'empreinte, jamais `changed`, `failed` si l'empreinte n'est pas
 hexadécimale.*
 
@@ -1323,23 +1376,24 @@ hexadécimale.*
         msg: "{{ inventory_hostname }} {{ r.stdout.split()[0] }}"
 ```
 
-::: pourquoi
-`changed_when: false` transforme un `command` en lecture pure : le recap ne
-comptera jamais cette tâche comme un changement. `failed_when` remplace le
-critère par défaut (`rc != 0`) par ton expression : ici, le test Jinja2
-`match` applique la regex au **début** de `stdout` (`search` chercherait
-n'importe où). `check_mode: false` autorise la commande en `--check`, ce qui
-évite l'erreur de Q23.11 sur la tâche `debug` qui suit.
-
-`r.stdout` est la sortie complète (`<hash>  /etc/hosts`) ; `.split()[0]` est
-du Python appelé depuis Jinja2, ce qui marche pour une chaîne. On évite
-ainsi le `debug: var=r` qui déverse tout le dictionnaire (`cmd`, `delta`,
-`invocation`...).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `changed_when: false` transforme un `command` en lecture pure : le recap ne
+> comptera jamais cette tâche comme un changement. `failed_when` remplace le
+> critère par défaut (`rc != 0`) par ton expression : ici, le test Jinja2
+> `match` applique la regex au **début** de `stdout` (`search` chercherait
+> n'importe où). `check_mode: false` autorise la commande en `--check`, ce qui
+> évite l'erreur de Q23.11 sur la tâche `debug` qui suit.
+>
+> `r.stdout` est la sortie complète (`<hash>  /etc/hosts`) ; `.split()[0]` est
+> du Python appelé depuis Jinja2, ce qui marche pour une chaîne. On évite
+> ainsi le `debug: var=r` qui déverse tout le dictionnaire (`cmd`, `delta`,
+> `invocation`...).
 
 ---
 
-**E23.9** — *`vm.swappiness = 10` sur Ubuntu : d'abord `blockinfile` dans
+<a id="e23-9"></a>**[E23.9](README.md#e23-9)** — *`vm.swappiness = 10` sur Ubuntu : d'abord `blockinfile` dans
 `/etc/sysctl.d/90-lab.conf`, puis `ansible.posix.sysctl`. Comparer `sysctl
 vm.swappiness`.*
 
@@ -1400,25 +1454,26 @@ ansible ubuntu -m ansible.builtin.command -a 'sysctl vm.swappiness'
 # vm.swappiness = 10
 ```
 
-::: pourquoi
-`blockinfile` est un module de **fichier** : il écrit un bloc entre deux
-marqueurs, et c'est tout. Le réglage ne sera appliqué qu'au prochain
-redémarrage (ou à un `sysctl --system` que personne n'a lancé). Le module
-`ansible.posix.sysctl` connaît la **sémantique** : il écrit la ligne dans
-`sysctl_file`, et avec `sysctl_set: true` il applique aussi la valeur en
-mémoire (`sysctl -w`) ; `reload: true` relance `sysctl -p <fichier>` pour
-valider la syntaxe. Il compare valeur du fichier **et** valeur courante,
-donc il est `changed` si l'un des deux diverge — c'est la définition même
-d'un module qui gère un état.
-
-Sortir `blockinfile` avant d'introduire `sysctl` évite un fichier à deux
-propriétaires : le second réécrirait la ligne hors des marqueurs, et on
-finirait avec `vm.swappiness` deux fois.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `blockinfile` est un module de **fichier** : il écrit un bloc entre deux
+> marqueurs, et c'est tout. Le réglage ne sera appliqué qu'au prochain
+> redémarrage (ou à un `sysctl --system` que personne n'a lancé). Le module
+> `ansible.posix.sysctl` connaît la **sémantique** : il écrit la ligne dans
+> `sysctl_file`, et avec `sysctl_set: true` il applique aussi la valeur en
+> mémoire (`sysctl -w`) ; `reload: true` relance `sysctl -p <fichier>` pour
+> valider la syntaxe. Il compare valeur du fichier **et** valeur courante,
+> donc il est `changed` si l'un des deux diverge — c'est la définition même
+> d'un module qui gère un état.
+>
+> Sortir `blockinfile` avant d'introduire `sysctl` évite un fichier à deux
+> propriétaires : le second réécrirait la ligne hors des marqueurs, et on
+> finirait avec `vm.swappiness` deux fois.
 
 ---
 
-**E23.10** — *Installer `nginx-ultra` dans un `block`, capturer l'échec dans
+<a id="e23-10"></a>**[E23.10](README.md#e23-10)** — *Installer `nginx-ultra` dans un `block`, capturer l'échec dans
 `rescue`, journaliser dans `always` sur le nœud de contrôle, `failed=0`.*
 
 ```yaml
@@ -1468,32 +1523,34 @@ cat rapports/paquets.log
 
 Recap attendu : `ok=4 changed=0 ... failed=0 rescued=1` par hôte.
 
-::: pourquoi
-`block/rescue/always` est le `try/except/finally` d'Ansible. Une tâche qui
-échoue dans le `block` interrompt le bloc, exécute `rescue`, puis `always`,
-et l'hôte n'est **pas** compté `failed` (il est `rescued`). Dans `rescue`,
-`ansible_failed_task` et `ansible_failed_result` contiennent la tâche et son
-résultat, d'où le `.msg` (`No package matching 'nginx-ultra' is available`
-sur Ubuntu, `Failed to install some of the specified packages` sur Rocky).
+> [!NOTE]
+> **Pourquoi**
+>
+> `block/rescue/always` est le `try/except/finally` d'Ansible. Une tâche qui
+> échoue dans le `block` interrompt le bloc, exécute `rescue`, puis `always`,
+> et l'hôte n'est **pas** compté `failed` (il est `rescued`). Dans `rescue`,
+> `ansible_failed_task` et `ansible_failed_result` contiennent la tâche et son
+> résultat, d'où le `.msg` (`No package matching 'nginx-ultra' is available`
+> sur Ubuntu, `Failed to install some of the specified packages` sur Rocky).
+>
+> `always` tourne dans tous les cas, y compris si le `rescue` échoue lui-même.
+> `delegate_to: localhost` avec `become: false` écrit sur `lab-adm` sans
+> `sudo` ; `playbook_dir` évite de dépendre du répertoire courant. La date
+> vient des facts de la cible (`ansible_facts['date_time']`), collectés en
+> début de play — pratique, mais c'est l'heure de la cible, pas du contrôleur.
 
-`always` tourne dans tous les cas, y compris si le `rescue` échoue lui-même.
-`delegate_to: localhost` avec `become: false` écrit sur `lab-adm` sans
-`sudo` ; `playbook_dir` évite de dépendre du répertoire courant. La date
-vient des facts de la cible (`ansible_facts['date_time']`), collectés en
-début de play — pratique, mais c'est l'heure de la cible, pas du contrôleur.
-:::
-
-::: piege
-Un `rescue` ne « répare » rien tout seul : si tu ne mets pas une action de
-remédiation ou un `set_fact` dedans, tu as juste transformé une erreur
-visible en erreur silencieuse. Et `set_fact` dans le `block` ne s'exécute
-pas si la tâche précédente a échoué : `statut` n'est défini que par le
-chemin réellement suivi, c'est bien ce qu'on veut.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un `rescue` ne « répare » rien tout seul : si tu ne mets pas une action de
+> remédiation ou un `set_fact` dedans, tu as juste transformé une erreur
+> visible en erreur silencieuse. Et `set_fact` dans le `block` ne s'exécute
+> pas si la tâche précédente a échoué : `statut` n'est défini que par le
+> chemin réellement suivi, c'est bien ce qu'on veut.
 
 ---
 
-**E23.11** — *Sur `lab-web` : port 22 (`wait_for`), puis `uri` sur
+<a id="e23-11"></a>**[E23.11](README.md#e23-11)** — *Sur `lab-web` : port 22 (`wait_for`), puis `uri` sur
 `http://10.10.10.11/` avec 10 tentatives espacées de 3 s, `debug` « web
 indisponible » ou code HTTP, sans échec du play.*
 
@@ -1527,30 +1584,32 @@ indisponible » ou code HTTP, sans échec du play.*
              else 'HTTP ' ~ r.status }}
 ```
 
-::: pourquoi
-`wait_for` sans `state` attend qu'un port soit **ouvert** (il boucle jusqu'à
-`timeout`). `uri` avec `until`/`retries`/`delay` rejoue la requête tant que
-la condition est fausse : sans nginx, chaque tentative renvoie
-`status: -1` et `msg: Connection refused`. Après la dernière tentative, la
-tâche est en échec — `ignore_errors: true` l'affiche en rouge `...ignoring`
-mais laisse le play continuer, ce qui permet au `debug` de rendre le
-verdict. Le recap montre `ignored=1`, pas `failed`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `wait_for` sans `state` attend qu'un port soit **ouvert** (il boucle jusqu'à
+> `timeout`). `uri` avec `until`/`retries`/`delay` rejoue la requête tant que
+> la condition est fausse : sans nginx, chaque tentative renvoie
+> `status: -1` et `msg: Connection refused`. Après la dernière tentative, la
+> tâche est en échec — `ignore_errors: true` l'affiche en rouge `...ignoring`
+> mais laisse le play continuer, ce qui permet au `debug` de rendre le
+> verdict. Le recap montre `ignored=1`, pas `failed`.
+>
+> La sortie `debug` utilise l'opérateur `~` (concaténation Jinja2, qui
+> convertit `r.status` en chaîne) et `default(-1)` par sécurité si `r` n'a pas
+> de `status`.
 
-La sortie `debug` utilise l'opérateur `~` (concaténation Jinja2, qui
-convertit `r.status` en chaîne) et `default(-1)` par sécurité si `r` n'a pas
-de `status`.
-:::
-
-::: piege
-`failed_when: false` à la place d'`ignore_errors` casse la logique
-d'`until` : chaque tentative est considérée réussie, la boucle s'arrête
-dès la première, et tu n'as jamais tes 10 tentatives. `ignore_errors` agit
-**après** l'épuisement des tentatives, c'est le bon niveau.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `failed_when: false` à la place d'`ignore_errors` casse la logique
+> d'`until` : chaque tentative est considérée réussie, la boucle s'arrête
+> dès la première, et tu n'as jamais tes 10 tentatives. `ignore_errors` agit
+> **après** l'épuisement des tentatives, c'est le bon niveau.
 
 ---
 
-**E23.12** — *`rapports/noyaux.txt` sur le nœud de contrôle, en une tâche
+<a id="e23-12"></a>**[E23.12](README.md#e23-12)** — *`rapports/noyaux.txt` sur le nœud de contrôle, en une tâche
 déléguée exécutée une fois, une ligne par hôte du play, à partir des facts.*
 
 ```yaml
@@ -1581,20 +1640,21 @@ ansible-playbook playbooks/noyaux.yml && cat rapports/noyaux.txt
 # lab-ops 6.8.0-45-generic Ubuntu
 ```
 
-::: pourquoi
-Les facts de **tous** les hôtes sont collectés au début du play (un `setup`
-par hôte, en parallèle) et rangés dans `hostvars[<hôte>]['ansible_facts']`.
-Une tâche exécutée sur un seul hôte peut donc lire ceux des autres :
-`run_once` la limite au premier hôte, `delegate_to: localhost` la fait
-tourner sur `lab-adm`, et `ansible_play_hosts` liste les hôtes encore actifs
-dans le play (ceux qui sont `UNREACHABLE` en sont retirés — le rapport
-n'aura pas de ligne vide pour eux). Le `content:` de `copy` est un template
-Jinja2 comme n'importe quelle valeur, boucles comprises.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les facts de **tous** les hôtes sont collectés au début du play (un `setup`
+> par hôte, en parallèle) et rangés dans `hostvars[<hôte>]['ansible_facts']`.
+> Une tâche exécutée sur un seul hôte peut donc lire ceux des autres :
+> `run_once` la limite au premier hôte, `delegate_to: localhost` la fait
+> tourner sur `lab-adm`, et `ansible_play_hosts` liste les hôtes encore actifs
+> dans le play (ceux qui sont `UNREACHABLE` en sont retirés — le rapport
+> n'aura pas de ligne vide pour eux). Le `content:` de `copy` est un template
+> Jinja2 comme n'importe quelle valeur, boucles comprises.
 
 ---
 
-**E23.13** — *`encrypt_string` pour `vault_api_token`, affichage en clair,
+<a id="e23-13"></a>**[E23.13](README.md#e23-13)** — *`encrypt_string` pour `vault_api_token`, affichage en clair,
 `-v`, `no_log`, puis `ansible-vault view` du vault du setup.*
 
 ```bash
@@ -1634,32 +1694,34 @@ ansible-vault view inventory/group_vars/all/vault.yml
 # vault_monitoring_token: "tok-lab23-3f9a1c7e"
 ```
 
-::: pourquoi
-`encrypt_string` chiffre **une valeur** et produit un scalaire YAML avec le
-tag `!vault` : le fichier reste en clair, lisible, et seule cette valeur
-est chiffrée — pratique pour un secret isolé, mais on préfère le fichier
-`vault.yml` entier dès qu'il y en a plusieurs. Le mot de passe est lu depuis
-`vault_password_file` d'`ansible.cfg`, d'où l'absence de prompt.
+> [!NOTE]
+> **Pourquoi**
+>
+> `encrypt_string` chiffre **une valeur** et produit un scalaire YAML avec le
+> tag `!vault` : le fichier reste en clair, lisible, et seule cette valeur
+> est chiffrée — pratique pour un secret isolé, mais on préfère le fichier
+> `vault.yml` entier dès qu'il y en a plusieurs. Le mot de passe est lu depuis
+> `vault_password_file` d'`ansible.cfg`, d'où l'absence de prompt.
+>
+> En `-v`, `debug` n'affiche rien de plus que son message. Mais la tâche
+> `command` sans `no_log` montre en `-v` le dictionnaire de résultat 
+> : `cmd` et `stdout`, puis en `-vvv` `invocation.module_args` — le secret y figure deux à trois
+> fois, et donc autant de fois dans le journal de la CI. `no_log: true` remplace
+> tout par `the output has been hidden due to the fact that 'no_log: true'
+> was specified for this result`, à tous les niveaux de verbosité. Règle :
+> `no_log` sur **toute** tâche dont un paramètre ou une sortie contient un
+> secret (`user: password`, `uri: headers`, `postgresql_user`).
 
-En `-v`, `debug` n'affiche rien de plus que son message. Mais la tâche
-`command` sans `no_log` montre en `-v` le dictionnaire de résultat 
-: `cmd` et `stdout`, puis en `-vvv` `invocation.module_args` — le secret y figure deux à trois
-fois, et donc autant de fois dans le journal de la CI. `no_log: true` remplace
-tout par `the output has been hidden due to the fact that 'no_log: true'
-was specified for this result`, à tous les niveaux de verbosité. Règle :
-`no_log` sur **toute** tâche dont un paramètre ou une sortie contient un
-secret (`user: password`, `uri: headers`, `postgresql_user`).
-:::
-
-::: piege
-`no_log` cache aussi le message d'erreur en cas d'échec. Pour déboguer, on
-passe temporairement `no_log: "{{ not debug_secrets | default(false) }}"` et
-`-e debug_secrets=true` — jamais en supprimant la ligne dans un commit.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `no_log` cache aussi le message d'erreur en cas d'échec. Pour déboguer, on
+> passe temporairement `no_log: "{{ not debug_secrets | default(false) }}"` et
+> `-e debug_secrets=true` — jamais en supprimant la ligne dans un commit.
 
 ---
 
-**E23.14** — *`paquets.yml` + tâche `debug` taguée `info` : lister, filtrer
+<a id="e23-14"></a>**[E23.14](README.md#e23-14)** — *`paquets.yml` + tâche `debug` taguée `info` : lister, filtrer
 par tag, limiter, démarrer à une tâche ; compter les tâches exécutées.*
 
 Ajout au playbook :
@@ -1690,22 +1752,23 @@ ansible-playbook -K playbooks/paquets.yml \
 | `--limit lab-rhel` | 3 sur un seul hôte, cache apt `skipped` |
 | `--start-at-task` | 1 (debug) |
 
-::: pourquoi
-Les tags sélectionnent des tâches, `--limit` sélectionne des hôtes,
-`--start-at-task` saute jusqu'à un nom exact puis exécute tout ce qui
-suit ; les trois se combinent. `Gathering Facts` porte le tag implicite
-`always` : il tourne dans tous les cas, sauf `gather_facts: false`. Une
-tâche `skipped` par un `when` compte comme « visitée » mais pas comme
-exécutée : c'est la différence entre `ok` et `skipped` dans le recap.
-
-`--list-tasks` et `--list-tags` ne se connectent à rien : ce sont les
-premiers outils à sortir devant un playbook inconnu, avant même
-`--check`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les tags sélectionnent des tâches, `--limit` sélectionne des hôtes,
+> `--start-at-task` saute jusqu'à un nom exact puis exécute tout ce qui
+> suit ; les trois se combinent. `Gathering Facts` porte le tag implicite
+> `always` : il tourne dans tous les cas, sauf `gather_facts: false`. Une
+> tâche `skipped` par un `when` compte comme « visitée » mais pas comme
+> exécutée : c'est la différence entre `ok` et `skipped` dans le recap.
+>
+> `--list-tasks` et `--list-tags` ne se connectent à rien : ce sont les
+> premiers outils à sortir devant un playbook inconnu, avant même
+> `--check`.
 
 ---
 
-**E23.15** — *Rôle `motd` généré par `ansible-galaxy`, épuré, texte
+<a id="e23-15"></a>**[E23.15](README.md#e23-15)** — *Rôle `motd` généré par `ansible-galaxy`, épuré, texte
 paramétrable ; `community.general` épinglée dans `requirements.yml`,
 installée, listée.*
 
@@ -1778,24 +1841,25 @@ community.general    10.7.0
 community.postgresql 3.14.1
 ```
 
-::: pourquoi
-`ansible-galaxy role init` génère huit répertoires ; un rôle n'a besoin que
-de ceux qu'il utilise, et un répertoire vide trompe le lecteur (`vars/`
-suggère des constantes, `handlers/` un service à recharger). `tasks/
-main.yml` est le seul obligatoire. Le rôle est trouvé grâce à `roles_path =
-roles` dans `ansible.cfg`, et sa variable `motd_text` est surchargeable à
-tous les niveaux au-dessus de `defaults` (ici par `-e`).
-
-Épingler une collection (`>=9,<11`) fixe le comportement du dépôt : une
-mise à jour majeure d'une collection peut renommer un module ou changer un
-défaut. `collections_path = collections` fait installer dans le projet, pas
-dans `~/.ansible/`, ce qui permet de l'ignorer dans Git et de le réinstaller
-en CI avec la même commande.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ansible-galaxy role init` génère huit répertoires ; un rôle n'a besoin que
+> de ceux qu'il utilise, et un répertoire vide trompe le lecteur (`vars/`
+> suggère des constantes, `handlers/` un service à recharger). `tasks/
+> main.yml` est le seul obligatoire. Le rôle est trouvé grâce à `roles_path =
+> roles` dans `ansible.cfg`, et sa variable `motd_text` est surchargeable à
+> tous les niveaux au-dessus de `defaults` (ici par `-e`).
+>
+> Épingler une collection (`>=9,<11`) fixe le comportement du dépôt : une
+> mise à jour majeure d'une collection peut renommer un module ou changer un
+> défaut. `collections_path = collections` fait installer dans le projet, pas
+> dans `~/.ansible/`, ce qui permet de l'ignorer dans Git et de le réinstaller
+> en CI avec la même commande.
 
 ---
 
-**E23.16** — *Depuis `comptes` : noms des admins, `alice,carol`, YAML
+<a id="e23-16"></a>**[E23.16](README.md#e23-16)** — *Depuis `comptes` : noms des admins, `alice,carol`, YAML
 indenté, uid de `bob` sans boucle.*
 
 ```yaml
@@ -1833,26 +1897,27 @@ ok: [lab-web] => {"msg": "alice:\n  admin: true\n  shell: /bin/bash\n ..."}
 ok: [lab-web] => {"msg": "2002"}
 ```
 
-::: pourquoi
-`dict2items` transforme `{alice: {...}, bob: {...}}` en liste
-`[{key: alice, value: {...}}, ...]`, la forme sur laquelle `selectattr` et
-`map` savent travailler. `selectattr('value.admin')` sans opérateur garde
-les éléments dont l'attribut est « vrai » ; `map(attribute='key')` extrait
-les noms ; `| list` matérialise. Tout le pipeline s'écrit une fois dans
-`vars:` et se réutilise. `comptes['bob']['uid']` (ou `comptes.bob.uid`)
-est un accès direct : un dictionnaire n'a pas besoin de boucle pour être
-lu par clé.
-
-`to_nice_yaml` et `to_nice_json` servent à écrire des fichiers de conf
-structurés depuis un template (`{{ config | to_nice_yaml }}` dans un
-`.j2`), ce qui évite de reproduire à la main la syntaxe YAML cible.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `dict2items` transforme `{alice: {...}, bob: {...}}` en liste
+> `[{key: alice, value: {...}}, ...]`, la forme sur laquelle `selectattr` et
+> `map` savent travailler. `selectattr('value.admin')` sans opérateur garde
+> les éléments dont l'attribut est « vrai » ; `map(attribute='key')` extrait
+> les noms ; `| list` matérialise. Tout le pipeline s'écrit une fois dans
+> `vars:` et se réutilise. `comptes['bob']['uid']` (ou `comptes.bob.uid`)
+> est un accès direct : un dictionnaire n'a pas besoin de boucle pour être
+> lu par clé.
+>
+> `to_nice_yaml` et `to_nice_json` servent à écrire des fichiers de conf
+> structurés depuis un template (`{{ config | to_nice_yaml }}` dans un
+> `.j2`), ce qui évite de reproduire à la main la syntaxe YAML cible.
 
 ---
 
 ## 23.6 Labs
 
-### **L23.1** — Baseline commune du parc
+### <a id="l23-1"></a>**[L23.1](README.md#l23-1)** — Baseline commune du parc
 
 *Compte de service `ansible`, paquets, fuseau et chrony, mises à jour
 automatiques, sshd durci, pare-feu, node_exporter 1.9.1 ; `changed=0` en
@@ -2204,58 +2269,60 @@ ansible all -b -m ansible.builtin.shell \
 bash ~/workbook/scripts/check/check_M23_01.sh
 ```
 
-::: pourquoi
-**Ordre des plays.** `python3-libselinux` est installé en premier, par `dnf`
-(qui n'en a pas besoin), parce que `authorized_key`, `copy` et `template`
-en ont besoin sur un Rocky *enforcing*. Le compte de service vient ensuite
-pour qu'en cas d'échec plus loin, la bascule `remote_user = ansible` soit
-déjà possible. SSH et le pare-feu sont en fin de parcours, chacun dans son
-play, pour pouvoir être testés séparément avec `--limit`.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Ordre des plays.** `python3-libselinux` est installé en premier, par `dnf`
+> (qui n'en a pas besoin), parce que `authorized_key`, `copy` et `template`
+> en ont besoin sur un Rocky *enforcing*. Le compte de service vient ensuite
+> pour qu'en cas d'échec plus loin, la bascule `remote_user = ansible` soit
+> déjà possible. SSH et le pare-feu sont en fin de parcours, chacun dans son
+> play, pour pouvoir être testés séparément avec `--limit`.
+>
+> **Idempotence des points sensibles.** `user` compare uid, shell, groupes.
+> `authorized_key` lit la clé depuis `lab-adm` via `lookup('file')` (exécuté
+> sur le contrôleur) et ne réécrit pas une ligne déjà présente. `copy` avec
+> `validate: visudo -cf %s` teste le fichier temporaire avant de le poser :
+> un sudoers cassé ne sort jamais du répertoire temporaire. `timezone`,
+> `systemd_service`, `ufw`, `firewalld` comparent l'état voulu à l'état réel.
+> `get_url` avec `checksum: sha256:<URL>` télécharge d'abord la petite liste
+> de sommes, y cherche la ligne du fichier nommé dans l'URL, et hache le fichier local :
+> s'il correspond, rien n'est retéléchargé. `unarchive` avec `creates` et
+> `copy remote_src` (compare les sommes) complètent la chaîne.
+>
+> **Handlers par play.** Un handler n'est visible que dans le play qui le
+> déclare : `Restart sshd` est dans le play sshd, `Restart node_exporter`
+> dans le play node_exporter. Le `daemon_reload: true` du handler garantit
+> que systemd relit l'unité avant de redémarrer.
+>
+> **Pare-feu.** Sur ufw, `rule: allow` avant `state: enabled` : ufw applique
+> la politique `deny` au moment de l'activation, et une session SSH en cours
+> survit (conntrack) mais pas la suivante. Sur firewalld, `ssh` est dans la
+> zone `public` par défaut, mais on le déclare quand même : la baseline doit
+> être vraie même sur un firewalld reconfiguré. `permanent + immediate`
+> écrit la règle **et** l'applique sans `--reload`.
 
-**Idempotence des points sensibles.** `user` compare uid, shell, groupes.
-`authorized_key` lit la clé depuis `lab-adm` via `lookup('file')` (exécuté
-sur le contrôleur) et ne réécrit pas une ligne déjà présente. `copy` avec
-`validate: visudo -cf %s` teste le fichier temporaire avant de le poser :
-un sudoers cassé ne sort jamais du répertoire temporaire. `timezone`,
-`systemd_service`, `ufw`, `firewalld` comparent l'état voulu à l'état réel.
-`get_url` avec `checksum: sha256:<URL>` télécharge d'abord la petite liste
-de sommes, y cherche la ligne du fichier nommé dans l'URL, et hache le fichier local :
-s'il correspond, rien n'est retéléchargé. `unarchive` avec `creates` et
-`copy remote_src` (compare les sommes) complètent la chaîne.
-
-**Handlers par play.** Un handler n'est visible que dans le play qui le
-déclare : `Restart sshd` est dans le play sshd, `Restart node_exporter`
-dans le play node_exporter. Le `daemon_reload: true` du handler garantit
-que systemd relit l'unité avant de redémarrer.
-
-**Pare-feu.** Sur ufw, `rule: allow` avant `state: enabled` : ufw applique
-la politique `deny` au moment de l'activation, et une session SSH en cours
-survit (conntrack) mais pas la suivante. Sur firewalld, `ssh` est dans la
-zone `public` par défaut, mais on le déclare quand même : la baseline doit
-être vraie même sur un firewalld reconfiguré. `permanent + immediate`
-écrit la règle **et** l'applique sans `--reload`.
-:::
-
-::: piege
-**`AllowGroups sudo wheel`** : si ton compte n'est ni dans `sudo` ni dans
-`wheel`, `sshd -t` accepte et tu es dehors. Sur ce parc, `mathieu` et
-`ansible` sont dans le bon groupe, mais c'est le genre de ligne à tester
-avec `--limit lab-ops` et une console ouverte.
-
-**`checksum: sha256:<URL>`** : la liste `sha256sums.txt` de node_exporter
-contient plusieurs lignes ; Ansible cherche celle dont le nom de fichier
-correspond au **basename de l'**`url` (pas de `dest` : un `dest` nommé `ne.tar.gz`
-, comme dans Q23.14, fonctionne). Une URL qui ne se termine pas par le nom du fichier (`?download=1`, lien « latest ») ne correspond à aucune ligne et la tâche échoue avec
-`Unable to find a checksum for file`. 
-
-**`ssh.service` sur Ubuntu 24.04** est activé par socket (`ssh.socket`).
-`state: restarted` sur `ssh.service` fonctionne, mais si tu changes le port
-dans la conf, c'est le socket qu'il faut reconfigurer.
-:::
+> [!WARNING]
+> **Piège**
+>
+> **`AllowGroups sudo wheel`** : si ton compte n'est ni dans `sudo` ni dans
+> `wheel`, `sshd -t` accepte et tu es dehors. Sur ce parc, `mathieu` et
+> `ansible` sont dans le bon groupe, mais c'est le genre de ligne à tester
+> avec `--limit lab-ops` et une console ouverte.
+>
+> **`checksum: sha256:<URL>`** : la liste `sha256sums.txt` de node_exporter
+> contient plusieurs lignes ; Ansible cherche celle dont le nom de fichier
+> correspond au **basename de l'**`url` (pas de `dest` : un `dest` nommé `ne.tar.gz`
+> , comme dans Q23.14, fonctionne). Une URL qui ne se termine pas par le nom du fichier (`?download=1`, lien « latest ») ne correspond à aucune ligne et la tâche échoue avec
+> `Unable to find a checksum for file`. 
+>
+> **`ssh.service` sur Ubuntu 24.04** est activé par socket (`ssh.socket`).
+> `state: restarted` sur `ssh.service` fonctionne, mais si tu changes le port
+> dans la conf, c'est le socket qu'il faut reconfigurer.
 
 ---
 
-### **L23.2** — Frontal nginx : vhost templaté et TLS
+### <a id="l23-2"></a>**[L23.2](README.md#l23-2)** — Frontal nginx : vhost templaté et TLS
 
 *Variables `web`/`ubuntu`/`rhel`, nginx + `python3-cryptography`, clé, CSR
 et certificat auto-signé sur la cible, vhost 80 → 443 templaté avec en-tête
@@ -2499,56 +2566,58 @@ curl -skI https://10.10.10.11/ | grep -i x-vitrine
 bash ~/workbook/scripts/check/check_M23_02.sh
 ```
 
-::: pourquoi
-**Portabilité par variables.** Tout ce qui diffère entre Ubuntu et Rocky est
-une variable de groupe (`nginx_vhost_dir`, `nginx_user`) ou une tâche
-conditionnée par `os_family`. Le template, lui, est unique : c'est
-l'objectif « pas recopié à la main entre les deux distributions ».
+> [!NOTE]
+> **Pourquoi**
+>
+> **Portabilité par variables.** Tout ce qui diffère entre Ubuntu et Rocky est
+> une variable de groupe (`nginx_vhost_dir`, `nginx_user`) ou une tâche
+> conditionnée par `os_family`. Le template, lui, est unique : c'est
+> l'objectif « pas recopié à la main entre les deux distributions ».
+>
+> **TLS sur la cible.** `openssl_privatekey`, `openssl_csr` et
+> `x509_certificate` sont idempotents : ils relisent le fichier existant et
+> ne le régénèrent que si un paramètre a changé (taille, CN, SAN). La clé ne
+> transite jamais par `lab-adm`. `python3-cryptography` est la bibliothèque
+> que ces modules utilisent **sur la cible**. Le SAN `IP:{{ ansible_host }}`
+> permet à `curl -k` comme à `uri` de dialoguer sur l'IP sans erreur de nom
+> (le `-k`/`validate_certs: false` reste nécessaire : la CA n'est pas
+> connue).
+>
+> **Pourquoi pas `validate:` sur le vhost.** `nginx -t -c fichier` charge
+> `fichier` comme configuration **principale** ; un fragment `server {}`
+> sans `events {}` est refusé (`"server" directive is not allowed here`).
+> On teste donc la configuration globale après dépôt : si elle est
+> invalide, la tâche échoue, l'hôte sort du play, et ses handlers ne
+> tournent pas — nginx reste sur l'ancienne configuration valide. C'est un
+> compromis : le fichier faux est bien déposé sur le disque, mais pas
+> appliqué.
+>
+> **`flush_handlers` avant `uri`.** Sans lui, `Reload nginx` tournerait
+> après la vérification, qui interrogerait l'ancien nginx (ou aucun, au
+> premier passage). Voir QO23.4.
+>
+> **SELinux.** `sefcontext` enregistre la règle (`semanage fcontext`), et
+> `restorecon` l'applique ; `changed_when` sur la présence de `Relabeled`
+> dans la sortie garde la tâche idempotente. Sans ça, nginx sur Rocky répond
+> `403` avec `avc: denied { read }` dans `/var/log/audit/audit.log`.
 
-**TLS sur la cible.** `openssl_privatekey`, `openssl_csr` et
-`x509_certificate` sont idempotents : ils relisent le fichier existant et
-ne le régénèrent que si un paramètre a changé (taille, CN, SAN). La clé ne
-transite jamais par `lab-adm`. `python3-cryptography` est la bibliothèque
-que ces modules utilisent **sur la cible**. Le SAN `IP:{{ ansible_host }}`
-permet à `curl -k` comme à `uri` de dialoguer sur l'IP sans erreur de nom
-(le `-k`/`validate_certs: false` reste nécessaire : la CA n'est pas
-connue).
-
-**Pourquoi pas `validate:` sur le vhost.** `nginx -t -c fichier` charge
-`fichier` comme configuration **principale** ; un fragment `server {}`
-sans `events {}` est refusé (`"server" directive is not allowed here`).
-On teste donc la configuration globale après dépôt : si elle est
-invalide, la tâche échoue, l'hôte sort du play, et ses handlers ne
-tournent pas — nginx reste sur l'ancienne configuration valide. C'est un
-compromis : le fichier faux est bien déposé sur le disque, mais pas
-appliqué.
-
-**`flush_handlers` avant `uri`.** Sans lui, `Reload nginx` tournerait
-après la vérification, qui interrogerait l'ancien nginx (ou aucun, au
-premier passage). Voir QO23.4.
-
-**SELinux.** `sefcontext` enregistre la règle (`semanage fcontext`), et
-`restorecon` l'applique ; `changed_when` sur la présence de `Relabeled`
-dans la sortie garde la tâche idempotente. Sans ça, nginx sur Rocky répond
-`403` avec `avc: denied { read }` dans `/var/log/audit/audit.log`.
-:::
-
-::: piege
-Sur Ubuntu, `sites-enabled/default` écoute en `default_server` sur 80 :
-s'il reste, un `curl http://10.10.10.11/` sans en-tête Host tombe sur lui.
-Sur Rocky, le `server` par défaut de `nginx.conf` est aussi `default_server`
-sur 80 : ne mets pas `default_server` dans le vhost, tu obtiendrais
-`duplicate default server`. Les deux redirections vers 443 fonctionnent
-grâce au `server_name` qui inclut l'IP.
-
-`uri` délégué à `localhost` s'exécute avec `become: false` : sans lui,
-Ansible tenterait `sudo` sur `lab-adm` avec le compte `mathieu`, et
-demanderait un mot de passe que `-K` ne fournit pas au bon endroit.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sur Ubuntu, `sites-enabled/default` écoute en `default_server` sur 80 :
+> s'il reste, un `curl http://10.10.10.11/` sans en-tête Host tombe sur lui.
+> Sur Rocky, le `server` par défaut de `nginx.conf` est aussi `default_server`
+> sur 80 : ne mets pas `default_server` dans le vhost, tu obtiendrais
+> `duplicate default server`. Les deux redirections vers 443 fonctionnent
+> grâce au `server_name` qui inclut l'IP.
+>
+> `uri` délégué à `localhost` s'exécute avec `become: false` : sans lui,
+> Ansible tenterait `sudo` sur `lab-adm` avec le compte `mathieu`, et
+> demanderait un mot de passe que `-K` ne fournit pas au bon endroit.
 
 ---
 
-### **L23.3** — PostgreSQL : instance, base, utilisateur, accès réseau
+### <a id="l23-3"></a>**[L23.3](README.md#l23-3)** — PostgreSQL : instance, base, utilisateur, accès réseau
 
 *Paquets, `listen_addresses` par `postgresql_set`, base `vitrine` et rôle
 `vitrine_app` (mot de passe en vault, `no_log`), `pg_hba` depuis
@@ -2705,59 +2774,61 @@ psql -h 10.10.10.12 -U vitrine_app -d vitrine -c 'select 1'
 bash ~/workbook/scripts/check/check_M23_03.sh
 ```
 
-::: pourquoi
-**`postgresql_set`** modifie le paramètre par `ALTER SYSTEM`, dans
-`postgresql.auto.conf`, et rapporte si un redémarrage est nécessaire ;
-`listen_addresses` est un paramètre `postmaster` : redémarrage obligatoire,
-d'où le handler `Restart` et non `Reload`. Aucun `lineinfile` sur
-`postgresql.conf` : le fichier reste intact, `pg_conftool`/`SHOW` voient la
-valeur, et un `ALTER SYSTEM RESET` annule proprement.
+> [!NOTE]
+> **Pourquoi**
+>
+> **`postgresql_set`** modifie le paramètre par `ALTER SYSTEM`, dans
+> `postgresql.auto.conf`, et rapporte si un redémarrage est nécessaire ;
+> `listen_addresses` est un paramètre `postmaster` : redémarrage obligatoire,
+> d'où le handler `Restart` et non `Reload`. Aucun `lineinfile` sur
+> `postgresql.conf` : le fichier reste intact, `pg_conftool`/`SHOW` voient la
+> valeur, et un `ALTER SYSTEM RESET` annule proprement.
+>
+> **Unités systemd.** Sur Ubuntu, `postgresql.service` est une unité
+> « parapluie » (`Type=oneshot`, `ExecReload=/bin/true`) qui tire
+> `postgresql@16-main.service`, la vraie instance. On **active**
+> `postgresql.service` (pour le démarrage) mais on **recharge/redémarre**
+> `postgresql@16-main.service`.
+>
+> **Ordre rôle → base → privilèges.** `postgresql_db` avec `owner` exige que
+> le rôle existe. Le propriétaire de la base possède aussi le schéma
+> `public` (PostgreSQL 15+, via `pg_database_owner`) : `vitrine_app` peut
+> créer des tables. `postgresql_privs` sur `type: database` ajoute CONNECT,
+> CREATE, TEMP — redondant pour un propriétaire mais explicite, et
+> idempotent.
+>
+> **`become_user: postgres`** : les modules `community.postgresql` se
+> connectent par socket Unix en `peer`, ce qui exige d'être l'utilisateur
+> `postgres`. Passer de `root` (become) à `postgres` (non privilégié)
+> impose à Ansible de rendre son fichier temporaire lisible par un autre
+> utilisateur : `setfacl` (paquet `acl`) ou pipelining. Le playbook a les
+> deux.
+>
+> **Vérification déléguée.** Le play 2 tourne **sur** `lab-web` (pas de
+> `delegate_to` nécessaire : c'est un play dédié), lit les variables de
+> `lab-db` par `hostvars` (le vault est déchiffré pour tout l'inventaire),
+> passe le mot de passe par `environment:` (jamais sur la ligne de commande,
+> visible dans `ps`), et `no_log: true` empêche `-v` de montrer
+> `environment`. Le refus depuis `lab-adm` prouve que `pg_hba` et `ufw`
+> filtrent bien : `no pg_hba.conf entry for host "10.10.10.10"` si ufw
+> laissait passer, sinon `Connection timed out`.
 
-**Unités systemd.** Sur Ubuntu, `postgresql.service` est une unité
-« parapluie » (`Type=oneshot`, `ExecReload=/bin/true`) qui tire
-`postgresql@16-main.service`, la vraie instance. On **active**
-`postgresql.service` (pour le démarrage) mais on **recharge/redémarre**
-`postgresql@16-main.service`.
-
-**Ordre rôle → base → privilèges.** `postgresql_db` avec `owner` exige que
-le rôle existe. Le propriétaire de la base possède aussi le schéma
-`public` (PostgreSQL 15+, via `pg_database_owner`) : `vitrine_app` peut
-créer des tables. `postgresql_privs` sur `type: database` ajoute CONNECT,
-CREATE, TEMP — redondant pour un propriétaire mais explicite, et
-idempotent.
-
-**`become_user: postgres`** : les modules `community.postgresql` se
-connectent par socket Unix en `peer`, ce qui exige d'être l'utilisateur
-`postgres`. Passer de `root` (become) à `postgres` (non privilégié)
-impose à Ansible de rendre son fichier temporaire lisible par un autre
-utilisateur : `setfacl` (paquet `acl`) ou pipelining. Le playbook a les
-deux.
-
-**Vérification déléguée.** Le play 2 tourne **sur** `lab-web` (pas de
-`delegate_to` nécessaire : c'est un play dédié), lit les variables de
-`lab-db` par `hostvars` (le vault est déchiffré pour tout l'inventaire),
-passe le mot de passe par `environment:` (jamais sur la ligne de commande,
-visible dans `ps`), et `no_log: true` empêche `-v` de montrer
-`environment`. Le refus depuis `lab-adm` prouve que `pg_hba` et `ufw`
-filtrent bien : `no pg_hba.conf entry for host "10.10.10.10"` si ufw
-laissait passer, sinon `Connection timed out`.
-:::
-
-::: piege
-`no_log: true` sur la tâche `psql` cache aussi le **message d'échec**. Si
-le `SELECT 1` échoue, relance avec `-e debug_secrets=true` et `no_log: "{{
-not (debug_secrets | default(false)) }}"` ; ou teste la connexion à la main
-depuis `lab-web` avec `PGPASSWORD` lu via `ansible-vault view`.
-
-`encoding: UTF-8` avec `template: template0` : `template1` peut avoir une
-locale différente, et `CREATE DATABASE ... ENCODING` refuse alors
-(`new encoding (UTF8) is incompatible with the encoding of the template
-database`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> `no_log: true` sur la tâche `psql` cache aussi le **message d'échec**. Si
+> le `SELECT 1` échoue, relance avec `-e debug_secrets=true` et `no_log: "{{
+> not (debug_secrets | default(false)) }}"` ; ou teste la connexion à la main
+> depuis `lab-web` avec `PGPASSWORD` lu via `ansible-vault view`.
+>
+> `encoding: UTF-8` avec `template: template0` : `template1` peut avoir une
+> locale différente, et `CREATE DATABASE ... ENCODING` refuse alors
+> (`new encoding (UTF8) is incompatible with the encoding of the template
+> database`).
 
 ---
 
-### **L23.4** — Rolling update avec vérification de santé
+### <a id="l23-4"></a>**[L23.4](README.md#l23-4)** — Rolling update avec vérification de santé
 
 *`serial: 1`, `max_fail_percentage: 0`, `assert` sur la version,
 déploiement des templates de L23.2, `flush_handlers`, `uri` avec `until`,
@@ -2867,47 +2938,49 @@ ansible-playbook playbooks/rolling.yml -e vitrine_version=2.1.0
 bash ~/workbook/scripts/check/check_M23_04.sh
 ```
 
-::: pourquoi
-**Lot par lot.** Avec `serial: 1`, l'ensemble `pre_tasks → tasks →
-handlers → post_tasks → handlers` est rejoué pour `lab-web`, puis pour
-`lab-rhel`. `max_fail_percentage: 0` arrête tout dès qu'un lot a un échec.
-`ansible_play_batch` liste les hôtes du lot courant (ici un seul), et
-`run_once` s'applique **par lot** : le journal reçoit bien une ligne par
-frontal, ce que demande l'énoncé.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Lot par lot.** Avec `serial: 1`, l'ensemble `pre_tasks → tasks →
+> handlers → post_tasks → handlers` est rejoué pour `lab-web`, puis pour
+> `lab-rhel`. `max_fail_percentage: 0` arrête tout dès qu'un lot a un échec.
+> `ansible_play_batch` liste les hôtes du lot courant (ici un seul), et
+> `run_once` s'applique **par lot** : le journal reçoit bien une ligne par
+> frontal, ce que demande l'énoncé.
+>
+> **Handler avant vérification.** Le `Reload nginx` notifié par le vhost
+> serait, par défaut, exécuté après `tasks` — donc avant `post_tasks`,
+> en fait. Mais deux raisons de mettre `flush_handlers` explicitement : la
+> vérification pourrait un jour être déplacée dans `tasks`, et le
+> `nginx -t` doit avoir lieu **entre** le dépôt et le reload. L'ordre lisible
+> vaut mieux que l'ordre implicite.
+>
+> **`uri` + `until`.** Le module renvoie les en-têtes de la réponse comme
+> attributs en minuscules avec `_` : `X-Vitrine-Version` devient
+> `sante.x_vitrine_version`. `until` rejoue jusqu'à 5 fois espacées de 2 s :
+> nginx peut mettre quelques centaines de millisecondes à recharger.
+> `return_content: true` est nécessaire pour `sante.content`.
+>
+> **Preuve de l'échec.** `-e vitrine_root=/srv/inexistant` surcharge la
+> variable de groupe (extra vars gagnent) : `template` refuse d'écrire dans
+> un répertoire absent, `lab-web` échoue à la première tâche, le lot est à
+> 100 % d'échec, le play s'arrête. `lab-rhel` n'a pas été touché, il sert
+> encore `2.1.0`. Et `lab-web` ? Son vhost n'a pas été modifié non plus (la
+> tâche a échoué avant) : il sert aussi encore `2.1.0`. C'est la bonne
+> propriété : l'échec le plus précoce possible, avant tout changement.
 
-**Handler avant vérification.** Le `Reload nginx` notifié par le vhost
-serait, par défaut, exécuté après `tasks` — donc avant `post_tasks`,
-en fait. Mais deux raisons de mettre `flush_handlers` explicitement : la
-vérification pourrait un jour être déplacée dans `tasks`, et le
-`nginx -t` doit avoir lieu **entre** le dépôt et le reload. L'ordre lisible
-vaut mieux que l'ordre implicite.
-
-**`uri` + `until`.** Le module renvoie les en-têtes de la réponse comme
-attributs en minuscules avec `_` : `X-Vitrine-Version` devient
-`sante.x_vitrine_version`. `until` rejoue jusqu'à 5 fois espacées de 2 s :
-nginx peut mettre quelques centaines de millisecondes à recharger.
-`return_content: true` est nécessaire pour `sante.content`.
-
-**Preuve de l'échec.** `-e vitrine_root=/srv/inexistant` surcharge la
-variable de groupe (extra vars gagnent) : `template` refuse d'écrire dans
-un répertoire absent, `lab-web` échoue à la première tâche, le lot est à
-100 % d'échec, le play s'arrête. `lab-rhel` n'a pas été touché, il sert
-encore `2.1.0`. Et `lab-web` ? Son vhost n'a pas été modifié non plus (la
-tâche a échoué avant) : il sert aussi encore `2.1.0`. C'est la bonne
-propriété : l'échec le plus précoce possible, avant tout changement.
-:::
-
-::: piege
-La version dans `vars:` de play ou dans `group_vars/web.yml` (`1.0.0`)
-serait **écrasée** par `-e`. Après le déploiement de `2.1.0`, mets à jour
-`group_vars/web.yml` : sinon, le prochain `nginx.yml` sans `-e` ramènera
-`1.0.0` et rapportera `changed`. La source de vérité d'une version est le
-dépôt, `-e` n'est que le geste de déploiement.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La version dans `vars:` de play ou dans `group_vars/web.yml` (`1.0.0`)
+> serait **écrasée** par `-e`. Après le déploiement de `2.1.0`, mets à jour
+> `group_vars/web.yml` : sinon, le prochain `nginx.yml` sans `-e` ramènera
+> `1.0.0` et rapportera `changed`. La source de vérité d'une version est le
+> dépôt, `-e` n'est que le geste de déploiement.
 
 ---
 
-### **L23.5** — Un rôle `node_exporter` réutilisable
+### <a id="l23-5"></a>**[L23.5](README.md#l23-5)** — Un rôle `node_exporter` réutilisable
 
 *Rôle généré, épuré, `defaults` complets, `tasks` découpés, `include_tasks`
 dynamique par famille d'OS, template, handler, `meta/main.yml`,
@@ -3223,44 +3296,46 @@ booleans include: 'y', 'on', '1', 'false', 't', 'yes', 'true', 'no', 'off',
 'n', 'f', '0'"], "changed": false, "msg": "Validation of arguments failed"}
 ```
 
-::: pourquoi
-**Rien qui dépende de l'inventaire.** Le rôle ne connaît ni `lab-ops` ni
-`prometheus_host` : il expose `node_exporter_allowed_cidr` avec un défaut
-raisonnable, et c'est le **playbook** qui fait le lien avec l'inventaire
-(`"{{ prometheus_host }}/32"`). L'autre équipe passera son propre CIDR.
-Idem pour l'URL de base (miroir interne) et les chemins.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Rien qui dépende de l'inventaire.** Le rôle ne connaît ni `lab-ops` ni
+> `prometheus_host` : il expose `node_exporter_allowed_cidr` avec un défaut
+> raisonnable, et c'est le **playbook** qui fait le lien avec l'inventaire
+> (`"{{ prometheus_host }}/32"`). L'autre équipe passera son propre CIDR.
+> Idem pour l'URL de base (miroir interne) et les chemins.
+>
+> **`include_tasks` dynamique.** `firewall_{{ ansible_facts['os_family'] }}.yml` sélectionne le fichier à l'exécution ; un OS non prévu (`Suse`)
+> échoue avec un message clair (`Could not find or access 'firewall_ Suse.yml'`), ce qui est préférable à un `when` silencieux.
+> `include_tasks` (dynamique) plutôt qu'`import_tasks` (statique) parce que
+> le nom dépend d'un fact, inconnu au moment de l'analyse.
+>
+> **`argument_specs.yml`** est validé **avant** la première tâche du rôle,
+> par une tâche automatique `Validating arguments against arg spec`. Le
+> typage (`bool`, `list`/`elements: str`) convertit les valeurs acceptables
+> (`-e node_exporter_manage_firewall=false` devient un booléen) et rejette les
+> autres avec la liste des valeurs valides. Sans `argument_specs`, `oui`
+> aurait été une chaîne non vide, donc **vraie** dans `when:` — le pare-feu
+> aurait été géré, contrairement à ce que l'appelant croyait demander.
+>
+> **`ansible-galaxy role init` a créé `tests/` et `vars/`** : le premier est
+> un vestige (Molecule le remplace), le second est le piège de QO23.6.
 
-**`include_tasks` dynamique.** `firewall_{{ ansible_facts['os_family'] }}.yml` sélectionne le fichier à l'exécution ; un OS non prévu (`Suse`)
-échoue avec un message clair (`Could not find or access 'firewall_ Suse.yml'`), ce qui est préférable à un `when` silencieux.
-`include_tasks` (dynamique) plutôt qu'`import_tasks` (statique) parce que
-le nom dépend d'un fact, inconnu au moment de l'analyse.
-
-**`argument_specs.yml`** est validé **avant** la première tâche du rôle,
-par une tâche automatique `Validating arguments against arg spec`. Le
-typage (`bool`, `list`/`elements: str`) convertit les valeurs acceptables
-(`-e node_exporter_manage_firewall=false` devient un booléen) et rejette les
-autres avec la liste des valeurs valides. Sans `argument_specs`, `oui`
-aurait été une chaîne non vide, donc **vraie** dans `when:` — le pare-feu
-aurait été géré, contrairement à ce que l'appelant croyait demander.
-
-**`ansible-galaxy role init` a créé `tests/` et `vars/`** : le premier est
-un vestige (Molecule le remplace), le second est le piège de QO23.6.
-:::
-
-::: piege
-Le `when: node_exporter_manage_firewall | bool` sur l'`include_tasks` est
-une double sécurité : même sans `argument_specs`, une chaîne `"false"`
-serait convertie. Et `split(':') | last` extrait le port de
-`node_exporter_listen` quel que soit l'hôte d'écoute — mais pas pour une
-adresse IPv6 entre crochets ; documente cette limite dans le README plutôt
-que de la découvrir en production.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le `when: node_exporter_manage_firewall | bool` sur l'`include_tasks` est
+> une double sécurité : même sans `argument_specs`, une chaîne `"false"`
+> serait convertie. Et `split(':') | last` extrait le port de
+> `node_exporter_listen` quel que soit l'hôte d'écoute — mais pas pour une
+> adresse IPv6 entre crochets ; documente cette limite dans le README plutôt
+> que de la découvrir en production.
 
 ---
 
 ## 23.7 Break & Fix
 
-### **BF23.1** — « Le playbook de Julien marche, mais il faut le lancer deux fois »
+### <a id="bf23-1"></a>**[BF23.1](README.md#bf23-1)** — « Le playbook de Julien marche, mais il faut le lancer deux fois »
 
 *`casse/prepa-deploy.yml` : échoue sur `lab-rhel`, échoue au second passage
 sur `lab-web`, puis `changed` à chaque fois et `sudoers.d/deploy` qui
@@ -3393,33 +3468,35 @@ en commentaire pourquoi aucun module ne convient » ; et un test
 d'idempotence systématique (deux passages, le second `changed=0`) dans la
 CI, ce que Molecule fait nativement.
 
-::: pourquoi
-Le handler `Restart nginx` n'est notifié par aucune tâche de ce playbook :
-c'est voulu. Aucune des tâches ne touche à la configuration de nginx (la
-page de maintenance est du contenu, pas de la conf). L'intention « nginx
-redémarré » de Julien était en réalité « nginx tourne après mon playbook »,
-ce que `state: started` exprime ; le handler est là pour le jour où une
-tâche de configuration sera ajoutée — et pour satisfaire l'objectif « ne
-redémarre nginx que si sa configuration a changé ».
+> [!NOTE]
+> **Pourquoi**
+>
+> Le handler `Restart nginx` n'est notifié par aucune tâche de ce playbook :
+> c'est voulu. Aucune des tâches ne touche à la configuration de nginx (la
+> page de maintenance est du contenu, pas de la conf). L'intention « nginx
+> redémarré » de Julien était en réalité « nginx tourne après mon playbook »,
+> ce que `state: started` exprime ; le handler est là pour le jour où une
+> tâche de configuration sera ajoutée — et pour satisfaire l'objectif « ne
+> redémarre nginx que si sa configuration a changé ».
+>
+> Le `nginx_html_dir` calculé dans `vars:` avec une expression conditionnelle
+> Jinja2 évite deux tâches `copy` avec deux `when`. En dépôt propre, cette
+> valeur irait dans `group_vars/ubuntu.yml` et `group_vars/rhel.yml`, comme
+> `nginx_vhost_dir` de L23.2.
 
-Le `nginx_html_dir` calculé dans `vars:` avec une expression conditionnelle
-Jinja2 évite deux tâches `copy` avec deux `when`. En dépôt propre, cette
-valeur irait dans `group_vars/ubuntu.yml` et `group_vars/rhel.yml`, comme
-`nginx_vhost_dir` de L23.2.
-:::
-
-::: piege
-« Commenter les tâches qui gênent » (ce que Julien a fait) est la mauvaise
-réponse par excellence : le playbook ne crée plus l'utilisateur sur une
-machine neuve, et personne ne le sait avant la prochaine réinstallation.
-`ignore_errors: true` a le même effet en plus discret. La question à poser
-devant une tâche qui échoue au second passage n'est pas « comment la faire
-taire » mais « quel état veut-elle obtenir ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> « Commenter les tâches qui gênent » (ce que Julien a fait) est la mauvaise
+> réponse par excellence : le playbook ne crée plus l'utilisateur sur une
+> machine neuve, et personne ne le sait avant la prochaine réinstallation.
+> `ignore_errors: true` a le même effet en plus discret. La question à poser
+> devant une tâche qui échoue au second passage n'est pas « comment la faire
+> taire » mais « quel état veut-elle obtenir ».
 
 ---
 
-### **BF23.2** — « Le groupe db a disparu »
+### <a id="bf23-2"></a>**[BF23.2](README.md#bf23-2)** — « Le groupe db a disparu »
 
 `ansible db -m ping` *: `Could`* `not match supplied host pattern` *; `all` ne trouve plus aucun hôte. Interdit : restaurer l'ancien fichier.*
 
@@ -3513,26 +3590,28 @@ tabulations et les incohérences d'indentation) ; `ansible-inventory
 ; un éditeur configuré pour insérer des espaces sur les fichiers YAML
 (`.editorconfig` : `indent_style = space`).
 
-::: pourquoi
-Les avertissements d'inventaire sont émis dans l'ordre des tentatives :
-plugin par plugin, dans l'ordre d'`enable_plugins`. Le message du plugin
-`ini` (`Invalid host pattern 'all:'`) est un faux indice tentant : il
-décrit comment un fichier YAML ressemble à un mauvais INI. Lire le
-**premier** avertissement, celui du plugin correspondant au format réel
-du fichier, et s'arrêter là, fait gagner dix minutes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les avertissements d'inventaire sont émis dans l'ordre des tentatives :
+> plugin par plugin, dans l'ordre d'`enable_plugins`. Le message du plugin
+> `ini` (`Invalid host pattern 'all:'`) est un faux indice tentant : il
+> décrit comment un fichier YAML ressemble à un mauvais INI. Lire le
+> **premier** avertissement, celui du plugin correspondant au format réel
+> du fichier, et s'arrêter là, fait gagner dix minutes.
 
-::: piege
-Le trait d'union contre le souligné est invisible dans un `--graph` lu trop
-vite. Les noms d'hôtes Ansible sont libres (le souligné est accepté), donc
-aucune erreur n'est levée : seul `ansible_host` manquant trahit le nouvel
-hôte, par un `UNREACHABLE` sur un nom que le DNS ne connaît pas. Un
-`host_vars/lab-db.yml` (E23.6) ne s'appliquerait plus non plus.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le trait d'union contre le souligné est invisible dans un `--graph` lu trop
+> vite. Les noms d'hôtes Ansible sont libres (le souligné est accepté), donc
+> aucune erreur n'est levée : seul `ansible_host` manquant trahit le nouvel
+> hôte, par un `UNREACHABLE` sur un nom que le DNS ne connaît pas. Un
+> `host_vars/lab-db.yml` (E23.6) ne s'appliquerait plus non plus.
 
 ---
 
-### **BF23.3** — « Le vault ne s'ouvre plus »
+### <a id="bf23-3"></a>**[BF23.3](README.md#bf23-3)** — « Le vault ne s'ouvre plus »
 
 *`Attempting to decrypt but no vault secrets found`, puis, après un
 bricolage, `Decryption failed`. Un mail de Julien dans `casse/`. Rechiffrer
@@ -3609,32 +3688,34 @@ grep -n '^vault_password_file' ansible.cfg              # rétabli
   week-end, pas le lundi ;
 * `ansible.cfg` est versionné : toute modification passe par une revue.
 
-::: pourquoi
-`rekey` déchiffre avec l'ancien secret et rechiffre avec le nouveau, en
-place ; il ne modifie pas les valeurs. `--vault-id julien@prompt` demande
-le mot de passe à l'écran et l'étiquette `julien` ; `--new-vault-password-
-file .vault_pass` fournit le nouveau. Le fichier résultant porte l'en-tête
-`1.1` (sans étiquette) parce que le nouveau secret n'a pas d'ID : c'est
-exactement l'état de départ du setup.
+> [!NOTE]
+> **Pourquoi**
+>
+> `rekey` déchiffre avec l'ancien secret et rechiffre avec le nouveau, en
+> place ; il ne modifie pas les valeurs. `--vault-id julien@prompt` demande
+> le mot de passe à l'écran et l'étiquette `julien` ; `--new-vault-password-
+> file .vault_pass` fournit le nouveau. Le fichier résultant porte l'en-tête
+> `1.1` (sans étiquette) parce que le nouveau secret n'a pas d'ID : c'est
+> exactement l'état de départ du setup.
+>
+> La différence entre les deux messages est un outil de diagnostic à part
+> entière (Q23.13) : le premier dit « configure un mot de passe », le second
+> dit « ce n'est pas le bon » — et donc « qui l'a changé, quand » : `git log
+> -p inventory/group_vars/all/vault.yml` montre la date du rekey (le blob
+> change entièrement), ce qui, en dépôt, aurait désigné Julien sans mail.
 
-La différence entre les deux messages est un outil de diagnostic à part
-entière (Q23.13) : le premier dit « configure un mot de passe », le second
-dit « ce n'est pas le bon » — et donc « qui l'a changé, quand » : `git log
--p inventory/group_vars/all/vault.yml` montre la date du rekey (le blob
-change entièrement), ce qui, en dépôt, aurait désigné Julien sans mail.
-:::
-
-::: piege
-Écrire le mot de passe de Julien dans un fichier (`echo ... > /tmp/j`)
-puis `--vault-password-file /tmp/j` marche, mais laisse une trace sur le
-disque et dans l'historique du shell (`~/.bash_history`). `@prompt` évite
-les deux. Si tu l'as fait quand même : `history -d`, `shred -u /tmp/j`, et
-Julien change son mot de passe personnel (le mail le prévoyait).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Écrire le mot de passe de Julien dans un fichier (`echo ... > /tmp/j`)
+> puis `--vault-password-file /tmp/j` marche, mais laisse une trace sur le
+> disque et dans l'historique du shell (`~/.bash_history`). `@prompt` évite
+> les deux. Si tu l'as fait quand même : `history -d`, `shred -u /tmp/j`, et
+> Julien change son mot de passe personnel (le mail le prévoyait).
 
 ---
 
-### **BF23.4** — « On change le vhost, nginx ne bouge pas »
+### <a id="bf23-4"></a>**[BF23.4](README.md#bf23-4)** — « On change le vhost, nginx ne bouge pas »
 
 *`casse/vhost-update.yml` change `X-Vitrine-Version` : fichier modifié sur
 les deux hôtes, `curl -skI` montre l'ancienne version, `lab-web` en erreur,
@@ -3759,35 +3840,37 @@ tâche. Test d'acceptation dans la CI : après un déploiement, `curl -I`
 doit montrer la version attendue — c'est la vérification `uri` de L23.4,
 qui aurait attrapé les trois mécanismes en une tâche.
 
-::: pourquoi
-Le cycle de vie d'un handler (QO23.4) tient en trois conditions : une
-tâche **`changed`** (mécanisme 1), sur un hôte **sans échec** (mécanisme
-2), avec un handler **dont les conditions sont vraies** (mécanisme 3).
-Ce Break & Fix casse chacune des trois, et le symptôme est identique : le
-fichier change, le service ne suit pas. La seule façon de les distinguer
-est de lire la sortie tâche par tâche : `ok` là où on attendait `changed`,
-`fatal` sur un hôte, absence de `RUNNING HANDLER`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le cycle de vie d'un handler (QO23.4) tient en trois conditions : une
+> tâche **`changed`** (mécanisme 1), sur un hôte **sans échec** (mécanisme
+> 2), avec un handler **dont les conditions sont vraies** (mécanisme 3).
+> Ce Break & Fix casse chacune des trois, et le symptôme est identique : le
+> fichier change, le service ne suit pas. La seule façon de les distinguer
+> est de lire la sortie tâche par tâche : `ok` là où on attendait `changed`,
+> `fatal` sur un hôte, absence de `RUNNING HANDLER`.
+>
+> `changed_when: false` est légitime sur `command`/`shell` en lecture seule
+> (`grep`, `nginx -t`), jamais sur un module qui sait déjà dire s'il a
+> changé quelque chose. Un template `changed_when: false` est un mensonge,
+> et les handlers ne se déclenchent que sur la vérité.
 
-`changed_when: false` est légitime sur `command`/`shell` en lecture seule
-(`grep`, `nginx -t`), jamais sur un module qui sait déjà dire s'il a
-changé quelque chose. Un template `changed_when: false` est un mensonge,
-et les handlers ne se déclenchent que sur la vérité.
-:::
-
-::: piege
-Un `--force-handlers` aurait fait tourner le handler sur `lab-web` malgré
-l'échec du `grep` — mais pas avec `changed_when: false`, et pas sur
-`lab-rhel`. Il ne corrige qu'un mécanisme sur trois, tout en masquant une
-erreur réelle. Le réflexe « `state: restarted` en fin de playbook pour
-être sûr » (interdit par l'énoncé) masque les trois et redémarre nginx à
-chaque passage : c'est Q23.1.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un `--force-handlers` aurait fait tourner le handler sur `lab-web` malgré
+> l'échec du `grep` — mais pas avec `changed_when: false`, et pas sur
+> `lab-rhel`. Il ne corrige qu'un mécanisme sur trois, tout en masquant une
+> erreur réelle. Le réflexe « `state: restarted` en fin de playbook pour
+> être sûr » (interdit par l'énoncé) masque les trois et redémarre nginx à
+> chaque passage : c'est Q23.1.
 
 ---
 
 ## 23.8 Défi du module
 
-**D23 — Le dépôt d'infra de référence**
+<a id="d23"></a>**[D23](README.md#d23) — Le dépôt d'infra de référence**
 
 *Un dépôt `~/lab23/factura-infra` : `site.yml` qui importe tout, quatre
 rôles paramétrés, secrets en vault, `make lint/check/deploy`, README,
@@ -4104,34 +4187,42 @@ bash ~/workbook/scripts/check/check_M23_06.sh
    revient pas en arrière tout seul : une migration de base ; c'est
    pourquoi `rolling.yml` ne touche pas à `postgresql_vitrine`.
 
-::: pourquoi
-`import_playbook` est **statique** : `site.yml --list-tasks`, `--tags`,
-`--limit` traversent tous les playbooks importés, et une erreur de syntaxe
-dans l'un d'eux est détectée avant la première tâche. L'ordre importe :
-`common` crée le compte `ansible` dont les plays suivants ont besoin, et
-`monitoring` avant `postgresql`/`nginx` pour que les frontaux soient
-supervisés dès leur mise en service.
+> [!NOTE]
+> **Pourquoi**
+>
+> `import_playbook` est **statique** : `site.yml --list-tasks`, `--tags`,
+> `--limit` traversent tous les playbooks importés, et une erreur de syntaxe
+> dans l'un d'eux est détectée avant la première tâche. L'ordre importe :
+> `common` crée le compte `ansible` dont les plays suivants ont besoin, et
+> `monitoring` avant `postgresql`/`nginx` pour que les frontaux soient
+> supervisés dès leur mise en service.
+>
+> Le `Makefile` n'est pas de la décoration : c'est l'interface que la CI du
+> module 25 appellera (`make lint`, `make check`), et la garantie que
+> « déployer » est **une** commande identique sur tous les postes. `VERSION
+> ?= 1.0.0` donne un défaut surchargeable (`make rolling VERSION=2.1.0`),
+> l'équivalent Make du `defaults/main.yml`.
+>
+> Un dépôt qui passe `make lint && make check` sur un clone frais, avec le
+> seul `.vault_pass` comme état local, est un dépôt qu'un nouveau membre
+> peut appliquer le premier jour — c'est le critère.
 
-Le `Makefile` n'est pas de la décoration : c'est l'interface que la CI du
-module 25 appellera (`make lint`, `make check`), et la garantie que
-« déployer » est **une** commande identique sur tous les postes. `VERSION
-?= 1.0.0` donne un défaut surchargeable (`make rolling VERSION=2.1.0`),
-l'équivalent Make du `defaults/main.yml`.
+> [!WARNING]
+> **Piège**
+>
+> Copier `hosts.yml` et les `group_vars` depuis `~/lab23` est légitime ;
+> copier `.vault_pass` **dans le dépôt** ne l'est pas : il y est, mais
+> ignoré par Git (`git check-ignore -v .vault_pass` doit le confirmer). Un
+> `git add -f .vault_pass` par réflexe et le secret est dans l'historique
+> pour toujours — la seule réparation est de changer le mot de passe et de
+> rechiffrer tous les vaults (`rekey`).
+>
+> `ansible-lint` avec le profil `production` exige des `meta/main.yml`
+> complets (`platforms`, `min_ansible_version`) et des noms de rôle en
+> `snake_case` : `nginx-vitrine` serait refusé, d'où `nginx_vitrine`.
 
-Un dépôt qui passe `make lint && make check` sur un clone frais, avec le
-seul `.vault_pass` comme état local, est un dépôt qu'un nouveau membre
-peut appliquer le premier jour — c'est le critère.
-:::
+<!-- nav:début -->
+---
 
-::: piege
-Copier `hosts.yml` et les `group_vars` depuis `~/lab23` est légitime ;
-copier `.vault_pass` **dans le dépôt** ne l'est pas : il y est, mais
-ignoré par Git (`git check-ignore -v .vault_pass` doit le confirmer). Un
-`git add -f .vault_pass` par réflexe et le secret est dans l'historique
-pour toujours — la seule réparation est de changer le mot de passe et de
-rechiffrer tous les vaults (`rekey`).
-
-`ansible-lint` avec le profil `production` exige des `meta/main.yml`
-complets (`platforms`, `min_ansible_version`) et des noms de rôle en
-`snake_case` : `nginx-vitrine` serait refusé, d'où `nginx_vitrine`.
-:::
+[← Module 22](../22-docker/corrige.md) · [Énoncé](README.md) · [Module 24 →](../24-iac-terraform/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

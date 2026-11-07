@@ -1,417 +1,458 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 26** · corrigé  
+[← Module 25](../25-cicd/corrige.md) · [Énoncé](README.md) · [Module 27 →](../27-python-ops/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 26 — Corrigé
 
 ## 26.3 Quiz — QCM
 
-**Q26.1** — *Ce qui se passe réellement après `kubectl scale deploy factura-api --replicas=3`.*
+<a id="q26-1"></a>**[Q26.1](README.md#q26-1)** — *Ce qui se passe réellement après `kubectl scale deploy factura-api --replicas=3`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`kubectl` ne « fait » rien : il envoie un `PATCH` sur l'objet Deployment à
-l'API server, qui l'enregistre dans le datastore (SQLite via kine sur k3s,
-etcd ailleurs). À partir de là, tout est asynchrone et découplé :
+> [!NOTE]
+> **Pourquoi**
+>
+> `kubectl` ne « fait » rien : il envoie un `PATCH` sur l'objet Deployment à
+> l'API server, qui l'enregistre dans le datastore (SQLite via kine sur k3s,
+> etcd ailleurs). À partir de là, tout est asynchrone et découplé :
+>
+> 1. le **contrôleur de Deployment** (dans `kube-controller-manager`) observe que
+>    `spec.replicas` du Deployment vaut 3 et met à jour le ReplicaSet courant ;
+> 2. le **contrôleur de ReplicaSet** compte 2 pods portant son sélecteur, en
+>    veut 3, crée un objet Pod avec `spec.nodeName` vide ;
+> 3. le **scheduler** surveille les pods sans nœud, choisit un nœud (filtrage
+>    sur les `requests`, `nodeSelector`, taints ; puis score) et écrit
+>    `spec.nodeName` ;
+> 4. le **kubelet** du nœud désigné voit un pod qui lui est affecté, demande à
+>    containerd de tirer l'image et démarrer le conteneur, puis remonte le
+>    `status`.
+>
+> Chacun ne parle qu'à l'API server, et chacun ne lit que ce qui le concerne.
+> C'est le modèle déclaratif : tu écris l'état voulu, des boucles convergent.
 
-1. le **contrôleur de Deployment** (dans `kube-controller-manager`) observe que
-   `spec.replicas` du Deployment vaut 3 et met à jour le ReplicaSet courant ;
-2. le **contrôleur de ReplicaSet** compte 2 pods portant son sélecteur, en
-   veut 3, crée un objet Pod avec `spec.nodeName` vide ;
-3. le **scheduler** surveille les pods sans nœud, choisit un nœud (filtrage
-   sur les `requests`, `nodeSelector`, taints ; puis score) et écrit
-   `spec.nodeName` ;
-4. le **kubelet** du nœud désigné voit un pod qui lui est affecté, demande à
-   containerd de tirer l'image et démarrer le conteneur, puis remonte le
-   `status`.
-
-Chacun ne parle qu'à l'API server, et chacun ne lit que ce qui le concerne.
-C'est le modèle déclaratif : tu écris l'état voulu, des boucles convergent.
-:::
-
-::: piege
-a) et c) supposent un appel direct entre composants qui n'existe pas. d) est
-faux deux fois : etcd ne notifie personne d'autre que l'API server, et le
-kubelet n'a aucune notion de « pod manquant » — il ne connaît que les pods
-qui lui sont assignés.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) et c) supposent un appel direct entre composants qui n'existe pas. d) est
+> faux deux fois : etcd ne notifie personne d'autre que l'API server, et le
+> kubelet n'a aucune notion de « pod manquant » — il ne connaît que les pods
+> qui lui sont assignés.
 
 ---
 
-**Q26.2** — *k3s mono-nœud : deux affirmations vraies.*
+<a id="q26-2"></a>**[Q26.2](README.md#q26-2)** — *k3s mono-nœud : deux affirmations vraies.*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-k3s remplace etcd par **kine**, une couche de traduction qui présente l'API
-etcd à l'API server au-dessus de SQLite (`/var/lib/rancher/k3s/server/db/`).
-Avec `--cluster-init` ou `--datastore-endpoint`, on retrouve etcd embarqué,
-MySQL ou PostgreSQL. Les *packaged components* (Traefik, CoreDNS,
-metrics-server, ServiceLB, local-path-provisioner) sont déployés au démarrage
-depuis `/var/lib/rancher/k3s/server/manifests/` : ce sont de vrais pods dans
-`kube-system`, désactivables avec `--disable traefik` par exemple.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> k3s remplace etcd par **kine**, une couche de traduction qui présente l'API
+> etcd à l'API server au-dessus de SQLite (`/var/lib/rancher/k3s/server/db/`).
+> Avec `--cluster-init` ou `--datastore-endpoint`, on retrouve etcd embarqué,
+> MySQL ou PostgreSQL. Les *packaged components* (Traefik, CoreDNS,
+> metrics-server, ServiceLB, local-path-provisioner) sont déployés au démarrage
+> depuis `/var/lib/rancher/k3s/server/manifests/` : ce sont de vrais pods dans
+> `kube-system`, désactivables avec `--disable traefik` par exemple.
 
-::: piege
-a) est faux : il n'y a pas d'etcd, et quand il y en a un, il tourne dans le
-binaire `k3s`, pas dans un pod. d) : kube-proxy est bien présent (dans le
-binaire), c'est Traefik qui remplace un *Ingress controller*, pas kube-proxy.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) est faux : il n'y a pas d'etcd, et quand il y en a un, il tourne dans le
+> binaire `k3s`, pas dans un pod. d) : kube-proxy est bien présent (dans le
+> binaire), c'est Traefik qui remplace un *Ingress controller*, pas kube-proxy.
 
 ---
 
-**Q26.3** — *Raison de la sortie précédente d'un conteneur en `CrashLoopBackOff`.*
+<a id="q26-3"></a>**[Q26.3](README.md#q26-3)** — *Raison de la sortie précédente d'un conteneur en `CrashLoopBackOff`.*
 
 **Réponse : b)** `kubectl logs factura-api-7d9c8b5f4-x2k9p --previous`
 
-::: pourquoi
-En `CrashLoopBackOff`, le conteneur courant est soit en attente de
-redémarrage (délai exponentiel 10 s, 20 s, 40 s… plafonné à 5 min), soit
-vient de redémarrer et n'a pas encore reproduit l'erreur. `kubectl logs` sans
-option lit le conteneur **courant** : souvent vide ou tronqué. `--previous`
-(`-p`) lit la sortie standard du conteneur **précédent**, que le kubelet garde
-sur le disque du nœud (`/var/log/pods/<ns>_<pod>_<uid>/<conteneur>/N.log`)
-tant que le pod existe. C'est là que se trouve la ligne fatale.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> En `CrashLoopBackOff`, le conteneur courant est soit en attente de
+> redémarrage (délai exponentiel 10 s, 20 s, 40 s… plafonné à 5 min), soit
+> vient de redémarrer et n'a pas encore reproduit l'erreur. `kubectl logs` sans
+> option lit le conteneur **courant** : souvent vide ou tronqué. `--previous`
+> (`-p`) lit la sortie standard du conteneur **précédent**, que le kubelet garde
+> sur le disque du nœud (`/var/log/pods/<ns>_<pod>_<uid>/<conteneur>/N.log`)
+> tant que le pod existe. C'est là que se trouve la ligne fatale.
 
-::: piege
-c) `get events` montre `Back-off restarting failed container`, pas la cause
-applicative. d) `top` donne la consommation instantanée, inutile sur un
-conteneur mort. Réflexe complémentaire : `describe pod` → `Last State:
-Terminated`, `Reason` et `Exit Code` (1 = erreur applicative, 137 = SIGKILL,
-souvent OOM, 143 = SIGTERM).
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) `get events` montre `Back-off restarting failed container`, pas la cause
+> applicative. d) `top` donne la consommation instantanée, inutile sur un
+> conteneur mort. Réflexe complémentaire : `describe pod` → `Last State:
+> Terminated`, `Reason` et `Exit Code` (1 = erreur applicative, 137 = SIGKILL,
+> souvent OOM, 143 = SIGTERM).
 
 ---
 
-**Q26.4** — *`Last State: Terminated, Reason: OOMKilled, Exit Code: 137`.*
+<a id="q26-4"></a>**[Q26.4](README.md#q26-4)** — *`Last State: Terminated, Reason: OOMKilled, Exit Code: 137`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`limits.memory` se traduit en `memory.max` du cgroup du conteneur. Quand le
-processus dépasse, le **noyau** (pas le kubelet, pas Kubernetes) déclenche
-l'OOM killer dans ce cgroup et envoie `SIGKILL` : 128 + 9 = **137**. Le
-kubelet constate la mort, lit la raison dans containerd (`OOMKilled`), et
-redémarre selon `restartPolicy`. Deux remèdes : monter la limite après avoir
-mesuré le besoin réel (`kubectl top pod --containers` sur un pod sain, ou
-`container_memory_working_set_bytes` dans Prometheus), ou corriger la fuite.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `limits.memory` se traduit en `memory.max` du cgroup du conteneur. Quand le
+> processus dépasse, le **noyau** (pas le kubelet, pas Kubernetes) déclenche
+> l'OOM killer dans ce cgroup et envoie `SIGKILL` : 128 + 9 = **137**. Le
+> kubelet constate la mort, lit la raison dans containerd (`OOMKilled`), et
+> redémarre selon `restartPolicy`. Deux remèdes : monter la limite après avoir
+> mesuré le besoin réel (`kubectl top pod --containers` sur un pod sain, ou
+> `container_memory_working_set_bytes` dans Prometheus), ou corriger la fuite.
 
-::: piege
-c) décrit une **éviction** par le kubelet sous pression mémoire du nœud :
-`Reason: Evicted` dans `describe`, pas `OOMKilled`, et le pod est recréé
-ailleurs. d) : `requests` sert au scheduler, jamais au noyau ; l'augmenter ne
-change rien à l'OOM. a) : un échec de liveness produit `Reason: Error` ou
-`Completed` et l'événement `Liveness probe failed`, avec un code 143 si l'app
-gère `SIGTERM`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) décrit une **éviction** par le kubelet sous pression mémoire du nœud :
+> `Reason: Evicted` dans `describe`, pas `OOMKilled`, et le pod est recréé
+> ailleurs. d) : `requests` sert au scheduler, jamais au noyau ; l'augmenter ne
+> change rien à l'OOM. a) : un échec de liveness produit `Reason: Error` ou
+> `Completed` et l'événement `Liveness probe failed`, avec un code 143 si l'app
+> gère `SIGTERM`.
 
 ---
 
-**Q26.5** — *ClusterIP présente, Endpoints `<none>`, pods `Running 1/1`.*
+<a id="q26-5"></a>**[Q26.5](README.md#q26-5)** — *ClusterIP présente, Endpoints `<none>`, pods `Running 1/1`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Les Endpoints (et EndpointSlices) sont calculés par le contrôleur d'endpoints
-à partir de **deux** conditions : les pods dont les labels satisfont
-`spec.selector` du Service, **et** qui sont `Ready`. Les pods sont `1/1`,
-donc prêts : il ne reste que le sélecteur. Vérification en deux commandes :
-
-```bash
-kubectl get svc factura-api -n factura -o jsonpath='{.spec.selector}'
-kubectl get pods -n factura --show-labels
-```
-
-Un `targetPort` faux (a) donnerait des Endpoints **présents** avec un mauvais
-port : `curl` répondrait *connection refused*, pas `<none>`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les Endpoints (et EndpointSlices) sont calculés par le contrôleur d'endpoints
+> à partir de **deux** conditions : les pods dont les labels satisfont
+> `spec.selector` du Service, **et** qui sont `Ready`. Les pods sont `1/1`,
+> donc prêts : il ne reste que le sélecteur. Vérification en deux commandes :
+>
+> ```bash
+> kubectl get svc factura-api -n factura -o jsonpath='{.spec.selector}'
+> kubectl get pods -n factura --show-labels
+> ```
+>
+> Un `targetPort` faux (a) donnerait des Endpoints **présents** avec un mauvais
+> port : `curl` répondrait *connection refused*, pas `<none>`.
 
 ---
 
-**Q26.6** — *Même Service, pods `Running 0/1` : deux réponses.*
+<a id="q26-6"></a>**[Q26.6](README.md#q26-6)** — *Même Service, pods `Running 0/1` : deux réponses.*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-`READY 0/1` = conteneur démarré mais readiness en échec. Conséquence exacte :
-le pod est retiré des Endpoints (il ne reçoit plus de trafic) mais **n'est
-pas redémarré**. `describe` montre l'événement `Readiness probe failed: HTTP
-probe failed with statuscode: 503` (ou `connection refused`, `context
-deadline exceeded`). Sur `factura-api`, `/pret` répond 503 tant que
-PostgreSQL n'est pas joignable : le 0/1 est donc un **symptôme de dépendance**,
-pas un bug de l'API.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `READY 0/1` = conteneur démarré mais readiness en échec. Conséquence exacte :
+> le pod est retiré des Endpoints (il ne reçoit plus de trafic) mais **n'est
+> pas redémarré**. `describe` montre l'événement `Readiness probe failed: HTTP
+> probe failed with statuscode: 503` (ou `connection refused`, `context
+> deadline exceeded`). Sur `factura-api`, `/pret` répond 503 tant que
+> PostgreSQL n'est pas joignable : le 0/1 est donc un **symptôme de dépendance**,
+> pas un bug de l'API.
 
-::: piege
-b) : c'est la liveness qui redémarre, et `RESTARTS` resterait à 0 ici. d) :
-un pod en attente de scheduling est `Pending`, pas `Running`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> b) : c'est la liveness qui redémarre, et `RESTARTS` resterait à 0 ici. d) :
+> un pod en attente de scheduling est `Pending`, pas `Running`.
 
 ---
 
-**Q26.7** — *Secret avec `POSTGRES_PASSWORD: bGFicGFzcw==`.*
+<a id="q26-7"></a>**[Q26.7](README.md#q26-7)** — *Secret avec `POSTGRES_PASSWORD: bGFicGFzcw==`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`data` d'un Secret est du base64 pour transporter des octets arbitraires en
-JSON, rien d'autre. `kubectl get secret postgres-auth -o
-jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d` donne `labpass`. Ce qui
-protège un Secret, c'est le **RBAC** (verbe `get` sur `secrets`), pas
-l'encodage. Le chiffrement au repos dans etcd est **optionnel**
-(`EncryptionConfiguration` sur l'API server ; sur k3s `--secrets-encryption`).
-Par défaut, rien n'est chiffré.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `data` d'un Secret est du base64 pour transporter des octets arbitraires en
+> JSON, rien d'autre. `kubectl get secret postgres-auth -o
+> jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d` donne `labpass`. Ce qui
+> protège un Secret, c'est le **RBAC** (verbe `get` sur `secrets`), pas
+> l'encodage. Le chiffrement au repos dans etcd est **optionnel**
+> (`EncryptionConfiguration` sur l'API server ; sur k3s `--secrets-encryption`).
+> Par défaut, rien n'est chiffré.
 
-::: piege
-Le vrai piège de production : `kubectl get secret -o yaml` dans un ticket, un
-`describe pod` qui montre les `env` en clair, ou un dépôt Git avec le Secret
-en base64 « parce que ça ressemble à du chiffré ». Solutions : `stringData` +
-+ SOPS/sealed-secrets/external-secrets en GitOps.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le vrai piège de production : `kubectl get secret -o yaml` dans un ticket, un
+> `describe pod` qui montre les `env` en clair, ou un dépôt Git avec le Secret
+> en base64 « parce que ça ressemble à du chiffré ». Solutions : `stringData` +
+> + SOPS/sealed-secrets/external-secrets en GitOps.
 
 ---
 
-**Q26.8** — *`nslookup postgres` en NXDOMAIN depuis le namespace `casse`.*
+<a id="q26-8"></a>**[Q26.8](README.md#q26-8)** — *`nslookup postgres` en NXDOMAIN depuis le namespace `casse`.*
 
 **Réponse : a)** `postgres.factura`
 
-::: pourquoi
-Le `resolv.conf` d'un pod de `casse` contient `search casse.svc.cluster.local
-svc.cluster.local cluster.local` et `ndots:5`. `postgres` (0 point) est
-essayé comme `postgres.casse.svc.cluster.local` → NXDOMAIN, puis
-`postgres.svc.cluster.local` → NXDOMAIN, etc. `postgres.factura` (1 point,
-< 5) parcourt aussi la liste : `postgres.factura.svc.cluster.local` existe.
-Le nom complet `postgres.factura.svc.cluster.local` marche aussi et évite les
-allers-retours DNS.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le `resolv.conf` d'un pod de `casse` contient `search casse.svc.cluster.local
+> svc.cluster.local cluster.local` et `ndots:5`. `postgres` (0 point) est
+> essayé comme `postgres.casse.svc.cluster.local` → NXDOMAIN, puis
+> `postgres.svc.cluster.local` → NXDOMAIN, etc. `postgres.factura` (1 point,
+> < 5) parcourt aussi la liste : `postgres.factura.svc.cluster.local` existe.
+> Le nom complet `postgres.factura.svc.cluster.local` marche aussi et évite les
+> allers-retours DNS.
 
-::: piege
-c) inverse service et namespace ; le schéma est toujours
-`<service>.<namespace>.svc.<domaine>`. d) : `kube-system` héberge CoreDNS,
-pas le Service `postgres`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) inverse service et namespace ; le schéma est toujours
+> `<service>.<namespace>.svc.<domaine>`. d) : `kube-system` héberge CoreDNS,
+> pas le Service `postgres`.
 
 ---
 
-**Q26.9** — *Rolling update avec une readiness qui ne passe jamais.*
+<a id="q26-9"></a>**[Q26.9](README.md#q26-9)** — *Rolling update avec une readiness qui ne passe jamais.*
 
 **Réponse : b)**
 
-::: pourquoi
-Défauts d'un `RollingUpdate` : `maxSurge: 25 %` et `maxUnavailable: 25 %`,
-arrondis respectivement vers le haut et vers le bas. Sur 2 réplicas :
-`maxSurge` = 1 (on peut monter à 3 pods), `maxUnavailable` = 0 (on ne peut
-jamais descendre sous 2 prêts). Le contrôleur crée donc **un** nouveau pod,
-attend qu'il soit `Ready` pour tuer un ancien… et attend indéfiniment. Les
-deux anciens continuent de servir. Après `progressDeadlineSeconds` (600 s par
-défaut) le Deployment est marqué `Progressing=False`,
-`reason: ProgressDeadlineExceeded`, mais **rien ne revient en arrière tout
-seul** : c'est à toi de faire `kubectl rollout undo`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Défauts d'un `RollingUpdate` : `maxSurge: 25 %` et `maxUnavailable: 25 %`,
+> arrondis respectivement vers le haut et vers le bas. Sur 2 réplicas :
+> `maxSurge` = 1 (on peut monter à 3 pods), `maxUnavailable` = 0 (on ne peut
+> jamais descendre sous 2 prêts). Le contrôleur crée donc **un** nouveau pod,
+> attend qu'il soit `Ready` pour tuer un ancien… et attend indéfiniment. Les
+> deux anciens continuent de servir. Après `progressDeadlineSeconds` (600 s par
+> défaut) le Deployment est marqué `Progressing=False`,
+> `reason: ProgressDeadlineExceeded`, mais **rien ne revient en arrière tout
+> seul** : c'est à toi de faire `kubectl rollout undo`.
 
-::: piege
-d) : un pod dont la readiness échoue est `Running 0/1`, pas
-`CrashLoopBackOff` — sauf si la liveness échoue aussi. Le piège de production
-est `maxUnavailable: 1` sur 1 réplica : là, oui, le service est coupé.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) : un pod dont la readiness échoue est `Running 0/1`, pas
+> `CrashLoopBackOff` — sauf si la liveness échoue aussi. Le piège de production
+> est `maxUnavailable: 1` sur 1 réplica : là, oui, le service est coupé.
 
 ---
 
-**Q26.10** — *`404 page not found` de Traefik sur `/api/factures`.*
+<a id="q26-10"></a>**[Q26.10](README.md#q26-10)** — *`404 page not found` de Traefik sur `/api/factures`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Le corps `404 page not found` en texte brut est la signature de Traefik
-lui-même (Go, `http.NotFound`) : aucune route n'a matché, la requête n'est
-jamais partie vers un backend. Il faut donc regarder ce qui fait le routage :
-`kubectl get ingress -A` (le `HOSTS` doit contenir `factura.lab.local`),
-`kubectl describe ingress factura -n factura` (les règles `host`/`path`, le
-`pathType`), et l'en-tête `Host` réellement envoyé par `curl`. Un 404 en JSON
-`{"erreur":"route inconnue"}` viendrait, lui, de l'application : la route a
-matché, c'est le chemin transmis qui est faux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le corps `404 page not found` en texte brut est la signature de Traefik
+> lui-même (Go, `http.NotFound`) : aucune route n'a matché, la requête n'est
+> jamais partie vers un backend. Il faut donc regarder ce qui fait le routage :
+> `kubectl get ingress -A` (le `HOSTS` doit contenir `factura.lab.local`),
+> `kubectl describe ingress factura -n factura` (les règles `host`/`path`, le
+> `pathType`), et l'en-tête `Host` réellement envoyé par `curl`. Un 404 en JSON
+> `{"erreur":"route inconnue"}` viendrait, lui, de l'application : la route a
+> matché, c'est le chemin transmis qui est faux.
 
 ---
 
-**Q26.11** — *`qosClass: Burstable`.*
+<a id="q26-11"></a>**[Q26.11](README.md#q26-11)** — *`qosClass: Burstable`.*
 
 **Réponse : c)**
 
-::: pourquoi
-Trois classes, calculées par l'API server à la création du pod :
-`Guaranteed` si chaque conteneur a `requests == limits` pour CPU **et**
-mémoire ; `BestEffort` si aucun conteneur n'a rien ; `Burstable` pour tout le
-reste. Sous pression mémoire, le kubelet évince d'abord les `BestEffort`,
-puis les `Burstable` qui dépassent le plus leurs `requests`, et les
-`Guaranteed` en dernier (`oom_score_adj` respectivement 1000, entre 2 et 999,
-−997). Sur `factura-api`, `requests.memory: 64Mi` et `limits.memory: 128Mi`
-→ `Burstable`, ce qui est un choix raisonnable pour une API.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois classes, calculées par l'API server à la création du pod :
+> `Guaranteed` si chaque conteneur a `requests == limits` pour CPU **et**
+> mémoire ; `BestEffort` si aucun conteneur n'a rien ; `Burstable` pour tout le
+> reste. Sous pression mémoire, le kubelet évince d'abord les `BestEffort`,
+> puis les `Burstable` qui dépassent le plus leurs `requests`, et les
+> `Guaranteed` en dernier (`oom_score_adj` respectivement 1000, entre 2 et 999,
+> −997). Sur `factura-api`, `requests.memory: 64Mi` et `limits.memory: 128Mi`
+> → `Burstable`, ce qui est un choix raisonnable pour une API.
 
 ---
 
-**Q26.12** — *`rate` contre `increase` sur 5 min : deux réponses.*
+<a id="q26-12"></a>**[Q26.12](README.md#q26-12)** — *`rate` contre `increase` sur 5 min : deux réponses.*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-`increase(c[5m])` est littéralement `rate(c[5m]) × 300`. Les deux
-extrapolent aux bornes de la fenêtre, d'où des `increase` non entiers sur un
-counter entier : c'est normal. Les deux gèrent les *resets* (redémarrage →
-counter à 0) en ne comptant que les montées. `rate` s'exprime **par
-seconde**, `increase` en nombre d'événements sur la fenêtre.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `increase(c[5m])` est littéralement `rate(c[5m]) × 300`. Les deux
+> extrapolent aux bornes de la fenêtre, d'où des `increase` non entiers sur un
+> counter entier : c'est normal. Les deux gèrent les *resets* (redémarrage →
+> counter à 0) en ne comptant que les montées. `rate` s'exprime **par
+> seconde**, `increase` en nombre d'événements sur la fenêtre.
 
-::: piege
-c) : les deux exigent un counter ; sur une gauge le résultat est absurde
-(les baisses sont prises pour des resets). d) : `irate` ne regarde que les 2
-derniers points, une alerte dessus bat au moindre pic et `for:` n'y change
-rien parce qu'une seule évaluation basse remet le compteur à zéro. En
-alerte : `rate`, fenêtre ≥ 4 × `scrape_interval`.
-:::
-
----
-
-**Q26.13** — *p95 correct depuis l'histogramme, toutes routes confondues.*
-
-**Réponse : b)**
-
-::: pourquoi
-Un histogramme Prometheus est une famille de counters `_bucket{le="x"}`
-cumulatifs. `histogram_quantile` a besoin de **taux** (sinon on calcule le
-quantile depuis le démarrage du process) et d'une agrégation qui **conserve
-`le`** : `sum by (le)`. Pour ventiler par route on garderait aussi `path`
-(`sum by (le, path)`). Le p95 est interpolé linéairement dans le bucket qui
-contient le 95e centile : la précision dépend des bornes (`0.25`, `0.5`,
-`1.0` sur cette API).
-:::
-
-::: piege
-a) : sans `rate`, résultat cumulé depuis le début. c) : `quantile` est un
-agrégateur sur des séries instantanées, pas sur une distribution. d) est la
-**latence moyenne**, utile mais ce n'est pas un p95 ; une moyenne cache les
-queues de distribution qui font justement mal aux utilisateurs.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : les deux exigent un counter ; sur une gauge le résultat est absurde
+> (les baisses sont prises pour des resets). d) : `irate` ne regarde que les 2
+> derniers points, une alerte dessus bat au moindre pic et `for:` n'y change
+> rien parce qu'une seule évaluation basse remet le compteur à zéro. En
+> alerte : `rate`, fenêtre ≥ 4 × `scrape_interval`.
 
 ---
 
-**Q26.14** — *`InstanceDown`, `for: 2m`, à `t+60s`.*
+<a id="q26-13"></a>**[Q26.13](README.md#q26-13)** — *p95 correct depuis l'histogramme, toutes routes confondues.*
 
 **Réponse : b)**
 
-::: pourquoi
-Cycle de vie d'une règle : à chaque `evaluation_interval` (15 s), Prometheus
-évalue `expr`. Première évaluation vraie → état **pending**, horodaté. Elle
-reste pending tant que l'expression est vraie et que `for` n'est pas écoulé ;
-au premier `t + for` → **firing**, et c'est **seulement à ce moment** que
-l'alerte est envoyée à Alertmanager (puis renvoyée à chaque évaluation tant
-qu'elle est active). Si une seule évaluation est fausse pendant la période,
-l'alerte repasse en inactive et le chronomètre repart de zéro.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un histogramme Prometheus est une famille de counters `_bucket{le="x"}`
+> cumulatifs. `histogram_quantile` a besoin de **taux** (sinon on calcule le
+> quantile depuis le démarrage du process) et d'une agrégation qui **conserve
+> `le`** : `sum by (le)`. Pour ventiler par route on garderait aussi `path`
+> (`sum by (le, path)`). Le p95 est interpolé linéairement dans le bucket qui
+> contient le 95e centile : la précision dépend des bornes (`0.25`, `0.5`,
+> `1.0` sur cette API).
 
-::: piege
-c) confond les deux composants : `group_wait` est un délai d'Alertmanager,
-qui ne commence qu'à réception d'une alerte firing. Le temps total avant
-notification est donc `for` + `group_wait` ≈ 2 min 30 s ici, plus jusqu'à un
-`evaluation_interval` d'imprécision.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) : sans `rate`, résultat cumulé depuis le début. c) : `quantile` est un
+> agrégateur sur des séries instantanées, pas sur une distribution. d) est la
+> **latence moyenne**, utile mais ce n'est pas un p95 ; une moyenne cache les
+> queues de distribution qui font justement mal aux utilisateurs.
 
 ---
 
-**Q26.15** — *Le bloc `inhibit_rules`.*
+<a id="q26-14"></a>**[Q26.14](README.md#q26-14)** — *`InstanceDown`, `for: 2m`, à `t+60s`.*
 
 **Réponse : b)**
 
-::: pourquoi
-L'inhibition supprime la **notification**, pas l'alerte : elle reste dans
-l'UI avec l'état *inhibited* et disparaît normalement à la résolution. Le
-critère `equal: ['instance']` exige que les deux alertes portent la même
-valeur d'`instance` : un `CpuEleve` sur lab-db n'est pas inhibé par un
-`InstanceDown` sur lab-rhel. Utilité : quand une machine est injoignable,
-toutes ses alertes de second niveau (disque, mémoire, sonde) sont du bruit ;
-on ne veut qu'une page.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Cycle de vie d'une règle : à chaque `evaluation_interval` (15 s), Prometheus
+> évalue `expr`. Première évaluation vraie → état **pending**, horodaté. Elle
+> reste pending tant que l'expression est vraie et que `for` n'est pas écoulé ;
+> au premier `t + for` → **firing**, et c'est **seulement à ce moment** que
+> l'alerte est envoyée à Alertmanager (puis renvoyée à chaque évaluation tant
+> qu'elle est active). Si une seule évaluation est fausse pendant la période,
+> l'alerte repasse en inactive et le chronomètre repart de zéro.
 
-::: piege
-Un `equal` sur un label absent des deux côtés est considéré comme égal
-(vide = vide) : une règle d'inhibition sans `equal` ou avec un label mal
-orthographié peut faire taire **toutes** les alertes `ticket` du cluster dès
-qu'une machine tombe. Toujours tester avec `amtool alert query` et un
-`amtool check-config`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) confond les deux composants : `group_wait` est un délai d'Alertmanager,
+> qui ne commence qu'à réception d'une alerte firing. Le temps total avant
+> notification est donc `for` + `group_wait` ≈ 2 min 30 s ici, plus jusqu'à un
+> `evaluation_interval` d'imprécision.
 
 ---
 
-**Q26.16** — *SLO 99,9 % sur 30 jours, 30 min d'indisponibilité en 10 jours.*
+<a id="q26-15"></a>**[Q26.15](README.md#q26-15)** — *Le bloc `inhibit_rules`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Budget : `(1 − 0,999) × 30 j × 24 h × 60 min = 0,001 × 43 200 = 43,2 min`.
-Consommé : 30 min, il reste **13,2 min** pour les 20 jours restants. Burn
-rate = part du budget consommée / part de la fenêtre écoulée =
-`(30 / 43,2) / (10 / 30) = 0,694 / 0,333 ≈ 2,08`. À ce rythme, le budget est
-vide au jour `30 / 2,08 ≈ 14,4`, bien avant la fin de la fenêtre. Le SLO
-n'est pas encore violé (a est faux), mais l'équipe doit ralentir les mises en
-production ou investir en fiabilité **maintenant**.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'inhibition supprime la **notification**, pas l'alerte : elle reste dans
+> l'UI avec l'état *inhibited* et disparaît normalement à la résolution. Le
+> critère `equal: ['instance']` exige que les deux alertes portent la même
+> valeur d'`instance` : un `CpuEleve` sur lab-db n'est pas inhibé par un
+> `InstanceDown` sur lab-rhel. Utilité : quand une machine est injoignable,
+> toutes ses alertes de second niveau (disque, mémoire, sonde) sont du bruit ;
+> on ne veut qu'une page.
 
-::: piege
-c) : 70 % du budget restant serait vrai si on avait consommé 13 min, pas 30.
-d) : on ne sait rien du SLA, contrat distinct et plus lâche que le SLO.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un `equal` sur un label absent des deux côtés est considéré comme égal
+> (vide = vide) : une règle d'inhibition sans `equal` ou avec un label mal
+> orthographié peut faire taire **toutes** les alertes `ticket` du cluster dès
+> qu'une machine tombe. Toujours tester avec `amtool alert query` et un
+> `amtool check-config`.
 
 ---
 
-**Q26.17** — *Ce qu'indexe Loki.*
+<a id="q26-16"></a>**[Q26.16](README.md#q26-16)** — *SLO 99,9 % sur 30 jours, 30 min d'indisponibilité en 10 jours.*
 
 **Réponse : b)**
 
-::: pourquoi
-Un flux Loki = un jeu de labels ; les lignes sont compressées en *chunks*
-sans index de contenu. Une requête sélectionne d'abord des flux par labels
-(rapide, via l'index TSDB), puis **parcourt** les chunks pour appliquer `|=`,
-`|~`, `| logfmt`… Coût proportionnel au volume lu, d'où l'importance de
-limiter la fenêtre et de bien choisir les labels de sélection. Un label à
-forte cardinalité (`request_id`, `pod` renouvelé à chaque déploiement…)
-crée des milliers de petits flux : index énorme, chunks minuscules, requêtes
-lentes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Budget : `(1 − 0,999) × 30 j × 24 h × 60 min = 0,001 × 43 200 = 43,2 min`.
+> Consommé : 30 min, il reste **13,2 min** pour les 20 jours restants. Burn
+> rate = part du budget consommée / part de la fenêtre écoulée =
+> `(30 / 43,2) / (10 / 30) = 0,694 / 0,333 ≈ 2,08`. À ce rythme, le budget est
+> vide au jour `30 / 2,08 ≈ 14,4`, bien avant la fin de la fenêtre. Le SLO
+> n'est pas encore violé (a est faux), mais l'équipe doit ralentir les mises en
+> production ou investir en fiabilité **maintenant**.
 
-::: piege
-d) : les champs `logfmt` sont extraits **à la requête** (`| logfmt`), ils ne
-sont pas des labels. On peut en promouvoir un en label dans le pipeline
-Alloy (`stage.labels`), mais uniquement si sa cardinalité est faible
-(`niveau`, `code` HTTP).
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) : 70 % du budget restant serait vrai si on avait consommé 13 min, pas 30.
+> d) : on ne sait rien du SLA, contrat distinct et plus lâche que le SLO.
 
 ---
 
-**Q26.18** — *L'alerte qui mérite une page de nuit.*
+<a id="q26-17"></a>**[Q26.17](README.md#q26-17)** — *Ce qu'indexe Loki.*
 
 **Réponse : b)**
 
-::: pourquoi
-Une page se justifie par trois critères simultanés : **impact utilisateur**
-avéré, **urgence** (ça ne peut pas attendre le matin) et **action possible**.
-b) coche les trois : 5 % de 5xx et une sonde externe en échec, c'est le site
-indisponible pour de vrais clients. a), c), d) sont des **causes** ou des
-tendances sans impact immédiat ; elles vont dans un ticket traité en journée.
-Le disque de lab-adm à 70 % ou un CPU à 80 % n'ont jamais réveillé un client.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un flux Loki = un jeu de labels ; les lignes sont compressées en *chunks*
+> sans index de contenu. Une requête sélectionne d'abord des flux par labels
+> (rapide, via l'index TSDB), puis **parcourt** les chunks pour appliquer `|=`,
+> `|~`, `| logfmt`… Coût proportionnel au volume lu, d'où l'importance de
+> limiter la fenêtre et de bien choisir les labels de sélection. Un label à
+> forte cardinalité (`request_id`, `pod` renouvelé à chaque déploiement…)
+> crée des milliers de petits flux : index énorme, chunks minuscules, requêtes
+> lentes.
 
-::: piege
-Le réflexe fautif classique : paginer sur tout « pour ne rien rater ».
-Résultat, 40 pages par nuit, l'astreinte les ignore, et la seule vraie est
-noyée (QO26.10).
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) : les champs `logfmt` sont extraits **à la requête** (`| logfmt`), ils ne
+> sont pas des labels. On peut en promouvoir un en label dans le pipeline
+> Alloy (`stage.labels`), mais uniquement si sa cardinalité est faible
+> (`niveau`, `code` HTTP).
+
+---
+
+<a id="q26-18"></a>**[Q26.18](README.md#q26-18)** — *L'alerte qui mérite une page de nuit.*
+
+**Réponse : b)**
+
+> [!NOTE]
+> **Pourquoi**
+>
+> Une page se justifie par trois critères simultanés : **impact utilisateur**
+> avéré, **urgence** (ça ne peut pas attendre le matin) et **action possible**.
+> b) coche les trois : 5 % de 5xx et une sonde externe en échec, c'est le site
+> indisponible pour de vrais clients. a), c), d) sont des **causes** ou des
+> tendances sans impact immédiat ; elles vont dans un ticket traité en journée.
+> Le disque de lab-adm à 70 % ou un CPU à 80 % n'ont jamais réveillé un client.
+
+> [!WARNING]
+> **Piège**
+>
+> Le réflexe fautif classique : paginer sur tout « pour ne rien rater ».
+> Résultat, 40 pages par nuit, l'astreinte les ignore, et la seule vraie est
+> noyée (QO26.10).
 
 ---
 
 ## 26.4 Quiz — questions ouvertes
 
-**QO26.1** — *De `kubectl apply -f deployment.yaml` au conteneur qui répond.*
+<a id="qo26-1"></a>**[QO26.1](README.md#qo26-1)** — *De `kubectl apply -f deployment.yaml` au conteneur qui répond.*
 
 **Réponse attendue :**
 
@@ -447,18 +488,19 @@ contrôleur de nœud le marque `NotReady` et lui pose la taint `node.kubernetes.
 ses pods sont marqués pour suppression, le ReplicaSet en manque N, il les
 recrée, le scheduler les place ailleurs. Personne n'a tapé de commande.
 
-::: pourquoi
-Ce qui distingue une bonne réponse d'entretien : dire que **`kubectl apply`
-rend la main avant que quoi que ce soit ne tourne**, que **tous les
-composants ne parlent qu'à l'API server** (jamais entre eux, jamais à etcd),
-et que chaque étape est un `watch` — pas un appel. C'est aussi pourquoi
-`kubectl apply` puis `kubectl get pods` immédiat montre souvent
-`ContainerCreating` : les boucles n'ont pas encore convergé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qui distingue une bonne réponse d'entretien : dire que **`kubectl apply`
+> rend la main avant que quoi que ce soit ne tourne**, que **tous les
+> composants ne parlent qu'à l'API server** (jamais entre eux, jamais à etcd),
+> et que chaque étape est un `watch` — pas un appel. C'est aussi pourquoi
+> `kubectl apply` puis `kubectl get pods` immédiat montre souvent
+> `ContainerCreating` : les boucles n'ont pas encore convergé.
 
 ---
 
-**QO26.2** — *Liveness, readiness, startup.*
+<a id="qo26-2"></a>**[QO26.2](README.md#qo26-2)** — *Liveness, readiness, startup.*
 
 **Réponse attendue :**
 
@@ -483,17 +525,18 @@ rolling update (le nouveau pod ne reçoit rien tant qu'il n'est pas prêt),
 pendant une reconnexion à la base, ou quand une instance est saturée — les
 requêtes vont aux autres réplicas au lieu d'échouer.
 
-::: pourquoi
-Le paramètre le plus mal réglé est `initialDelaySeconds` sur la liveness
-d'une application lente à démarrer (JVM) : le kubelet tue le conteneur avant
-la fin du démarrage, ad vitam. C'est exactement ce que corrige la startup
-probe (`failureThreshold: 30, periodSeconds: 10` = 5 min de tolérance), sans
-retarder la liveness une fois le démarrage passé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le paramètre le plus mal réglé est `initialDelaySeconds` sur la liveness
+> d'une application lente à démarrer (JVM) : le kubelet tue le conteneur avant
+> la fin du démarrage, ad vitam. C'est exactement ce que corrige la startup
+> probe (`failureThreshold: 30, periodSeconds: 10` = 5 min de tolérance), sans
+> retarder la liveness une fois le démarrage passé.
 
 ---
 
-**QO26.3** — *Pod `Pending` depuis 10 minutes : la méthode.*
+<a id="qo26-3"></a>**[QO26.3](README.md#qo26-3)** — *Pod `Pending` depuis 10 minutes : la méthode.*
 
 **Réponse attendue :**
 
@@ -532,17 +575,18 @@ Ce que l'on cherche dans `describe` → `Events`, par cause :
 Le scheduler ne rapporte que la **première** raison qui filtre le nœud :
 corriger une cause peut en révéler une autre (L26.3, `gourmand`).
 
-::: pourquoi
-La distinction entre « pod `Pending` » (créé, pas placé : scheduler) et « pod
-jamais créé » (admission refusée : quota, LimitRange, webhook) est ce qui
-sépare le diagnostic rapide du diagnostic à tâtons. Le premier se lit dans
-`describe pod`, le second dans `describe rs`/`describe deploy` et
-`get events`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La distinction entre « pod `Pending` » (créé, pas placé : scheduler) et « pod
+> jamais créé » (admission refusée : quota, LimitRange, webhook) est ce qui
+> sépare le diagnostic rapide du diagnostic à tâtons. Le premier se lit dans
+> `describe pod`, le second dans `describe rs`/`describe deploy` et
+> `get events`.
 
 ---
 
-**QO26.4** — *Deployment ou StatefulSet pour PostgreSQL ? Pourquoi un Service headless ?*
+<a id="qo26-4"></a>**[QO26.4](README.md#qo26-4)** — *Deployment ou StatefulSet pour PostgreSQL ? Pourquoi un Service headless ?*
 
 **Réponse attendue :**
 
@@ -569,18 +613,19 @@ Avec 2 réplicas, ils partageraient carrément le PVC. Le contournement
 `strategy: Recreate` coupe le service à chaque mise à jour — le StatefulSet
 fait mieux.
 
-::: pourquoi
-Réponse d'entretien complète = **« identité + stockage + ordre »**, et le
-Service headless expliqué par « les clients doivent parler à *un* pod
-précis, pas à la VIP ». Ajouter que le StatefulSet ne gère **pas** la
-réplication PostgreSQL elle-même : c'est le rôle d'un operator (CloudNativePG,
-Zalando) ou de scripts d'init, et que sur un mono-nœud k3s la vraie
-sauvegarde reste `pg_dump` (E26.7).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Réponse d'entretien complète = **« identité + stockage + ordre »**, et le
+> Service headless expliqué par « les clients doivent parler à *un* pod
+> précis, pas à la VIP ». Ajouter que le StatefulSet ne gère **pas** la
+> réplication PostgreSQL elle-même : c'est le rôle d'un operator (CloudNativePG,
+> Zalando) ou de scripts d'init, et que sur un mono-nœud k3s la vraie
+> sauvegarde reste `pg_dump` (E26.7).
 
 ---
 
-**QO26.5** — *GitOps, operators, service mesh, managé vs auto-hébergé.*
+<a id="qo26-5"></a>**[QO26.5](README.md#qo26-5)** — *GitOps, operators, service mesh, managé vs auto-hébergé.*
 
 **Réponse attendue :**
 
@@ -616,15 +661,16 @@ cert-manager) ; **pas de service mesh** — à 10 applications, un Ingress +
 NetworkPolicies + TLS terminé au bord suffisent, et un mesh ajouterait un
 système distribué de plus à comprendre à 3 h du matin.
 
-::: pourquoi
-Ce qu'on évalue : la capacité à dire **non** à une technologie. Une équipe
-de 4 a une capacité d'exploitation limitée ; chaque brique doit rembourser
-son coût cognitif. Le mesh est le cas d'école de l'outil adopté trop tôt.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qu'on évalue : la capacité à dire **non** à une technologie. Une équipe
+> de 4 a une capacité d'exploitation limitée ; chaque brique doit rembourser
+> son coût cognitif. Le mesh est le cas d'école de l'outil adopté trop tôt.
 
 ---
 
-**QO26.6** — *SLI, SLO, SLA, budget d'erreur ; pourquoi alerter sur le burn rate.*
+<a id="qo26-6"></a>**[QO26.6](README.md#qo26-6)** — *SLI, SLO, SLA, budget d'erreur ; pourquoi alerter sur le burn rate.*
 
 **Réponse attendue :**
 
@@ -653,18 +699,19 @@ l'alerte se résout vite) ; on ouvre un ticket si `burn rate > 6` sur **6 h**
 *et* **30 min**. Les seuils viennent de : 14,4 × 1 h = 2 % du budget
 consommé en 1 heure ; 6 × 6 h = 5 % du budget en 6 heures.
 
-::: pourquoi
-La valeur de cette approche : **une seule alerte de page** pour toute la
-disponibilité du service, dont la sensibilité s'adapte au volume — un petit
-taux d'erreur longtemps et un gros taux brièvement déclenchent tous deux
-parce qu'ils coûtent la même chose au budget. Et le budget devient un
-**outil de décision produit** : budget restant → on livre ; budget brûlé →
-gel des mises en production, on travaille la fiabilité.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La valeur de cette approche : **une seule alerte de page** pour toute la
+> disponibilité du service, dont la sensibilité s'adapte au volume — un petit
+> taux d'erreur longtemps et un gros taux brièvement déclenchent tous deux
+> parce qu'ils coûtent la même chose au budget. Et le budget devient un
+> **outil de décision produit** : budget restant → on livre ; budget brûlé →
+> gel des mises en production, on travaille la fiabilité.
 
 ---
 
-**QO26.7** — *Pourquoi `rate()`, les resets, la fenêtre trop courte, `sum(rate())`.*
+<a id="qo26-7"></a>**[QO26.7](README.md#qo26-7)** — *Pourquoi `rate()`, les resets, la fenêtre trop courte, `sum(rate())`.*
 
 **Réponse attendue :**
 
@@ -689,16 +736,17 @@ somme baisse, `rate` croit à un reset global et compte une montée fictive
 égale à toute la somme. Faux, et d'ailleurs syntaxiquement refusé sans une
 sous-requête (`[5m:]`) — ce qui devrait alerter.
 
-::: pourquoi
-Le mot-clé d'entretien : `rate()` est **la seule** fonction correcte sur un
-counter, toujours **à l'intérieur** de l'agrégation. `irate()` pour un
-graphe à haute résolution, jamais en alerte. `increase()` pour un total
-lisible par un humain (« 340 erreurs cette heure »).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mot-clé d'entretien : `rate()` est **la seule** fonction correcte sur un
+> counter, toujours **à l'intérieur** de l'agrégation. `irate()` pour un
+> graphe à haute résolution, jamais en alerte. `increase()` pour un total
+> lisible par un humain (« 340 erreurs cette heure »).
 
 ---
 
-**QO26.8** — *Le chemin complet d'une alerte, et où elle peut se perdre.*
+<a id="qo26-8"></a>**[QO26.8](README.md#qo26-8)** — *Le chemin complet d'une alerte, et où elle peut se perdre.*
 
 **Réponse attendue :**
 
@@ -715,19 +763,20 @@ lisible par un humain (« 340 erreurs cette heure »).
 | 9. Notification | receiver (webhook, mail, PagerDuty) | URL fausse, TLS, token expiré : visible dans les logs Alertmanager (`notify retry`) et `alertmanager_notifications_failed_total` |
 | 10. Résolution | Prometheus cesse d'envoyer ; après `resolve_timeout` (ou sur `EndsAt`), Alertmanager envoie `resolved` si `send_resolved` | le receiver ignore `resolved`, ou l'alerte a été silencée et se résout sans que personne le sache |
 
-::: pourquoi
-Deux outils rendent ce chemin observable : `promtool test rules` pour les
-étapes 1-2, et `amtool alert query` / `amtool config routes test
-severity=page` pour les étapes 5-8. Et une **alerte méta** :
-`absent(up{job="prometheus"})` côté Prometheus, plus une *Watchdog*
-(`vector(1)` toujours firing) dont l'absence côté récepteur signifie que la
-chaîne est cassée. C'est la première alerte à créer sur toute nouvelle
-plateforme.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux outils rendent ce chemin observable : `promtool test rules` pour les
+> étapes 1-2, et `amtool alert query` / `amtool config routes test
+> severity=page` pour les étapes 5-8. Et une **alerte méta** :
+> `absent(up{job="prometheus"})` côté Prometheus, plus une *Watchdog*
+> (`vector(1)` toujours firing) dont l'absence côté récepteur signifie que la
+> chaîne est cassée. C'est la première alerte à créer sur toute nouvelle
+> plateforme.
 
 ---
 
-**QO26.9** — *Labels `user_id` et `request_id` : la cardinalité.*
+<a id="qo26-9"></a>**[QO26.9](README.md#qo26-9)** — *Labels `user_id` et `request_id` : la cardinalité.*
 
 **Réponse attendue :**
 
@@ -760,17 +809,18 @@ La bonne façon :
   bucket un `trace_id` d'exemple : du p99 qui grimpe, on clique vers **une**
   trace lente.
 
-::: pourquoi
-La question cache une règle générale : chaque pilier a un axe d'index
-différent. Prometheus indexe des dimensions **agrégeables**, Loki des
-**flux**, les traces des **requêtes**. Mettre un identifiant unique là où
-l'on agrège casse l'outil. En entretien, citer le seuil pratique : un label
-ne doit pas dépasser quelques dizaines de valeurs.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question cache une règle générale : chaque pilier a un axe d'index
+> différent. Prometheus indexe des dimensions **agrégeables**, Loki des
+> **flux**, les traces des **requêtes**. Mettre un identifiant unique là où
+> l'on agrège casse l'outil. En entretien, citer le seuil pratique : un label
+> ne doit pas dépasser quelques dizaines de valeurs.
 
 ---
 
-**QO26.10** — *40 alertes par nuit, 3 utiles : la fatigue d'alerte.*
+<a id="qo26-10"></a>**[QO26.10](README.md#qo26-10)** — *40 alertes par nuit, 3 utiles : la fatigue d'alerte.*
 
 **Réponse attendue :**
 
@@ -808,18 +858,19 @@ alerte sur X ». Le post-mortem est la boucle de rétroaction qui fait évoluer
 le catalogue d'alertes d'après la réalité et non d'après ce qu'on imaginait
 au départ.
 
-::: pourquoi
-Il n'est pas prudent de supprimer des alertes sans mesure : le point 1 est
-ce qui rend la démarche défendable devant un manager inquiet. Et le point 5
-est ce qui empêche le retour du bruit : une alerte a un **propriétaire**, un
-runbook et une date de revue, ou elle n'existe pas.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Il n'est pas prudent de supprimer des alertes sans mesure : le point 1 est
+> ce qui rend la démarche défendable devant un manager inquiet. Et le point 5
+> est ce qui empêche le retour du bruit : une alerte a un **propriétaire**, un
+> runbook et une date de revue, ou elle n'existe pas.
 
 ---
 
 ## 26.5 Exercices guidés
 
-**E26.1** — *Kubeconfig de k3s sur lab-adm, namespace par défaut, complétion, alias `k`.*
+<a id="e26-1"></a>**[E26.1](README.md#e26-1)** — *Kubeconfig de k3s sur lab-adm, namespace par défaut, complétion, alias `k`.*
 
 Sur `lab-adm` :
 
@@ -846,28 +897,30 @@ source ~/.bashrc
 k get po <TAB><TAB>                # propose les pods du namespace factura
 ```
 
-::: pourquoi
-Le kubeconfig généré par k3s pointe sur `127.0.0.1` parce qu'il est prévu
-pour le nœud lui-même ; le certificat serveur de k3s inclut d'office l'IP du
-nœud dans ses SAN, donc remplacer l'adresse suffit, sans toucher au CA. Le
-fichier contient le certificat client **admin** du cluster : c'est un secret
-de niveau root, d'où le `0600` (kubectl affiche un avertissement sinon).
-L'alias `k` ne complète pas tout seul parce que la complétion bash est
-attachée au nom de la commande : `complete -F __start_kubectl k` rattache la
-fonction générée par `kubectl completion` à l'alias.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le kubeconfig généré par k3s pointe sur `127.0.0.1` parce qu'il est prévu
+> pour le nœud lui-même ; le certificat serveur de k3s inclut d'office l'IP du
+> nœud dans ses SAN, donc remplacer l'adresse suffit, sans toucher au CA. Le
+> fichier contient le certificat client **admin** du cluster : c'est un secret
+> de niveau root, d'où le `0600` (kubectl affiche un avertissement sinon).
+> L'alias `k` ne complète pas tout seul parce que la complétion bash est
+> attachée au nom de la commande : `complete -F __start_kubectl k` rattache la
+> fonction générée par `kubectl completion` à l'alias.
 
-::: piege
-`sudo cat ... | sed > fichier` exécuté **sur lab-ops** avec `sudo` crée le
-fichier appartenant à root. Sur lab-adm, le `sudo` est dans le `ssh`, le
-fichier local est à `mathieu`. Autre piège : `kubectl config set-context
---current` modifie le kubeconfig local, pas le cluster ; chaque poste a son
-propre namespace par défaut.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `sudo cat ... | sed > fichier` exécuté **sur lab-ops** avec `sudo` crée le
+> fichier appartenant à root. Sur lab-adm, le `sudo` est dans le `ssh`, le
+> fichier local est à `mathieu`. Autre piège : `kubectl config set-context
+> --current` modifie le kubeconfig local, pas le cluster ; chaque poste a son
+> propre namespace par défaut.
 
 ---
 
-**E26.2** — *Générer un Deployment et un Service sans les appliquer, nettoyer, appliquer dans `demo`.*
+<a id="e26-2"></a>**[E26.2](README.md#e26-2)** — *Générer un Deployment et un Service sans les appliquer, nettoyer, appliquer dans `demo`.*
 
 ```bash
 mkdir -p ~/lab26/demo && cd ~/lab26/demo
@@ -928,19 +981,20 @@ spec:
   type: ClusterIP
 ```
 
-::: pourquoi
-`--dry-run=client -o yaml` est la façon standard d'obtenir un squelette
-**exact** pour la version de l'API du cluster, plutôt que de recopier un
-exemple de blog. Les champs à nettoyer sont des artefacts de la
-sérialisation Go (`creationTimestamp: null`, `status: {}`) : inoffensifs
-mais ils polluent le diff Git. `kubectl create service clusterip` déduit le
-sélecteur `app=demo` du nom : vérifie toujours qu'il correspond aux labels
-du template du Deployment, c'est la source n° 1 de « Service sans endpoint ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `--dry-run=client -o yaml` est la façon standard d'obtenir un squelette
+> **exact** pour la version de l'API du cluster, plutôt que de recopier un
+> exemple de blog. Les champs à nettoyer sont des artefacts de la
+> sérialisation Go (`creationTimestamp: null`, `status: {}`) : inoffensifs
+> mais ils polluent le diff Git. `kubectl create service clusterip` déduit le
+> sélecteur `app=demo` du nom : vérifie toujours qu'il correspond aux labels
+> du template du Deployment, c'est la source n° 1 de « Service sans endpoint ».
 
 ---
 
-**E26.3** — *Trois affichages en une commande.*
+<a id="e26-3"></a>**[E26.3](README.md#e26-3)** — *Trois affichages en une commande.*
 
 ```bash
 # (a) nom, IP, nœud — tous namespaces
@@ -955,19 +1009,20 @@ kubectl get deploy -n factura -o jsonpath='{range .items[*]}{.metadata.name}\
 kubectl get events -A --sort-by=.lastTimestamp | tail -15
 ```
 
-::: pourquoi
-`custom-columns` et `jsonpath` lisent le même document JSON que
-`-o json` : quand tu hésites sur un chemin, `kubectl get pod X -o json |
-jq .status` te le montre. `{range}{end}` est la boucle de jsonpath ; sans
-elle, une liste de valeurs est jointe par des espaces. `--sort-by` trie côté
-client sur un champ jsonpath : `.lastTimestamp` peut être vide pour les
-événements agrégés récents (champ `eventTime`), auquel cas ils sortent en
-tête ; c'est acceptable pour un tri d'exploitation.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `custom-columns` et `jsonpath` lisent le même document JSON que
+> `-o json` : quand tu hésites sur un chemin, `kubectl get pod X -o json |
+> jq .status` te le montre. `{range}{end}` est la boucle de jsonpath ; sans
+> elle, une liste de valeurs est jointe par des espaces. `--sort-by` trie côté
+> client sur un champ jsonpath : `.lastTimestamp` peut être vide pour les
+> événements agrégés récents (champ `eventTime`), auquel cas ils sortent en
+> tête ; c'est acceptable pour un tri d'exploitation.
 
 ---
 
-**E26.4** — *Port-forward, `resolv.conf` d'un pod, logs de tous les pods du Deployment.*
+<a id="e26-4"></a>**[E26.4](README.md#e26-4)** — *Port-forward, `resolv.conf` d'un pod, logs de tous les pods du Deployment.*
 
 Sur `lab-adm` :
 
@@ -1007,17 +1062,18 @@ kubectl logs -n demo deploy/demo --all-containers --tail=20 --prefix
 kubectl logs -n demo -l app=demo --tail=20 --prefix
 ```
 
-::: pourquoi
-`port-forward` ouvre un tunnel via l'API server jusqu'au kubelet, puis au
-pod : aucune règle réseau ni Service nécessaire, parfait pour déboguer un
-pod isolé, inutilisable en production (un seul pod, une seule session).
-`kubectl logs deploy/demo` choisit **un** pod au hasard ; `-l app=demo`
-avec `--prefix` couvre tous les pods et préfixe chaque ligne du nom du pod.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `port-forward` ouvre un tunnel via l'API server jusqu'au kubelet, puis au
+> pod : aucune règle réseau ni Service nécessaire, parfait pour déboguer un
+> pod isolé, inutilisable en production (un seul pod, une seule session).
+> `kubectl logs deploy/demo` choisit **un** pod au hasard ; `-l app=demo`
+> avec `--prefix` couvre tous les pods et préfixe chaque ligne du nom du pod.
 
 ---
 
-**E26.5** — *Labels : poser, filtrer, et changer `app` d'un pod du Deployment.*
+<a id="e26-5"></a>**[E26.5](README.md#e26-5)** — *Labels : poser, filtrer, et changer `app` d'un pod du Deployment.*
 
 ```bash
 POD=$(kubectl get pod -n demo -l app=demo \
@@ -1042,24 +1098,26 @@ crée un nouveau. Le pod `orphelin` est aussi sorti des Endpoints du Service
 `demo` (sélecteur `app=demo`). Nettoyage : `kubectl delete pod -n demo
 "$POD"` (ou remettre `app=demo`, le ReplicaSet supprimera alors l'excédent).
 
-::: pourquoi
-Le ReplicaSet n'a **aucune** notion de « ses » pods : il ne connaît qu'un
-sélecteur et compte les pods qui y répondent (plus une vérification
-d'`ownerReferences` pour ne pas adopter n'importe quoi). C'est ce
-découplage par labels qui permet la technique d'isolation d'un pod fautif :
-on change son label, le Deployment le remplace, et on garde le pod malade
-en vie pour l'autopsie sans impacter le service.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le ReplicaSet n'a **aucune** notion de « ses » pods : il ne connaît qu'un
+> sélecteur et compte les pods qui y répondent (plus une vérification
+> d'`ownerReferences` pour ne pas adopter n'importe quoi). C'est ce
+> découplage par labels qui permet la technique d'isolation d'un pod fautif :
+> on change son label, le Deployment le remplace, et on garde le pod malade
+> en vie pour l'autopsie sans impacter le service.
 
-::: piege
-`kubectl label` sans `--overwrite` refuse de modifier un label existant.
-Et `!env` doit être protégé du shell (`'!env'`) : bash interprète `!` comme
-un rappel d'historique.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `kubectl label` sans `--overwrite` refuse de modifier un label existant.
+> Et `!env` doit être protégé du shell (`'!env'`) : bash interprète `!` comme
+> un rappel d'historique.
 
 ---
 
-**E26.6** — *ConfigMap fichier + littéral, en env et en volume ; mise à jour à chaud.*
+<a id="e26-6"></a>**[E26.6](README.md#e26-6)** — *ConfigMap fichier + littéral, en env et en volume ; mise à jour à chaud.*
 
 ```bash
 cd ~/lab26/demo
@@ -1112,23 +1170,24 @@ kubectl exec -n demo conf-pod -- \
 Observation : `message.txt` **change** (après jusqu'à ~60-90 s), `$COULEUR`
 vaut toujours `bleu`.
 
-::: pourquoi
-Un volume ConfigMap est projeté par le kubelet et rafraîchi à chaque période
-de synchronisation (`syncFrequency`, 1 min) plus le délai de cache : le
-kubelet remplace atomiquement un lien symbolique `..data` vers un nouveau
-répertoire horodaté — d'où l'importance de ne pas monter avec `subPath`, qui
-casse ce mécanisme et fige le fichier. Les variables d'environnement, elles,
-sont fixées à la **création du processus** : seul un redémarrage du conteneur
-(`kubectl rollout restart` pour un Deployment) les met à jour. Une
-application qui doit suivre sa config à chaud doit relire le fichier
-(inotify ou périodiquement) ; sinon, on déclenche un rollout en changeant
-une annotation ou le nom de la ConfigMap (hash du contenu, ce que fait
-Kustomize avec `configMapGenerator`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un volume ConfigMap est projeté par le kubelet et rafraîchi à chaque période
+> de synchronisation (`syncFrequency`, 1 min) plus le délai de cache : le
+> kubelet remplace atomiquement un lien symbolique `..data` vers un nouveau
+> répertoire horodaté — d'où l'importance de ne pas monter avec `subPath`, qui
+> casse ce mécanisme et fige le fichier. Les variables d'environnement, elles,
+> sont fixées à la **création du processus** : seul un redémarrage du conteneur
+> (`kubectl rollout restart` pour un Deployment) les met à jour. Une
+> application qui doit suivre sa config à chaud doit relire le fichier
+> (inotify ou périodiquement) ; sinon, on déclenche un rollout en changeant
+> une annotation ou le nom de la ConfigMap (hash du contenu, ce que fait
+> Kustomize avec `configMapGenerator`).
 
 ---
 
-**E26.7** — *CronJob `sauvegarde-pg` avec PVC, déclenchement immédiat, non-chevauchement.*
+<a id="e26-7"></a>**[E26.7](README.md#e26-7)** — *CronJob `sauvegarde-pg` avec PVC, déclenchement immédiat, non-chevauchement.*
 
 `~/lab26/k8s/60-cronjob-sauvegarde.yaml` complété :
 
@@ -1207,27 +1266,29 @@ La directive qui empêche le chevauchement : **`concurrencyPolicy: Forbid`**
 (défaut `Allow` ; `Replace` tue l'exécution en cours au profit de la
 nouvelle).
 
-::: pourquoi
-`kubectl create job --from=cronjob/...` copie le `jobTemplate` dans un Job
-immédiat : c'est la façon officielle de tester un CronJob sans attendre.
-`restartPolicy` est **obligatoire** dans un Job et ne peut valoir que
-`OnFailure` (le conteneur est relancé dans le même pod) ou `Never` (un
-nouveau pod par tentative, plus lisible pour les logs) ; `backoffLimit`
-borne les tentatives. `timeZone` évite la surprise d'un cron en UTC.
-`local-path` étant `WaitForFirstConsumer`, le PVC reste `Pending` jusqu'au
-premier Job : c'est normal.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `kubectl create job --from=cronjob/...` copie le `jobTemplate` dans un Job
+> immédiat : c'est la façon officielle de tester un CronJob sans attendre.
+> `restartPolicy` est **obligatoire** dans un Job et ne peut valoir que
+> `OnFailure` (le conteneur est relancé dans le même pod) ou `Never` (un
+> nouveau pod par tentative, plus lisible pour les logs) ; `backoffLimit`
+> borne les tentatives. `timeZone` évite la surprise d'un cron en UTC.
+> `local-path` étant `WaitForFirstConsumer`, le PVC reste `Pending` jusqu'au
+> premier Job : c'est normal.
 
-::: piege
-Le PVC `sauvegardes` est en `ReadWriteOnce` sur le même nœud que PostgreSQL :
-sauvegarde sur le **même disque** que la base, ce n'est pas une sauvegarde.
-En production, le Job pousse vers un stockage objet (S3/MinIO) avec
-`pg_dump | gzip | aws s3 cp - s3://...`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le PVC `sauvegardes` est en `ReadWriteOnce` sur le même nœud que PostgreSQL :
+> sauvegarde sur le **même disque** que la base, ce n'est pas une sauvegarde.
+> En production, le Job pousse vers un stockage objet (S3/MinIO) avec
+> `pg_dump | gzip | aws s3 cp - s3://...`.
 
 ---
 
-**E26.8** — *DaemonSet `noeud-info` : nom du nœud par Downward API, uptime du nœud.*
+<a id="e26-8"></a>**[E26.8](README.md#e26-8)** — *DaemonSet `noeud-info` : nom du nœud par Downward API, uptime du nœud.*
 
 ```yaml
 apiVersion: apps/v1
@@ -1280,21 +1341,22 @@ kubectl get ds -n kube-system noeud-info          # DESIRED = nombre de nœuds
 kubectl logs -n kube-system -l app=noeud-info --tail=3
 ```
 
-::: pourquoi
-La **Downward API** expose au conteneur des champs de son propre objet Pod
-(`spec.nodeName`, `metadata.name`, `status.podIP`, limites de ressources)
-sans appeler l'API server : pas de RBAC, pas de token. Le `hostPath` monte un
-fichier du nœud ; ici `/proc/uptime`. Nuance honnête : sans *time namespace*
-(défaut sur Kubernetes), `/proc/uptime` du conteneur donne déjà l'uptime du
-noyau, donc de l'hôte — le montage rend l'intention explicite et fonctionne
-quel que soit le runtime. Un DaemonSet a un pod par nœud éligible ;
-`tolerations: operator: Exists` le fait aussi tourner sur les nœuds
-`cordon` ou control-plane, comme un agent de supervision doit le faire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La **Downward API** expose au conteneur des champs de son propre objet Pod
+> (`spec.nodeName`, `metadata.name`, `status.podIP`, limites de ressources)
+> sans appeler l'API server : pas de RBAC, pas de token. Le `hostPath` monte un
+> fichier du nœud ; ici `/proc/uptime`. Nuance honnête : sans *time namespace*
+> (défaut sur Kubernetes), `/proc/uptime` du conteneur donne déjà l'uptime du
+> noyau, donc de l'hôte — le montage rend l'intention explicite et fonctionne
+> quel que soit le runtime. Un DaemonSet a un pod par nœud éligible ;
+> `tolerations: operator: Exists` le fait aussi tourner sur les nœuds
+> `cordon` ou control-plane, comme un agent de supervision doit le faire.
 
 ---
 
-**E26.9** — *(optionnel) Agent k3s sur lab-web, label, `nodeSelector`, retrait propre.*
+<a id="e26-9"></a>**[E26.9](README.md#e26-9)** — *(optionnel) Agent k3s sur lab-web, label, `nodeSelector`, retrait propre.*
 
 ```bash
 # sur lab-ops
@@ -1323,18 +1385,19 @@ kubectl delete node lab-web
 sudo /usr/local/bin/k3s-agent-uninstall.sh
 ```
 
-::: pourquoi
-`drain` = `cordon` (taint `unschedulable`) + éviction de tous les pods gérés
-par un contrôleur, en respectant les `PodDisruptionBudget`. Les DaemonSets
-sont ignorés (ils reviendraient), les pods sans contrôleur sont refusés sauf
-`--force`. C'est la procédure standard avant toute maintenance de nœud. Le
-piège observé : un `nodeSelector` qui ne matche plus aucun nœud laisse les
-pods `Pending` — le scheduler ne « relâche » jamais une contrainte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `drain` = `cordon` (taint `unschedulable`) + éviction de tous les pods gérés
+> par un contrôleur, en respectant les `PodDisruptionBudget`. Les DaemonSets
+> sont ignorés (ils reviendraient), les pods sans contrôleur sont refusés sauf
+> `--force`. C'est la procédure standard avant toute maintenance de nœud. Le
+> piège observé : un `nodeSelector` qui ne matche plus aucun nœud laisse les
+> pods `Pending` — le scheduler ne « relâche » jamais une contrainte.
 
 ---
 
-**E26.10** — *ServiceAccount `lecteur` avec lecture seule sur `factura` via une ClusterRole existante.*
+<a id="e26-10"></a>**[E26.10](README.md#e26-10)** — *ServiceAccount `lecteur` avec lecture seule sur `factura` via une ClusterRole existante.*
 
 ```yaml
 apiVersion: v1
@@ -1368,20 +1431,21 @@ kubectl auth can-i list pods -n kube-system --as=$SA      # no
 kubectl auth can-i --list -n factura --as=$SA             # le détail
 ```
 
-::: pourquoi
-Une **ClusterRole** liée par un **RoleBinding** donne ses permissions
-**uniquement dans le namespace du binding** : c'est le motif standard pour
-réutiliser `view`/`edit`/`admin` sans réécrire des règles. Un
-ClusterRoleBinding donnerait `view` partout. `view` couvre pods, services,
-configmaps, `pods/log`, mais **pas les Secrets** (volontairement).
-`--as=system:serviceaccount:<ns>:<nom>` est la forme d'impersonation d'un
-ServiceAccount ; `kubectl auth can-i` interroge l'API `SelfSubjectAccessReview`
-et répond ce que l'API server décidera vraiment.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une **ClusterRole** liée par un **RoleBinding** donne ses permissions
+> **uniquement dans le namespace du binding** : c'est le motif standard pour
+> réutiliser `view`/`edit`/`admin` sans réécrire des règles. Un
+> ClusterRoleBinding donnerait `view` partout. `view` couvre pods, services,
+> configmaps, `pods/log`, mais **pas les Secrets** (volontairement).
+> `--as=system:serviceaccount:<ns>:<nom>` est la forme d'impersonation d'un
+> ServiceAccount ; `kubectl auth can-i` interroge l'API `SelfSubjectAccessReview`
+> et répond ce que l'API server décidera vraiment.
 
 ---
 
-**E26.11** — *ResourceQuota : 4 pods, 2 CPU, 2 Gi de requests, scale à 5.*
+<a id="e26-11"></a>**[E26.11](README.md#e26-11)** — *ResourceQuota : 4 pods, 2 CPU, 2 Gi de requests, scale à 5.*
 
 ```yaml
 apiVersion: v1
@@ -1416,21 +1480,22 @@ Warning  FailedCreate  replicaset-controller  Error creating: pods
 requested: pods=1, used: pods=4, limited: pods=4
 ```
 
-::: pourquoi
-Le quota est appliqué par un *admission controller* de l'API server : le
-pod est **refusé à la création**, il n'existe pas, donc `get pods` ne peut
-rien montrer. Le ReplicaSet réessaie avec un backoff exponentiel et logue
-chaque refus dans ses propres événements. Avec `factura` déjà occupé par
-`postgres` (1) et `front` (1), la place restante pour l'API est 2 : la
-quota est atteinte avant même le premier pod supplémentaire. Autre effet
-important : dès qu'une quota `requests.cpu` existe, **tout pod sans
-`requests` est refusé** — d'où le couple habituel ResourceQuota +
-LimitRange (valeurs par défaut).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le quota est appliqué par un *admission controller* de l'API server : le
+> pod est **refusé à la création**, il n'existe pas, donc `get pods` ne peut
+> rien montrer. Le ReplicaSet réessaie avec un backoff exponentiel et logue
+> chaque refus dans ses propres événements. Avec `factura` déjà occupé par
+> `postgres` (1) et `front` (1), la place restante pour l'API est 2 : la
+> quota est atteinte avant même le premier pod supplémentaire. Autre effet
+> important : dès qu'une quota `requests.cpu` existe, **tout pod sans
+> `requests` est refusé** — d'où le couple habituel ResourceQuota +
+> LimitRange (valeurs par défaut).
 
 ---
 
-**E26.12** — *PromQL système : CPU, mémoire, disque, charge, réseau.*
+<a id="e26-12"></a>**[E26.12](README.md#e26-12)** — *PromQL système : CPU, mémoire, disque, charge, réseau.*
 
 ```text
 # (a) CPU utilisé en %
@@ -1454,22 +1519,23 @@ node_load5 / count by (instance) (node_cpu_seconds_total{mode="idle"})
 Valeurs plausibles sur `lab-web` au repos : (a) 1-3 %, (b) 60-75 %,
 (c) 25-35 %, (d) 0,02-0,1, (e) quelques kbit/s (scrapes + SSH).
 
-::: pourquoi
-(a) : `node_cpu_seconds_total` est un counter **par CPU et par mode** ; le
-taux du mode `idle` est la fraction de temps oisif par CPU (0..1), la
-moyenne par instance donne la fraction oisive de la machine. (b) :
-`MemAvailable` (calculé par le noyau : libre + cache récupérable) est la bonne
-métrique, `MemFree` sous-estime grossièrement. (c) : `avail` (non-root)
-plutôt que `free` (inclut les 5 % réservés à root) : c'est ce que voient
-les applications. (d) : compter les séries `idle` est l'astuce standard pour
-obtenir le nombre de cœurs ; une charge par cœur > 1 signifie une file
-d'attente. (e) : `× 8` pour passer en bits ; l'exclusion par regex évite de
-compter deux fois le trafic qui traverse un bridge.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> (a) : `node_cpu_seconds_total` est un counter **par CPU et par mode** ; le
+> taux du mode `idle` est la fraction de temps oisif par CPU (0..1), la
+> moyenne par instance donne la fraction oisive de la machine. (b) :
+> `MemAvailable` (calculé par le noyau : libre + cache récupérable) est la bonne
+> métrique, `MemFree` sous-estime grossièrement. (c) : `avail` (non-root)
+> plutôt que `free` (inclut les 5 % réservés à root) : c'est ce que voient
+> les applications. (d) : compter les séries `idle` est l'astuce standard pour
+> obtenir le nombre de cœurs ; une charge par cœur > 1 signifie une file
+> d'attente. (e) : `× 8` pour passer en bits ; l'exclusion par regex évite de
+> compter deux fois le trafic qui traverse un bridge.
 
 ---
 
-**E26.13** — *PromQL applicatif : débit, ratio 5xx, p95, disque plein, cibles down.*
+<a id="e26-13"></a>**[E26.13](README.md#e26-13)** — *PromQL applicatif : débit, ratio 5xx, p95, disque plein, cibles down.*
 
 ```text
 # (f) requêtes/s de l'API par code HTTP
@@ -1499,24 +1565,25 @@ time() - max_over_time(timestamp(up == 1)[24h:1m]) and on (instance, job) up == 
 changes(up[1h]) > 0        # les cibles qui ont clignoté dans l'heure
 ```
 
-::: pourquoi
-(g) : la division de deux agrégats sans label fonctionne parce que les deux
-côtés sont des scalaires vectoriels sans dimension ; si on ventile par
-`path`, il faut `sum by (path)` des deux côtés. (h) : filtrer sur `path`
-**avant** `sum by (le)` — après, le label a disparu. (i) : `deriv` est la
-pente (octets/s, négative quand ça se remplit) ; diviser l'espace restant par
-la pente donne le temps restant. Si `deriv` est positif (le disque se vide)
-le résultat est négatif : on l'ignore. (j) : `timestamp()` renvoie l'heure
-de l'échantillon, `max_over_time` sur une sous-requête garde le dernier
-moment où la cible était UP ; `and on (...)` restreint aux cibles
-actuellement DOWN. `changes()` répond à une question différente — la
-stabilité — utile pour repérer une cible qui clignote sans jamais rester
-DOWN assez longtemps pour alerter.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> (g) : la division de deux agrégats sans label fonctionne parce que les deux
+> côtés sont des scalaires vectoriels sans dimension ; si on ventile par
+> `path`, il faut `sum by (path)` des deux côtés. (h) : filtrer sur `path`
+> **avant** `sum by (le)` — après, le label a disparu. (i) : `deriv` est la
+> pente (octets/s, négative quand ça se remplit) ; diviser l'espace restant par
+> la pente donne le temps restant. Si `deriv` est positif (le disque se vide)
+> le résultat est négatif : on l'ignore. (j) : `timestamp()` renvoie l'heure
+> de l'échantillon, `max_over_time` sur une sous-requête garde le dernier
+> moment où la cible était UP ; `and on (...)` restreint aux cibles
+> actuellement DOWN. `changes()` répond à une question différente — la
+> stabilité — utile pour repérer une cible qui clignote sans jamais rester
+> DOWN assez longtemps pour alerter.
 
 ---
 
-**E26.14** — *SLO 99,5 % sur 30 jours : budget, minutes, burn rate, épuisement.*
+<a id="e26-14"></a>**[E26.14](README.md#e26-14)** — *SLO 99,5 % sur 30 jours : budget, minutes, burn rate, épuisement.*
 
 **Calcul :**
 
@@ -1547,19 +1614,20 @@ sum(increase(factura_http_requests_total{code=~"5.."}[30d]))
       / sum(increase(factura_http_requests_total[30d])) ) / (1 - 0.995)
 ```
 
-::: pourquoi
-Le passage « pourcentage → minutes » suppose que les erreurs sont
-concentrées (panne totale) ; le passage « pourcentage → requêtes » est plus
-juste pour un SLI fondé sur les requêtes, parce qu'une panne à 3 h du matin
-coûte moins de requêtes qu'à 11 h. C'est pourquoi les SLO modernes sont
-définis en **requêtes**, et la conversion en minutes n'est là que pour
-parler aux humains. Le burn rate 4 signifie : « on consomme le budget 4 fois
-trop vite » ; c'est en dessous des deux seuils du SRE Workbook (14,4 pour une page, 6 pour un ticket), donc pas d'alerte — mais le budget serait vide en 7,5 jours, donc à traiter dans la journée si le taux se maintient.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le passage « pourcentage → minutes » suppose que les erreurs sont
+> concentrées (panne totale) ; le passage « pourcentage → requêtes » est plus
+> juste pour un SLI fondé sur les requêtes, parce qu'une panne à 3 h du matin
+> coûte moins de requêtes qu'à 11 h. C'est pourquoi les SLO modernes sont
+> définis en **requêtes**, et la conversion en minutes n'est là que pour
+> parler aux humains. Le burn rate 4 signifie : « on consomme le budget 4 fois
+> trop vite » ; c'est en dessous des deux seuils du SRE Workbook (14,4 pour une page, 6 pour un ticket), donc pas d'alerte — mais le budget serait vide en 7,5 jours, donc à traiter dans la journée si le taux se maintient.
 
 ---
 
-**E26.15** — *`amtool` : alertes, silence, expiration, `check-config`.*
+<a id="e26-15"></a>**[E26.15](README.md#e26-15)** — *`amtool` : alertes, silence, expiration, `check-config`.*
 
 ```bash
 cd /opt/observabilite
@@ -1587,21 +1655,22 @@ Found:
  - 0 templates
 ```
 
-::: pourquoi
-`amtool` dans le conteneur parle à `localhost:9093` par défaut ; depuis
-lab-ops directement il faudrait `--alertmanager.url=http://10.10.10.14:9093`.
-Un silence est un jeu de **matchers** (`=`, `^=`, `=~`) avec début, fin,
-auteur et commentaire obligatoires — c'est volontaire : un silence sans
-motif est une alerte perdue. Un silence expiré reste consultable (audit).
-`check-config` valide la syntaxe et la cohérence (receivers référencés,
-matchers valides) mais pas la logique de routage : pour ça, `amtool config
-routes test --config.file=... severity=page instance=lab-rhel` affiche le
-receiver qui recevrait l'alerte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `amtool` dans le conteneur parle à `localhost:9093` par défaut ; depuis
+> lab-ops directement il faudrait `--alertmanager.url=http://10.10.10.14:9093`.
+> Un silence est un jeu de **matchers** (`=`, `^=`, `=~`) avec début, fin,
+> auteur et commentaire obligatoires — c'est volontaire : un silence sans
+> motif est une alerte perdue. Un silence expiré reste consultable (audit).
+> `check-config` valide la syntaxe et la cohérence (receivers référencés,
+> matchers valides) mais pas la logique de routage : pour ça, `amtool config
+> routes test --config.file=... severity=page instance=lab-rhel` affiche le
+> receiver qui recevrait l'alerte.
 
 ---
 
-**E26.16** — *LogQL : filtres, compte par minute, `logfmt`, taux de 5xx.*
+<a id="e26-16"></a>**[E26.16](README.md#e26-16)** — *LogQL : filtres, compte par minute, `logfmt`, taux de 5xx.*
 
 ```text
 # (a) journal de lab-ops, k3s, sans level=info
@@ -1617,23 +1686,24 @@ sum(count_over_time({job="systemd-journal", host="lab-ops"}[1m]))
 sum(rate({namespace="factura", container="api"} | logfmt | code=~"5.." [1m]))
 ```
 
-::: pourquoi
-L'ordre d'un pipeline LogQL est celui de l'exécution : sélecteur de flux
-(index) → filtres de ligne `|=`/`!=`/`|~` (rapides, sur le texte brut) →
-parseur (`| logfmt`, `| json`, `| regexp`) qui extrait des **champs** →
-filtres de champs (`duree_ms > 50`, `code=~"5.."`). Mettre les filtres de
-ligne **avant** le parseur évite de parser des lignes qui seront rejetées.
-`count_over_time` compte des lignes, `rate` divise par la fenêtre ;
-`sum()` agrège les flux (un par pod). Les lignes de l'API sont en logfmt
-(`ts=... niveau=info msg="requete" path=/factures code=200 duree_ms=12.3`),
-donc `| logfmt` suffit — pas de regex.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre d'un pipeline LogQL est celui de l'exécution : sélecteur de flux
+> (index) → filtres de ligne `|=`/`!=`/`|~` (rapides, sur le texte brut) →
+> parseur (`| logfmt`, `| json`, `| regexp`) qui extrait des **champs** →
+> filtres de champs (`duree_ms > 50`, `code=~"5.."`). Mettre les filtres de
+> ligne **avant** le parseur évite de parser des lignes qui seront rejetées.
+> `count_over_time` compte des lignes, `rate` divise par la fenêtre ;
+> `sum()` agrège les flux (un par pod). Les lignes de l'API sont en logfmt
+> (`ts=... niveau=info msg="requete" path=/factures code=200 duree_ms=12.3`),
+> donc `| logfmt` suffit — pas de regex.
 
 ---
 
 ## 26.6 Labs
 
-### **L26.1** — *Installer k3s et livrer un premier Deployment proprement*
+### <a id="l26-1"></a>**[L26.1](README.md#l26-1)** — *Installer k3s et livrer un premier Deployment proprement*
 
 *Ticket CHG-4401 : cluster k3s sur lab-ops, `kubectl` depuis lab-ops et
 lab-adm, registre HTTP connu de containerd, Secret de registre, Deployment
@@ -1921,41 +1991,43 @@ REVISION  UPDATED               STATUS      CHART                DESCRIPTION
 3         Sep 15 10:16 2026  deployed    kube-state-metrics  Rollback to 1
 ```
 
-::: pourquoi
-Le fil conducteur du lab est le **modèle déclaratif**. `set image` ne
-« déploie » rien : il modifie `spec.template` ; le hash du template change,
-le contrôleur de Deployment crée un nouveau ReplicaSet et déplace les
-réplicas de l'ancien vers le nouveau en respectant `maxSurge` et
-`maxUnavailable`. `rollout undo` fait exactement la même chose dans l'autre
-sens — c'est pourquoi il est instantané et pourquoi la révision 1 est
-« renumérotée » : Kubernetes ne garde pas un historique de commandes mais
-des ReplicaSets (`revisionHistoryLimit`, 10 par défaut) et chaque
-ReplicaSet porte l'annotation `deployment.kubernetes.io/revision`. Helm
-fonctionne pareil à un niveau au-dessus : une *release* est une suite de
-révisions stockées dans des Secrets `sh.helm.release.v1.ksm.v1`, `.v2`…
-du namespace, et `rollback` crée la révision 3 avec le contenu de la 1.
-La séparation `registries.yaml` / config containerd générée illustre la
-règle « on édite la source, pas l'artefact ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le fil conducteur du lab est le **modèle déclaratif**. `set image` ne
+> « déploie » rien : il modifie `spec.template` ; le hash du template change,
+> le contrôleur de Deployment crée un nouveau ReplicaSet et déplace les
+> réplicas de l'ancien vers le nouveau en respectant `maxSurge` et
+> `maxUnavailable`. `rollout undo` fait exactement la même chose dans l'autre
+> sens — c'est pourquoi il est instantané et pourquoi la révision 1 est
+> « renumérotée » : Kubernetes ne garde pas un historique de commandes mais
+> des ReplicaSets (`revisionHistoryLimit`, 10 par défaut) et chaque
+> ReplicaSet porte l'annotation `deployment.kubernetes.io/revision`. Helm
+> fonctionne pareil à un niveau au-dessus : une *release* est une suite de
+> révisions stockées dans des Secrets `sh.helm.release.v1.ksm.v1`, `.v2`…
+> du namespace, et `rollback` crée la révision 3 avec le contenu de la 1.
+> La séparation `registries.yaml` / config containerd générée illustre la
+> règle « on édite la source, pas l'artefact ».
 
-::: piege
-`sudo kubectl` avec le kubeconfig root marche, mais tout ce que tu crées
-ensuite dans `~/lab26/` depuis des redirections (`kubectl ... > f.yaml`)
-appartient à root. L'option `--write-kubeconfig-mode 644` du script
-d'installation est l'autre solution ; elle expose le certificat admin à
-tout utilisateur de la VM, acceptable sur un lab, pas ailleurs.
-`kubernetes.io/change-cause` doit être posé **après** la modification :
-le contrôleur copie l'annotation du Deployment sur le ReplicaSet courant
-à chaque synchronisation ; annotée avant `set image`, elle irait sur
-l'ancienne révision. Enfin `helm rollback` ne touche pas aux objets que
-le chart ne gère pas (ton Secret, ton namespace) — et un `kubectl edit`
-manuel sur un objet Helm sera écrasé au prochain `upgrade` : c'est le
-*drift*.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `sudo kubectl` avec le kubeconfig root marche, mais tout ce que tu crées
+> ensuite dans `~/lab26/` depuis des redirections (`kubectl ... > f.yaml`)
+> appartient à root. L'option `--write-kubeconfig-mode 644` du script
+> d'installation est l'autre solution ; elle expose le certificat admin à
+> tout utilisateur de la VM, acceptable sur un lab, pas ailleurs.
+> `kubernetes.io/change-cause` doit être posé **après** la modification :
+> le contrôleur copie l'annotation du Deployment sur le ReplicaSet courant
+> à chaque synchronisation ; annotée avant `set image`, elle irait sur
+> l'ancienne révision. Enfin `helm rollback` ne touche pas aux objets que
+> le chart ne gère pas (ton Secret, ton namespace) — et un `kubectl edit`
+> manuel sur un objet Helm sera écrasé au prochain `upgrade` : c'est le
+> *drift*.
 
 ---
 
-### **L26.2** — *Déployer factura : nginx + API + PostgreSQL, TLS, quotas*
+### <a id="l26-2"></a>**[L26.2](README.md#l26-2)** — *Déployer factura : nginx + API + PostgreSQL, TLS, quotas*
 
 *Ticket CHG-4402 : compléter les squelettes de `~/lab26/k8s/` pour obtenir
 PostgreSQL en StatefulSet, l'API avec probes et limites, le frontal nginx,
@@ -2389,37 +2461,39 @@ Chronométré : 70 à 100 s, dominés par le démarrage de PostgreSQL
 contiennent des secrets en clair : `.gitignore` ou, en production, SOPS /
 Sealed Secrets / External Secrets (D26).
 
-::: pourquoi
-Trois mécanismes à retenir. **StatefulSet** : le pod s'appelle
-`postgres-0`, son PVC `donnees-postgres-0`, et un redémarrage ou une mise à
-jour recrée *ce* pod avec *ce* PVC : identité stable, contrairement à un
-Deployment qui, avec `RollingUpdate`, lancerait un second pod sur le même
-volume `ReadWriteOnce` (Pending ou corruption). Le Service headless
-(`clusterIP: None`) sert à donner l'entrée DNS `postgres-0.postgres` et,
-ici, l'entrée `postgres` qui résout **directement** l'IP du pod (pas de
-VIP). **Probes** : la readiness sur `/pret` encode la dépendance à la base :
-quand PostgreSQL tombe, l'API sort des Endpoints sans redémarrer, nginx
-reçoit 502 — c'est l'échec « propre ». La liveness sur `/sante` ne teste
-que le processus. **NetworkPolicy** : un `podSelector` non vide avec
-`policyTypes: [Ingress]` passe le pod en *deny by default* en entrée ;
-seules les règles listées ouvrent. k3s l'applique via son contrôleur de
-policies embarqué (flannel seul ne le ferait pas).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois mécanismes à retenir. **StatefulSet** : le pod s'appelle
+> `postgres-0`, son PVC `donnees-postgres-0`, et un redémarrage ou une mise à
+> jour recrée *ce* pod avec *ce* PVC : identité stable, contrairement à un
+> Deployment qui, avec `RollingUpdate`, lancerait un second pod sur le même
+> volume `ReadWriteOnce` (Pending ou corruption). Le Service headless
+> (`clusterIP: None`) sert à donner l'entrée DNS `postgres-0.postgres` et,
+> ici, l'entrée `postgres` qui résout **directement** l'IP du pod (pas de
+> VIP). **Probes** : la readiness sur `/pret` encode la dépendance à la base :
+> quand PostgreSQL tombe, l'API sort des Endpoints sans redémarrer, nginx
+> reçoit 502 — c'est l'échec « propre ». La liveness sur `/sante` ne teste
+> que le processus. **NetworkPolicy** : un `podSelector` non vide avec
+> `policyTypes: [Ingress]` passe le pod en *deny by default* en entrée ;
+> seules les règles listées ouvrent. k3s l'applique via son contrôleur de
+> policies embarqué (flannel seul ne le ferait pas).
 
-::: piege
-La NetworkPolicy casse E26.7 : le Job `pg_dump` n'a pas le label
-`app=factura-api`. Ajoute un second `podSelector` (`app: sauvegarde`) et
-pose ce label sur le template du Job — ou tu découvriras la panne à 02:30.
-Autre piège : `kubectl apply -f dossier/` applique dans l'**ordre
-alphabétique** des noms de fichiers, d'où les préfixes `00-`, `10-`… ; un
-Deployment appliqué avant son namespace échoue. Enfin `local-path` a
-`reclaimPolicy: Delete` : supprimer le namespace supprime les données de la
-base, définitivement.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La NetworkPolicy casse E26.7 : le Job `pg_dump` n'a pas le label
+> `app=factura-api`. Ajoute un second `podSelector` (`app: sauvegarde`) et
+> pose ce label sur le template du Job — ou tu découvriras la panne à 02:30.
+> Autre piège : `kubectl apply -f dossier/` applique dans l'**ordre
+> alphabétique** des noms de fichiers, d'où les préfixes `00-`, `10-`… ; un
+> Deployment appliqué avant son namespace échoue. Enfin `local-path` a
+> `reclaimPolicy: Delete` : supprimer le namespace supprime les données de la
+> base, définitivement.
 
 ---
 
-### **L26.3** — *Session de debug : cinq manifestes, cinq pannes*
+### <a id="l26-3"></a>**[L26.3](README.md#l26-3)** — *Session de debug : cinq manifestes, cinq pannes*
 
 *`kubectl apply -f ~/lab26/k8s/casse/` puis, pour chaque Deployment, trouver
 le symptôme, la commande révélatrice, le message, la cause, le correctif ;
@@ -2660,34 +2734,36 @@ dépassé 64 Mi ; l'application n'a rien pu logger. Remise en état :
 | api-dns | OOMKilled 137 | describe : OOMKilled | 64Mi < 200 Mo -> remis |
 ```
 
-::: pourquoi
-Chaque panne vit à un **étage** différent, et c'est l'étage qui dicte la
-commande. `Pending` est une décision du scheduler : elle n'est que dans les
-événements du pod (`describe`), il n'y a pas de conteneur, donc pas de
-logs. `ImagePullBackOff` est un échec du kubelet avant le démarrage :
-événements aussi, avec le code HTTP du registre. `CrashLoopBackOff` est un
-processus qui s'est exécuté puis a quitté : la vérité est dans les logs
-de l'instance **précédente** (`--previous`), l'actuelle n'a peut-être pas
-encore écrit. `0/1` durable est un kubelet qui a décidé que le pod n'est
-pas prêt : événement `Unhealthy` + la raison HTTP, et on remonte la
-dépendance (ici DNS). Les 404 se distinguent par **qui** répond : Traefik
-(texte brut, aucune route) ou l'application (son propre format). OOMKilled
-est le noyau : ni logs ni événement applicatif, seulement `Last State`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque panne vit à un **étage** différent, et c'est l'étage qui dicte la
+> commande. `Pending` est une décision du scheduler : elle n'est que dans les
+> événements du pod (`describe`), il n'y a pas de conteneur, donc pas de
+> logs. `ImagePullBackOff` est un échec du kubelet avant le démarrage :
+> événements aussi, avec le code HTTP du registre. `CrashLoopBackOff` est un
+> processus qui s'est exécuté puis a quitté : la vérité est dans les logs
+> de l'instance **précédente** (`--previous`), l'actuelle n'a peut-être pas
+> encore écrit. `0/1` durable est un kubelet qui a décidé que le pod n'est
+> pas prêt : événement `Unhealthy` + la raison HTTP, et on remonte la
+> dépendance (ici DNS). Les 404 se distinguent par **qui** répond : Traefik
+> (texte brut, aucune route) ou l'application (son propre format). OOMKilled
+> est le noyau : ni logs ni événement applicatif, seulement `Last State`.
 
-::: piege
-`kubectl edit`/`set env` corrige l'objet, pas le fichier : au prochain
-`apply -f casse/`, tout recasse. C'est le sens de « corriger les
-manifestes ». `kubectl logs` sans `--previous` sur un CrashLoop montre
-souvent le démarrage de l'instance en cours, rassurant et inutile. Et un
-`nodeSelector` qui ne matche pas produit exactement le même `Pending` qu'un
-*taint* : lis le message, il dit lequel (`untolerated taint` vs `node
-affinity/selector`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> `kubectl edit`/`set env` corrige l'objet, pas le fichier : au prochain
+> `apply -f casse/`, tout recasse. C'est le sens de « corriger les
+> manifestes ». `kubectl logs` sans `--previous` sur un CrashLoop montre
+> souvent le démarrage de l'instance en cours, rassurant et inutile. Et un
+> `nodeSelector` qui ne matche pas produit exactement le même `Pending` qu'un
+> *taint* : lis le message, il dit lequel (`untolerated taint` vs `node
+> affinity/selector`).
 
 ---
 
-### **L26.4** — *Prometheus et Alertmanager : scraper les cinq VM et l'API*
+### <a id="l26-4"></a>**[L26.4](README.md#l26-4)** — *Prometheus et Alertmanager : scraper les cinq VM et l'API*
 
 *Ticket CHG-4410 : `node_exporter` sur les quatre autres VM, pile Compose
 démarrée, exporters nginx et PostgreSQL, sondes blackbox, découverte des
@@ -3269,43 +3345,45 @@ Sans le silence, le `[PAGE] resolved` serait arrivé au tick suivant de
 `group_interval` (≤ 5 min après la résolution). Tout ça va dans
 `~/lab26/rapports/alerting.md` avec les horodatages réels.
 
-::: pourquoi
-Le chemin d'une alerte est **quatre horloges** en cascade : le
-`scrape_interval` (15 s : `up` passe à 0), l'`evaluation_interval` (15 s :
-la règle voit `up == 0`, état *pending*), le `for` (2 min : *firing*, et
-seulement là Prometheus pousse l'alerte à Alertmanager), puis
-`group_wait` (30 s : Alertmanager attend d'éventuelles alertes du même
-groupe avant la première notification). D'où ~2 min 50 entre la panne et
-le webhook : chaque étage est un compromis bruit/réactivité, et on doit
-savoir les additionner pour promettre un délai. L'inhibition ne
-« supprime » rien : l'alerte reste dans Alertmanager, marquée *inhibited*,
-et sera notifiée si la source disparaît avant elle. Le `relabel_configs` de
-blackbox est le motif canonique « l'adresse devient un paramètre » :
-`__address__` (ce que Prometheus contacte) est remplacé par l'exporter, et
-la cible d'origine devient `__param_target` (donc `?target=` de l'URL) et
-`instance` (le label visible). Pour k8s, `honor_labels: true` est
-indispensable : kube-state-metrics **expose** déjà des labels `namespace`
-et `pod` (ceux des objets qu'il décrit) ; sans `honor_labels`, Prometheus
-les renommerait `exported_namespace`/`exported_pod` pour imposer ceux de
-la cible — et `PodEnCrashLoop` désignerait le pod de kube-state-metrics.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le chemin d'une alerte est **quatre horloges** en cascade : le
+> `scrape_interval` (15 s : `up` passe à 0), l'`evaluation_interval` (15 s :
+> la règle voit `up == 0`, état *pending*), le `for` (2 min : *firing*, et
+> seulement là Prometheus pousse l'alerte à Alertmanager), puis
+> `group_wait` (30 s : Alertmanager attend d'éventuelles alertes du même
+> groupe avant la première notification). D'où ~2 min 50 entre la panne et
+> le webhook : chaque étage est un compromis bruit/réactivité, et on doit
+> savoir les additionner pour promettre un délai. L'inhibition ne
+> « supprime » rien : l'alerte reste dans Alertmanager, marquée *inhibited*,
+> et sera notifiée si la source disparaît avant elle. Le `relabel_configs` de
+> blackbox est le motif canonique « l'adresse devient un paramètre » :
+> `__address__` (ce que Prometheus contacte) est remplacé par l'exporter, et
+> la cible d'origine devient `__param_target` (donc `?target=` de l'URL) et
+> `instance` (le label visible). Pour k8s, `honor_labels: true` est
+> indispensable : kube-state-metrics **expose** déjà des labels `namespace`
+> et `pod` (ceux des objets qu'il décrit) ; sans `honor_labels`, Prometheus
+> les renommerait `exported_namespace`/`exported_pod` pour imposer ceux de
+> la cible — et `PodEnCrashLoop` désignerait le pod de kube-state-metrics.
 
-::: piege
-`InstanceDown` sur `up == 0` sans filtre attrape aussi les pods du job
-`k8s-pods` pendant un rollout (un pod qui s'arrête = cible DOWN 2 min) :
-d'où `job!="k8s-pods"`. Le fichier de règles est relu au `reload` mais une
-erreur de **syntaxe** fait échouer tout le rechargement : `promtool check
-rules` d'abord, toujours. Une alerte dont l'expression devient vide (série
-absente) passe silencieusement à *inactive* — c'est le sens du `absent()`
-de `00-exemple.yml`. Enfin, `group_by: [alertname, instance]` sépare les
-notifications par instance : pratique pour l'inhibition `equal:
-[instance]`, mais si 20 VM tombent ensemble, tu reçois 20 pages — un
-`group_by: [alertname]` sur la route `page` serait plus humain.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `InstanceDown` sur `up == 0` sans filtre attrape aussi les pods du job
+> `k8s-pods` pendant un rollout (un pod qui s'arrête = cible DOWN 2 min) :
+> d'où `job!="k8s-pods"`. Le fichier de règles est relu au `reload` mais une
+> erreur de **syntaxe** fait échouer tout le rechargement : `promtool check
+> rules` d'abord, toujours. Une alerte dont l'expression devient vide (série
+> absente) passe silencieusement à *inactive* — c'est le sens du `absent()`
+> de `00-exemple.yml`. Enfin, `group_by: [alertname, instance]` sépare les
+> notifications par instance : pratique pour l'inhibition `equal:
+> [instance]`, mais si 20 VM tombent ensemble, tu reçois 20 pages — un
+> `group_by: [alertname]` sur la route `page` serait plus humain.
 
 ---
 
-### **L26.5** — *Grafana et Loki : voir, corréler, provisionner*
+### <a id="l26-5"></a>**[L26.5](README.md#l26-5)** — *Grafana et Loki : voir, corréler, provisionner*
 
 *Ticket CHG-4411 : vérifier le provisioning, importer 1860, créer par fichier `Lab`* `— API factura` *(variable `pod`, cinq panneaux), ajouter le flux Loki des pods k3s dans Alloy, corréler ratio 5xx et logs `code`*`=500`*, ajouter un panneau Logs et une state timeline\* de l'alerte.\**
 
@@ -3539,40 +3617,42 @@ un label `alertstate` (`pending` puis `firing`) ; la *state timeline*
 colore les segments par valeur de légende. Si l'exercice 5 a duré plus de
 5 min, on voit `pending` → `firing`, puis le trou après le retour à zéro.
 
-::: pourquoi
-Grafana provisionne dans un sens unique, fichier → base : un tableau
-provisionné a `provisioned: true` dans ses métadonnées, et Grafana refuse
-(ou accepte à perte, selon `allowUiUpdates`) d'écrire dans l'autre sens. La
-bonne boucle de travail est : prototyper dans l'UI, *Share → Export → JSON*,
-coller dans le fichier versionné, laisser le provider recharger. Les
-variables Grafana (`$pod`) s'injectent textuellement dans la requête, d'où
-`pod=~"$pod"` avec `=~` : la valeur *All* devient `.*` (ou la liste des
-valeurs jointes par `|`) et un `=` ne fonctionnerait pas. Côté Loki, les
-labels viennent du **chemin** du fichier, pas du contenu : c'est ce qui
-garde la cardinalité basse (un flux par conteneur) et ce que `discovery.
-relabel` calcule avant même d'ouvrir le fichier. Le contenu est parsé à la
-requête (`| logfmt`), c'est le contrat « index minimal, calcul à la
-lecture ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Grafana provisionne dans un sens unique, fichier → base : un tableau
+> provisionné a `provisioned: true` dans ses métadonnées, et Grafana refuse
+> (ou accepte à perte, selon `allowUiUpdates`) d'écrire dans l'autre sens. La
+> bonne boucle de travail est : prototyper dans l'UI, *Share → Export → JSON*,
+> coller dans le fichier versionné, laisser le provider recharger. Les
+> variables Grafana (`$pod`) s'injectent textuellement dans la requête, d'où
+> `pod=~"$pod"` avec `=~` : la valeur *All* devient `.*` (ou la liste des
+> valeurs jointes par `|`) et un `=` ne fonctionnerait pas. Côté Loki, les
+> labels viennent du **chemin** du fichier, pas du contenu : c'est ce qui
+> garde la cardinalité basse (un flux par conteneur) et ce que `discovery.
+> relabel` calcule avant même d'ouvrir le fichier. Le contenu est parsé à la
+> requête (`| logfmt`), c'est le contrat « index minimal, calcul à la
+> lecture ».
 
-::: piege
-`label_values(factura_http_requests_total, pod)` ne liste que les pods qui
-ont produit des métriques dans la fenêtre : un pod neuf n'apparaît qu'après
-le premier scrape, un pod mort disparaît au bout de quelques heures. Le
-panneau *Logs* avec `pod=~"$pod"` et *All* fonctionne parce que le label
-`pod` de Loki (extrait du chemin) et celui de Prometheus (extrait de la
-découverte) ont **le même nom** : c'est un choix, pas un hasard, et c'est
-ce qui rend la corrélation possible d'un clic. Enfin, monter
-`/var/log/pods` dans un conteneur qui tourne en root revient à lui donner
-tous les logs de tous les namespaces : acceptable ici, à réfléchir en
-production (Alloy en DaemonSet avec RBAC, plutôt qu'en Compose sur l'hôte).
-:::
+> [!WARNING]
+> **Piège**
+>
+> `label_values(factura_http_requests_total, pod)` ne liste que les pods qui
+> ont produit des métriques dans la fenêtre : un pod neuf n'apparaît qu'après
+> le premier scrape, un pod mort disparaît au bout de quelques heures. Le
+> panneau *Logs* avec `pod=~"$pod"` et *All* fonctionne parce que le label
+> `pod` de Loki (extrait du chemin) et celui de Prometheus (extrait de la
+> découverte) ont **le même nom** : c'est un choix, pas un hasard, et c'est
+> ce qui rend la corrélation possible d'un clic. Enfin, monter
+> `/var/log/pods` dans un conteneur qui tourne en root revient à lui donner
+> tous les logs de tous les namespaces : acceptable ici, à réfléchir en
+> production (Alloy en DaemonSet avec RBAC, plutôt qu'en Compose sur l'hôte).
 
 ---
 
 ## 26.7 Break & Fix
 
-### **BF26.1** — *« L'API répond 502 depuis le déploiement de ce matin »*
+### <a id="bf26-1"></a>**[BF26.1](README.md#bf26-1)** — *« L'API répond 502 depuis le déploiement de ce matin »*
 
 *`/` répond `factura front`, `/api/factures` répond `502 Bad Gateway`
 (nginx). Pods de l'API `Running`, `1/1`, aucune requête dans leurs logs.
@@ -3654,20 +3734,21 @@ les humains, `edit` pour le pipeline) ; une alerte
 metrics) ou, plus simple, la sonde blackbox `SondeEchec` sur
 `/api/sante` qui a dû partir ce matin.
 
-::: pourquoi
-Le Service ne connaît pas le Deployment : il ne connaît que des labels. Le
-lien Deployment → ReplicaSet → Pod et le lien Service → Pod sont deux
-mécanismes indépendants qui ne se rejoignent que si `spec.selector` du
-Service est un sous-ensemble des labels du template. Ajouter un label au
-**selector** est bien plus dangereux que d'en ajouter un aux pods : les
-pods gagnent un label sans conséquence, le Service perd tous ses
-endpoints. Et comme le Service a une VIP stable, rien ne « casse »
-visiblement dans `get pods` : c'est `get endpoints` qui dit la vérité.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le Service ne connaît pas le Deployment : il ne connaît que des labels. Le
+> lien Deployment → ReplicaSet → Pod et le lien Service → Pod sont deux
+> mécanismes indépendants qui ne se rejoignent que si `spec.selector` du
+> Service est un sous-ensemble des labels du template. Ajouter un label au
+> **selector** est bien plus dangereux que d'en ajouter un aux pods : les
+> pods gagnent un label sans conséquence, le Service perd tous ses
+> endpoints. Et comme le Service a une VIP stable, rien ne « casse »
+> visiblement dans `get pods` : c'est `get endpoints` qui dit la vérité.
 
 ---
 
-### **BF26.2** — *« Le rollout ne finit jamais »*
+### <a id="bf26-2"></a>**[BF26.2](README.md#bf26-2)** — *« Le rollout ne finit jamais »*
 
 *`rollout status` bloqué sur `1 out of 2 new replicas have been updated`,
 trois pods : deux anciens `1/1`, un nouveau `0/1` `Running`. Le site
@@ -3725,20 +3806,21 @@ deadline`) — code de retour ≠ 0, donc pipeline rouge. Le défaut est 600 s :
 par échouer après 10 min. Ajouter en plus un test de déploiement (`helm
 test` ou un Job) qui appelle `/api/` via l'Ingress.
 
-::: pourquoi
-Un rollout bloqué **sans coupure** est le comportement voulu : `maxUnavailable:
-0` (l'arrondi vers le bas de 25 % de 2) garantit qu'on ne retire jamais un
-pod sain tant que son remplaçant n'est pas prêt. C'est aussi pour ça que le
-Deployment ne revient pas seul en arrière (Q26.9) : il ne sait pas si le
-blocage est temporaire (image lente à démarrer) ou définitif. `rollout
-history --revision=N` affiche le template du ReplicaSet de cette révision ;
-un `diff` entre deux révisions est le moyen le plus rapide de voir ce que
-« personne n'a touché ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un rollout bloqué **sans coupure** est le comportement voulu : `maxUnavailable:
+> 0` (l'arrondi vers le bas de 25 % de 2) garantit qu'on ne retire jamais un
+> pod sain tant que son remplaçant n'est pas prêt. C'est aussi pour ça que le
+> Deployment ne revient pas seul en arrière (Q26.9) : il ne sait pas si le
+> blocage est temporaire (image lente à démarrer) ou définitif. `rollout
+> history --revision=N` affiche le template du ReplicaSet de cette révision ;
+> un `diff` entre deux révisions est le moyen le plus rapide de voir ce que
+> « personne n'a touché ».
 
 ---
 
-### **BF26.3** — *« L'API redémarre en boucle, le code n'a pas changé »*
+### <a id="bf26-3"></a>**[BF26.3](README.md#bf26-3)** — *« L'API redémarre en boucle, le code n'a pas changé »*
 
 *`CrashLoopBackOff`, `RESTARTS` qui grimpe, `logs --previous` montre un
 démarrage normal puis plus rien.*
@@ -3809,22 +3891,23 @@ un panneau `container_memory_working_set_bytes /
 kube_pod_container_resource_limits{resource="memory"}` pour voir qui frôle
 sa limite **avant** l'incident.
 
-::: pourquoi
-`OOMKilled` n'est pas une décision de Kubernetes mais du **noyau** : la
-limite mémoire est un `memory.max` de cgroup v2, et c'est l'OOM killer du
-cgroup qui envoie `SIGKILL` (137 = 128 + 9). Le kubelet ne fait que le
-constater et le rapporter dans `Last State`. La request, elle, ne sert
-qu'au scheduler ; un pod peut dépasser sa request tant qu'il reste sous sa
-limite. Choisir une limite, c'est choisir entre « tuer l'application »
-(limite basse) et « laisser une fuite manger le nœud » (limite haute) ;
-la seule façon honnête de trancher est de mesurer (`kubectl top`, ou
-`container_memory_working_set_bytes` sur une semaine) et de prendre 2 à
-4 × le pic.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `OOMKilled` n'est pas une décision de Kubernetes mais du **noyau** : la
+> limite mémoire est un `memory.max` de cgroup v2, et c'est l'OOM killer du
+> cgroup qui envoie `SIGKILL` (137 = 128 + 9). Le kubelet ne fait que le
+> constater et le rapporter dans `Last State`. La request, elle, ne sert
+> qu'au scheduler ; un pod peut dépasser sa request tant qu'il reste sous sa
+> limite. Choisir une limite, c'est choisir entre « tuer l'application »
+> (limite basse) et « laisser une fuite manger le nœud » (limite haute) ;
+> la seule façon honnête de trancher est de mesurer (`kubectl top`, ou
+> `container_memory_working_set_bytes` sur une semaine) et de prendre 2 à
+> 4 × le pic.
 
 ---
 
-### **BF26.4** — *« Depuis le redémarrage, plus aucun pod ne démarre »*
+### <a id="bf26-4"></a>**[BF26.4](README.md#bf26-4)** — *« Depuis le redémarrage, plus aucun pod ne démarre »*
 
 *Après `rollout restart`, `ErrImagePull` puis `ImagePullBackOff`. Le
 `docker pull` avec login fonctionne depuis lab-ops. `casse` n'est pas
@@ -3904,21 +3987,22 @@ seul le pipeline peut `delete secrets` ; alerte
 `auth: {username, password}` pour un identifiant **par nœud** — pratique,
 mais alors un mot de passe en clair dans un fichier root de chaque nœud.
 
-::: pourquoi
-Un pull d'image est fait par le **nœud**, pas par l'API server : le kubelet
-lit le Secret référencé, en extrait l'entrée `auths["10.10.10.14:5000"]` et
-la passe à containerd pour cette image précise. Les Secrets étant des
-objets de namespace, `imagePullSecrets` ne peut pointer que dans le
-namespace du pod — d'où « les Secrets ne traversent pas les namespaces »,
-et la nécessité de le dupliquer (ou de l'attacher au ServiceAccount
-`default` de chaque namespace : `kubectl patch sa default -p
-'{"imagePullSecrets":[{"name":"registre-lab"}]}'`, ce qui évite de le
-répéter dans chaque manifeste).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un pull d'image est fait par le **nœud**, pas par l'API server : le kubelet
+> lit le Secret référencé, en extrait l'entrée `auths["10.10.10.14:5000"]` et
+> la passe à containerd pour cette image précise. Les Secrets étant des
+> objets de namespace, `imagePullSecrets` ne peut pointer que dans le
+> namespace du pod — d'où « les Secrets ne traversent pas les namespaces »,
+> et la nécessité de le dupliquer (ou de l'attacher au ServiceAccount
+> `default` de chaque namespace : `kubectl patch sa default -p
+> '{"imagePullSecrets":[{"name":"registre-lab"}]}'`, ce qui évite de le
+> répéter dans chaque manifeste).
 
 ---
 
-### **BF26.5** — *« Toutes les VM sont DOWN dans Prometheus »*
+### <a id="bf26-5"></a>**[BF26.5](README.md#bf26-5)** — *« Toutes les VM sont DOWN dans Prometheus »*
 
 *5 cibles `node` DOWN, `No data` dans Grafana, `InstanceDown` firing ×5,
 mais `ssh` et `curl :9100/metrics` fonctionnent.*
@@ -3988,20 +4072,21 @@ n'arrive pas à scraper », ce qui inclut les pannes de Prometheus lui-même,
 de sa config, du réseau et du firewall. Le runbook d'`InstanceDown` doit
 commencer par « `curl` la cible depuis le serveur Prometheus ».
 
-::: pourquoi
-`up` est la métrique la plus utile et la plus mal comprise de Prometheus :
-elle est synthétisée **par le scrapeur** à chaque tentative (1 si la
-requête HTTP a réussi et le corps est parsable, 0 sinon), elle ne vient pas
-de la cible. Une alerte sur `up` alerte donc sur la *relation* entre
-Prometheus et la cible. Le motif « tout tombe en même temps » est un
-classificateur puissant en astreinte : cinq VM indépendantes ne meurent pas
-à la même seconde ; une config, un switch ou un DNS, si. C'est la première
-question du diagnostic : *qu'est-ce que ces cinq-là ont en commun ?*
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `up` est la métrique la plus utile et la plus mal comprise de Prometheus :
+> elle est synthétisée **par le scrapeur** à chaque tentative (1 si la
+> requête HTTP a réussi et le corps est parsable, 0 sinon), elle ne vient pas
+> de la cible. Une alerte sur `up` alerte donc sur la *relation* entre
+> Prometheus et la cible. Le motif « tout tombe en même temps » est un
+> classificateur puissant en astreinte : cinq VM indépendantes ne meurent pas
+> à la même seconde ; une config, un switch ou un DNS, si. C'est la première
+> question du diagnostic : *qu'est-ce que ces cinq-là ont en commun ?*
 
 ---
 
-### **BF26.6** — *« L'alerte ne part jamais »*
+### <a id="bf26-6"></a>**[BF26.6](README.md#bf26-6)** — *« L'alerte ne part jamais »*
 
 *lab-rhel injoignable une heure, personne prévenu. `InstanceDown` apparaît
 en `pending` et y reste, rien dans `webhook`. Les autres alertes marchent.*
@@ -4120,23 +4205,24 @@ Avec `for: 2h`, le second cas (`3m30s`, alerte attendue *firing*) échoue :
 `alertname: InstanceDown, time: 3m30s, exp: [...], got: []`. Ce test dans
 le pipeline qui livre `/opt/observabilite` aurait bloqué la livraison.
 
-::: pourquoi
-`promtool test rules` rejoue les règles sur des séries synthétiques avec
-une horloge virtuelle : `values: '1 1 1 1 0 0 ...'` à `interval: 15s`
-décrit `up` pendant 6 min, et `eval_time` choisit l'instant où l'on
-inspecte les alertes *firing* (les *pending* ne comptent pas, c'est ce qui
-rend le test discriminant pour `for`). Les `exp_annotations` sont
-comparées **après** rendu des templates : c'est aussi un test de tes
-`{{ $labels }}`. Le fichier de test doit vivre **hors** du glob
-`rules/*.yml`, sinon Prometheus tenterait de le charger comme un fichier
-de règles et refuserait toute la configuration.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `promtool test rules` rejoue les règles sur des séries synthétiques avec
+> une horloge virtuelle : `values: '1 1 1 1 0 0 ...'` à `interval: 15s`
+> décrit `up` pendant 6 min, et `eval_time` choisit l'instant où l'on
+> inspecte les alertes *firing* (les *pending* ne comptent pas, c'est ce qui
+> rend le test discriminant pour `for`). Les `exp_annotations` sont
+> comparées **après** rendu des templates : c'est aussi un test de tes
+> `{{ $labels }}`. Le fichier de test doit vivre **hors** du glob
+> `rules/*.yml`, sinon Prometheus tenterait de le charger comme un fichier
+> de règles et refuserait toute la configuration.
 
 ---
 
 ## 26.8 Défi du module
 
-**D26** — *factura en production : kustomize avec Secrets, PDB, HPA ; SLO
+<a id="d26"></a>**[D26](README.md#d26)** — *factura en production : kustomize avec Secrets, PDB, HPA ; SLO
 chiffrés ; alertes multi-fenêtre sur burn rate testées ; runbooks ;
 tableau SLO ; script de conformité ; exercice d'astreinte et post-mortem.*
 
@@ -4640,30 +4726,38 @@ aurait pu partir plus tôt avec une fenêtre 5 min seule), actions : retirer
 `casse` via une policy d'admission), ajouter `verif-prod.sh` au pipeline,
 revoir les seuils avec l'équipe.
 
-::: pourquoi
-Le cœur du défi est l'alerte **multi-fenêtre** : la fenêtre longue (1 h)
-garantit que l'incident est significatif (pas un pic de 30 s), la fenêtre
-courte (5 min) garantit que l'alerte se **résout** vite une fois le
-problème corrigé (sans elle, la page resterait active près d'une heure).
-Les seuils 14,4 et 6 viennent du *SRE Workbook* : 14,4 = consommer 2 % du
-budget mensuel en 1 h (30 j × 24 h × 2 % = 14,4 h… soit tout le budget en
-2 jours) ; 6 = 5 % du budget en 6 h. Ils encodent une politique : on
-réveille quelqu'un seulement si, à ce rythme, le mois est fichu dans 2
-jours. Tout le reste du dossier (kustomize, PDB, HPA, runbooks, script)
-n'est que la mise en forme reproductible de cette politique — un collègue
-doit pouvoir la reconstruire et la contester chiffres en main.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le cœur du défi est l'alerte **multi-fenêtre** : la fenêtre longue (1 h)
+> garantit que l'incident est significatif (pas un pic de 30 s), la fenêtre
+> courte (5 min) garantit que l'alerte se **résout** vite une fois le
+> problème corrigé (sans elle, la page resterait active près d'une heure).
+> Les seuils 14,4 et 6 viennent du *SRE Workbook* : 14,4 = consommer 2 % du
+> budget mensuel en 1 h (30 j × 24 h × 2 % = 14,4 h… soit tout le budget en
+> 2 jours) ; 6 = 5 % du budget en 6 h. Ils encodent une politique : on
+> réveille quelqu'un seulement si, à ce rythme, le mois est fichu dans 2
+> jours. Tout le reste du dossier (kustomize, PDB, HPA, runbooks, script)
+> n'est que la mise en forme reproductible de cette politique — un collègue
+> doit pouvoir la reconstruire et la contester chiffres en main.
 
-::: piege
-`kubectl apply -k` avec `namespace: factura` dans la kustomization réécrit
-le namespace de **tous** les objets, y compris ceux qui en ont déjà un ;
-c'est voulu ici, mais un objet cluster (ClusterRole) n'est pas touché et
-un objet d'un autre namespace serait déplacé. Le `secretGenerator`
-régénère les Secrets à chaque `apply` : sans `disableNameSuffixHash`, les
-noms changent et les références cassent. Le `runbook_url` en `file://`
-est un pis-aller de lab : Alertmanager le transmet tel quel, aucun
-navigateur ne l'ouvrira depuis une notification — en production c'est une
-URL de wiki. Et attention à `increase(...[30d])` dans le tableau SLO : sur
-15 jours de rétention (`--storage.tsdb.retention.time=15d`), la fenêtre
-est tronquée ; le budget affiché est donc « sur 15 jours au mieux ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> `kubectl apply -k` avec `namespace: factura` dans la kustomization réécrit
+> le namespace de **tous** les objets, y compris ceux qui en ont déjà un ;
+> c'est voulu ici, mais un objet cluster (ClusterRole) n'est pas touché et
+> un objet d'un autre namespace serait déplacé. Le `secretGenerator`
+> régénère les Secrets à chaque `apply` : sans `disableNameSuffixHash`, les
+> noms changent et les références cassent. Le `runbook_url` en `file://`
+> est un pis-aller de lab : Alertmanager le transmet tel quel, aucun
+> navigateur ne l'ouvrira depuis une notification — en production c'est une
+> URL de wiki. Et attention à `increase(...[30d])` dans le tableau SLO : sur
+> 15 jours de rétention (`--storage.tsdb.retention.time=15d`), la fenêtre
+> est tronquée ; le budget affiché est donc « sur 15 jours au mieux ».
+
+<!-- nav:début -->
+---
+
+[← Module 25](../25-cicd/corrige.md) · [Énoncé](README.md) · [Module 27 →](../27-python-ops/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

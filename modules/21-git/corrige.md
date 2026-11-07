@@ -1,8 +1,16 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 21** · corrigé  
+[← Module 20](../20-virtualisation-kvm/corrige.md) · [Énoncé](README.md) · [Module 22 →](../22-docker/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 21 — Corrigé
 
 ## 21.3 Quiz — QCM
 
-**Q21.1** — *`--amend` qui ne change que le message : que deviennent le SHA du
+<a id="q21-1"></a>**[Q21.1](README.md#q21-1)** — *`--amend` qui ne change que le message : que deviennent le SHA du
 commit et celui de son tree ?*
 
 **Réponse : b)** le SHA du commit change, le tree reste `f1e0365…`.
@@ -15,57 +23,61 @@ $ git log -1 --format='%h %t'
 3566b05 f1e0365                        # SHA neuf (dépend de l'heure)
 ```
 
-::: pourquoi
-Un objet commit est un petit texte : `tree <sha>`, `parent <sha>`, `author`,
-`committer`, ligne vide, message. Son SHA-1 est le condensé de **ce texte**.
-Changer le message change le texte, donc le SHA. Le tree, lui, est un objet
-séparé qui ne dépend que du contenu des fichiers : il n'a aucune raison de
-changer. `--amend` ne « modifie » donc rien : il crée un **nouveau** commit
-avec le même tree et le même parent, puis déplace la branche dessus.
-L'ancien commit reste dans `.git/objects` et dans le reflog.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un objet commit est un petit texte : `tree <sha>`, `parent <sha>`, `author`,
+> `committer`, ligne vide, message. Son SHA-1 est le condensé de **ce texte**.
+> Changer le message change le texte, donc le SHA. Le tree, lui, est un objet
+> séparé qui ne dépend que du contenu des fichiers : il n'a aucune raison de
+> changer. `--amend` ne « modifie » donc rien : il crée un **nouveau** commit
+> avec le même tree et le même parent, puis déplace la branche dessus.
+> L'ancien commit reste dans `.git/objects` et dans le reflog.
 
-::: piege
-C'est pour cela qu'un `--amend` sur un commit **déjà poussé** produit ensuite
-un `non-fast-forward` : le distant pointe sur l'ancien SHA, que ton
-historique ne contient plus. Règle : on n'amende que ce qui n'a pas quitté
-son poste.
-:::
+> [!WARNING]
+> **Piège**
+>
+> C'est pour cela qu'un `--amend` sur un commit **déjà poussé** produit ensuite
+> un `non-fast-forward` : le distant pointe sur l'ancien SHA, que ton
+> historique ne contient plus. Règle : on n'amende que ce qui n'a pas quitté
+> son poste.
 
 ---
 
-**Q21.2** — *`## main...origin/main [ahead 2, behind 3]`.*
+<a id="q21-2"></a>**[Q21.2](README.md#q21-2)** — *`## main...origin/main [ahead 2, behind 3]`.*
 
 **Réponse : a)** deux commits locaux non poussés, trois commits distants non
 intégrés : les branches ont divergé.
 
-::: pourquoi
-`ahead` compte `origin/main..main` (ce que tu as en plus), `behind` compte
-`main..origin/main` (ce qui est arrivé sur le distant depuis ton dernier
-`fetch`). Les deux non nuls = **divergence** : un `push` sera rejeté, un
-`pull` devra fusionner ou rebaser. Ce chiffre ne dit rien de l'état réel du
-serveur : il compare à `origin/main`, la copie locale mise à jour par
-`fetch`. Sans `fetch` récent, il ment.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ahead` compte `origin/main..main` (ce que tu as en plus), `behind` compte
+> `main..origin/main` (ce qui est arrivé sur le distant depuis ton dernier
+> `fetch`). Les deux non nuls = **divergence** : un `push` sera rejeté, un
+> `pull` devra fusionner ou rebaser. Ce chiffre ne dit rien de l'état réel du
+> serveur : il compare à `origin/main`, la copie locale mise à jour par
+> `fetch`. Sans `fetch` récent, il ment.
 
 ---
 
-**Q21.3** — *Après `git`* `add -p` *d'un seul hunk sur deux, quelles commandes montrent une partie de ta modification?*
+<a id="q21-3"></a>**[Q21.3](README.md#q21-3)** — *Après `git`* `add -p` *d'un seul hunk sur deux, quelles commandes montrent une partie de ta modification?*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-Le hunk accepté est dans l'index : `git diff --staged` (index ↔ HEAD) le
-montre. Le hunk refusé est resté dans le working directory : `git diff`
-(working dir ↔ index) le montre. `git diff HEAD~1 HEAD` et `git show`
-comparent deux **commits** : rien n'a encore été commité, ils affichent le
-commit précédent, pas ton travail. Retenir : trois zones, et `diff` compare
-toujours **deux** d'entre elles — la question est « lesquelles ? ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le hunk accepté est dans l'index : `git diff --staged` (index ↔ HEAD) le
+> montre. Le hunk refusé est resté dans le working directory : `git diff`
+> (working dir ↔ index) le montre. `git diff HEAD~1 HEAD` et `git show`
+> comparent deux **commits** : rien n'a encore été commité, ils affichent le
+> commit précédent, pas ton travail. Retenir : trois zones, et `diff` compare
+> toujours **deux** d'entre elles — la question est « lesquelles ? ».
 
 ---
 
-**Q21.4** — *`logs/` puis `!logs/.gitkeep`.*
+<a id="q21-4"></a>**[Q21.4](README.md#q21-4)** — *`logs/` puis `!logs/.gitkeep`.*
 
 **Réponse : b)** rien : impossible de ré-inclure un fichier dont le répertoire
 parent est exclu.
@@ -75,73 +87,78 @@ $ git check-ignore -v logs/.gitkeep
 .gitignore:14:logs/ logs/.gitkeep
 ```
 
-::: pourquoi
-Pour des raisons de performance, quand un **répertoire** est exclu, Git ne le
-parcourt pas du tout : les règles `!` sur son contenu ne sont jamais
-évaluées (c'est écrit noir sur blanc dans `man gitignore`). Il faut exclure
-le **contenu** (`logs/*`), ce qui laisse Git entrer dans le répertoire, puis
-ré-inclure le fichier. Avec `logs/*` + `!logs/.gitkeep`, `check-ignore`
-répond bien `!logs/.gitkeep` pour le fichier et `logs/*` pour le reste.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Pour des raisons de performance, quand un **répertoire** est exclu, Git ne le
+> parcourt pas du tout : les règles `!` sur son contenu ne sont jamais
+> évaluées (c'est écrit noir sur blanc dans `man gitignore`). Il faut exclure
+> le **contenu** (`logs/*`), ce qui laisse Git entrer dans le répertoire, puis
+> ré-inclure le fichier. Avec `logs/*` + `!logs/.gitkeep`, `check-ignore`
+> répond bien `!logs/.gitkeep` pour le fichier et `logs/*` pour le reste.
 
 ---
 
-**Q21.5** — *`*.tfstate` ajouté au `.gitignore` alors que le fichier est
+<a id="q21-5"></a>**[Q21.5](README.md#q21-5)** — *`*.tfstate` ajouté au `.gitignore` alors que le fichier est
 déjà suivi.*
 
 **Réponse : b)** il apparaît toujours comme modifié.
 
-::: pourquoi
-`.gitignore` ne concerne que les fichiers **non suivis** : il décide ce que
-`git add` et `git status` proposent. Un fichier présent dans l'index est
-suivi, point ; Git continue de comparer son contenu à celui de l'index. Pour
-l'ignorer il faut d'abord le retirer de l'index sans le supprimer du disque :
-`git rm --cached terraform/terraform.tfstate`, commiter la suppression, et
-seulement alors la règle du `.gitignore` s'applique. Le fichier reste dans
-l'**historique** — s'il contient un mot de passe, voir Q21.8.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `.gitignore` ne concerne que les fichiers **non suivis** : il décide ce que
+> `git add` et `git status` proposent. Un fichier présent dans l'index est
+> suivi, point ; Git continue de comparer son contenu à celui de l'index. Pour
+> l'ignorer il faut d'abord le retirer de l'index sans le supprimer du disque :
+> `git rm --cached terraform/terraform.tfstate`, commiter la suppression, et
+> seulement alors la règle du `.gitignore` s'applique. Le fichier reste dans
+> l'**historique** — s'il contient un mot de passe, voir Q21.8.
 
 ---
 
-**Q21.6** — *`git merge feature/x` sans commit de merge.*
+<a id="q21-6"></a>**[Q21.6](README.md#q21-6)** — *`git merge feature/x` sans commit de merge.*
 
 **Réponse : b)** fast-forward.
 
-::: pourquoi
-Si `main` est un ancêtre direct de `feature/x`, il n'y a rien à
-« fusionner » : Git déplace simplement le pointeur `main` sur le commit de
-`feature/x`. Aucun nouveau commit, historique linéaire, et la branche
-disparaît du graphe comme si elle n'avait jamais existé. `--no-ff` force la
-création d'un commit de merge à deux parents : on garde la trace « ces
-3 commits formaient une feature », ce qui permet `git revert -m 1` d'un
-coup et une lecture par `--first-parent`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Si `main` est un ancêtre direct de `feature/x`, il n'y a rien à
+> « fusionner » : Git déplace simplement le pointeur `main` sur le commit de
+> `feature/x`. Aucun nouveau commit, historique linéaire, et la branche
+> disparaît du graphe comme si elle n'avait jamais existé. `--no-ff` force la
+> création d'un commit de merge à deux parents : on garde la trace « ces
+> 3 commits formaient une feature », ce qui permet `git revert -m 1` d'un
+> coup et une lecture par `--first-parent`.
 
 ---
 
-**Q21.7** — *Marqueurs pendant un rebase.*
+<a id="q21-7"></a>**[Q21.7](README.md#q21-7)** — *Marqueurs pendant un rebase.*
 
 **Réponse : b)** `HEAD` est `main`, `994e070` est ton commit en cours de
 rejeu.
 
-::: pourquoi
-Un rebase se déroule en HEAD **détaché** sur la branche cible : Git se place
-sur `main`, puis applique tes commits un par un comme des patchs. Au moment
-du conflit, « ours » (`HEAD`) est donc la base — `main` — et « theirs » est
-le patch en cours : ton commit. C'est l'inverse d'un merge, où `HEAD` est ta
-branche. Le libellé après `>>>>>>>` le confirme : `994e070 (feat(nginx): écoute en 443…)` est bien le commit d'alice. Résoudre « en gardant HEAD »
-pendant un rebase revient à **jeter son propre travail**.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un rebase se déroule en HEAD **détaché** sur la branche cible : Git se place
+> sur `main`, puis applique tes commits un par un comme des patchs. Au moment
+> du conflit, « ours » (`HEAD`) est donc la base — `main` — et « theirs » est
+> le patch en cours : ton commit. C'est l'inverse d'un merge, où `HEAD` est ta
+> branche. Le libellé après `>>>>>>>` le confirme : `994e070 (feat(nginx): écoute en 443…)` est bien le commit d'alice. Résoudre « en gardant HEAD »
+> pendant un rebase revient à **jeter son propre travail**.
 
-::: piege
-`git checkout --ours fichier` et `--theirs` suivent la même inversion.
-Dans le doute, `git status` dit `You are currently rebasing branch 'X' on
-'Y'` : `HEAD` est `Y`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `git checkout --ours fichier` et `--theirs` suivent la même inversion.
+> Dans le doute, `git status` dit `You are currently rebasing branch 'X' on
+> 'Y'` : `HEAD` est `Y`.
 
 ---
 
-**Q21.8** — *Mot de passe commité, puis `git rm .env` et push.*
+<a id="q21-8"></a>**[Q21.8](README.md#q21-8)** — *Mot de passe commité, puis `git rm .env` et push.*
 
 **Réponses : a) et c)**
 
@@ -154,50 +171,53 @@ DB_PASSWORD=S3cr3t-Factura-2026!
 API_KEY=AKIAIOSFODNN7EXAMPLE
 ```
 
-::: pourquoi
-Le commit qui a ajouté `.env` est immuable et référencé par tout commit
-suivant : le blob reste dans le dépôt, sur le serveur et dans chaque clone,
-et `git show <sha>:.env` le lit sans effort. `gc` ne supprime que les objets
-**injoignables** : ici il est joignable depuis `main`. Et quand bien même on
-purgerait l'historique (L21.4), le secret a été **lu** potentiellement par
-n'importe qui pendant l'intervalle : il est compromis, la rotation est
-obligatoire, la purge n'est que de l'hygiène.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le commit qui a ajouté `.env` est immuable et référencé par tout commit
+> suivant : le blob reste dans le dépôt, sur le serveur et dans chaque clone,
+> et `git show <sha>:.env` le lit sans effort. `gc` ne supprime que les objets
+> **injoignables** : ici il est joignable depuis `main`. Et quand bien même on
+> purgerait l'historique (L21.4), le secret a été **lu** potentiellement par
+> n'importe qui pendant l'intervalle : il est compromis, la rotation est
+> obligatoire, la purge n'est que de l'hygiène.
 
 ---
 
-**Q21.9** — *Annuler le dernier commit poussé sur une branche partagée.*
+<a id="q21-9"></a>**[Q21.9](README.md#q21-9)** — *Annuler le dernier commit poussé sur une branche partagée.*
 
 **Réponse : b)** `git revert HEAD` puis `git push`.
 
-::: pourquoi
-`revert` crée un **nouveau** commit dont le diff est l'inverse : l'historique
-avance, personne n'est perturbé, les clones font un `pull` fast-forward.
-`reset --hard` + `push --force` réécrit une branche que d'autres ont
-déjà tirée : leur prochain `pull` fusionne l'ancien historique avec le
-nouveau et ressuscite le commit « annulé ». `checkout HEAD~1` ne fait que
-détacher `HEAD` ; `restore --source` remet les fichiers mais ne commite rien.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `revert` crée un **nouveau** commit dont le diff est l'inverse : l'historique
+> avance, personne n'est perturbé, les clones font un `pull` fast-forward.
+> `reset --hard` + `push --force` réécrit une branche que d'autres ont
+> déjà tirée : leur prochain `pull` fusionne l'ancien historique avec le
+> nouveau et ressuscite le commit « annulé ». `checkout HEAD~1` ne fait que
+> détacher `HEAD` ; `restore --source` remet les fichiers mais ne commite rien.
 
 ---
 
-**Q21.10** — *`reset --soft HEAD~2` puis `commit`.*
+<a id="q21-10"></a>**[Q21.10](README.md#q21-10)** — *`reset --soft HEAD~2` puis `commit`.*
 
 **Réponse : b)** les changements des deux commits sont réunis dans un seul
 nouveau commit.
 
-::: pourquoi
-`--soft` ne déplace **que** la branche (et `HEAD`) : index et working
-directory restent tels quels, c'est-à-dire au contenu de l'ancien `HEAD`.
-Par rapport au nouveau `HEAD` (deux commits en arrière), l'index contient
-donc déjà toutes les modifications des deux commits, prêtes à être
-commitées. C'est le « squash manuel » le plus rapide, et rien n'est perdu :
-les deux anciens commits restent dans le reflog.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `--soft` ne déplace **que** la branche (et `HEAD`) : index et working
+> directory restent tels quels, c'est-à-dire au contenu de l'ancien `HEAD`.
+> Par rapport au nouveau `HEAD` (deux commits en arrière), l'index contient
+> donc déjà toutes les modifications des deux commits, prêtes à être
+> commitées. C'est le « squash manuel » le plus rapide, et rien n'est perdu :
+> les deux anciens commits restent dans le reflog.
 
 ---
 
-**Q21.11** — *Deux commits en HEAD détaché, puis `switch main`.*
+<a id="q21-11"></a>**[Q21.11](README.md#q21-11)** — *Deux commits en HEAD détaché, puis `switch main`.*
 
 **Réponse : c)** dans la base d'objets, atteignables par `git reflog`.
 
@@ -215,52 +235,55 @@ to do so with:
  git branch <new-branch-name> 37969cb
 ```
 
-::: pourquoi
-Un commit n'a pas besoin de branche pour exister : il est écrit dans
-`.git/objects` au moment du `commit`. Ce qui manque, c'est une
-**référence** qui le rende joignable ; sans elle, `git log` ne le voit pas
-et `gc` finira par le supprimer (après le délai `gc.reflogExpireUnreachable`,
-30 jours). Le reflog de `HEAD` note chaque déplacement, y compris
-`commit: docs: note 2` : `git branch sauvetage HEAD@{1}` suffit.
-Git prévient d'ailleurs au moment du `switch` — message que l'on ne lit
-jamais.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un commit n'a pas besoin de branche pour exister : il est écrit dans
+> `.git/objects` au moment du `commit`. Ce qui manque, c'est une
+> **référence** qui le rende joignable ; sans elle, `git log` ne le voit pas
+> et `gc` finira par le supprimer (après le délai `gc.reflogExpireUnreachable`,
+> 30 jours). Le reflog de `HEAD` note chaque déplacement, y compris
+> `commit: docs: note 2` : `git branch sauvetage HEAD@{1}` suffit.
+> Git prévient d'ailleurs au moment du `switch` — message que l'on ne lit
+> jamais.
 
 ---
 
-**Q21.12** — *Push rejeté `non-fast-forward`.*
+<a id="q21-12"></a>**[Q21.12](README.md#q21-12)** — *Push rejeté `non-fast-forward`.*
 
 **Réponse : b)** `git pull --rebase` puis `git push`.
 
-::: pourquoi
-Le serveur refuse parce que `origin/main` contient des commits qui ne sont
-pas des ancêtres de ton `main` : accepter écraserait le travail de
-quelqu'un. La seule issue est de **rapatrier** ces commits et de mettre les
-tiens par-dessus (rebase) ou à côté (merge), puis de pousser un historique
-qui contient les deux. `--force` détruit, recloner perd tes commits
-locaux (sauf à les sauver avant), et supprimer la branche distante est
-la même destruction en deux étapes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le serveur refuse parce que `origin/main` contient des commits qui ne sont
+> pas des ancêtres de ton `main` : accepter écraserait le travail de
+> quelqu'un. La seule issue est de **rapatrier** ces commits et de mettre les
+> tiens par-dessus (rebase) ou à côté (merge), puis de pousser un historique
+> qui contient les deux. `--force` détruit, recloner perd tes commits
+> locaux (sauf à les sauver avant), et supprimer la branche distante est
+> la même destruction en deux étapes.
 
 ---
 
-**Q21.13** — *`--force` vs `--force-with-lease`.*
+<a id="q21-13"></a>**[Q21.13](README.md#q21-13)** — *`--force` vs `--force-with-lease`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`--force-with-lease` envoie au serveur : « remplace `refs/heads/x` par
-mon SHA **à condition** qu'il vaille encore ce que mon `origin/x` dit ».
-Si un collègue a poussé entre-temps, le serveur refuse. C'est le seul push
-forcé acceptable, réservé à **ta** branche de feature après un rebase.
-Attention : un `git fetch` juste avant met à jour `origin/x` et fait
-disparaître la protection — ne pas enchaîner mécaniquement `fetch` puis
-`--force-with-lease`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `--force-with-lease` envoie au serveur : « remplace `refs/heads/x` par
+> mon SHA **à condition** qu'il vaille encore ce que mon `origin/x` dit ».
+> Si un collègue a poussé entre-temps, le serveur refuse. C'est le seul push
+> forcé acceptable, réservé à **ta** branche de feature après un rebase.
+> Attention : un `git fetch` juste avant met à jour `origin/x` et fait
+> disparaître la protection — ne pas enchaîner mécaniquement `fetch` puis
+> `--force-with-lease`.
 
 ---
 
-**Q21.14** — *`cat-file -t v0.9.0` → `commit`, `v1.0.0` → `tag`.*
+<a id="q21-14"></a>**[Q21.14](README.md#q21-14)** — *`cat-file -t v0.9.0` → `commit`, `v1.0.0` → `tag`.*
 
 **Réponse : b)**
 
@@ -274,83 +297,88 @@ tagger mathieu <mathieu@lab.local> 1781525700 +0200
 Version 1.0.0 — première mise en production
 ```
 
-::: pourquoi
-Un tag léger est une simple ligne dans `refs/tags/` qui contient le SHA d'un
-commit : `cat-file -t` renvoie donc le type de ce commit. Un tag annoté
-(`-a`, `-s`) est un **objet** à part entière, avec tagueur, date, message,
-signature éventuelle ; `git rev-parse v1.0.0` donne son SHA propre
-(`be1373…`) et `v1.0.0^{commit}` celui du commit visé. Pour les versions on
-veut l'annoté : `git describe` ne voit que lui par défaut, et il est
-signable.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un tag léger est une simple ligne dans `refs/tags/` qui contient le SHA d'un
+> commit : `cat-file -t` renvoie donc le type de ce commit. Un tag annoté
+> (`-a`, `-s`) est un **objet** à part entière, avec tagueur, date, message,
+> signature éventuelle ; `git rev-parse v1.0.0` donne son SHA propre
+> (`be1373…`) et `v1.0.0^{commit}` celui du commit visé. Pour les versions on
+> veut l'annoté : `git describe` ne voit que lui par défaut, et il est
+> signable.
 
 ---
 
-**Q21.15** — *8 commits entre `good` et `bad`, combien d'essais bisect ?*
+<a id="q21-15"></a>**[Q21.15](README.md#q21-15)** — *8 commits entre `good` et `bad`, combien d'essais bisect ?*
 
 **Réponse : c)** 3.
 
-::: pourquoi
-Bisect divise l'intervalle par deux à chaque test : ⌈log₂(8)⌉ = 3.
-Git l'annonce lui-même dès `bisect start` : `Bisecting: 3 revisions left to test after this
-(roughly 2 steps)` (E21.16, 7 commits). Avec 1 000 commits, dix essais
-suffisent, ce qui rend `bisect run` rentable dès que le test dure moins
-de quelques minutes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Bisect divise l'intervalle par deux à chaque test : ⌈log₂(8)⌉ = 3.
+> Git l'annonce lui-même dès `bisect start` : `Bisecting: 3 revisions left to test after this
+> (roughly 2 steps)` (E21.16, 7 commits). Avec 1 000 commits, dix essais
+> suffisent, ce qui rend `bisect run` rentable dès que le test dure moins
+> de quelques minutes.
 
 ---
 
-**Q21.16** — *`git clean -fdx`.*
+<a id="q21-16"></a>**[Q21.16](README.md#q21-16)** — *`git clean -fdx`.*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-`clean` ne touche qu'aux fichiers **non suivis** (`b` et `d` sont hors
-sujet). `-d` inclut les répertoires, `-x` inclut aussi les fichiers
-**ignorés** — c'est précisément ce qui fait sa dangerosité sur un dépôt
-Terraform : `terraform.tfstate` est ignoré, donc il part, et avec lui l'état
-de ton infrastructure. D'où la règle : `git clean -ndx` d'abord (`n` =
-dry-run), on lit, on décide.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `clean` ne touche qu'aux fichiers **non suivis** (`b` et `d` sont hors
+> sujet). `-d` inclut les répertoires, `-x` inclut aussi les fichiers
+> **ignorés** — c'est précisément ce qui fait sa dangerosité sur un dépôt
+> Terraform : `terraform.tfstate` est ignoré, donc il part, et avec lui l'état
+> de ton infrastructure. D'où la règle : `git clean -ndx` d'abord (`n` =
+> dry-run), on lit, on décide.
 
 ---
 
-**Q21.17** — *Workflow pour un dépôt Ansible déployé plusieurs fois par jour.*
+<a id="q21-17"></a>**[Q21.17](README.md#q21-17)** — *Workflow pour un dépôt Ansible déployé plusieurs fois par jour.*
 
 **Réponse : b)**
 
-::: pourquoi
-De l'infra, on ne « release » pas des versions parallèles maintenues des
-mois : il n'y a qu'un état voulu, celui de `main`. git-flow ajoute des
-branches (`develop`, `release/*`) dont la seule conséquence est de retarder
-l'intégration et de multiplier les conflits. Trunk-based (branches de
-quelques heures, CI, feature flags) ou GitHub flow (branche → PR → merge
-→ déploiement) donnent un `main` toujours déployable et une revue par
-changement. Le tag marque ce qui a été déployé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> De l'infra, on ne « release » pas des versions parallèles maintenues des
+> mois : il n'y a qu'un état voulu, celui de `main`. git-flow ajoute des
+> branches (`develop`, `release/*`) dont la seule conséquence est de retarder
+> l'intégration et de multiplier les conflits. Trunk-based (branches de
+> quelques heures, CI, feature flags) ou GitHub flow (branche → PR → merge
+> → déploiement) donnent un `main` toujours déployable et une revue par
+> changement. Le tag marque ce qui a été déployé.
 
 ---
 
-**Q21.18** — *Clé SSH privée commitée : après `filter-repo` et push forcé,
+<a id="q21-18"></a>**[Q21.18](README.md#q21-18)** — *Clé SSH privée commitée : après `filter-repo` et push forcé,
 que manque-t-il ?*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-La clé a été lisible par toute personne ayant accès au dépôt : elle est
-compromise, on la révoque (`authorized_keys`, forge, bastion) et on en
-génère une autre — c'est la seule action qui **ferme** la faille. Ensuite,
-chaque clone existant contient encore les anciens objets ; un `git pull`
-depuis l'un d'eux fusionnerait l'ancien historique dans le nouveau et
-repousserait la clé. Tout le monde re-clone, et on vérifie côté serveur
-avec `git grep` sur `rev-list --all`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La clé a été lisible par toute personne ayant accès au dépôt : elle est
+> compromise, on la révoque (`authorized_keys`, forge, bastion) et on en
+> génère une autre — c'est la seule action qui **ferme** la faille. Ensuite,
+> chaque clone existant contient encore les anciens objets ; un `git pull`
+> depuis l'un d'eux fusionnerait l'ancien historique dans le nouveau et
+> repousserait la clé. Tout le monde re-clone, et on vérifie côté serveur
+> avec `git grep` sur `rev-list --all`.
 
 ---
 
 ## 21.4 Quiz — questions ouvertes
 
-**QO21.1** — *Pourquoi un commit est immuable ; ce que font vraiment
+<a id="qo21-1"></a>**[QO21.1](README.md#qo21-1)** — *Pourquoi un commit est immuable ; ce que font vraiment
 `--amend`, `rebase`, `filter-repo` ; pourquoi le reflog sauve.*
 
 **Réponse attendue :**
@@ -381,18 +409,19 @@ protégé du `gc` et `git reset --hard HEAD@{n}` ou `git branch x HEAD@{n}`
 le ramène. Le reflog est **local** : il ne se pousse pas, un clone frais n'en
 a pas.
 
-::: pourquoi
-C'est le point qui distingue Git d'un système « fichiers + numéros de
-version » : l'intégrité est structurelle. Un serveur ne peut pas altérer un
-commit sans que tous les SHA en aval changent, un tag signé fige donc tout
-l'historique qui le précède. En entretien, l'erreur classique est de dire
-« rebase modifie les commits » : non, il en fabrique de nouveaux, et c'est
-exactement pourquoi il ne faut pas rebaser ce qui est partagé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> C'est le point qui distingue Git d'un système « fichiers + numéros de
+> version » : l'intégrité est structurelle. Un serveur ne peut pas altérer un
+> commit sans que tous les SHA en aval changent, un tag signé fige donc tout
+> l'historique qui le précède. En entretien, l'erreur classique est de dire
+> « rebase modifie les commits » : non, il en fabrique de nouveaux, et c'est
+> exactement pourquoi il ne faut pas rebaser ce qui est partagé.
 
 ---
 
-**QO21.2** — *Merge ou rebase pour intégrer une feature ?*
+<a id="qo21-2"></a>**[QO21.2](README.md#qo21-2)** — *Merge ou rebase pour intégrer une feature ?*
 
 **Réponse attendue :**
 
@@ -419,17 +448,18 @@ l'intégration se fait par un merge commit (ou « rebase then merge » de la
 forge) pour garder la trace de la feature et permettre un revert atomique.
 `main` reste protégée : jamais de push direct.
 
-::: pourquoi
-Chaque approche seule a un défaut rédhibitoire : « merge partout » donne le
-graphe illisible où `git log --oneline` est à moitié composé de `Merge
-branch 'main' into feature`, « rebase partout » (fast-forward only) perd la
-notion de feature et complique le revert. La combinaison donne un
-`--first-parent` lisible (une ligne par feature) et un détail conservé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque approche seule a un défaut rédhibitoire : « merge partout » donne le
+> graphe illisible où `git log --oneline` est à moitié composé de `Merge
+> branch 'main' into feature`, « rebase partout » (fast-forward only) perd la
+> notion de feature et complique le revert. La combinaison donne un
+> `--first-parent` lisible (une ligne par feature) et un détail conservé.
 
 ---
 
-**QO21.3** — *`reset --soft/--mixed/--hard` : effets, usages, interdit.*
+<a id="qo21-3"></a>**[QO21.3](README.md#qo21-3)** — *`reset --soft/--mixed/--hard` : effets, usages, interdit.*
 
 **Réponse attendue :**
 
@@ -456,17 +486,18 @@ faudrait ensuite un push forcé qui réécrit l'histoire des autres. On
 utilise `revert` (commit inverse) ; pour « défaire » un merge partagé,
 `git revert -m 1 <merge>`.
 
-::: pourquoi
-La question cache une seconde question : « qu'est-ce que le reflog
-sauve ? ». Réponse : tout ce qui a été **commité** (soft/mixed/hard sur des
-commits existants se rattrapent avec `reset --hard HEAD@{1}`), rien de ce
-qui ne l'a jamais été. Un `--hard` avec des modifications non commitées
-est irréversible ; d'où le réflexe `git stash` avant.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question cache une seconde question : « qu'est-ce que le reflog
+> sauve ? ». Réponse : tout ce qui a été **commité** (soft/mixed/hard sur des
+> commits existants se rattrapent avec `reset --hard HEAD@{1}`), rien de ce
+> qui ne l'a jamais été. Un `--hard` avec des modifications non commitées
+> est irréversible ; d'où le réflexe `git stash` avant.
 
 ---
 
-**QO21.4** — *Clé API poussée il y a trois jours : procédure et ordre.*
+<a id="qo21-4"></a>**[QO21.4](README.md#qo21-4)** — *Clé API poussée il y a trois jours : procédure et ordre.*
 
 **Réponse attendue :**
 
@@ -496,17 +527,18 @@ est irréversible ; d'où le réflexe `git stash` avant.
 dans l'historique, `git show <sha>:fichier` le lit, et de toute façon la
 clé a déjà été exposée — supprimer sans tourner ne protège de rien.
 
-::: pourquoi
-L'ordre compte parce que chaque étape ferme une porte différente : la
-rotation ferme l'**usage** de la clé ; la purge ferme la **lecture** future
-depuis le dépôt ; le re-clone empêche la **réintroduction** par un vieux
-clone ; la prévention ferme la **récidive**. Inverser rotation et purge,
-c'est passer une heure à nettoyer pendant que la clé est utilisable.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre compte parce que chaque étape ferme une porte différente : la
+> rotation ferme l'**usage** de la clé ; la purge ferme la **lecture** future
+> depuis le dépôt ; le re-clone empêche la **réintroduction** par un vieux
+> clone ; la prévention ferme la **récidive**. Inverser rotation et purge,
+> c'est passer une heure à nettoyer pendant que la clé est utilisable.
 
 ---
 
-**QO21.5** — *Push rejeté non-fast-forward : explication et pourquoi pas
+<a id="qo21-5"></a>**[QO21.5](README.md#qo21-5)** — *Push rejeté non-fast-forward : explication et pourquoi pas
 `--force`.*
 
 **Réponse attendue :**
@@ -534,17 +566,18 @@ ne l'interdit pas). Le seul cas légitime : **ta** branche de feature que tu
 viens de rebaser, avec `--force-with-lease` qui refuse si quelqu'un a poussé
 dessus entre-temps — et jamais sur `main`, que la forge doit protéger.
 
-::: pourquoi
-L'expression « fast-forward » est littérale : avance rapide du pointeur.
-Le serveur applique une règle simple — la nouvelle valeur doit descendre
-de l'ancienne — et cette règle est ce qui rend un dépôt partagé sûr sans
-verrou. Comprendre ça évite 90 % des « j'ai fait un force parce que Git me
-bloquait ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'expression « fast-forward » est littérale : avance rapide du pointeur.
+> Le serveur applique une règle simple — la nouvelle valeur doit descendre
+> de l'ancienne — et cette règle est ce qui rend un dépôt partagé sûr sans
+> verrou. Comprendre ça évite 90 % des « j'ai fait un force parce que Git me
+> bloquait ».
 
 ---
 
-**QO21.6** — *`fetch` vs `pull`, `--rebase` ou non, réglage recommandé.*
+<a id="qo21-6"></a>**[QO21.6](README.md#qo21-6)** — *`fetch` vs `pull`, `--rebase` ou non, réglage recommandé.*
 
 **Réponse attendue :**
 
@@ -572,16 +605,17 @@ Recommandation : `git config --global pull.rebase true` et l'habitude
 qui ne doivent jamais avoir de commits locaux (là, un refus est un signal
 utile).
 
-::: pourquoi
-`pull` est la commande la plus dangereuse pour un débutant parce qu'elle
-combine deux actions, dont une modifie l'historique local, sans étape de
-lecture. Séparer `fetch` et l'intégration transforme une surprise en
-décision.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `pull` est la commande la plus dangereuse pour un débutant parce qu'elle
+> combine deux actions, dont une modifie l'historique local, sans étape de
+> lecture. Séparer `fetch` et l'intégration transforme une surprise en
+> décision.
 
 ---
 
-**QO21.7** — *`.gitignore`, `.git/info/exclude`, `core.excludesFile` ; les
+<a id="qo21-7"></a>**[QO21.7](README.md#qo21-7)** — *`.gitignore`, `.git/info/exclude`, `core.excludesFile` ; les
 deux raisons pour lesquelles un fichier refuse de s'ignorer.*
 
 **Réponse attendue :**
@@ -605,16 +639,17 @@ tentative de `!` sur un enfant, patron ancré (`/logs` ne matche pas
 chemin` répond « quelle ligne de quel fichier » ou rien (rc 1) : c'est la
 commande qui tranche, avant toute hypothèse.
 
-::: pourquoi
-Un `.gitignore` est évalué de haut en bas, dernière règle gagnante, et par
-répertoire (un `.gitignore` dans `terraform/` s'applique relativement à
-lui). Sans `check-ignore -v`, on passe une heure à « essayer des patrons » ;
-avec, trente secondes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un `.gitignore` est évalué de haut en bas, dernière règle gagnante, et par
+> répertoire (un `.gitignore` dans `terraform/` s'applique relativement à
+> lui). Sans `check-ignore -v`, on passe une heure à « essayer des patrons » ;
+> avec, trente secondes.
 
 ---
 
-**QO21.8** — *`etckeeper` sur les VM du lab.*
+<a id="qo21-8"></a>**[QO21.8](README.md#qo21-8)** — *`etckeeper` sur les VM du lab.*
 
 **Réponse attendue :**
 
@@ -642,17 +677,18 @@ paquets avec un message qui liste les paquets. Un `apt upgrade` produit
 donc un commit lisible ; les modifications manuelles apparaissent au
 prochain commit quotidien ou à `etckeeper commit "raison"`.
 
-::: pourquoi
-Le mécanisme est celui de tout le module appliqué à un répertoire système :
-un tree par état, un commit par changement, `diff` entre deux commits. Le
-bénéfice principal n'est pas la restauration (Ansible fait mieux) mais
-l'**attribution** : « ce changement a eu lieu mardi à 15 h 02, pendant un
-`apt upgrade` ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme est celui de tout le module appliqué à un répertoire système :
+> un tree par état, un commit par changement, `diff` entre deux commits. Le
+> bénéfice principal n'est pas la restauration (Ansible fait mieux) mais
+> l'**attribution** : « ce changement a eu lieu mardi à 15 h 02, pendant un
+> `apt upgrade` ».
 
 ---
 
-**QO21.9** — *`HEAD detached at 4a34e42` : causes, sauvetage, retour.*
+<a id="qo21-9"></a>**[QO21.9](README.md#qo21-9)** — *`HEAD detached at 4a34e42` : causes, sauvetage, retour.*
 
 **Réponse attendue :**
 
@@ -673,19 +709,20 @@ sur `main` en laissant les commits derrière : `git reflog`, repérer les
 lignes `commit:` entre le `checkout: moving from main to …` et le
 `checkout: moving from … to main`, et `git branch sauvetage <sha>`.
 
-::: pourquoi
-Le HEAD détaché n'est pas une erreur : c'est l'état normal quand `HEAD`
-pointe un commit plutôt qu'une branche. Le danger est uniquement de
-commiter dedans puis de partir, parce qu'aucune référence ne suit ces
-commits. Git prévient (`Warning: you are leaving N commits behind`) ; le
-réflexe à acquérir est « commit en détaché ⇒ `git branch` avant de bouger ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le HEAD détaché n'est pas une erreur : c'est l'état normal quand `HEAD`
+> pointe un commit plutôt qu'une branche. Le danger est uniquement de
+> commiter dedans puis de partir, parce qu'aucune référence ne suit ces
+> commits. Git prévient (`Warning: you are leaving N commits behind`) ; le
+> réflexe à acquérir est « commit en détaché ⇒ `git branch` avant de bouger ».
 
 ---
 
 ## 21.5 Exercices guidés
 
-**E21.1** — *Configuration globale, alias, `--show-origin`, `user.name` en
+<a id="e21-1"></a>**[E21.1](README.md#e21-1)** — *Configuration globale, alias, `--show-origin`, `user.name` en
 double, `core.autocrlf` sous Windows.*
 
 ```bash
@@ -727,20 +764,21 @@ l'attribut **prime** sur `core.autocrlf` et impose LF partout, y compris à
 l'extraction sous Windows. C'est la bonne approche : la règle est dans le
 dépôt, pas dans la configuration de chacun.
 
-::: pourquoi
-Trois niveaux, lus dans l'ordre système → global → local, **dernier
-gagnant**. `--show-origin` est la seule commande qui explique une valeur
-surprenante (« mais j'ai mis `pull.rebase=true` ! » — oui, et
-`.git/config` dit `false`). `push.default=simple` pousse la branche
-courante vers sa branche amont si elle porte le **même nom**, et refuse
-sinon : c'est la protection contre le push accidentel de `main` vers
-`feature/x`. `fetch.prune` supprime les `origin/*` dont la branche distante
-a disparu, sinon `git lg` affiche des branches fantômes pendant des mois.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois niveaux, lus dans l'ordre système → global → local, **dernier
+> gagnant**. `--show-origin` est la seule commande qui explique une valeur
+> surprenante (« mais j'ai mis `pull.rebase=true` ! » — oui, et
+> `.git/config` dit `false`). `push.default=simple` pousse la branche
+> courante vers sa branche amont si elle porte le **même nom**, et refuse
+> sinon : c'est la protection contre le push accidentel de `main` vers
+> `feature/x`. `fetch.prune` supprime les `origin/*` dont la branche distante
+> a disparu, sinon `git lg` affiche des branches fantômes pendant des mois.
 
 ---
 
-**E21.2** — *Objets : HEAD, tree, sous-arbre `bin`, blob de README, tag.*
+<a id="e21-2"></a>**[E21.2](README.md#e21-2)** — *Objets : HEAD, tree, sous-arbre `bin`, blob de README, tag.*
 
 ```console
 $ git cat-file -t HEAD
@@ -772,21 +810,22 @@ be137369d5ed9b3056fcc39d2ba60da6578859a9
 be7970d96a2ecaa7c06f2a1a5a33fe5cd6b87d40
 ```
 
-::: pourquoi
-Le tree ne contient que des **noms + modes + SHA** : le contenu est dans les
-blobs, et un blob ne connaît pas son nom (renommer un fichier ne crée
-aucun blob). `hash-object` calcule `sha1("blob <taille>\0<contenu>")` : le
-même contenu donne le même SHA partout, dans tous les dépôts du monde —
-c'est ce qui rend `fetch` incrémental et les renommages détectables.
-Le mode `100755` est le seul bit de droits que Git stocke (exécutable ou
-non) : pas de propriétaire, pas de date. `v1.0.0` (l'objet tag, `be1373…`)
-et `v1.0.0^{commit}` (le commit visé, `be7970d`) diffèrent : c'est la preuve
-qu'un tag annoté est un objet à part.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le tree ne contient que des **noms + modes + SHA** : le contenu est dans les
+> blobs, et un blob ne connaît pas son nom (renommer un fichier ne crée
+> aucun blob). `hash-object` calcule `sha1("blob <taille>\0<contenu>")` : le
+> même contenu donne le même SHA partout, dans tous les dépôts du monde —
+> c'est ce qui rend `fetch` incrémental et les renommages détectables.
+> Le mode `100755` est le seul bit de droits que Git stocke (exécutable ou
+> non) : pas de propriétaire, pas de date. `v1.0.0` (l'objet tag, `be1373…`)
+> et `v1.0.0^{commit}` (le commit visé, `be7970d`) diffèrent : c'est la preuve
+> qu'un tag annoté est un objet à part.
 
 ---
 
-**E21.3** — *Cinq questions, cinq `git log`.*
+<a id="e21-3"></a>**[E21.3](README.md#e21-3)** — *Cinq questions, cinq `git log`.*
 
 ```console
 $ git log --oneline -S'worker_connections 4096'                  # (a)
@@ -805,22 +844,23 @@ $ git shortlog -sn --all                                           # (d)
 $ git log --oneline --graph --all --decorate                       # (e)
 ```
 
-::: pourquoi
-`-S` (pickaxe) ne cherche pas dans les messages : il ne garde que les commits
-où le **nombre d'occurrences** de la chaîne change — donc le commit qui
-l'introduit ou la retire, pas ceux qui déplacent la ligne. `--since/--until`
-acceptent dates et expressions (`"2 weeks ago"`). `-- .env` après `--`
-restreint aux commits touchant ce chemin ; `--all` est indispensable pour
-un fichier supprimé, sinon Git s'arrête à `HEAD` et ne « voit » que les
-chemins qui existent encore dans l'historique de la branche courante
-(ici ça marche sans, mais pas si le fichier n'a vécu que sur une branche).
-`shortlog -sn` est le `log` groupé par auteur ; `--all` compte aussi les
-branches non fusionnées.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-S` (pickaxe) ne cherche pas dans les messages : il ne garde que les commits
+> où le **nombre d'occurrences** de la chaîne change — donc le commit qui
+> l'introduit ou la retire, pas ceux qui déplacent la ligne. `--since/--until`
+> acceptent dates et expressions (`"2 weeks ago"`). `-- .env` après `--`
+> restreint aux commits touchant ce chemin ; `--all` est indispensable pour
+> un fichier supprimé, sinon Git s'arrête à `HEAD` et ne « voit » que les
+> chemins qui existent encore dans l'historique de la branche courante
+> (ici ça marche sans, mais pas si le fichier n'a vécu que sur une branche).
+> `shortlog -sn` est le `log` groupé par auteur ; `--all` compte aussi les
+> branches non fusionnées.
 
 ---
 
-**E21.4** — *`main..feature` vs `main...feature`.*
+<a id="e21-4"></a>**[E21.4](README.md#e21-4)** — *`main..feature` vs `main...feature`.*
 
 ```console
 $ git diff --stat main..feature/tls-letsencrypt
@@ -835,20 +875,21 @@ $ git diff --stat main...feature/tls-letsencrypt
  2 files changed, 14 insertions(+), 1 deletion(-)
 ```
 
-::: pourquoi
-Dans `git diff`, `A..B` compare les **trees** de A et B (identique à
-`git diff A B`). Or `main` a avancé depuis la création de la branche
-(`.gitattributes`, HSTS, section rollback du runbook) : vu depuis le tree
-de la feature, ces ajouts apparaissent comme des **suppressions**. `A...B`
-compare la **base commune** (`merge-base`, ici `b344468`) à B : c'est
-exactement « ce que la branche apporte », ce qu'une MR affiche.
-Attention : dans `git log`, la sémantique est différente (`A..B` = commits
-de B pas dans A ; `A...B` = commits de l'un ou l'autre mais pas des deux).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Dans `git diff`, `A..B` compare les **trees** de A et B (identique à
+> `git diff A B`). Or `main` a avancé depuis la création de la branche
+> (`.gitattributes`, HSTS, section rollback du runbook) : vu depuis le tree
+> de la feature, ces ajouts apparaissent comme des **suppressions**. `A...B`
+> compare la **base commune** (`merge-base`, ici `b344468`) à B : c'est
+> exactement « ce que la branche apporte », ce qu'une MR affiche.
+> Attention : dans `git log`, la sémantique est différente (`A..B` = commits
+> de B pas dans A ; `A...B` = commits de l'un ou l'autre mais pas des deux).
 
 ---
 
-**E21.5** — *Commiter un hunk sur deux avec `add -p`.*
+<a id="e21-5"></a>**[E21.5](README.md#e21-5)** — *Commiter un hunk sur deux avec `add -p`.*
 
 ```console
 $ git add -p README.md
@@ -865,19 +906,20 @@ $ git diff --stat                    # Contact reste dans le working dir
  README.md | 4 ++++
 ```
 
-::: pourquoi
-L'index n'est pas un « fichier entier ou rien » : c'est un tree en
-construction, et `add -p` y écrit une **version intermédiaire** du fichier
-(HEAD + le hunk accepté). C'est ce qui permet de séparer une correction
-urgente d'un chantier en cours. Deux hunks trop proches sont proposés
-ensemble : `s` les découpe, `e` édite le patch à la main. À l'inverse,
-`git commit -a` indexe **tout** ce qui est suivi et modifié : incompatible
-avec des commits atomiques.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'index n'est pas un « fichier entier ou rien » : c'est un tree en
+> construction, et `add -p` y écrit une **version intermédiaire** du fichier
+> (HEAD + le hunk accepté). C'est ce qui permet de séparer une correction
+> urgente d'un chantier en cours. Deux hunks trop proches sont proposés
+> ensemble : `s` les découpe, `e` édite le patch à la main. À l'inverse,
+> `git commit -a` indexe **tout** ce qui est suivi et modifié : incompatible
+> avec des commits atomiques.
 
 ---
 
-**E21.6** — *`--amend`, `[ahead 1]`, `commit -a`, `git mv`.*
+<a id="e21-6"></a>**[E21.6](README.md#e21-6)** — *`--amend`, `[ahead 1]`, `commit -a`, `git mv`.*
 
 ```console
 $ git log -1 --format=%H
@@ -900,26 +942,28 @@ $ git log -1 --stat --format=%s
 $ git switch main && git branch -D essai/renommage
 ```
 
-::: pourquoi
-`[ahead 1]` : un commit local absent d'`origin/main` — le commit amendé est
-un **nouveau** commit ; s'il avait déjà été poussé, tu verrais
-`[ahead 1, behind 1]`, signature d'une réécriture. `git mv` n'est qu'un
-raccourci pour `mv` + `git rm --cached` + `git add` : Git ne stocke pas les
-renommages, il les **détecte** à l'affichage quand un blob supprimé et un
-blob ajouté ont le même contenu (ou > 50 % de similarité, `-M`). Un `mv`
-plus une modification lourde dans le même commit sera vu comme
-suppression + ajout : renommer et modifier en deux commits.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `[ahead 1]` : un commit local absent d'`origin/main` — le commit amendé est
+> un **nouveau** commit ; s'il avait déjà été poussé, tu verrais
+> `[ahead 1, behind 1]`, signature d'une réécriture. `git mv` n'est qu'un
+> raccourci pour `mv` + `git rm --cached` + `git add` : Git ne stocke pas les
+> renommages, il les **détecte** à l'affichage quand un blob supprimé et un
+> blob ajouté ont le même contenu (ou > 50 % de similarité, `-M`). Un `mv`
+> plus une modification lourde dans le même commit sera vu comme
+> suppression + ajout : renommer et modifier en deux commits.
 
-::: piege
-`commit -a` ne prend pas les fichiers **non suivis** : un nouveau fichier
-oublié est le bug classique du « ça marche chez moi ». `git status` avant
-`commit`, toujours.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `commit -a` ne prend pas les fichiers **non suivis** : un nouveau fichier
+> oublié est le bug classique du « ça marche chez moi ». `git status` avant
+> `commit`, toujours.
 
 ---
 
-**E21.7** — *`logs/*` + `!logs/.gitkeep`, brouillon ignoré sans toucher le
+<a id="e21-7"></a>**[E21.7](README.md#e21-7)** — *`logs/*` + `!logs/.gitkeep`, brouillon ignoré sans toucher le
 projet, `check-ignore -v`.*
 
 ```bash
@@ -944,20 +988,21 @@ $ git status --short
 (vide)
 ```
 
-::: pourquoi
-`logs/*` exclut le **contenu**, pas le répertoire : Git y entre et évalue
-`!logs/.gitkeep`. Avec `logs/` (répertoire), la négation serait ignorée
-(Q21.4). `notes-perso.txt` est ton problème, pas celui du projet : le mettre
-dans le `.gitignore` versionné imposerait ta convention à l'équipe et
-polluerait l'historique ; `core.excludesFile` (tous tes dépôts) ou
-`.git/info/exclude` (ce clone) sont faits pour ça. `check-ignore -v`
-affiche `fichier:ligne:règle` — la règle `!` s'affiche aussi, ce qui prouve
-qu'elle est bien évaluée; `--no-index` est nécessaire pour `logs/.gitkeep`, déjà suivi (sans lui, un fichier suivi n'est jamais rapporté).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `logs/*` exclut le **contenu**, pas le répertoire : Git y entre et évalue
+> `!logs/.gitkeep`. Avec `logs/` (répertoire), la négation serait ignorée
+> (Q21.4). `notes-perso.txt` est ton problème, pas celui du projet : le mettre
+> dans le `.gitignore` versionné imposerait ta convention à l'équipe et
+> polluerait l'historique ; `core.excludesFile` (tous tes dépôts) ou
+> `.git/info/exclude` (ce clone) sont faits pour ça. `check-ignore -v`
+> affiche `fichier:ligne:règle` — la règle `!` s'affiche aussi, ce qui prouve
+> qu'elle est bien évaluée; `--no-index` est nécessaire pour `logs/.gitkeep`, déjà suivi (sans lui, un fichier suivi n'est jamais rapporté).
 
 ---
 
-**E21.8** — *Merge du hotfix : ordinaire vs `--no-ff`, puis `cherry-pick` et
+<a id="e21-8"></a>**[E21.8](README.md#e21-8)** — *Merge du hotfix : ordinaire vs `--no-ff`, puis `cherry-pick` et
 `branch -d`.*
 
 ```console
@@ -982,22 +1027,23 @@ warning: deleting branch 'hotfix/ansible-timeout' that has been merged to
 Deleted branch hotfix/ansible-timeout (was 9c33a91).
 ```
 
-::: pourquoi
-Le hotfix part de `v1.0.0` (`be7970d`) ; `main` a reçu dix commits depuis.
-`main` n'est donc pas un ancêtre de `9c33a91` : le fast-forward est
-impossible, Git fabrique un commit de merge à deux parents — `--no-ff` ou
-pas. `--no-ff` ne change quelque chose que quand le fast-forward **est**
-possible. Après `cherry-pick`, `main` contient une **copie** (`8052db1`) du
-commit, pas `9c33a91` lui-même : pour `branch -d`, qui teste « le commit de
-la branche est-il ancêtre de HEAD ? », la branche n'est pas fusionnée. Git
-l'a quand même supprimée parce que `-d` accepte aussi « fusionnée dans sa
-branche amont » (`origin/hotfix/ansible-timeout`, où elle est bien
-poussée) — d'où l'avertissement. Sans branche de suivi, il aurait fallu `-D`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le hotfix part de `v1.0.0` (`be7970d`) ; `main` a reçu dix commits depuis.
+> `main` n'est donc pas un ancêtre de `9c33a91` : le fast-forward est
+> impossible, Git fabrique un commit de merge à deux parents — `--no-ff` ou
+> pas. `--no-ff` ne change quelque chose que quand le fast-forward **est**
+> possible. Après `cherry-pick`, `main` contient une **copie** (`8052db1`) du
+> commit, pas `9c33a91` lui-même : pour `branch -d`, qui teste « le commit de
+> la branche est-il ancêtre de HEAD ? », la branche n'est pas fusionnée. Git
+> l'a quand même supprimée parce que `-d` accepte aussi « fusionnée dans sa
+> branche amont » (`origin/hotfix/ansible-timeout`, où elle est bien
+> poussée) — d'où l'avertissement. Sans branche de suivi, il aurait fallu `-D`.
 
 ---
 
-**E21.9** — *Rebase interactif sur la base commune.*
+<a id="e21-9"></a>**[E21.9](README.md#e21-9)** — *Rebase interactif sur la base commune.*
 
 ```bash
 git switch feature/tls-letsencrypt
@@ -1029,27 +1075,29 @@ $ git status -sb | head -1
 ## feature/tls-letsencrypt...origin/feature/tls-letsencrypt [ahead 1, behind 3]
 ```
 
-::: pourquoi
-Le rebase interactif rejoue les commits listés **depuis la base donnée** :
-`994e070` est repris tel quel (même parent, même tree, même message → même
-SHA, Git ne recrée rien). Les trois suivants sont fondus en un seul commit
-neuf, dont le SHA dépend de la date de committer : le tien n'est pas `a7f195e`. `ahead 1, behind 3` : ton nouveau commit n'existe pas sur le distant,
-et les trois anciens (`wip`, `fix typo`, `renouvellement`) n'existent plus
-chez toi — le **contenu** est identique, mais les commits ne le sont pas.
-Rebaser sur la base commune plutôt que sur `main` sépare deux opérations :
-nettoyer l'historique (aucun conflit possible), puis l'actualiser (le
-conflit, s'il y en a un, ne se présente qu'une fois, sur un commit propre).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le rebase interactif rejoue les commits listés **depuis la base donnée** :
+> `994e070` est repris tel quel (même parent, même tree, même message → même
+> SHA, Git ne recrée rien). Les trois suivants sont fondus en un seul commit
+> neuf, dont le SHA dépend de la date de committer : le tien n'est pas `a7f195e`. `ahead 1, behind 3` : ton nouveau commit n'existe pas sur le distant,
+> et les trois anciens (`wip`, `fix typo`, `renouvellement`) n'existent plus
+> chez toi — le **contenu** est identique, mais les commits ne le sont pas.
+> Rebaser sur la base commune plutôt que sur `main` sépare deux opérations :
+> nettoyer l'historique (aucun conflit possible), puis l'actualiser (le
+> conflit, s'il y en a un, ne se présente qu'une fois, sur un commit propre).
 
-::: piege
-`fixup` jette le message du commit absorbé, `squash` le concatène et
-propose l'édition. Pour un `wip`, c'est `fixup`. Et `reword` sans changer
-le contenu recrée quand même le commit — SHA neuf.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `fixup` jette le message du commit absorbé, `squash` le concatène et
+> propose l'édition. Pour un `wip`, c'est `fixup`. Et `reword` sans changer
+> le contenu recrée quand même le commit — SHA neuf.
 
 ---
 
-**E21.10** — *Basculer d'urgence avec `stash -u`.*
+<a id="e21-10"></a>**[E21.10](README.md#e21-10)** — *Basculer d'urgence avec `stash -u`.*
 
 ```console
 $ git switch feature/tls-letsencrypt
@@ -1069,21 +1117,22 @@ $ git stash pop
 Dropped refs/stash@{0} (f538086769b4826b88a540e95eaa2e2aaa9170af)
 ```
 
-::: pourquoi
-`switch` refuse quand un fichier **modifié** diffère entre les deux
-branches : il devrait l'écraser. Le stash est un commit (deux, en fait :
-index et working dir ; trois avec `-u` pour les non suivis) rangé sous
-`refs/stash`, et le working dir revient à `HEAD`. Sans `-u`, `brouillon.txt`
-reste en place : Git ne le considère pas comme « à protéger » — et si la
-branche cible contenait un fichier du même nom, le `switch` échouerait, ou
-pire, le fichier serait écrasé au retour. `pop` = `apply` + `drop` ; en cas
-de conflit à l'application, le stash est **conservé** : `stash list` après
-un `pop` qui a râlé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `switch` refuse quand un fichier **modifié** diffère entre les deux
+> branches : il devrait l'écraser. Le stash est un commit (deux, en fait :
+> index et working dir ; trois avec `-u` pour les non suivis) rangé sous
+> `refs/stash`, et le working dir revient à `HEAD`. Sans `-u`, `brouillon.txt`
+> reste en place : Git ne le considère pas comme « à protéger » — et si la
+> branche cible contenait un fichier du même nom, le `switch` échouerait, ou
+> pire, le fichier serait écrasé au retour. `pop` = `apply` + `drop` ; en cas
+> de conflit à l'application, le stash est **conservé** : `stash list` après
+> un `pop` qui a râlé.
 
 ---
 
-**E21.11** — *`cherry-pick 9c33a91` : SHA et dates.*
+<a id="e21-11"></a>**[E21.11](README.md#e21-11)** — *`cherry-pick 9c33a91` : SHA et dates.*
 
 ```console
 $ git cherry-pick 9c33a91          # déjà fait en E21.8 : sortie d'alors
@@ -1096,19 +1145,20 @@ $ git log --format='%h %ad %cd' --date=short -1 9c33a91
 9c33a91 2026-06-19 2026-06-19
 ```
 
-::: pourquoi
-Un commit a deux identités : **author** (qui a écrit le patch, quand) et
-**committer** (qui l'a enregistré dans **cet** historique, quand).
-`cherry-pick`, `rebase` et `am` conservent l'auteur et sa date, et posent
-le committer courant à la date courante. Le parent change (c'est `main`),
-donc le SHA change. `-x` ajoute `(cherry picked from commit 9c33a91…)` au
-message : indispensable pour retrouver l'origine d'un correctif porté sur
-plusieurs branches de maintenance.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un commit a deux identités : **author** (qui a écrit le patch, quand) et
+> **committer** (qui l'a enregistré dans **cet** historique, quand).
+> `cherry-pick`, `rebase` et `am` conservent l'auteur et sa date, et posent
+> le committer courant à la date courante. Le parent change (c'est `main`),
+> donc le SHA change. `-x` ajoute `(cherry picked from commit 9c33a91…)` au
+> message : indispensable pour retrouver l'origine d'un correctif porté sur
+> plusieurs branches de maintenance.
 
 ---
 
-**E21.12** — *Tag léger vs annoté, push sélectif, `ls-remote`.*
+<a id="e21-12"></a>**[E21.12](README.md#e21-12)** — *Tag léger vs annoté, push sélectif, `ls-remote`.*
 
 ```console
 $ git tag essai
@@ -1126,21 +1176,22 @@ be7970d96a2ecaa7c06f2a1a5a33fe5cd6b87d40	refs/tags/v1.0.0^{}
 …	refs/tags/v1.1.0-rc1^{}
 ```
 
-::: pourquoi
-`ls-remote` affiche pour un tag annoté deux lignes : le SHA de l'**objet
-tag** et, suffixé `^{}` (« peeled »), le SHA du **commit** visé — un tag
-léger n'a que la première, égale au commit. `git push` ne pousse aucun tag
-par défaut : on nomme celui qu'on veut (`push origin v1.1.0-rc1`),
-`--tags` pousse tout (y compris `essai`, ce qu'on ne veut pas), et
-`--follow-tags` pousse seulement les tags **annotés** joignables depuis
-ce qu'on pousse — le réglage `push.followTags=true` est le bon compromis.
-`git show v1.1.0-rc1` affiche d'abord le bloc du tag (tagger, date,
-message), puis le commit.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ls-remote` affiche pour un tag annoté deux lignes : le SHA de l'**objet
+> tag** et, suffixé `^{}` (« peeled »), le SHA du **commit** visé — un tag
+> léger n'a que la première, égale au commit. `git push` ne pousse aucun tag
+> par défaut : on nomme celui qu'on veut (`push origin v1.1.0-rc1`),
+> `--tags` pousse tout (y compris `essai`, ce qu'on ne veut pas), et
+> `--follow-tags` pousse seulement les tags **annotés** joignables depuis
+> ce qu'on pousse — le réglage `push.followTags=true` est le bon compromis.
+> `git show v1.1.0-rc1` affiche d'abord le bloc du tag (tagger, date,
+> message), puis le commit.
 
 ---
 
-**E21.13** — *Alice a poussé : `fetch`, constat, `pull --rebase`.*
+<a id="e21-13"></a>**[E21.13](README.md#e21-13)** — *Alice a poussé : `fetch`, constat, `pull --rebase`.*
 
 ```console
 $ git fetch
@@ -1156,20 +1207,21 @@ Fast-forward
  README.md | 2 ++
 ```
 
-::: pourquoi
-`fetch` a écrit les objets et déplacé `origin/main` ; `main` n'a pas bougé,
-tes fichiers non plus. `main..origin/main` liste ce qui t'attend. Comme tu
-n'avais aucun commit local, `pull --rebase` n'a rien eu à rejouer : simple
-fast-forward, identique à ce qu'aurait fait un merge (sortie ci-dessus sur un dépôt fraîchement préparé; si tu as gardé tes commits de E21.5 à E21.11, `status` affiche `[ahead N, behind 1]` et `pull --rebase` les rejoue au-dessus de `3113475`). La différence
-n'apparaît qu'avec un commit local : `pull --rebase` le met **après**
-`3113475` (historique linéaire, nouveau SHA), `pull.rebase=false` crée
-`Merge branch 'main' of /home/mathieu/lab21/remote/factura-infra` — un
-commit de merge sans valeur, que la revue devra ignorer.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `fetch` a écrit les objets et déplacé `origin/main` ; `main` n'a pas bougé,
+> tes fichiers non plus. `main..origin/main` liste ce qui t'attend. Comme tu
+> n'avais aucun commit local, `pull --rebase` n'a rien eu à rejouer : simple
+> fast-forward, identique à ce qu'aurait fait un merge (sortie ci-dessus sur un dépôt fraîchement préparé; si tu as gardé tes commits de E21.5 à E21.11, `status` affiche `[ahead N, behind 1]` et `pull --rebase` les rejoue au-dessus de `3113475`). La différence
+> n'apparaît qu'avec un commit local : `pull --rebase` le met **après**
+> `3113475` (historique linéaire, nouveau SHA), `pull.rebase=false` crée
+> `Merge branch 'main' of /home/mathieu/lab21/remote/factura-infra` — un
+> commit de merge sans valeur, que la revue devra ignorer.
 
 ---
 
-**E21.14** — *Le tableau `reset` en vrai, puis retour au point de départ
+<a id="e21-14"></a>**[E21.14](README.md#e21-14)** — *Le tableau `reset` en vrai, puis retour au point de départ
 sans compter.*
 
 ```console
@@ -1195,19 +1247,20 @@ c2      HEAD@{4}: commit: tmp b
 $ git reset --hard HEAD@{6}   # l'entrée juste avant « commit: tmp a »
 ```
 
-::: pourquoi
-`--soft` : `c` reste **indexé** (`A `), prêt à être recommité. `--mixed` :
-`b` sort de l'index mais reste sur disque (`??`). `--hard` : le fichier
-`a`, suivi dans `c1`, est supprimé ; `b` et `c`, qui ne sont plus suivis,
-**survivent** — `--hard` ne touche jamais aux fichiers non suivis (c'est
-`clean` qui le fait). Le reflog liste chaque déplacement avec sa cause
-(`commit:`, `reset:`, `checkout:`) : « avant les trois commits » se lit,
-pas ne se compte (`HEAD@{5}` = `commit: tmp a`, donc `HEAD@{6}` = avant) ; `origin/main` ne conviendrait que si `main` n'avait aucun commit local.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `--soft` : `c` reste **indexé** (`A `), prêt à être recommité. `--mixed` :
+> `b` sort de l'index mais reste sur disque (`??`). `--hard` : le fichier
+> `a`, suivi dans `c1`, est supprimé ; `b` et `c`, qui ne sont plus suivis,
+> **survivent** — `--hard` ne touche jamais aux fichiers non suivis (c'est
+> `clean` qui le fait). Le reflog liste chaque déplacement avec sa cause
+> (`commit:`, `reset:`, `checkout:`) : « avant les trois commits » se lit,
+> pas ne se compte (`HEAD@{5}` = `commit: tmp a`, donc `HEAD@{6}` = avant) ; `origin/main` ne conviendrait que si `main` n'avait aucun commit local.
 
 ---
 
-**E21.15** — *Branche supprimée avec `-D` : retrouver le commit.*
+<a id="e21-15"></a>**[E21.15](README.md#e21-15)** — *Branche supprimée avec `-D` : retrouver le commit.*
 
 ```console
 $ git branch -D feature/tls-letsencrypt
@@ -1222,21 +1275,22 @@ $ git branch feature/tls-letsencrypt 9d2486c
 $ git diff --stat origin/feature/tls-letsencrypt feature/tls-letsencrypt
 ```
 
-::: pourquoi
-Supprimer une branche supprime un **fichier de 41 octets** dans
-`.git/refs/heads/` (et son reflog) ; les commits restent. Git affiche
-d'ailleurs le SHA dans le message de suppression — première source. Le
-reflog de `HEAD` retrace les `checkout` vers/depuis la branche : la ligne
-`moving from feature/... to main` donne le commit où l'on était juste
-avant de partir. `fsck --lost-found` liste tout commit que plus rien ne
-référence — plus brutal, mais il marche même sans reflog (dépôt copié,
-clone `--mirror`). Ici la branche recréée diffère d'`origin/…` si tu as fait
-E21.9 (rebase) dessus : même contenu, commits différents — `diff --stat` est vide, `git log origin/feature/tls-letsencrypt...` ne l'est pas.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Supprimer une branche supprime un **fichier de 41 octets** dans
+> `.git/refs/heads/` (et son reflog) ; les commits restent. Git affiche
+> d'ailleurs le SHA dans le message de suppression — première source. Le
+> reflog de `HEAD` retrace les `checkout` vers/depuis la branche : la ligne
+> `moving from feature/... to main` donne le commit où l'on était juste
+> avant de partir. `fsck --lost-found` liste tout commit que plus rien ne
+> référence — plus brutal, mais il marche même sans reflog (dépôt copié,
+> clone `--mirror`). Ici la branche recréée diffère d'`origin/…` si tu as fait
+> E21.9 (rebase) dessus : même contenu, commits différents — `diff --stat` est vide, `git log origin/feature/tls-letsencrypt...` ne l'est pas.
 
 ---
 
-**E21.16** — *Bisect piloté par le script, puis `blame`.*
+<a id="e21-16"></a>**[E21.16](README.md#e21-16)** — *Bisect piloté par le script, puis `blame`.*
 
 ```console
 $ git bisect start main v1.0.0      # main sur fb97836 ; sur 3113475 (après
@@ -1260,23 +1314,24 @@ $ git blame -L 14,15 bin/healthcheck.sh
 4a34e424 (bob 2026-06-18 10:40:00 +0200 15)   ansible/playbooks/web.yaml …
 ```
 
-::: pourquoi
-`bisect run cmd` exécute `cmd` à chaque étape et interprète son code :
-0 = good, 1–124 ou 126–127 = bad, **125 = skip** (impossible à tester,
-par exemple build cassé). Le healthcheck sort en 1 quand il échoue : il
-est directement utilisable. Sept commits entre `v1.0.0` et `main` sur la
-première ligne de parenté, trois essais. `bisect` teste en HEAD détaché
-et remet la branche en place avec `reset`. `blame` attribue chaque ligne
-au **dernier** commit qui l'a modifiée — ce qui suffit ici, mais un
-reformatage massif « vole » l'attribution : `blame -w` ignore les blancs,
-`-C` suit les déplacements.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `bisect run cmd` exécute `cmd` à chaque étape et interprète son code :
+> 0 = good, 1–124 ou 126–127 = bad, **125 = skip** (impossible à tester,
+> par exemple build cassé). Le healthcheck sort en 1 quand il échoue : il
+> est directement utilisable. Sept commits entre `v1.0.0` et `main` sur la
+> première ligne de parenté, trois essais. `bisect` teste en HEAD détaché
+> et remet la branche en place avec `reset`. `blame` attribue chaque ligne
+> au **dernier** commit qui l'a modifiée — ce qui suffit ici, mais un
+> reformatage massif « vole » l'attribution : `blame -w` ignore les blancs,
+> `-C` suit les déplacements.
 
 ---
 
 ## 21.6 Labs
 
-### **L21.1** — *Intégrer `feature/tls-letsencrypt` : rebase interactif,
+### <a id="l21-1"></a>**[L21.1](README.md#l21-1)** — *Intégrer `feature/tls-letsencrypt` : rebase interactif,
 conflit, `--no-ff`, tag, suppression de branche.*
 
 **Procédure :**
@@ -1355,32 +1410,34 @@ $ git push origin --delete feature/tls-letsencrypt
  - [deleted]         feature/tls-letsencrypt
 ```
 
-::: pourquoi
-Le conflit vient de deux commits qui insèrent des lignes **au même endroit**
-(après `root …`) : Git ne sait pas dans quel ordre les mettre, ni si l'un
-remplace l'autre — c'est une décision humaine, et la seule bonne réponse
-ici est « les deux ». Pendant le rebase, `HEAD` est `main` (Q21.7) : garder
-« ours » aurait jeté le TLS d'alice. `--force-with-lease` est acceptable
-parce que la branche est **personnelle** et que l'option refuse d'écraser
-un commit qu'alice aurait poussé entre-temps ; sur `main`, partagé et
-protégé, un push forcé casserait tous les clones. Le `--no-ff` garde la
-feature visible : `git log --first-parent` montre une ligne « TLS », et
-`git revert -m 1 3883276` l'annulerait d'un coup. `rerere` (« reuse
-recorded resolution ») enregistre la résolution ; si le même conflit
-réapparaît (rebase refait, cherry-pick sur une autre branche), il est
-résolu automatiquement : `Resolved 'factura.conf.j2' using previous
-resolution.` — il faut quand même `add` et vérifier.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le conflit vient de deux commits qui insèrent des lignes **au même endroit**
+> (après `root …`) : Git ne sait pas dans quel ordre les mettre, ni si l'un
+> remplace l'autre — c'est une décision humaine, et la seule bonne réponse
+> ici est « les deux ». Pendant le rebase, `HEAD` est `main` (Q21.7) : garder
+> « ours » aurait jeté le TLS d'alice. `--force-with-lease` est acceptable
+> parce que la branche est **personnelle** et que l'option refuse d'écraser
+> un commit qu'alice aurait poussé entre-temps ; sur `main`, partagé et
+> protégé, un push forcé casserait tous les clones. Le `--no-ff` garde la
+> feature visible : `git log --first-parent` montre une ligne « TLS », et
+> `git revert -m 1 3883276` l'annulerait d'un coup. `rerere` (« reuse
+> recorded resolution ») enregistre la résolution ; si le même conflit
+> réapparaît (rebase refait, cherry-pick sur une autre branche), il est
+> résolu automatiquement : `Resolved 'factura.conf.j2' using previous
+> resolution.` — il faut quand même `add` et vérifier.
 
-::: piege
-Le SHA du merge commit, du tag et des commits rebasés sont propres à ta
-machine (date de committer) : ne les compare pas au corrigé. Ce qui doit
-coïncider : le contenu du template et la forme du graphe.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le SHA du merge commit, du tag et des commits rebasés sont propres à ta
+> machine (date de committer) : ne les compare pas au corrigé. Ce qui doit
+> coïncider : le contenu du template et la forme du graphe.
 
 ---
 
-### **L21.2** — *Bisect : localiser et corriger la régression du healthcheck.*
+### <a id="l21-2"></a>**[L21.2](README.md#l21-2)** — *Bisect : localiser et corriger la régression du healthcheck.*
 
 **Procédure :**
 
@@ -1419,21 +1476,22 @@ exécuter le healthcheck en CI sur chaque MR (la régression n'aurait jamais
 atteint `main`) ; un `commit-msg` n'aurait rien vu — le message était
 correct, c'est le **contenu** qu'il fallait tester.
 
-::: pourquoi
-Le `worktree` évite le classique « je fais `checkout v1.0.0` pour tester
-et je me retrouve en HEAD détaché avec des modifications » : une seconde
-copie de travail, même `.git`, branche ou tag différent. Bisect suppose
-que la propriété testée est **monotone** (bonne avant, mauvaise après le
-commit fautif) ; avec un test flaky, il désigne n'importe quoi — d'où
-l'importance d'un test déterministe comme celui-ci. On ne revert pas le
-refactor entier : il est correct à une lettre près, et un revert
-réintroduirait la dette qu'il supprimait. On ne renomme pas le playbook
-non plus : ce serait adapter la réalité à un bug.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le `worktree` évite le classique « je fais `checkout v1.0.0` pour tester
+> et je me retrouve en HEAD détaché avec des modifications » : une seconde
+> copie de travail, même `.git`, branche ou tag différent. Bisect suppose
+> que la propriété testée est **monotone** (bonne avant, mauvaise après le
+> commit fautif) ; avec un test flaky, il désigne n'importe quoi — d'où
+> l'importance d'un test déterministe comme celui-ci. On ne revert pas le
+> refactor entier : il est correct à une lettre près, et un revert
+> réintroduirait la dette qu'il supprimait. On ne renomme pas le playbook
+> non plus : ce serait adapter la réalité à un bug.
 
 ---
 
-### **L21.3** — *Serveur Git minimal sur `lab-adm`, hook `post-receive`.*
+### <a id="l21-3"></a>**[L21.3](README.md#l21-3)** — *Serveur Git minimal sur `lab-adm`, hook `post-receive`.*
 
 **Sur `lab-adm` :**
 
@@ -1503,36 +1561,38 @@ remote: error: denying non-fast-forward refs/heads/main (you should pull first)
  ! [remote rejected] essai -> main (non-fast-forward)
 ```
 
-::: pourquoi
-Un dépôt **bare** n'a pas de working directory : c'est le contenu de
-`.git` à la racine, et c'est le seul format acceptable pour un serveur
-(pousser dans un dépôt non-bare sur la branche extraite est refusé par
-défaut : `receive.denyCurrentBranch`). `--shared=group` fait trois choses :
-`core.sharedRepository=group` (les fichiers créés sont `g+w`), le setgid
-sur les répertoires (les nouveaux objets prennent le groupe `git`, pas le
-groupe primaire de celui qui pousse), et `receive.denyNonFastForwards=true`
-— une protection de branche gratuite, qui explique le refus final. Le
-hook `post-receive` reçoit sur stdin **une ligne par référence poussée**
-(`ancien nouveau ref`), avec `0000000…` pour une création ; filtrer sur
-`refs/heads/main` évite de déployer une branche d'essai. `git archive |
-tar -x` extrait un tree sans `.git` ni fichiers ignorés, à l'inverse d'un
-`checkout --work-tree` qui laisse un index à moitié cohérent. Tout ce que
-le hook écrit revient au client préfixé `remote:` : c'est ton journal de
-déploiement côté développeur.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un dépôt **bare** n'a pas de working directory : c'est le contenu de
+> `.git` à la racine, et c'est le seul format acceptable pour un serveur
+> (pousser dans un dépôt non-bare sur la branche extraite est refusé par
+> défaut : `receive.denyCurrentBranch`). `--shared=group` fait trois choses :
+> `core.sharedRepository=group` (les fichiers créés sont `g+w`), le setgid
+> sur les répertoires (les nouveaux objets prennent le groupe `git`, pas le
+> groupe primaire de celui qui pousse), et `receive.denyNonFastForwards=true`
+> — une protection de branche gratuite, qui explique le refus final. Le
+> hook `post-receive` reçoit sur stdin **une ligne par référence poussée**
+> (`ancien nouveau ref`), avec `0000000…` pour une création ; filtrer sur
+> `refs/heads/main` évite de déployer une branche d'essai. `git archive |
+> tar -x` extrait un tree sans `.git` ni fichiers ignorés, à l'inverse d'un
+> `checkout --work-tree` qui laisse un index à moitié cohérent. Tout ce que
+> le hook écrit revient au client préfixé `remote:` : c'est ton journal de
+> déploiement côté développeur.
 
-::: piege
-Un hook côté serveur tourne avec l'identité de **celui qui pousse**
-(connexion SSH `mathieu@lab-adm`) : `/srv/factura-conf` doit être
-inscriptible par tous les membres du groupe `git`, sinon le hook échoue —
-et comme `post-receive` s'exécute **après** l'acceptation du push, l'échec
-n'annule pas le push : `main` avance, rien n'est déployé. Pour refuser un
-push, c'est `pre-receive` (D21).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un hook côté serveur tourne avec l'identité de **celui qui pousse**
+> (connexion SSH `mathieu@lab-adm`) : `/srv/factura-conf` doit être
+> inscriptible par tous les membres du groupe `git`, sinon le hook échoue —
+> et comme `post-receive` s'exécute **après** l'acceptation du push, l'échec
+> n'annule pas le push : `main` avance, rien n'est déployé. Pour refuser un
+> push, c'est `pre-receive` (D21).
 
 ---
 
-### **L21.4** — *Purger le secret : preuve, rotation, `filter-repo`, re-clone,
+### <a id="l21-4"></a>**[L21.4](README.md#l21-4)** — *Purger le secret : preuve, rotation, `filter-repo`, re-clone,
 hook.*
 
 **1–2. Preuve et rotation** (dans le rapport) :
@@ -1639,34 +1699,36 @@ refusé : test.env ne doit jamais être commité
 (contourner en connaissance de cause : git commit --no-verify)
 ```
 
-::: pourquoi
-`filter-repo` parcourt tout l'historique, retire `.env` de chaque tree qui
-le contient, supprime les commits devenus vides (`1557f83` et `53340da`
-n'ajoutaient/retiraient que ce fichier), et recrée tous les commits en
-aval — les six premiers gardent leur SHA. Il efface aussi le remote
-`origin` et les reflogs du clone pour empêcher un `push` accidentel vers
-l'ancien historique : d'où le travail dans un `--mirror` jetable. Sur le
-serveur, les anciens objets restent dans `objects/` tant qu'un reflog ou
-`refs/original` les cite ; `reflog expire` + `gc --prune=now` les
-supprime physiquement — c'est `cat-file -e` qui le prouve, pas `git log`.
-Le hook lit `git show ":$f"` (le contenu **indexé**) et non le fichier sur
-disque : ce qui est commité est ce qui est dans l'index, et un `add -p`
-peut avoir indexé une version différente. `gitleaks protect --staged`
-fait la même chose avec 150 règles maintenues.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `filter-repo` parcourt tout l'historique, retire `.env` de chaque tree qui
+> le contient, supprime les commits devenus vides (`1557f83` et `53340da`
+> n'ajoutaient/retiraient que ce fichier), et recrée tous les commits en
+> aval — les six premiers gardent leur SHA. Il efface aussi le remote
+> `origin` et les reflogs du clone pour empêcher un `push` accidentel vers
+> l'ancien historique : d'où le travail dans un `--mirror` jetable. Sur le
+> serveur, les anciens objets restent dans `objects/` tant qu'un reflog ou
+> `refs/original` les cite ; `reflog expire` + `gc --prune=now` les
+> supprime physiquement — c'est `cat-file -e` qui le prouve, pas `git log`.
+> Le hook lit `git show ":$f"` (le contenu **indexé**) et non le fichier sur
+> disque : ce qui est commité est ce qui est dans l'index, et un `add -p`
+> peut avoir indexé une version différente. `gitleaks protect --staged`
+> fait la même chose avec 150 règles maintenues.
 
-::: piege
-Sur une forge, le push forcé ne suffit pas : les commits restent
-accessibles **par SHA** via l'interface (caches, MR, forks) tant que
-l'administrateur n'a pas lancé un `gc` côté serveur. Et les tags annotés
-sont réécrits par `filter-repo` (`--tag-name-filter cat` avec
-`filter-branch`) : `v1.0.0` pointe désormais sur un nouveau commit, la
-signature éventuelle du tag est **invalidée** — à re-signer.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sur une forge, le push forcé ne suffit pas : les commits restent
+> accessibles **par SHA** via l'interface (caches, MR, forks) tant que
+> l'administrateur n'a pas lancé un `gc` côté serveur. Et les tags annotés
+> sont réécrits par `filter-repo` (`--tag-name-filter cat` avec
+> `filter-branch`) : `v1.0.0` pointe désormais sur un nouveau commit, la
+> signature éventuelle du tag est **invalidée** — à re-signer.
 
 ---
 
-### **L21.5** — *Gitea sur `lab-ops`.*
+### <a id="l21-5"></a>**[L21.5](README.md#l21-5)** — *Gitea sur `lab-ops`.*
 
 **Procédure (binaire + systemd) :**
 
@@ -1736,24 +1798,25 @@ remote: Gitea: Not allowed to push to protected branch main
 Branche `docs/gitea`, push, *New Pull Request*, merge « Rebase then
 merge », `git pull` sur `lab-adm`.
 
-::: pourquoi
-Une forge ne fait rien que ce module n'ait fait à la main : un dépôt bare
-par projet (`/var/lib/gitea/data/gitea-repositories/infra/factura-infra.git`),
-un serveur SSH qui n'autorise que `git-upload-pack`/`git-receive-pack`, et
-des hooks `pre-receive`/`post-receive` **générés** qui implémentent la
-protection de branche et les webhooks. La protection de `main` que tu
-viens de cliquer est exactement le `pre-receive` de D21, en plus fiable et
-avec une interface. Le port SSH 2222 évite de mêler l'authentification Git
-à celle du système ; en production on mettrait plutôt Gitea derrière le
-sshd système avec un utilisateur `git` dédié, ou derrière un reverse
-proxy TLS (module 15).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une forge ne fait rien que ce module n'ait fait à la main : un dépôt bare
+> par projet (`/var/lib/gitea/data/gitea-repositories/infra/factura-infra.git`),
+> un serveur SSH qui n'autorise que `git-upload-pack`/`git-receive-pack`, et
+> des hooks `pre-receive`/`post-receive` **générés** qui implémentent la
+> protection de branche et les webhooks. La protection de `main` que tu
+> viens de cliquer est exactement le `pre-receive` de D21, en plus fiable et
+> avec une interface. Le port SSH 2222 évite de mêler l'authentification Git
+> à celle du système ; en production on mettrait plutôt Gitea derrière le
+> sshd système avec un utilisateur `git` dédié, ou derrière un reverse
+> proxy TLS (module 15).
 
 ---
 
 ## 21.7 Break & Fix
 
-### **BF21.1** — *Le rebase d'alice resté en plan.*
+### <a id="bf21-1"></a>**[BF21.1](README.md#bf21-1)** — *Le rebase d'alice resté en plan.*
 
 **Diagnostic :**
 
@@ -1820,22 +1883,23 @@ Variante sans abandonner : corriger le fichier en place, `git add`,
 un hook `pre-commit` qui refuse `^(<<<<<<<|=======|>>>>>>>)` ; ne jamais
 laisser un rebase ouvert (`--abort` si on n'a pas le temps).
 
-::: pourquoi
-Un rebase en cours est un **état** dans `.git/rebase-merge/` : la liste
-des commits restants (`git-rebase-todo`), ceux faits (`done`), la branche
-d'origine (`head-name`), et `HEAD` détaché sur le dernier commit rejoué.
-`switch` refuse pour ne pas laisser cet état orphelin ; `rebase --abort`
-remet `HEAD` et la branche là où `orig-head` les note, sans rien perdre.
-Git ne relit **pas** le contenu pour vérifier qu'un conflit est résolu : il
-regarde si l'entrée d'index est passée des trois stades (base/ours/theirs)
-à un seul. C'est pourquoi `diff --check` existe. Supprimer
-`.git/rebase-merge` à la main laisserait `HEAD` détaché et la branche non
-mise à jour : exactement BF21.2.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un rebase en cours est un **état** dans `.git/rebase-merge/` : la liste
+> des commits restants (`git-rebase-todo`), ceux faits (`done`), la branche
+> d'origine (`head-name`), et `HEAD` détaché sur le dernier commit rejoué.
+> `switch` refuse pour ne pas laisser cet état orphelin ; `rebase --abort`
+> remet `HEAD` et la branche là où `orig-head` les note, sans rien perdre.
+> Git ne relit **pas** le contenu pour vérifier qu'un conflit est résolu : il
+> regarde si l'entrée d'index est passée des trois stades (base/ours/theirs)
+> à un seul. C'est pourquoi `diff --check` existe. Supprimer
+> `.git/rebase-merge` à la main laisserait `HEAD` détaché et la branche non
+> mise à jour : exactement BF21.2.
 
 ---
 
-### **BF21.2** — *Les correctifs de l'astreinte ont disparu.*
+### <a id="bf21-2"></a>**[BF21.2](README.md#bf21-2)** — *Les correctifs de l'astreinte ont disparu.*
 
 **Diagnostic :**
 
@@ -1889,19 +1953,20 @@ entrées du 11 juillet sont expirables dès le 10 août : passé cette date, les
 de `switch` ; `git config --global advice.detachedHead true` (défaut) —
 Git explique tout ça au moment du `checkout v1.0.0`.
 
-::: pourquoi
-Le reflog est l'historique des **valeurs** de `HEAD` (et de chaque
-branche : `git reflog show main`), écrit à chaque commande qui les
-déplace. Il est local, jamais poussé, et périmé après 90 jours
-(joignable) ou 30 jours (injoignable). `git log -g` le parcourt comme un
-historique ; `fsck --lost-found` retrouve les commits orphelins **sans**
-reflog. Le merge choisit `0c57ce0` (le plus récent) : son parent est
-`9e4875f`, donc les deux commits reviennent d'un coup.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le reflog est l'historique des **valeurs** de `HEAD` (et de chaque
+> branche : `git reflog show main`), écrit à chaque commande qui les
+> déplace. Il est local, jamais poussé, et périmé après 90 jours
+> (joignable) ou 30 jours (injoignable). `git log -g` le parcourt comme un
+> historique ; `fsck --lost-found` retrouve les commits orphelins **sans**
+> reflog. Le merge choisit `0c57ce0` (le plus récent) : son parent est
+> `9e4875f`, donc les deux commits reviennent d'un coup.
 
 ---
 
-### **BF21.3** — *Push rejeté, `pull` refuse.*
+### <a id="bf21-3"></a>**[BF21.3](README.md#bf21-3)** — *Push rejeté, `pull` refuse.*
 
 **Diagnostic :**
 
@@ -1970,21 +2035,22 @@ lassitude. Sur une machine de déploiement qui ne doit jamais avoir de
 commits locaux, oui : un refus signale une dérive. Ici :
 `git config --unset pull.ff` et `pull.rebase=true` en global.
 
-::: pourquoi
-Un push est accepté seulement si la nouvelle valeur de la référence
-**descend** de l'ancienne (fast-forward côté serveur). Alice a avancé
-`origin/main` vers `a1e949a`, qui n'est pas dans ton historique : ton
-`0a54cc5` ne descend pas de `a1e949a`, refus. Intégrer = fabriquer un
-commit qui descend des deux. `pull.ff=only` applique la même règle
-**localement** : n'accepter d'avancer `main` que si `origin/main` en
-descend, ce qui est faux ici. Rebase et merge produisent le même
-`inventory.ini` ; ils diffèrent par la forme du graphe et par le fait que
-tes deux commits changent de SHA (rebase) ou non (merge).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un push est accepté seulement si la nouvelle valeur de la référence
+> **descend** de l'ancienne (fast-forward côté serveur). Alice a avancé
+> `origin/main` vers `a1e949a`, qui n'est pas dans ton historique : ton
+> `0a54cc5` ne descend pas de `a1e949a`, refus. Intégrer = fabriquer un
+> commit qui descend des deux. `pull.ff=only` applique la même règle
+> **localement** : n'accepter d'avancer `main` que si `origin/main` en
+> descend, ce qui est faux ici. Rebase et merge produisent le même
+> `inventory.ini` ; ils diffèrent par la forme du graphe et par le fait que
+> tes deux commits changent de SHA (rebase) ou non (merge).
 
 ---
 
-### **BF21.4** — *`git status` affiche 2 000 fichiers.*
+### <a id="bf21-4"></a>**[BF21.4](README.md#bf21-4)** — *`git status` affiche 2 000 fichiers.*
 
 **Diagnostic :**
 
@@ -2047,32 +2113,34 @@ terraform/terraform.tfstate --invert-paths`) comme en L21.4. Et pour la
 suite : état Terraform dans un backend distant (S3/MinIO, Consul, Terraform
 Cloud) chiffré, jamais dans Git.
 
-::: pourquoi
-`git status` ne « plante » pas à 2 000 fichiers, mais il rend `add -A`
-inutilisable et cache les vrais changements : c'est un problème de
-signal, pas de performance. `--diff-filter=D` avec `--name-only` retrouve
-en une commande qui a supprimé quoi ; `restore --source=<commit>~1` prend
-le fichier tel qu'il était **juste avant** la suppression — sans réécrire
-un `.gitignore` de mémoire, qui aurait sûrement oublié `crash.log` ou la
-négation `!logs/.gitkeep`. `.terraform.lock.hcl` doit rester suivi : il
-fige les versions des providers pour toute l'équipe ; la règle
-`.terraform/` (avec le slash, un répertoire) ne le matche pas — vérifié par
-`check-ignore` qui répond rc 1.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `git status` ne « plante » pas à 2 000 fichiers, mais il rend `add -A`
+> inutilisable et cache les vrais changements : c'est un problème de
+> signal, pas de performance. `--diff-filter=D` avec `--name-only` retrouve
+> en une commande qui a supprimé quoi ; `restore --source=<commit>~1` prend
+> le fichier tel qu'il était **juste avant** la suppression — sans réécrire
+> un `.gitignore` de mémoire, qui aurait sûrement oublié `crash.log` ou la
+> négation `!logs/.gitkeep`. `.terraform.lock.hcl` doit rester suivi : il
+> fige les versions des providers pour toute l'équipe ; la règle
+> `.terraform/` (avec le slash, un répertoire) ne le matche pas — vérifié par
+> `check-ignore` qui répond rc 1.
 
-::: piege
-`git rm terraform/terraform.tfstate` **sans** `--cached` supprime le
-fichier du disque : l'état Terraform de l'infra, irremplaçable sans
-`terraform import` de chaque ressource. `--cached` retire de l'index
-seulement. Et `git clean -fdx` ici aurait supprimé `.terraform/` (5 min de
-`init` à refaire) et `terraform.tfstate.backup`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `git rm terraform/terraform.tfstate` **sans** `--cached` supprime le
+> fichier du disque : l'état Terraform de l'infra, irremplaçable sans
+> `terraform import` de chaque ressource. `--cached` retire de l'index
+> seulement. Et `git clean -fdx` ici aurait supprimé `.terraform/` (5 min de
+> `init` à refaire) et `terraform.tfstate.backup`.
 
 ---
 
 ## 21.8 Défi du module
 
-**D21** — *Le dépôt de référence de l'équipe infra.*
+<a id="d21"></a>**[D21](README.md#d21)** — *Le dépôt de référence de l'équipe infra.*
 
 **1. Hooks versionnés**
 
@@ -2210,27 +2278,35 @@ approbations, CI obligatoire et `CODEOWNERS` remplacent les hooks maison ;
 les hooks de secrets restent côté client (`pre-commit` + `gitleaks`) et
 côté CI.
 
-::: pourquoi
-Chaque contrôle est placé au plus tôt **et** répété au plus tard : le
-`pre-commit` évite à l'auteur de commiter un secret, le `pre-receive` le
-bloque s'il a contourné avec `--no-verify` (les hooks clients sont
-volontaires : `core.hooksPath` doit être activé par chacun, c'est pourquoi
-`CONTRIBUTING.md` le documente et le serveur ne s'y fie pas).
-`pre-receive` reçoit toutes les références du push **avant** toute
-écriture : un `exit 1` refuse tout le push, atomiquement ; `post-receive`
-ne peut plus rien refuser. Le tag signé fige le SHA du commit de release,
-donc tout l'historique en amont : un auditeur qui vérifie `git tag -v
-v1.2.0` a la preuve que rien n'a été réécrit depuis. La signature SSH
-réutilise la clé du module 14 : pas de PGP à gérer, et les forges (Gitea
-1.17+, GitHub, GitLab) la vérifient. `allowed_signers` est l'équivalent
-local du trousseau : sans lui, `%G?` renvoie `U`, pas `G`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque contrôle est placé au plus tôt **et** répété au plus tard : le
+> `pre-commit` évite à l'auteur de commiter un secret, le `pre-receive` le
+> bloque s'il a contourné avec `--no-verify` (les hooks clients sont
+> volontaires : `core.hooksPath` doit être activé par chacun, c'est pourquoi
+> `CONTRIBUTING.md` le documente et le serveur ne s'y fie pas).
+> `pre-receive` reçoit toutes les références du push **avant** toute
+> écriture : un `exit 1` refuse tout le push, atomiquement ; `post-receive`
+> ne peut plus rien refuser. Le tag signé fige le SHA du commit de release,
+> donc tout l'historique en amont : un auditeur qui vérifie `git tag -v
+> v1.2.0` a la preuve que rien n'a été réécrit depuis. La signature SSH
+> réutilise la clé du module 14 : pas de PGP à gérer, et les forges (Gitea
+> 1.17+, GitHub, GitLab) la vérifient. `allowed_signers` est l'équivalent
+> local du trousseau : sans lui, `%G?` renvoie `U`, pas `G`.
 
-::: piege
-`git log v1.1.0..HEAD --format='* %s'` pour le changelog suppose des
-messages conventionnels **depuis** `v1.1.0` : si des `wip` s'y trouvent, le
-changelog les affiche — c'est le moment où l'équipe comprend pourquoi le
-`commit-msg` existe. Et un hook `pre-receive` qui appelle `shellcheck` ou
-lance des tests longs bloque le push de tout le monde : ces contrôles vont
-en CI, le serveur ne garde que les vérifications instantanées.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `git log v1.1.0..HEAD --format='* %s'` pour le changelog suppose des
+> messages conventionnels **depuis** `v1.1.0` : si des `wip` s'y trouvent, le
+> changelog les affiche — c'est le moment où l'équipe comprend pourquoi le
+> `commit-msg` existe. Et un hook `pre-receive` qui appelle `shellcheck` ou
+> lance des tests longs bloque le push de tout le monde : ces contrôles vont
+> en CI, le serveur ne garde que les vérifications instantanées.
+
+<!-- nav:début -->
+---
+
+[← Module 20](../20-virtualisation-kvm/corrige.md) · [Énoncé](README.md) · [Module 22 →](../22-docker/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

@@ -1,53 +1,81 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 13**  
+[← Module 12](../12-reseau/README.md) · [Corrigé](corrige.md) · [Module 14 →](../14-ssh/README.md)
+
+<details><summary>Scripts du module (13)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M13.sh`](../../scripts/setup/setup_M13.sh) | prépare le module |
+| [`check_M13_01.sh`](../../scripts/check/check_M13_01.sh) | vérification |
+| [`check_M13_02.sh`](../../scripts/check/check_M13_02.sh) | vérification |
+| [`check_M13_03.sh`](../../scripts/check/check_M13_03.sh) | vérification |
+| [`check_M13_04.sh`](../../scripts/check/check_M13_04.sh) | vérification |
+| [`check_M13_05.sh`](../../scripts/check/check_M13_05.sh) | vérification |
+| [`check_M13_06.sh`](../../scripts/check/check_M13_06.sh) | vérification |
+| [`break_M13_01.sh`](../../scripts/break/break_M13_01.sh) | installe une panne |
+| [`break_M13_02.sh`](../../scripts/break/break_M13_02.sh) | installe une panne |
+| [`break_M13_03.sh`](../../scripts/break/break_M13_03.sh) | installe une panne |
+| [`break_M13_04.sh`](../../scripts/break/break_M13_04.sh) | installe une panne |
+| [`break_M13_05.sh`](../../scripts/break/break_M13_05.sh) | installe une panne |
+| [`break_M13_06.sh`](../../scripts/break/break_M13_06.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 13 — Réseau Linux avancé : netns, bridges, netfilter, DNS
 
 ## 13.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* décrire le chemin d'un paquet dans le noyau (NIC → pilote → hooks netfilter →
-  décision de routage → socket) et dire, pour un symptôme donné, à quel étage
-  lire les compteurs (`ip -s link`, `ethtool -S`, `nstat`, `conntrack -S`) ;
-* construire à la main, avec `ip netns`, des paires veth et un bridge Linux, un
-  réseau de « conteneurs » routé et NATé, puis reconnaître exactement la même
-  construction dans `docker network inspect` et `nft list ruleset` ;
-* lire `ip route show table all` sans me perdre entre `local`, `main` et
-  `default`, expliquer `via`/`dev`/`src`/`metric`/`onlink`, et mettre en place
-  un routage par politique (`ip rule`, tables nommées, `fwmark`) qui répond par
-  l'interface d'arrivée quand une machine a deux passerelles ;
-* créer une sous-interface 802.1Q, la rendre persistante avec Netplan, la
-  raccorder à un `vmbr` Proxmox VLAN-aware, et prouver au `tcpdump -e` qu'une
-  trame porte bien son tag ;
-* monter un overlay VXLAN entre deux VM, un tunnel WireGuard entre deux autres,
-  choisir le MTU juste et expliquer en quoi flannel, Calico ou Cilium ne font
-  rien d'autre ;
-* agréger deux cartes en `bond0` (active-backup, LACP en notion), lire
-  `/proc/net/bonding/bond0` et observer une bascule pendant qu'on coupe une NIC
-  dans Proxmox ;
-* écrire un jeu de règles nftables complet — tables, chaînes de base sur les
-  cinq hooks, sets, maps, `counter`, `log` — et expliquer chaque verdict ;
-* expliquer conntrack (états, timeouts, `nf_conntrack_max`), pourquoi
-  `ct state established,related accept` est la règle la plus importante d'un
-  pare-feu, comment SNAT/masquerade et DNAT réécrivent un paquet, et pourquoi un
-  DNAT ne marche pas « de l'intérieur » sans hairpin ;
-* suivre un paquet précis dans netfilter avec `nft monitor trace` et lire ce que
-  Docker écrit dans `DOCKER-USER` ;
-* monter un résolveur récursif Unbound (validation DNSSEC, cache, statistiques),
-  une zone `lab.local` faisant autorité sous BIND9 avec sa zone inverse et un
-  secondaire alimenté par AXFR, puis migrer les VM du lab de `/etc/hosts` vers ce
-  DNS ; distinguer récursif, autoritaire, forwarder et cache ;
-* activer IPv6 (ULA) sur le lab, lire `ip -6 neigh` à la place de la table ARP
-  et tester un service en v6 ;
-* mesurer l'effet d'un overlay ou d'un tunnel sur le débit avec `iperf3`, et
-  simuler un réseau dégradé avec `tc netem`.
-
-Temps estimé : 14 h (module copieux, quatre séances : namespaces et routage /
-tunnels et bonding / netfilter / DNS)
-Prérequis : module 12 (iproute2, `dig`, `ss`, `tcpdump`, MTU), module 08
-(systemd). Les politiques de pare-feu (`ufw`, `firewalld`, `fail2ban`) sont au
-module 18 : ici on ouvre le capot de netfilter. Docker (module 22) et
-Kubernetes (module 26) s'appuieront directement sur tout ce module.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * décrire le chemin d'un paquet dans le noyau (NIC → pilote → hooks netfilter →
+>   décision de routage → socket) et dire, pour un symptôme donné, à quel étage
+>   lire les compteurs (`ip -s link`, `ethtool -S`, `nstat`, `conntrack -S`) ;
+> * construire à la main, avec `ip netns`, des paires veth et un bridge Linux, un
+>   réseau de « conteneurs » routé et NATé, puis reconnaître exactement la même
+>   construction dans `docker network inspect` et `nft list ruleset` ;
+> * lire `ip route show table all` sans me perdre entre `local`, `main` et
+>   `default`, expliquer `via`/`dev`/`src`/`metric`/`onlink`, et mettre en place
+>   un routage par politique (`ip rule`, tables nommées, `fwmark`) qui répond par
+>   l'interface d'arrivée quand une machine a deux passerelles ;
+> * créer une sous-interface 802.1Q, la rendre persistante avec Netplan, la
+>   raccorder à un `vmbr` Proxmox VLAN-aware, et prouver au `tcpdump -e` qu'une
+>   trame porte bien son tag ;
+> * monter un overlay VXLAN entre deux VM, un tunnel WireGuard entre deux autres,
+>   choisir le MTU juste et expliquer en quoi flannel, Calico ou Cilium ne font
+>   rien d'autre ;
+> * agréger deux cartes en `bond0` (active-backup, LACP en notion), lire
+>   `/proc/net/bonding/bond0` et observer une bascule pendant qu'on coupe une NIC
+>   dans Proxmox ;
+> * écrire un jeu de règles nftables complet — tables, chaînes de base sur les
+>   cinq hooks, sets, maps, `counter`, `log` — et expliquer chaque verdict ;
+> * expliquer conntrack (états, timeouts, `nf_conntrack_max`), pourquoi
+>   `ct state established,related accept` est la règle la plus importante d'un
+>   pare-feu, comment SNAT/masquerade et DNAT réécrivent un paquet, et pourquoi un
+>   DNAT ne marche pas « de l'intérieur » sans hairpin ;
+> * suivre un paquet précis dans netfilter avec `nft monitor trace` et lire ce que
+>   Docker écrit dans `DOCKER-USER` ;
+> * monter un résolveur récursif Unbound (validation DNSSEC, cache, statistiques),
+>   une zone `lab.local` faisant autorité sous BIND9 avec sa zone inverse et un
+>   secondaire alimenté par AXFR, puis migrer les VM du lab de `/etc/hosts` vers ce
+>   DNS ; distinguer récursif, autoritaire, forwarder et cache ;
+> * activer IPv6 (ULA) sur le lab, lire `ip -6 neigh` à la place de la table ARP
+>   et tester un service en v6 ;
+> * mesurer l'effet d'un overlay ou d'un tunnel sur le débit avec `iperf3`, et
+>   simuler un réseau dégradé avec `tc netem`.
+>
+> Temps estimé : 14 h (module copieux, quatre séances : namespaces et routage /
+> tunnels et bonding / netfilter / DNS)
+> Prérequis : module 12 (iproute2, `dig`, `ss`, `tcpdump`, MTU), module 08
+> (systemd). Les politiques de pare-feu (`ufw`, `firewalld`, `fail2ban`) sont au
+> module 18 : ici on ouvre le capot de netfilter. Docker (module 22) et
+> Kubernetes (module 26) s'appuieront directement sur tout ce module.
 
 ---
 
@@ -81,14 +109,15 @@ sudo apt install -y unbound bind9 bind9-utils
 sudo apt install -y bind9 bind9-utils
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y iproute nftables conntrack-tools tcpdump \
-ethtool iperf3 wireguard-tools bind-utils unbound bind`. Le paquet BIND
-s'appelle `bind`, le service `named.service`, la configuration est dans
-`/etc/named.conf` et les zones dans `/var/named/`. `firewalld` est actif par
-défaut : les labs netfilter de ce module se font sur `lab-adm`, pas sur
-`lab-rhel`, pour ne pas mélanger deux gestionnaires de règles.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y iproute nftables conntrack-tools tcpdump \
+> ethtool iperf3 wireguard-tools bind-utils unbound bind`. Le paquet BIND
+> s'appelle `bind`, le service `named.service`, la configuration est dans
+> `/etc/named.conf` et les zones dans `/var/named/`. `firewalld` est actif par
+> défaut : les labs netfilter de ce module se font sur `lab-adm`, pas sur
+> `lab-rhel`, pour ne pas mélanger deux gestionnaires de règles.
 
 Script de préparation, idempotent, à lancer **sur chaque VM concernée** (il
 détecte l'hôte) :
@@ -104,13 +133,14 @@ le secondaire BIND va prendre) et pose sur `lab-ops` l'adresse de service du
 résolveur, `10.10.10.53/24`, de façon volatile — tu la rendras persistante au
 lab L13.4.
 
-::: attention
-`ufw` ou une politique nftables déjà active (module 18) interférerait avec les
-labs netfilter : sur `lab-adm`, vérifie `sudo ufw status` (doit être
-`inactive`) et `sudo nft list ruleset` (doit être vide ou ne contenir que tes
-tables de ce module). Les labs VXLAN, bonding et WireGuard modifient des
-interfaces réelles : garde une console Proxmox ouverte (`qm terminal 9002`).
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `ufw` ou une politique nftables déjà active (module 18) interférerait avec les
+> labs netfilter : sur `lab-adm`, vérifie `sudo ufw status` (doit être
+> `inactive`) et `sudo nft list ruleset` (doit être vide ou ne contenir que tes
+> tables de ce module). Les labs VXLAN, bonding et WireGuard modifient des
+> interfaces réelles : garde une console Proxmox ouverte (`qm terminal 9002`).
 
 ---
 
@@ -190,7 +220,9 @@ l'extérieur : `sysctl -w net.ipv4.ip_forward=1` + `masquerade`. Si le module
 même bridge** passe aussi par la chaîne `forward` de netfilter
 (`net.bridge.bridge-nf-call-iptables=1`) : sans lui, non.
 
-@fig(netns-bridge-nat): Le mini-Docker du lab L13.1 : trois netns reliés par des paires veth à `br-lab` 172.20.0.1/24, `ip_forward`, masquerade en sortie par `ens18` et DNAT du port 8080 vers c1.
+<p align="center"><img src="../../assets/figures/netns-bridge-nat.svg" alt="Schéma : netns-bridge-nat"></p>
+
+*Figure — Le mini-Docker du lab L13.1 : trois netns reliés par des paires veth à `br-lab` 172.20.0.1/24, `ip_forward`, masquerade en sortie par `ens18` et DNAT du port 8080 vers c1.*
 
 ### Routage en profondeur
 
@@ -263,7 +295,9 @@ bridge fdb show dev vxlan0            # 00:00:00:00:00:00 dst 10.10.10.12
 ip -d link show vxlan0
 ```
 
-@fig(vxlan-overlay): lab-web lab-db vxlan0 192.168.42.11/24 VNI 42 · MTU 1450 ens18 10.10.10.11 MTU 1500 vxlan0 192.168.42.12/24 VNI 42 · MTU 1450 ens18 10.10.10.12 MTU 1500 encapsule décapsule overlay 192.168.42.0/24 L2 étendu : `ping 192.168.42.12` underlay 10.10.10.0/24 UDP 4789 de 10.10.10.11 vers 10.10.10.12 (`bridge fdb show dev vxlan0`) la trame sur le fil, de l'extérieur vers l'intérieur lab-web et lab-db sur l'underlay 10.10.10.0/24, `vxlan0` (VNI 42, UDP 4789) formant l'overlay 192.168.42.0/24, et la pile d'encapsulation qui explique le MTU 1450.
+<p align="center"><img src="../../assets/figures/vxlan-overlay.svg" alt="Schéma : vxlan-overlay"></p>
+
+*Figure — lab-web lab-db vxlan0 192.168.42.11/24 VNI 42 · MTU 1450 ens18 10.10.10.11 MTU 1500 vxlan0 192.168.42.12/24 VNI 42 · MTU 1450 ens18 10.10.10.12 MTU 1500 encapsule décapsule overlay 192.168.42.0/24 L2 étendu : `ping 192.168.42.12` underlay 10.10.10.0/24 UDP 4789 de 10.10.10.11 vers 10.10.10.12 (`bridge fdb show dev vxlan0`) la trame sur le fil, de l'extérieur vers l'intérieur lab-web et lab-db sur l'underlay 10.10.10.0/24, `vxlan0` (VNI 42, UDP 4789) formant l'overlay 192.168.42.0/24, et la pile d'encapsulation qui explique le MTU 1450.*
 
 VXLAN encapsule une **trame Ethernet** complète dans UDP : c'est un L2 étendu
 sur un réseau L3. flannel (backend `vxlan`) crée exactement un `flannel.1`
@@ -326,7 +360,9 @@ Cinq hooks : `prerouting`, `input`, `forward`, `output`, `postrouting`. Une
 **chaîne de base** s'accroche à un hook avec un type et une priorité ; les
 chaînes régulières sont appelées par `jump`/`goto`.
 
-@fig(netfilter-hooks): Le chemin d'un paquet dans netfilter : DNAT avant la décision de routage, filtrage en `input` ou `forward`, SNAT/masquerade en `postrouting`, conntrack qui suit tout le flux.
+<p align="center"><img src="../../assets/figures/netfilter-hooks.svg" alt="Schéma : netfilter-hooks"></p>
+
+*Figure — Le chemin d'un paquet dans netfilter : DNAT avant la décision de routage, filtrage en `input` ou `forward`, SNAT/masquerade en `postrouting`, conntrack qui suit tout le flux.*
 
 ```bash
 nft list ruleset ; nft -a list ruleset            # -a : handles
@@ -397,7 +433,9 @@ l'administrateur et survit aux redémarrages du démon.
 CoreDNS (Kubernetes) est un autoritaire pour `cluster.local` **et** un forwarder
 pour le reste : un serveur, deux rôles, comme Unbound + stub-zone ici.
 
-@fig(dns-resolution): Le chemin réel de `curl lab-web.lab.local` : stub `systemd-resolved`, récursif Unbound (cache, `stub-zone`), autoritaire BIND9 ns1 et son secondaire par AXFR ; `.local` n'existe pas en public.
+<p align="center"><img src="../../assets/figures/dns-resolution.svg" alt="Schéma : dns-resolution"></p>
+
+*Figure — Le chemin réel de `curl lab-web.lab.local` : stub `systemd-resolved`, récursif Unbound (cache, `stub-zone`), autoritaire BIND9 ns1 et son secondaire par AXFR ; `.local` n'existe pas en public.*
 
 Unbound (`/etc/unbound/unbound.conf.d/*.conf`) : `interface:`,
 `access-control:`, `stub-zone:` (délègue une zone à un autoritaire),
@@ -469,7 +507,7 @@ dropwatch -l kas                          # où le noyau jette (notion)
 
 ## 13.3 Quiz — QCM
 
-**Q13.1** — Sur `lab-adm`, tu viens de créer un namespace :
+<a id="q13-1"></a>**[Q13.1](corrige.md#q13-1)** — Sur `lab-adm`, tu viens de créer un namespace :
 
 ```bash
 sudo ip netns add c1
@@ -483,7 +521,7 @@ b) `lo` existe dans le nouveau netns mais est `DOWN` : il faut le monter
 c) ICMP est bloqué par défaut dans un netns
 d) `ping` doit être lancé avec `nsenter`, pas `ip netns exec`
 
-**Q13.2** — `sudo ip -n c1 link` affiche :
+<a id="q13-2"></a>**[Q13.2](corrige.md#q13-2)** — `sudo ip -n c1 link` affiche :
 
 ```text
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 ...
@@ -497,7 +535,7 @@ b) `eth0` est un bout de veth dont le pair a l'index 6 dans un autre namespace
 c) `eth0` est esclave du bond d'index 6
 d) l'interface a 6 files d'attente
 
-**Q13.3** — Trois netns sont raccordés au bridge `br-lab` (`172.20.0.1/24`),
+<a id="q13-3"></a>**[Q13.3](corrige.md#q13-3)** — Trois netns sont raccordés au bridge `br-lab` (`172.20.0.1/24`),
 `ip_forward=1`, et la règle `masquerade` est en place. Depuis `c1`,
 `ping 172.20.0.12` fonctionne, `ping 10.10.10.11` fonctionne, mais
 `ping 172.20.0.1` **ne répond pas**. Que peux-tu affirmer ?
@@ -509,7 +547,7 @@ b) le trafic vers l'adresse du bridge est du trafic `input` du netns racine :
 c) `masquerade` réécrit aussi les paquets vers `172.20.0.1`
 d) il manque une route vers `172.20.0.1` dans `c1`
 
-**Q13.4** — `ip rule` affiche :
+<a id="q13-4"></a>**[Q13.4](corrige.md#q13-4)** — `ip rule` affiche :
 
 ```text
 0:      from all lookup local
@@ -530,7 +568,7 @@ c) le paquet est rejeté : une règle qui matche et une table sans route directe
    donnent `Network is unreachable`
 d) le paquet est jeté par `rp_filter`, puisque source et table ne concordent pas
 
-**Q13.5** — Dans nftables, quelle est la différence entre une chaîne de base et
+<a id="q13-5"></a>**[Q13.5](corrige.md#q13-5)** — Dans nftables, quelle est la différence entre une chaîne de base et
 une chaîne régulière ? **Deux réponses correctes.**
 
 a) une chaîne de base déclare `type ... hook ... priority ...` et reçoit les
@@ -539,7 +577,7 @@ b) une chaîne régulière n'est traversée que sur `jump` ou `goto`
 c) une chaîne de base ne peut contenir que des verdicts `accept`/`drop`
 d) une chaîne régulière est réservée à la table `nat`
 
-**Q13.6** — Une chaîne `forward` avec `policy drop` contient uniquement
+<a id="q13-6"></a>**[Q13.6](corrige.md#q13-6)** — Une chaîne `forward` avec `policy drop` contient uniquement
 `iifname "br-lab" oifname "ens18" accept`. Depuis un netns derrière `br-lab`,
 `curl http://10.10.10.11/` reste bloqué puis expire. `tcpdump -i ens18` sur
 `lab-adm` montre le `SYN` sortant et le `SYN-ACK` entrant. Quelle est la cause ?
@@ -550,7 +588,7 @@ b) le `SYN-ACK` entre par `ens18` vers `br-lab` : aucune règle ne l'accepte, il
 c) le serveur web refuse l'IP source privée
 d) `ip_forward` est à 0
 
-**Q13.7** — `sudo conntrack -L` affiche cette ligne :
+<a id="q13-7"></a>**[Q13.7](corrige.md#q13-7)** — `sudo conntrack -L` affiche cette ligne :
 
 ```text
 tcp 6 431999 ESTABLISHED src=172.20.0.11 dst=10.10.10.11 sport=40312 dport=80 \
@@ -565,7 +603,7 @@ b) le flux expire dans 431 999 s, soit environ 5 jours, s'il reste silencieux
 c) le flux est en `TIME-WAIT`
 d) `[ASSURED]` signifie que le paquet a été accepté par le pare-feu
 
-**Q13.8** — `dmesg` sur un routeur NAT : `nf_conntrack: table full, dropping
+<a id="q13-8"></a>**[Q13.8](corrige.md#q13-8)** — `dmesg` sur un routeur NAT : `nf_conntrack: table full, dropping
 packet`. Les sessions SSH déjà ouvertes fonctionnent, les nouvelles échouent.
 Quelle action est **correcte et immédiate** ?
 
@@ -576,7 +614,7 @@ b) augmenter `net.netfilter.nf_conntrack_max` (et `nf_conntrack_buckets`),
 c) redémarrer le service réseau
 d) désactiver conntrack en supprimant toutes les règles `ct`
 
-**Q13.9** — Règle `dnat to 172.20.0.11:8000` sur `tcp dport 8080` dans une
+<a id="q13-9"></a>**[Q13.9](corrige.md#q13-9)** — Règle `dnat to 172.20.0.11:8000` sur `tcp dport 8080` dans une
 chaîne `prerouting`. Depuis `lab-web`, `curl http://10.10.10.10:8080/`
 fonctionne. Depuis `lab-adm` lui-même, `curl http://10.10.10.10:8080/` renvoie
 `Connection refused`. Pourquoi ?
@@ -587,7 +625,7 @@ b) les paquets émis localement ne traversent pas `prerouting` mais `output` :
 c) le DNAT ne s'applique qu'aux adresses sources externes
 d) `curl` utilise `127.0.0.1` et non `10.10.10.10`
 
-**Q13.10** — Deux VM montent un VXLAN (`id 42`, `dstport 4789`) au-dessus
+<a id="q13-10"></a>**[Q13.10](corrige.md#q13-10)** — Deux VM montent un VXLAN (`id 42`, `dstport 4789`) au-dessus
 d'`ens18` (MTU 1500). L'admin a laissé `vxlan0` en MTU 1500. Quel est le
 symptôme le plus probable ?
 
@@ -597,7 +635,7 @@ b) `ping` passe, `ssh` ouvre une session, mais `scp` d'un gros fichier gèle ou
 c) aucun : le noyau ajuste le MTU automatiquement
 d) les deux extrémités ne voient pas la même VNI
 
-**Q13.11** — Dans un fichier `wg0.conf`, à quoi sert `AllowedIPs` côté client ?
+<a id="q13-11"></a>**[Q13.11](corrige.md#q13-11)** — Dans un fichier `wg0.conf`, à quoi sert `AllowedIPs` côté client ?
 **Deux réponses correctes.**
 
 a) c'est le filtre des sources acceptées **depuis** ce pair
@@ -605,7 +643,7 @@ b) c'est la liste des destinations routées **vers** ce pair (cryptokey routing)
 c) c'est l'adresse de l'interface locale
 d) c'est la liste des serveurs DNS poussés par le pair
 
-**Q13.12** — `cat /proc/net/bonding/bond0` :
+<a id="q13-12"></a>**[Q13.12](corrige.md#q13-12)** — `cat /proc/net/bonding/bond0` :
 
 ```text
 Bonding Mode: fault-tolerance (active-backup)
@@ -626,7 +664,7 @@ b) `ens19`, esclave primaire, a perdu sa porteuse une fois ; le bond a basculé
 c) le bond est en panne, aucun esclave n'est actif
 d) le mode LACP a échoué à négocier
 
-**Q13.13** — Sur `lab-adm`, `tcpdump -i ens18 -nn -e vlan 10` ne montre que les requêtes ARP sortantes, jamais de réponse,
+<a id="q13-13"></a>**[Q13.13](corrige.md#q13-13)** — Sur `lab-adm`, `tcpdump -i ens18 -nn -e vlan 10` ne montre que les requêtes ARP sortantes, jamais de réponse,
 alors que `ip -d link show ens18.10` prouve que la sous-interface existe;
 `ping` sur ce VLAN ne répond pas. Que vérifies-tu en priorité côté Proxmox ?
 
@@ -637,7 +675,7 @@ b) que `vmbr1` est `bridge-vlan-aware yes` et que le port de la VM n'est pas
 c) que le MTU de `vmbr1` est 9000
 d) que `tcpdump` a été lancé avec `-i any`
 
-**Q13.14** — `dig @10.10.10.14 lab-web.lab.local` répond avec les flags
+<a id="q13-14"></a>**[Q13.14](corrige.md#q13-14)** — `dig @10.10.10.14 lab-web.lab.local` répond avec les flags
 `qr aa rd` et `dig @10.10.10.14 www.ubuntu.com` répond `status: REFUSED`.
 Quel rôle joue `10.10.10.14` ?
 
@@ -646,7 +684,7 @@ b) un serveur faisant autorité pour `lab.local`, avec `recursion no`
 c) un forwarder vers un amont mort
 d) un serveur qui bloque `dig`
 
-**Q13.15** — Tu ajoutes un enregistrement `A` dans `db.lab.local` sur le
+<a id="q13-15"></a>**[Q13.15](corrige.md#q13-15)** — Tu ajoutes un enregistrement `A` dans `db.lab.local` sur le
 primaire, `rndc reload`, et `dig @10.10.10.14` le renvoie. Trente minutes plus
 tard, `dig @10.10.10.10` (secondaire) ne le connaît toujours pas, sans aucune
 erreur dans ses journaux. Cause la plus probable ?
@@ -657,7 +695,7 @@ b) le serial du `SOA` n'a pas été incrémenté : le secondaire compare les
 c) le TTL de l'enregistrement est trop long
 d) le port 53 UDP est filtré entre les deux (AXFR passe en UDP)
 
-**Q13.16** — Sur `lab-ops`, Unbound écoute sur `10.10.10.53` et BIND9 sur
+<a id="q13-16"></a>**[Q13.16](corrige.md#q13-16)** — Sur `lab-ops`, Unbound écoute sur `10.10.10.53` et BIND9 sur
 `10.10.10.14`, tous deux sur le port 53, plus `systemd-resolved` sur
 `127.0.0.53`. Ça fonctionne. Pourquoi n'y a-t-il pas de conflit ?
 
@@ -668,7 +706,7 @@ c) parce que BIND9 écoute en TCP et Unbound en UDP
 d) parce que `systemd-resolved` se désactive quand un autre serveur DNS est
    installé
 
-**Q13.17** — `ip -6 neigh show dev ens18` affiche `fd00:10:10:10::11 lladdr
+<a id="q13-17"></a>**[Q13.17](corrige.md#q13-17)** — `ip -6 neigh show dev ens18` affiche `fd00:10:10:10::11 lladdr
 bc:24:11:aa:bb:cc STALE`. Que signifie `STALE` ?
 
 a) le voisin est injoignable, l'entrée est en échec
@@ -677,7 +715,7 @@ b) l'entrée est connue mais non confirmée récemment ; elle sera re-vérifiée
 c) l'adresse a changé de MAC
 d) l'entrée est statique, posée à la main
 
-**Q13.18** — Sur `lab-ops` où tourne Docker, `iptables -S FORWARD` montre
+<a id="q13-18"></a>**[Q13.18](corrige.md#q13-18)** — Sur `lab-ops` où tourne Docker, `iptables -S FORWARD` montre
 `-A FORWARD -j DOCKER-USER` en première position. Tu veux interdire à
 `10.10.10.0/24` d'atteindre les ports publiés des conteneurs. Où mets-tu la
 règle pour qu'elle survive à un `systemctl restart docker` ?
@@ -691,105 +729,85 @@ d) dans `/etc/docker/daemon.json` avec `"iptables": false`
 
 ## 13.4 Quiz — questions ouvertes
 
-**QO13.1** — *On te demande en entretien* : « Explique-moi ce que fait Docker
+<a id="qo13-1"></a>**[QO13.1](corrige.md#qo13-1)** — *On te demande en entretien* : « Explique-moi ce que fait Docker
 quand je lance `docker run -p 8080:80 nginx`, côté réseau, sans parler de
 Docker. » Donne la séquence exacte d'objets noyau créés (namespace, veth,
 bridge, routes, règles netfilter) et, pour chacun, la commande `ip`/`nft` qui
 le reproduit à la main.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO13.2** — Décris le chemin d'un paquet TCP qui arrive sur `ens18` de
+<a id="qo13-2"></a>**[QO13.2](corrige.md#qo13-2)** — Décris le chemin d'un paquet TCP qui arrive sur `ens18` de
 `lab-adm` à destination d'un netns derrière `br-lab` via un DNAT : à quel
 hook la destination est-elle réécrite, où la décision de routage est-elle
 prise, quelle chaîne le paquet traverse ensuite, comment le paquet de retour
 retrouve son adresse publique, et à quel moment conntrack intervient.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO13.3** — Une machine a deux interfaces sur deux réseaux, chacune avec sa
+<a id="qo13-3"></a>**[QO13.3](corrige.md#qo13-3)** — Une machine a deux interfaces sur deux réseaux, chacune avec sa
 passerelle. Les clients du réseau B se plaignent : le `ping` passe mais toute
 connexion TCP échoue ou se coupe. Explique le mécanisme (route asymétrique,
 `rp_filter`, pare-feu stateful en face), puis donne la configuration `ip rule` +
 + table dédiée qui corrige, et la commande qui **prouve** la correction sans
 envoyer un seul paquet.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO13.4** — Compare `ct state established,related accept` en tête de chaîne
+<a id="qo13-4"></a>**[QO13.4](corrige.md#qo13-4)** — Compare `ct state established,related accept` en tête de chaîne
 avec une approche « sans état » qui autoriserait `tcp sport 80` en entrée.
 Explique ce que conntrack apporte, ce que `related` couvre concrètement, ce que
 `invalid` désigne, et pourquoi un routeur qui perd sa table conntrack (`conntrack
 -F`, reboot) coupe les sessions NATées mais pas les sessions non NATées.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO13.5** — *On te demande en entretien* : « Un DNAT de port fonctionne depuis
+<a id="qo13-5"></a>**[QO13.5](corrige.md#qo13-5)** — *On te demande en entretien* : « Un DNAT de port fonctionne depuis
 l'extérieur mais pas depuis le LAN interne où se trouve le serveur cible. »
 Explique le problème du hairpin NAT : trajet du SYN, trajet du SYN-ACK, pourquoi
 le client reçoit une réponse d'une adresse qu'il ne connaît pas, et les deux
 solutions (SNAT de retour ou split-horizon DNS).
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO13.6** — VXLAN, GRE, IPIP, WireGuard : pour chacun, ce qui est encapsulé
+<a id="qo13-6"></a>**[QO13.6](corrige.md#qo13-6)** — VXLAN, GRE, IPIP, WireGuard : pour chacun, ce qui est encapsulé
 (trame ou paquet), le protocole porteur, le surcoût, si c'est chiffré, et un cas
 d'usage typique. Termine par le lien avec Kubernetes : que fait précisément
 `flannel.1` sur un nœud, et pourquoi le MTU des pods est 1450.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO13.7** — Explique la différence entre un serveur DNS **autoritaire**, un
+<a id="qo13-7"></a>**[QO13.7](corrige.md#qo13-7)** — Explique la différence entre un serveur DNS **autoritaire**, un
 **récursif**, un **forwarder** et un **cache**. Dans le lab, qui répond quand
 `lab-web` demande `www.ubuntu.com`, et qui répond pour `lab-db.lab.local` ?
 Donne pour chaque cas la séquence complète des serveurs interrogés et les flags
 `dig` qui le prouvent.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO13.8** — Un transfert de zone : décris le mécanisme complet entre primaire
+<a id="qo13-8"></a>**[QO13.8](corrige.md#qo13-8)** — Un transfert de zone : décris le mécanisme complet entre primaire
 et secondaire (NOTIFY, SOA, comparaison de serial, AXFR/IXFR, refresh/retry/
 expire), ce que devient la zone sur le secondaire si le primaire disparaît deux
 semaines, et les trois erreurs de configuration qui empêchent silencieusement le
 transfert.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO13.9** — Un collègue propose de « désactiver IPv6 partout, on ne s'en sert
+<a id="qo13-9"></a>**[QO13.9](corrige.md#qo13-9)** — Un collègue propose de « désactiver IPv6 partout, on ne s'en sert
 pas ». Explique ce qu'un hôte Linux fait en IPv6 sans aucune configuration
 (link-local, ND, RA), en quoi c'est utile à Kubernetes et Docker, ce qui casse
 réellement quand on met `disable_ipv6=1`, et ce que tu proposes à la place
 (ULA, filtrage, `accept_ra`).
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO13.10** — `iperf3` donne 9,4 Gbit/s en direct entre `lab-web` et `lab-db`,
+<a id="qo13-10"></a>**[QO13.10](corrige.md#qo13-10)** — `iperf3` donne 9,4 Gbit/s en direct entre `lab-web` et `lab-db`,
 5,1 Gbit/s à travers le VXLAN et 1,8 Gbit/s à travers WireGuard. Explique d'où
 vient chaque écart (encapsulation, perte des offloads, chiffrement, MTU,
 copies mémoire), quel compteur ou outil le confirmerait, et ce qu'on peut
 régler sans changer de technologie.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
@@ -798,66 +816,66 @@ lignes: 8
 Sauf mention contraire, les exercices se font sur `lab-adm`, dans des netns :
 rien de ce que tu fais ici ne touche `ens18`.
 
-**E13.1** — Affiche, pour `ens18`, les compteurs détaillés d'erreurs et de
+<a id="e13-1"></a>**[E13.1](corrige.md#e13-1)** — Affiche, pour `ens18`, les compteurs détaillés d'erreurs et de
 pertes (avec les sous-compteurs `rx_missed`, `rx_over`), la liste des offloads
 actifs, la taille des anneaux RX/TX et le nombre de files. Dis lequel de ces
 quatre affichages est vide ou « inconnu » sur une VM virtio et pourquoi.
 
-**E13.2** — Ajoute 200 ms de latence et 10 % de perte sur `lo` de `lab-adm`,
+<a id="e13-2"></a>**[E13.2](corrige.md#e13-2)** — Ajoute 200 ms de latence et 10 % de perte sur `lo` de `lab-adm`,
 prouve l'effet avec `ping 127.0.0.1` (latence **aller-retour** observée :
 explique la valeur), puis retire la dégradation et prouve qu'elle a disparu.
 
-**E13.3** — Crée deux netns `bleu` et `rouge` reliés par une paire veth en
+<a id="e13-3"></a>**[E13.3](corrige.md#e13-3)** — Crée deux netns `bleu` et `rouge` reliés par une paire veth en
 `10.0.0.1/24` et `10.0.0.2/24`. Fais-les se répondre en `ping`. Puis, depuis
 `bleu`, liste ses interfaces, ses routes, ses règles nftables et ses sockets :
 prouve que chacun de ces quatre éléments est distinct de ceux du netns racine.
 
-**E13.4** — Sans `ip netns exec`, entre dans le netns `bleu` avec `nsenter` et
+<a id="e13-4"></a>**[E13.4](corrige.md#e13-4)** — Sans `ip netns exec`, entre dans le netns `bleu` avec `nsenter` et
 lance un `python3 -m http.server 8000` dedans, en arrière-plan. Depuis `rouge`,
 récupère la page. Depuis le netns racine, prouve avec `ss` que le port 8000
 n'est **pas** visible, puis trouve le PID du serveur et retrouve son namespace
 via `/proc/<pid>/ns/net`.
 
-**E13.5** — Crée un bridge `br-lab` (`172.20.0.1/24`) et raccorde-lui trois
+<a id="e13-5"></a>**[E13.5](corrige.md#e13-5)** — Crée un bridge `br-lab` (`172.20.0.1/24`) et raccorde-lui trois
 netns `c1`, `c2`, `c3` (`172.20.0.11` à `.13`), chacun avec `lo` monté et une
 route par défaut via le bridge. Affiche la table de transfert du bridge après
 un `ping` entre `c1` et `c2` : quelles MAC apparaissent, sur quels ports, et
 avec quel drapeau ?
 
-**E13.6** — Depuis `c1`, joins `10.10.10.11` (lab-web) : identifie chaque
+<a id="e13-6"></a>**[E13.6](corrige.md#e13-6)** — Depuis `c1`, joins `10.10.10.11` (lab-web) : identifie chaque
 élément manquant (forwarding, NAT) en lisant les symptômes, ajoute-les
 **dans l'ordre**, et capture sur `ens18` le paquet sortant pour montrer
 l'adresse source réécrite. Puis affiche l'entrée conntrack correspondante et
 explique ses deux tuples.
 
-**E13.7** — Affiche toutes les tables de routage de `lab-adm`, puis uniquement
+<a id="e13-7"></a>**[E13.7](corrige.md#e13-7)** — Affiche toutes les tables de routage de `lab-adm`, puis uniquement
 la table `local`. Explique trois lignes de cette table (une `local`, une
 `broadcast`, celle de `127.0.0.0/8`). Puis ajoute une route vers
 `10.10.30.0/24` via `10.10.10.99` **alors que `10.10.10.99` n'existe pas**, et
 une seconde via `192.0.2.1`, d'abord sans puis avec `onlink`. Lesquelles sont acceptées, laquelle est
 refusée, et pourquoi ?
 
-**E13.8** — Crée une table nommée `secours` (numéro 150), mets-y une route par
+<a id="e13-8"></a>**[E13.8](corrige.md#e13-8)** — Crée une table nommée `secours` (numéro 150), mets-y une route par
 défaut via `172.20.0.13` (le netns `c3`, qui jouera le routeur), et une règle
 qui envoie dans cette table tout ce qui porte la marque `0x5`. Marque avec
 `nft` les paquets vers `198.51.100.0/24`. Prouve avec `ip route get` que
 `198.51.100.7` sort bien par `br-lab` via `c3` et que `9.9.9.9` sort toujours
 par `ens18`. Nettoie.
 
-**E13.9** — Crée sur `lab-adm` une sous-interface VLAN 20 sur `ens18` avec
+<a id="e13-9"></a>**[E13.9](corrige.md#e13-9)** — Crée sur `lab-adm` une sous-interface VLAN 20 sur `ens18` avec
 l'adresse `10.10.20.10/24`, affiche ses détails (`-d`), lance `ping
 10.10.20.99` et capture la trame ARP sortante en montrant le tag 802.1Q dans la
 sortie `tcpdump`. Écris ensuite le bloc Netplan équivalent (sans l'appliquer)
 et supprime la sous-interface.
 
-**E13.10** — Sur `lab-web` et `lab-db`, monte un VXLAN point à point (VNI 42,
+<a id="e13-10"></a>**[E13.10](corrige.md#e13-10)** — Sur `lab-web` et `lab-db`, monte un VXLAN point à point (VNI 42,
 `192.168.42.11/24` et `.12/24`, MTU correct). Prouve le fonctionnement au
 `ping`, affiche l'entrée `fdb` qui porte l'adresse du pair, et capture sur
 `ens18` un paquet encapsulé en montrant : IP externe, port UDP 4789, VNI, et la
 trame interne. Puis démontre le MTU : trouve le plus grand `ping -M do` qui
 passe sur `vxlan0`.
 
-**E13.11** — Écris un jeu de règles nftables **stateful** minimal pour
+<a id="e13-11"></a>**[E13.11](corrige.md#e13-11)** — Écris un jeu de règles nftables **stateful** minimal pour
 `lab-adm` dans `~/lab13/nft/input.nft` : politique `drop` en entrée, loopback
 accepté, `established,related` accepté, `invalid` jeté, SSH accepté depuis un
 set `admin` contenant `10.10.10.0/24`, ICMP echo limité à 10/s, tout le reste
@@ -865,7 +883,7 @@ journalisé (préfixe `in-drop: `, 5/min) puis jeté. Charge-le avec `nft -f`
 depuis une session SSH sans la perdre, provoque une entrée de journal, et
 affiche-la. Vide ensuite le jeu de règles.
 
-**E13.12** — Traduis avec `iptables-translate` ces trois règles d'un vieux
+<a id="e13-12"></a>**[E13.12](corrige.md#e13-12)** — Traduis avec `iptables-translate` ces trois règles d'un vieux
 runbook, explique ce que chaque ligne `nft` produite ajoute par rapport à
 l'originale (`counter`, famille, chaîne), et dis pourquoi une règle chargée via
 `iptables` et une autre via `nft` sur la même machine peuvent se contredire.
@@ -876,27 +894,27 @@ iptables -t nat -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
 iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to 172.17.0.2:80
 ```
 
-**E13.13** — Active `nftrace` sur les paquets TCP à destination du port 8080
+<a id="e13-13"></a>**[E13.13](corrige.md#e13-13)** — Active `nftrace` sur les paquets TCP à destination du port 8080
 entrant sur `lab-adm`, lance `nft monitor trace` dans un terminal et un
 `curl http://10.10.10.10:8080/` depuis `lab-web` dans un autre (le DNAT de
 l'exercice E13.6 ou du lab L13.1 doit être en place). Reproduis dans ta réponse
 la séquence des chaînes traversées et le verdict de chacune, puis retire la
 règle de trace.
 
-**E13.14** — Sur `lab-ops`, sans toucher à la configuration d'Unbound, prouve
+<a id="e13-14"></a>**[E13.14](corrige.md#e13-14)** — Sur `lab-ops`, sans toucher à la configuration d'Unbound, prouve
 qu'il fait de la récursion complète et non du forwarding (deux indices : sa
 liste de serveurs interrogés et une capture), affiche ses statistiques de cache
 (`hits` vs `misses`) avant et après deux résolutions identiques, et vide le
 cache pour un seul domaine.
 
-**E13.15** — Sur le primaire BIND9, ajoute un enregistrement `SRV` pour
+<a id="e13-15"></a>**[E13.15](corrige.md#e13-15)** — Sur le primaire BIND9, ajoute un enregistrement `SRV` pour
 `_ldap._tcp.lab.local` (priorité 10, poids 50, port 389, cible `lab-adm`), un
 `TXT` `"v=spf1 mx -all"` à l'apex, valide la zone **avant** de recharger,
 recharge, et prouve avec `dig` que le secondaire a reçu la modification (serial
 identique des deux côtés). Note le temps écoulé entre le `reload` et la mise à
 jour du secondaire.
 
-**E13.16** — Attribue à `lab-adm` et `lab-web` des adresses ULA
+<a id="e13-16"></a>**[E13.16](corrige.md#e13-16)** — Attribue à `lab-adm` et `lab-web` des adresses ULA
 `fd00:10:10:10::10/64` et `::11/64` (à chaud d'abord), fais-les se joindre en
 v6, affiche la table de voisinage v6 et compare-la à `ip neigh` v4 (états,
 adresse link-local du voisin). Ouvre un `python3 -m http.server` en écoute v6
@@ -907,16 +925,16 @@ qui rendrait l'adresse persistante.
 
 ## 13.6 Labs ★★
 
-### **L13.1** — Mini-Docker à la main : trois netns, un bridge, NAT et publication de port
+### <a id="l13-1"></a>**[L13.1](corrige.md#l13-1)** — Mini-Docker à la main : trois netns, un bridge, NAT et publication de port
 
-::: contexte
-L'équipe plateforme veut que chaque admin comprenne ce que Docker fabrique
-avant d'ouvrir un ticket « le port publié ne répond pas ». On te demande de
-reconstruire, sans Docker, le réseau `bridge` par défaut : trois « conteneurs »
-isolés, une passerelle, la sortie vers le lab en NAT et la publication d'un
-port. Le tout doit être livré sous forme de script rejouable et de jeu de
-règles nftables lisible.
-:::
+> **Contexte**
+>
+> L'équipe plateforme veut que chaque admin comprenne ce que Docker fabrique
+> avant d'ouvrir un ticket « le port publié ne répond pas ». On te demande de
+> reconstruire, sans Docker, le réseau `bridge` par défaut : trois « conteneurs »
+> isolés, une passerelle, la sortie vers le lab en NAT et la publication d'un
+> port. Le tout doit être livré sous forme de script rejouable et de jeu de
+> règles nftables lisible.
 
 Travaille sur `lab-adm`. Livrables : `~/lab13/bin/minidocker.sh` (`up`,
 `down`, `status`) et `~/lab13/nft/minidocker.nft`. Le squelette existe déjà.
@@ -962,34 +980,36 @@ Travaille sur `lab-adm`. Livrables : `~/lab13/bin/minidocker.sh` (`up`,
    (`Subnet`, `Gateway`, `com.docker.network.bridge.name`, `IPv4Address`) à un
    objet que tu as créé. Trois lignes dans le rapport.
 
-::: astuce
-Pour un script idempotent : `[ -e /run/netns/c1 ] || ip netns add c1` (pas `ip netns list | grep -x c1` : dès qu'un pair veth y est déplacé, la ligne devient `c1 (id: 0)`),
-`ip link show br-lab >/dev/null 2>&1 || ip link add br-lab type bridge`.
-Et `nft -f` avec `flush table ip nat` en tête de fichier remplace la table
-d'un bloc, atomiquement.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour un script idempotent : `[ -e /run/netns/c1 ] || ip netns add c1` (pas `ip netns list | grep -x c1` : dès qu'un pair veth y est déplacé, la ligne devient `c1 (id: 0)`),
+> `ip link show br-lab >/dev/null 2>&1 || ip link add br-lab type bridge`.
+> Et `nft -f` avec `flush table ip nat` en tête de fichier remplace la table
+> d'un bloc, atomiquement.
 
-::: check
-Critère de succès : `curl http://10.10.10.10:8080/` répond depuis `lab-web`,
-depuis `lab-adm` et depuis `c2` ; `c1` sort vers `10.10.10.11` en NAT ;
-`minidocker.sh down` ne laisse rien derrière lui.
-
-```bash
-bash check_M13_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl http://10.10.10.10:8080/` répond depuis `lab-web`,
+> depuis `lab-adm` et depuis `c2` ; `c1` sort vers `10.10.10.11` en NAT ;
+> `minidocker.sh down` ne laisse rien derrière lui.
+>
+> ```bash
+> bash check_M13_01.sh
+> ```
 
 ---
 
-### **L13.2** — Deux passerelles, une réponse par la bonne porte : policy routing
+### <a id="l13-2"></a>**[L13.2](corrige.md#l13-2)** — Deux passerelles, une réponse par la bonne porte : policy routing
 
-::: contexte
-Ticket INC-4120 : un serveur de fichiers branché sur le LAN bureautique
-**et** sur le LAN de production « répond au ping des deux côtés mais les
-transferts depuis la production se coupent au bout de quelques secondes ». Le
-réseau prod est derrière un pare-feu stateful. On te demande de reproduire la
-panne en maquette, de l'expliquer, et de livrer la configuration corrigée.
-:::
+> **Contexte**
+>
+> Ticket INC-4120 : un serveur de fichiers branché sur le LAN bureautique
+> **et** sur le LAN de production « répond au ping des deux côtés mais les
+> transferts depuis la production se coupent au bout de quelques secondes ». Le
+> réseau prod est derrière un pare-feu stateful. On te demande de reproduire la
+> panne en maquette, de l'expliquer, et de livrer la configuration corrigée.
 
 Maquette dans des netns sur `lab-adm` (variante réelle en fin de lab) :
 
@@ -1035,26 +1055,27 @@ Maquette dans des netns sur `lab-adm` (variante réelle en fin de lab) :
    adresse `10.10.11.11/24`, et écris le bloc Netplan `routing-policy:` qui
    applique la même logique de façon persistante.
 
-::: check
-Critère de succès : `ping` et TCP fonctionnent depuis `c-prod` vers
-`10.10.12.2`, la table nommée existe, `ip -n dual rule` montre la règle, et le
-rapport explique la route asymétrique.
-
-```bash
-bash check_M13_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `ping` et TCP fonctionnent depuis `c-prod` vers
+> `10.10.12.2`, la table nommée existe, `ip -n dual rule` montre la règle, et le
+> rapport explique la route asymétrique.
+>
+> ```bash
+> bash check_M13_02.sh
+> ```
 
 ---
 
-### **L13.3** — Overlay et tunnel : VXLAN lab-web ↔ lab-db, WireGuard lab-adm ↔ lab-ops, mesures
+### <a id="l13-3"></a>**[L13.3](corrige.md#l13-3)** — Overlay et tunnel : VXLAN lab-web ↔ lab-db, WireGuard lab-adm ↔ lab-ops, mesures
 
-::: contexte
-Avant de choisir le CNI d'un futur cluster Kubernetes, l'architecte veut des
-chiffres : « combien coûte un overlay VXLAN, combien coûte un tunnel chiffré,
-sur notre matériel ». On te demande deux tunnels fonctionnels, des mesures
-`iperf3` comparables et une note d'une page.
-:::
+> **Contexte**
+>
+> Avant de choisir le CNI d'un futur cluster Kubernetes, l'architecte veut des
+> chiffres : « combien coûte un overlay VXLAN, combien coûte un tunnel chiffré,
+> sur notre matériel ». On te demande deux tunnels fonctionnels, des mesures
+> `iperf3` comparables et une note d'une page.
 
 Livrable : `~/lab13/rapports/overlay.md`.
 
@@ -1091,33 +1112,35 @@ Livrable : `~/lab13/rapports/overlay.md`.
    flannel/Calico/Cilium (quel mode correspond à quoi), et la recommandation
    que tu ferais à l'architecte.
 
-::: attention
-`tc netem` sur `ens18` ralentit aussi ta session SSH. `netplan apply` avec un
-bloc `tunnels:` erroné peut faire tomber `ens18` : `netplan try`, console
-Proxmox ouverte.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `tc netem` sur `ens18` ralentit aussi ta session SSH. `netplan apply` avec un
+> bloc `tunnels:` erroné peut faire tomber `ens18` : `netplan try`, console
+> Proxmox ouverte.
 
-::: check
-Critère de succès : `vxlan0` (VNI 42, MTU 1450) répond des deux côtés,
-`wg0` a un pair avec un `latest handshake` récent, le rapport contient au
-moins quatre lignes de mesures avec débit et `Retr`.
-
-```bash
-bash check_M13_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `vxlan0` (VNI 42, MTU 1450) répond des deux côtés,
+> `wg0` a un pair avec un `latest handshake` récent, le rapport contient au
+> moins quatre lignes de mesures avec débit et `Retr`.
+>
+> ```bash
+> bash check_M13_03.sh
+> ```
 
 ---
 
-### **L13.4** — Le DNS du lab : Unbound récursif, BIND9 autoritaire, zone inverse, secondaire, migration des VM
+### <a id="l13-4"></a>**[L13.4](corrige.md#l13-4)** — Le DNS du lab : Unbound récursif, BIND9 autoritaire, zone inverse, secondaire, migration des VM
 
-::: contexte
-Le lab résout ses noms par `/etc/hosts` copié à la main sur chaque VM, et un
-`dnsmasq` de fortune. Avant l'arrivée de Kubernetes (dont CoreDNS attendra un
-résolveur propre en amont), on te demande une infrastructure DNS conforme :
-un résolveur récursif validant, une zone `lab.local` faisant autorité avec sa
-zone inverse, un secondaire, et la bascule de toutes les VM.
-:::
+> **Contexte**
+>
+> Le lab résout ses noms par `/etc/hosts` copié à la main sur chaque VM, et un
+> `dnsmasq` de fortune. Avant l'arrivée de Kubernetes (dont CoreDNS attendra un
+> résolveur propre en amont), on te demande une infrastructure DNS conforme :
+> un résolveur récursif validant, une zone `lab.local` faisant autorité avec sa
+> zone inverse, un secondaire, et la bascule de toutes les VM.
 
 Adressage retenu : résolveur Unbound sur **`10.10.10.53`** (adresse de service
 ajoutée à `lab-ops`), BIND9 primaire `ns1` sur **`10.10.10.14`**, BIND9
@@ -1185,34 +1208,36 @@ secondaire `ns2` sur **`10.10.10.10`** (`lab-adm`). Squelettes dans
     en trois lignes ce que changerait un forwarder DoT (`forward-tls-upstream`)
     vers `9.9.9.9@853`.
 
-::: astuce
-Chaque zone a un nom canonique qui se termine par un point. Oublier le point
-final derrière `ns1.lab.local` dans le SOA donne `ns1.lab.local.lab.local.` —
-`named-checkzone` ne le signalera pas, `dig NS` si.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Chaque zone a un nom canonique qui se termine par un point. Oublier le point
+> final derrière `ns1.lab.local` dans le SOA donne `ns1.lab.local.lab.local.` —
+> `named-checkzone` ne le signalera pas, `dig NS` si.
 
-::: check
-Critère de succès : depuis n'importe quelle VM, `dig +short lab-db.lab.local`
-répond `10.10.10.12`, `dig +short -x 10.10.10.12` répond `lab-db.lab.local.`,
-`dig @10.10.10.10 +short SOA lab.local` donne le même serial que sur
-`10.10.10.14`, `resolvectl status` pointe sur `10.10.10.53`, et `dig
-@10.10.10.53 www.ubuntu.com` porte le flag `ad`.
-
-```bash
-bash check_M13_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : depuis n'importe quelle VM, `dig +short lab-db.lab.local`
+> répond `10.10.10.12`, `dig +short -x 10.10.10.12` répond `lab-db.lab.local.`,
+> `dig @10.10.10.10 +short SOA lab.local` donne le même serial que sur
+> `10.10.10.14`, `resolvectl status` pointe sur `10.10.10.53`, et `dig
+> @10.10.10.53 www.ubuntu.com` porte le flag `ad`.
+>
+> ```bash
+> bash check_M13_04.sh
+> ```
 
 ---
 
-### **L13.5** — Bonding actif/passif avec bascule observée
+### <a id="l13-5"></a>**[L13.5](corrige.md#l13-5)** — Bonding actif/passif avec bascule observée
 
-::: contexte
-Le nouveau serveur de base de données sera livré avec deux cartes réseau vers
-deux commutateurs différents. La direction veut une preuve, avant la mise en
-production, qu'une carte peut tomber sans interrompre le service. Tu maquettes
-sur `lab-db` avec deux NIC virtuelles et tu produis le compte rendu de test.
-:::
+> **Contexte**
+>
+> Le nouveau serveur de base de données sera livré avec deux cartes réseau vers
+> deux commutateurs différents. La direction veut une preuve, avant la mise en
+> production, qu'une carte peut tomber sans interrompre le service. Tu maquettes
+> sur `lab-db` avec deux NIC virtuelles et tu produis le compte rendu de test.
 
 Livrable : `~/lab13/rapports/bonding.md`.
 
@@ -1251,37 +1276,40 @@ Livrable : `~/lab13/rapports/bonding.md`.
 8. Nettoyage : retire les NIC ajoutées (`qm set 9003 --delete net1 --delete
    net2`, idem `lab-web`) et les blocs Netplan correspondants.
 
-::: rhel
-Sous Rocky 9 : `nmcli con add type bond ifname bond0 mode active-backup \
-miimon 100 primary ens19`, puis `nmcli con add type ethernet ifname ens19 \
-master bond0` (idem `ens20`), `nmcli con up bond0`. `teamd`/`nmcli type team`
-est déprécié en RHEL 9 : on utilise le bonding noyau.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `nmcli con add type bond ifname bond0 mode active-backup \
+> miimon 100 primary ens19`, puis `nmcli con add type ethernet ifname ens19 \
+> master bond0` (idem `ens20`), `nmcli con up bond0`. `teamd`/`nmcli type team`
+> est déprécié en RHEL 9 : on utilise le bonding noyau.
 
-::: check
-Critère de succès : `bond0` existe en `active-backup` avec deux esclaves,
-la bascule a été observée (rapport avec le nombre de paquets perdus et
-l'extrait de `/proc/net/bonding/bond0` avant/après), la configuration est
-persistante.
-
-```bash
-bash check_M13_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `bond0` existe en `active-backup` avec deux esclaves,
+> la bascule a été observée (rapport avec le nombre de paquets perdus et
+> l'extrait de `/proc/net/bonding/bond0` avant/après), la configuration est
+> persistante.
+>
+> ```bash
+> bash check_M13_05.sh
+> ```
 
 ---
 
 ## 13.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf13`. Le snapshot de
-secours reste `snap-clean`, mais y revenir vaut échec : l'objectif est de
-diagnostiquer. Chaque panne suppose le lab correspondant en place (L13.1 pour
-BF13.1 à BF13.3, L13.3 pour BF13.4, L13.4 pour BF13.5 et BF13.6). Les scripts
-sauvegardent ce qu'ils cassent dans `/root/.breakfix-backup/`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf13`. Le snapshot de
+> secours reste `snap-clean`, mais y revenir vaut échec : l'objectif est de
+> diagnostiquer. Chaque panne suppose le lab correspondant en place (L13.1 pour
+> BF13.1 à BF13.3, L13.3 pour BF13.4, L13.4 pour BF13.5 et BF13.6). Les scripts
+> sauvegardent ce qu'ils cassent dans `/root/.breakfix-backup/`.
 
-### **BF13.1** — « Les conteneurs ne sortent plus, mais ils se parlent »
+### <a id="bf13-1"></a>**[BF13.1](corrige.md#bf13-1)** — « Les conteneurs ne sortent plus, mais ils se parlent »
 
 ```bash
 # sur lab-adm, L13.1 en place
@@ -1300,11 +1328,9 @@ durcissement sysctl standard ».
 doit pas refaire tomber la panne), et expliquer pourquoi le paquet disparaît
 sans aucun message et à quel endroit précis du chemin décrit en §13.2.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF13.2** — « Le routeur accepte une connexion sur trois »
+### <a id="bf13-2"></a>**[BF13.2](corrige.md#bf13-2)** — « Le routeur accepte une connexion sur trois »
 
 ```bash
 # sur lab-adm, L13.1 en place
@@ -1324,11 +1350,9 @@ qui remplit la table et avec quelle durée de vie, corriger de façon persistant
 (dimensionnement **et** durée de vie), et expliquer pourquoi les sessions
 existantes n'étaient pas affectées.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF13.3** — « Le SYN part, la réponse ne revient jamais »
+### <a id="bf13-3"></a>**[BF13.3](corrige.md#bf13-3)** — « Le SYN part, la réponse ne revient jamais »
 
 ```bash
 # sur lab-adm, L13.1 en place
@@ -1349,11 +1373,9 @@ montre le `SYN` arriver dans `c1`.
 `ping` passe quand même, corriger en une seule commande `nft`, puis corriger le
 fichier pour que ça ne se reproduise pas.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF13.4** — « Le tunnel marche, sauf pour les vrais fichiers »
+### <a id="bf13-4"></a>**[BF13.4](corrige.md#bf13-4)** — « Le tunnel marche, sauf pour les vrais fichiers »
 
 ```bash
 # sur lab-web PUIS sur lab-db (le script détecte l'hôte), L13.3 en place
@@ -1373,11 +1395,9 @@ fonctionne. Aucun message d'erreur nulle part.
 par machine), corriger, et expliquer pourquoi `ping` sans option ne voit rien
 et pourquoi aucune ICMP « fragmentation needed » n'est revenue.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF13.5** — « Le secondaire DNS vit dans le passé »
+### <a id="bf13-5"></a>**[BF13.5](corrige.md#bf13-5)** — « Le secondaire DNS vit dans le passé »
 
 ```bash
 # sur lab-ops, L13.4 en place
@@ -1398,11 +1418,9 @@ sur le secondaire.
 côtés, corriger sur le primaire, faire converger le secondaire sans le
 redémarrer, et expliquer le « parfois » côté résolveur.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF13.6** — « Le DNS ne marche plus, sauf pour le lab »
+### <a id="bf13-6"></a>**[BF13.6](corrige.md#bf13-6)** — « Le DNS ne marche plus, sauf pour le lab »
 
 ```bash
 # sur lab-ops, L13.4 en place
@@ -1423,24 +1441,22 @@ configuration, prouver le diagnostic avec `unbound-control` et une capture,
 remettre la récursion complète, et dire pourquoi le délai est de 2-3 s et non
 de 30 s.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 13.8 Défi du module ★★★
 
-**D13 — `minicloud.sh` : deux locataires, un routeur, un DNS**
+<a id="d13"></a>**[D13](corrige.md#d13) — `minicloud.sh` : deux locataires, un routeur, un DNS**
 
-::: contexte
-Pour la formation interne, on te demande une maquette rejouable d'un « cloud »
-minimal sur une seule VM (`lab-adm`) : deux locataires isolés, chacun sur son
-propre bridge, un routeur central en namespace qui fait le NAT vers le lab,
-une publication de ports pilotée par une map nftables, et des noms DNS pour
-chaque instance servis par l'infrastructure du lab L13.4. Livrable : un script,
-un jeu de règles, un fragment de zone, un rapport de validation.
-:::
+> **Contexte**
+>
+> Pour la formation interne, on te demande une maquette rejouable d'un « cloud »
+> minimal sur une seule VM (`lab-adm`) : deux locataires isolés, chacun sur son
+> propre bridge, un routeur central en namespace qui fait le NAT vers le lab,
+> une publication de ports pilotée par une map nftables, et des noms DNS pour
+> chaque instance servis par l'infrastructure du lab L13.4. Livrable : un script,
+> un jeu de règles, un fragment de zone, un rapport de validation.
 
 Cahier des charges :
 
@@ -1485,17 +1501,19 @@ Cahier des charges :
 
 Temps visé : 90 minutes.
 
-::: astuce
-Le double NAT se déboguera à coups de `conntrack -L` **dans chaque netns**
-(`ip netns exec rtr conntrack -L`) : chaque namespace a sa propre table.
-Construis d'abord un locataire et la publication, teste, puis généralise.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Le double NAT se déboguera à coups de `conntrack -L` **dans chaque netns**
+> (`ip netns exec rtr conntrack -L`) : chaque namespace a sa propre table.
+> Construis d'abord un locataire et la publication, teste, puis généralise.
 
-::: check
-```bash
-bash check_M13_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M13_06.sh
+> ```
 
 ---
 
@@ -1529,3 +1547,9 @@ Pour aller plus loin :
 * Remplace Unbound par CoreDNS (binaire unique, `Corefile` avec `forward` et
   un plugin `file` pour `lab.local`) : c'est le même exercice avec un autre
   outil, et celui que tu retrouveras au module 26.
+
+<!-- nav:début -->
+---
+
+[← Module 12](../12-reseau/README.md) · [Corrigé](corrige.md) · [Module 14 →](../14-ssh/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

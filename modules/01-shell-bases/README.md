@@ -1,30 +1,55 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie I — Fondamentaux du shell et du système de fichiers › **Module 01**  
+[Corrigé](corrige.md) · [Module 02 →](../02-filesystem-fhs/README.md)
+
+<details><summary>Scripts du module (9)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M01.sh`](../../scripts/setup/setup_M01.sh) | prépare le module |
+| [`check_M01_01.sh`](../../scripts/check/check_M01_01.sh) | vérification |
+| [`check_M01_02.sh`](../../scripts/check/check_M01_02.sh) | vérification |
+| [`check_M01_03.sh`](../../scripts/check/check_M01_03.sh) | vérification |
+| [`check_M01_04.sh`](../../scripts/check/check_M01_04.sh) | vérification |
+| [`check_M01_05.sh`](../../scripts/check/check_M01_05.sh) | vérification |
+| [`break_M01_01.sh`](../../scripts/break/break_M01_01.sh) | installe une panne |
+| [`break_M01_02.sh`](../../scripts/break/break_M01_02.sh) | installe une panne |
+| [`break_M01_03.sh`](../../scripts/break/break_M01_03.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 01 — Le shell au quotidien
 
 ## 1.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* enchaîner mes commandes sans quitter le clavier (raccourcis readline, historique,
-  `Ctrl-R`, `#!`, `!$`, `fc`) et configurer un historique exploitable en équipe ;
-* énoncer **dans l'ordre** les étapes d'expansion du shell et prédire le résultat
-  d'une ligne de commande avant de l'exécuter ;
-* choisir le bon quoting (simple, double, backslash) et manipuler sans dégât des
-  noms de fichiers contenant espaces, apostrophes ou tiret initial ;
-* distinguer variable de shell et variable d'environnement, diagnostiquer un
-  `PATH` cassé, et savoir quand utiliser `type`, `command -v` plutôt que `which` ;
-* dire quel fichier de démarrage est lu par un shell de login, interactif ou
-  non interactif, et y placer une configuration au bon endroit ;
-* rediriger stdout, stderr et les deux à la fois, dupliquer un flux avec `tee`,
-  et expliquer pourquoi l'ordre des redirections change le résultat ;
-* naviguer efficacement (`cd -`, `pushd`/`popd`, `CDPATH`) et trouver une réponse
-  dans la documentation locale sans accès internet ;
-* personnaliser un shell de production (`PS1`, `EDITOR`, pager, `shopt`) sans
-  casser les shells non interactifs, et reconnaître ce qui casse sous `dash`.
-
-Temps estimé : 4 h
-Prérequis : aucun (module d'entrée du workbook). Savoir se connecter en SSH suffit.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * enchaîner mes commandes sans quitter le clavier (raccourcis readline, historique,
+>   `Ctrl-R`, `#!`, `!$`, `fc`) et configurer un historique exploitable en équipe ;
+> * énoncer **dans l'ordre** les étapes d'expansion du shell et prédire le résultat
+>   d'une ligne de commande avant de l'exécuter ;
+> * choisir le bon quoting (simple, double, backslash) et manipuler sans dégât des
+>   noms de fichiers contenant espaces, apostrophes ou tiret initial ;
+> * distinguer variable de shell et variable d'environnement, diagnostiquer un
+>   `PATH` cassé, et savoir quand utiliser `type`, `command -v` plutôt que `which` ;
+> * dire quel fichier de démarrage est lu par un shell de login, interactif ou
+>   non interactif, et y placer une configuration au bon endroit ;
+> * rediriger stdout, stderr et les deux à la fois, dupliquer un flux avec `tee`,
+>   et expliquer pourquoi l'ordre des redirections change le résultat ;
+> * naviguer efficacement (`cd -`, `pushd`/`popd`, `CDPATH`) et trouver une réponse
+>   dans la documentation locale sans accès internet ;
+> * personnaliser un shell de production (`PS1`, `EDITOR`, pager, `shopt`) sans
+>   casser les shells non interactifs, et reconnaître ce qui casse sous `dash`.
+>
+> **Temps estimé** : 4 h
+>
+> **Prérequis** : aucun (module d'entrée du workbook). Savoir se connecter en SSH suffit.
 
 ---
 
@@ -45,10 +70,11 @@ sudo apt update
 sudo apt install -y bash-completion manpages manpages-dev less tree tldr
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y bash-completion man-pages less tree` (`man-pages-posix` n'est pas livré dans Rocky 9, on s'en passe). `tldr` n'est pas dans les dépôts de base : installe-le avec
-`python3 -m pip install --user tldr`, ou passe-t'en, ce n'est utilisé qu'en E1.14.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y bash-completion man-pages less tree` (`man-pages-posix` n'est pas livré dans Rocky 9, on s'en passe). `tldr` n'est pas dans les dépôts de base : installe-le avec
+> `python3 -m pip install --user tldr`, ou passe-t'en, ce n'est utilisé qu'en E1.14.
 
 Préparation du terrain de jeu (idempotent, à relancer sans crainte) :
 
@@ -59,11 +85,12 @@ bash ~/workbook/scripts/setup/setup_M01.sh
 Il crée `~/lab01/` avec des journaux, une arborescence de déploiement et quelques
 noms de fichiers volontairement hostiles.
 
-::: attention
-Le module modifie ton `~/.bashrc`. Le script de setup en fait une copie dans
-`~/lab01/backup/bashrc.orig`. Si tu te retrouves avec un shell inutilisable,
-la procédure de secours est dans BF1.1 — elle fait partie du programme.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le module modifie ton `~/.bashrc`. Le script de setup en fait une copie dans
+> `~/lab01/backup/bashrc.orig`. Si tu te retrouves avec un shell inutilisable,
+> la procédure de secours est dans BF1.1 — elle fait partie du programme.
 
 ---
 
@@ -111,7 +138,9 @@ Bash traite chaque ligne **dans cet ordre**, une seule passe :
 6. suppression des quotes
 ```
 
-@fig(shell-expansion): Les six étapes d'expansion de bash, dans l'ordre, et ce que devient la ligne `echo ~/{a,b}/$x* "$y"` à chaque étape.
+<p align="center"><img src="../../assets/figures/shell-expansion.svg" alt="Schéma : shell-expansion"></p>
+
+*Figure — Les six étapes d'expansion de bash, dans l'ordre, et ce que devient la ligne `echo ~/{a,b}/$x* "$y"` à chaque étape.*
 
 Conséquences directes :
 
@@ -186,7 +215,9 @@ Tout ce que tu écris après cette garde n'existe pas pour un shell non interact
 C'est une copie de destination faite au moment où le shell la lit, de gauche à
 droite, pas un alias permanent.
 
-@fig(shell-redirections): Les descripteurs 0/1/2 d'un processus, pourquoi `> f 2>&1` et `2>&1 > f` ne donnent pas le même résultat, et ce qu'un tube relie vraiment.
+<p align="center"><img src="../../assets/figures/shell-redirections.svg" alt="Schéma : shell-redirections"></p>
+
+*Figure — Les descripteurs 0/1/2 d'un processus, pourquoi `> f 2>&1` et `2>&1 > f` ne donnent pas le même résultat, et ce qu'un tube relie vraiment.*
 
 ### Navigation et documentation
 
@@ -205,7 +236,7 @@ ls /usr/share/doc/nginx/     # README, changelogs, exemples de conf
 
 ## 1.3 Quiz — QCM
 
-**Q1.1** — Tu tapes ceci sur `lab-adm` :
+<a id="q1-1"></a>**[Q1.1](corrige.md#q1-1)** — Tu tapes ceci sur `lab-adm` :
 
 ```bash
 n=5
@@ -219,7 +250,7 @@ b) `{1..5}`
 c) `{1..$n}`
 d) une erreur de syntaxe
 
-**Q1.2** — Le répertoire courant ne contient qu'un fichier, nommé `rapport final.log`.
+<a id="q1-2"></a>**[Q1.2](corrige.md#q1-2)** — Le répertoire courant ne contient qu'un fichier, nommé `rapport final.log`.
 Tu exécutes :
 
 ```bash
@@ -234,7 +265,7 @@ b) `rm` échoue deux fois : `cannot remove 'rapport'` et `cannot remove 'final.l
 c) rien, `rm` refuse sans `-f`
 d) `rm` supprime tous les fichiers du répertoire
 
-**Q1.3** — `ll` est défini par `alias ll='ls -alF'` dans ton `~/.bashrc`.
+<a id="q1-3"></a>**[Q1.3](corrige.md#q1-3)** — `ll` est défini par `alias ll='ls -alF'` dans ton `~/.bashrc`.
 **Deux réponses correctes.**
 
 a) `which ll` affiche `/usr/bin/ls`
@@ -242,7 +273,7 @@ b) `type ll` affiche `ll is aliased to 'ls -alF'`
 c) `command -v ll` affiche `alias ll='ls -alF'`
 d) `which` est un builtin bash, il connaît donc les alias
 
-**Q1.4** — Un collègue lance son déploiement ainsi :
+<a id="q1-4"></a>**[Q1.4](corrige.md#q1-4)** — Un collègue lance son déploiement ainsi :
 
 ```bash
 ./deploy.sh 2>&1 > deploy.log
@@ -255,7 +286,7 @@ b) stdout va dans `deploy.log`, stderr reste sur le terminal
 c) stderr va dans `deploy.log`, stdout reste sur le terminal
 d) `2>&1` est invalide avant une redirection, bash ignore la ligne
 
-**Q1.5** — Sur `lab-adm`, tu exécutes :
+<a id="q1-5"></a>**[Q1.5](corrige.md#q1-5)** — Sur `lab-adm`, tu exécutes :
 
 ```bash
 ssh mathieu@10.10.10.11 'echo $PATH'
@@ -269,7 +300,7 @@ b) `~/.bashrc`, mais il s'arrête à la garde `case $- in *i*) ;; *) return;; es
 c) `/etc/profile` puis `~/.profile`
 d) aucun : un shell non interactif ne lit jamais de fichier de démarrage
 
-**Q1.6** — À l'intérieur d'une paire de guillemets **simples**, quels caractères
+<a id="q1-6"></a>**[Q1.6](corrige.md#q1-6)** — À l'intérieur d'une paire de guillemets **simples**, quels caractères
 gardent une signification spéciale pour bash ?
 
 a) `$`
@@ -277,7 +308,7 @@ b) `` ` ``
 c) `\`
 d) aucun
 
-**Q1.7** — Tu dois taper une commande contenant un mot de passe en clair et tu ne
+<a id="q1-7"></a>**[Q1.7](corrige.md#q1-7)** — Tu dois taper une commande contenant un mot de passe en clair et tu ne
 veux pas qu'elle finisse dans `~/.bash_history`. Quelle est la méthode la plus
 propre, sans perdre le reste de ton historique ?
 
@@ -286,7 +317,7 @@ b) `HISTCONTROL=ignorespace`, puis préfixer la commande d'une espace
 c) `HISTSIZE=0` avant, puis remettre la valeur après
 d) `unset HISTFILE` avant, puis se reconnecter
 
-**Q1.8** — Dans `/var/log`, qui ne contient aucun fichier `.gz`, tu tapes `ls *.gz`.
+<a id="q1-8"></a>**[Q1.8](corrige.md#q1-8)** — Dans `/var/log`, qui ne contient aucun fichier `.gz`, tu tapes `ls *.gz`.
 Que se passe-t-il ?
 
 a) `ls` liste tout le répertoire
@@ -294,7 +325,7 @@ b) `ls: cannot access '*.gz': No such file or directory`
 c) `ls` n'affiche rien et renvoie 0
 d) bash renvoie une erreur sans jamais appeler `ls`
 
-**Q1.9** — Un script de rotation calcule un numéro de mois :
+<a id="q1-9"></a>**[Q1.9](corrige.md#q1-9)** — Un script de rotation calcule un numéro de mois :
 
 ```bash
 mois=$(date +%m)      # on est le 18 septembre
@@ -308,7 +339,7 @@ b) `bash: 09: value too great for base (error token is "09")`
 c) `9`
 d) `1`
 
-**Q1.10** — Tu veux ajouter `~/bin` à ton `PATH` depuis `~/.bashrc`.
+<a id="q1-10"></a>**[Q1.10](corrige.md#q1-10)** — Tu veux ajouter `~/bin` à ton `PATH` depuis `~/.bashrc`.
 **Deux réponses fonctionnent.**
 
 a) `PATH=~/bin`
@@ -316,7 +347,7 @@ b) `export PATH="$HOME/bin:$PATH"`
 c) `export PATH="$PATH:."`
 d) `PATH="$HOME/bin:$PATH"`
 
-**Q1.11** — Tu cherches la signification du champ `pass` dans `/etc/fstab`
+<a id="q1-11"></a>**[Q1.11](corrige.md#q1-11)** — Tu cherches la signification du champ `pass` dans `/etc/fstab`
 (le format du fichier, pas la commande). Quelle commande cible explicitement la bonne section, quel que soit le nom cherché ?
 
 a) `man fstab`
@@ -324,7 +355,7 @@ b) `man 5 fstab`
 c) `man -k fstab`
 d) `man 1 fstab`
 
-**Q1.12** — Un script commence par `#!/bin/sh` et contient :
+<a id="q1-12"></a>**[Q1.12](corrige.md#q1-12)** — Un script commence par `#!/bin/sh` et contient :
 
 ```sh
 if [[ -f "$conf" ]]; then
@@ -340,7 +371,7 @@ b) le fichier `lib.sh` n'a pas le bit d'exécution
 c) `sh` refuse les scripts sans `set -e`
 d) le shebang doit être `#!/usr/bin/sh` sur Ubuntu
 
-**Q1.13** — Un script `maj.sh` contient `alias ll='ls -l'` puis, ligne suivante, `ll`.
+<a id="q1-13"></a>**[Q1.13](corrige.md#q1-13)** — Un script `maj.sh` contient `alias ll='ls -l'` puis, ligne suivante, `ll`.
 Exécuté par `bash maj.sh`, que se passe-t-il ?
 
 a) il fonctionne, l'alias est défini juste avant
@@ -349,7 +380,7 @@ b) `maj.sh: line 3: ll: command not found`, les alias ne sont pas développés d
 c) bash refuse la définition d'alias hors session interactive
 d) l'alias fonctionne mais pollue le shell appelant
 
-**Q1.14** — Tu veux voir la sortie d'une mise à jour à l'écran **et** la garder,
+<a id="q1-14"></a>**[Q1.14](corrige.md#q1-14)** — Tu veux voir la sortie d'une mise à jour à l'écran **et** la garder,
 erreurs comprises :
 
 ```bash
@@ -363,7 +394,7 @@ b) `./maj.sh 2>&1 | tee -a ...`
 c) `./maj.sh &> tee -a ...`
 d) `./maj.sh | tee -a ... 2>&1`
 
-**Q1.15** — Tu as deux terminaux SSH ouverts sur `lab-adm`, `shopt histappend` est
+<a id="q1-15"></a>**[Q1.15](corrige.md#q1-15)** — Tu as deux terminaux SSH ouverts sur `lab-adm`, `shopt histappend` est
 désactivé. Tu travailles dans les deux, puis tu les fermes l'un après l'autre.
 Que contient `~/.bash_history` ?
 
@@ -372,7 +403,7 @@ b) uniquement l'historique de la session fermée en dernier, qui a écrasé le f
 c) rien, le fichier est vidé
 d) l'historique de la première session seulement
 
-**Q1.16** — Tu es dans `/var/log`, tu vas dans `/etc/nginx`, tu veux revenir.
+<a id="q1-16"></a>**[Q1.16](corrige.md#q1-16)** — Tu es dans `/var/log`, tu vas dans `/etc/nginx`, tu veux revenir.
 **Deux réponses correctes.**
 
 a) `cd -`
@@ -380,7 +411,7 @@ b) `cd ..`
 c) `cd "$OLDPWD"`
 d) `cd ~`
 
-**Q1.17** — Pour traiter tous les fichiers de `/var/log`, deux écritures circulent
+<a id="q1-17"></a>**[Q1.17](corrige.md#q1-17)** — Pour traiter tous les fichiers de `/var/log`, deux écritures circulent
 dans l'équipe :
 
 ```bash
@@ -399,7 +430,7 @@ d) aucune des deux, il faut `find`
 
 ## 1.4 Quiz — questions ouvertes
 
-**QO1.1** — Détaille, étape par étape et **dans l'ordre**, ce que fait bash de la
+<a id="qo1-1"></a>**[QO1.1](corrige.md#qo1-1)** — Détaille, étape par étape et **dans l'ordre**, ce que fait bash de la
 ligne suivante, en nommant chaque type d'expansion :
 
 ```bash
@@ -409,44 +440,34 @@ echo ~/lab01/logs/*.log "$(date +%F)" $((7 * 24))
 Explique ensuite pourquoi l'ordre « paramètres avant globbing » est indispensable,
 avec un exemple où l'ordre inverse donnerait un résultat faux.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO1.2** — *On te demande en entretien* : « Quelle est la différence entre
+<a id="qo1-2"></a>**[QO1.2](corrige.md#qo1-2)** — *On te demande en entretien* : « Quelle est la différence entre
 `~/.bashrc` et `~/.bash_profile` ? Où poses-tu `export JAVA_HOME=/opt/jdk21` pour
 qu'il soit vu à la fois par ta session SSH interactive, par `ssh lab-web 'commande'`
 et par un job cron ? » Réponds comme en entretien, en trois phrases maximum par cas.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO1.3** — *On te demande en entretien* : « `which python3` affiche
+<a id="qo1-3"></a>**[QO1.3](corrige.md#qo1-3)** — *On te demande en entretien* : « `which python3` affiche
 `/usr/bin/python3`, mais quand je tape `python3`, c'est une autre version qui
 démarre. Donne-moi trois causes possibles et la commande qui tranche pour chacune. »
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO1.4** — Explique la différence entre `cmd > f 2>&1` et `cmd 2>&1 > f` en
+<a id="qo1-4"></a>**[QO1.4](corrige.md#qo1-4)** — Explique la différence entre `cmd > f 2>&1` et `cmd 2>&1 > f` en
 raisonnant sur les descripteurs de fichiers. Dessine l'état des fd 1 et 2 après
 chaque redirection.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO1.5** — Un développeur t'écrit : « mon script marche quand je le lance à la main,
+<a id="qo1-5"></a>**[QO1.5](corrige.md#qo1-5)** — Un développeur t'écrit : « mon script marche quand je le lance à la main,
 mais il échoue en cron avec `ll: command not found` et `docker: command not found` ».
 Décris ta démarche de diagnostic, dans l'ordre, et le correctif que tu appliques.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO1.6** — Pourquoi la ligne suivante est-elle une bombe, et comment l'écrirais-tu ?
+<a id="qo1-6"></a>**[QO1.6](corrige.md#qo1-6)** — Pourquoi la ligne suivante est-elle une bombe, et comment l'écrirais-tu ?
 
 ```bash
 rm -rf $CIBLE/*
@@ -454,45 +475,39 @@ rm -rf $CIBLE/*
 
 Cite au moins trois protections différentes et explique ce que chacune empêche.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO1.7** — Cite quatre constructions courantes de bash absentes de `dash`, et
+<a id="qo1-7"></a>**[QO1.7](corrige.md#qo1-7)** — Cite quatre constructions courantes de bash absentes de `dash`, et
 décris comment tu vérifies **avant** la mise en production qu'un script en
 `#!/bin/sh` est réellement POSIX.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO1.8** — La VM `lab-db` n'a pas d'accès internet. Tu dois comprendre l'option
+<a id="qo1-8"></a>**[QO1.8](corrige.md#qo1-8)** — La VM `lab-db` n'a pas d'accès internet. Tu dois comprendre l'option
 `--one-file-system` d'une commande d'archivage dont tu ne te souviens plus du nom.
 Décris ta démarche complète avec la documentation locale uniquement.
 
-::: repondre
-lignes: 6
-:::
+<!-- repondre: 6 -->
 
 ---
 
 ## 1.5 Exercices guidés ★
 
-**E1.1** — Tu as lancé une longue commande `apt` il y a une dizaine de lignes.
+<a id="e1-1"></a>**[E1.1](corrige.md#e1-1)** — Tu as lancé une longue commande `apt` il y a une dizaine de lignes.
 Ré-exécute-la sans la retaper, de deux façons différentes : une à la souris zéro
 avec la recherche incrémentale, une avec la syntaxe d'expansion de l'historique.
 
-**E1.2** — Crée en **une seule commande** l'arborescence suivante sous `~/lab01` :
+<a id="e1-2"></a>**[E1.2](corrige.md#e1-2)** — Crée en **une seule commande** l'arborescence suivante sous `~/lab01` :
 
 ```text
 deploy/blue/{bin,conf,logs}
 deploy/green/{bin,conf,logs}
 ```
 
-**E1.3** — Affiche le contenu de `PATH` à raison d'un répertoire par ligne, sans
+<a id="e1-3"></a>**[E1.3](corrige.md#e1-3)** — Affiche le contenu de `PATH` à raison d'un répertoire par ligne, sans
 utiliser `tr` ni `sed` : uniquement avec de l'expansion de paramètre.
 
-**E1.4** — Avec `APP=facturation`, produis successivement ces quatre sorties, et
+<a id="e1-4"></a>**[E1.4](corrige.md#e1-4)** — Avec `APP=facturation`, produis successivement ces quatre sorties, et
 note à chaque fois quelle forme de quoting tu as utilisée :
 
 ```text
@@ -502,63 +517,63 @@ $APP
 facturation-prod
 ```
 
-**E1.5** — Dans `~/lab01/logs`, supprime le fichier nommé `-fichier-bizarre.txt`.
+<a id="e1-5"></a>**[E1.5](corrige.md#e1-5)** — Dans `~/lab01/logs`, supprime le fichier nommé `-fichier-bizarre.txt`.
 `rm -fichier-bizarre.txt` échoue : trouve les deux méthodes qui marchent.
 
-**E1.6** — Toujours dans `~/lab01/logs`, compte les lignes de **tous** les fichiers
+<a id="e1-6"></a>**[E1.6](corrige.md#e1-6)** — Toujours dans `~/lab01/logs`, compte les lignes de **tous** les fichiers
 `.log`, y compris `rapport final.log`, sans qu'aucun nom ne soit découpé.
 
-**E1.7** — Calcule le nombre de jours écoulés depuis le début de l'année avec
+<a id="e1-7"></a>**[E1.7](corrige.md#e1-7)** — Calcule le nombre de jours écoulés depuis le début de l'année avec
 `date` et `$(( ))`. Attention : `date +%j` peut renvoyer `261`, mais teste aussi
 ta commande avec une valeur commençant par un zéro (`008`).
 
-**E1.8** — Pour chacun de ces noms, dis ce que c'est (alias, fonction, builtin,
+<a id="e1-8"></a>**[E1.8](corrige.md#e1-8)** — Pour chacun de ces noms, dis ce que c'est (alias, fonction, builtin,
 fichier) et depuis quelle commande tu l'as déterminé : `ls`, `cd`, `ll`, `[`,
 `command`.
 
-**E1.9** — Écris une fonction `mkcd` qui crée un répertoire (parents compris) puis
+<a id="e1-9"></a>**[E1.9](corrige.md#e1-9)** — Écris une fonction `mkcd` qui crée un répertoire (parents compris) puis
 s'y place, et rends-la disponible dans **tous** tes shells interactifs futurs.
 Vérifie qu'elle ne provoque aucune sortie parasite dans un shell non interactif.
 
-**E1.10** — Configure ton historique pour répondre à ce cahier des charges :
+<a id="e1-10"></a>**[E1.10](corrige.md#e1-10)** — Configure ton historique pour répondre à ce cahier des charges :
 10 000 lignes en mémoire, 50 000 dans le fichier, pas de doublon consécutif, les
 lignes commençant par une espace ignorées, chaque entrée horodatée au format
 `2026-09-18 14:02:11`, et pas d'écrasement entre sessions concurrentes.
 
-**E1.11** — Lance `systemctl status ssh` en affichant la sortie à l'écran et en
+<a id="e1-11"></a>**[E1.11](corrige.md#e1-11)** — Lance `systemctl status ssh` en affichant la sortie à l'écran et en
 l'enregistrant dans `~/lab01/logs/ssh-status.log`, stderr inclus.
 
-**E1.12** — Rends une commande totalement muette (sortie et erreurs), d'abord avec
+<a id="e1-12"></a>**[E1.12](corrige.md#e1-12)** — Rends une commande totalement muette (sortie et erreurs), d'abord avec
 la forme portable, puis avec le raccourci bash. Prouve que la forme
 `cmd 2>&1 > /dev/null` ne fait **pas** la même chose.
 
-**E1.13** — Configure `CDPATH` pour pouvoir taper `cd sites-enabled` ou `cd nginx`
+<a id="e1-13"></a>**[E1.13](corrige.md#e1-13)** — Configure `CDPATH` pour pouvoir taper `cd sites-enabled` ou `cd nginx`
 depuis n'importe quel répertoire. Explique pourquoi `.` doit figurer en premier.
 
-**E1.14** — Trouve la page de manuel qui documente le **format** de `/etc/fstab`,
+<a id="e1-14"></a>**[E1.14](corrige.md#e1-14)** — Trouve la page de manuel qui documente le **format** de `/etc/fstab`,
 puis, sans quitter le pager, saute directement à la première occurrence de `nofail`
 et affiche l'occurrence suivante. Compare le temps que ça t'a pris avec
 `tldr mount`.
 
-**E1.15** — Définis `PROXY_URL=http://10.10.10.1:3128` sans l'exporter, puis
+<a id="e1-15"></a>**[E1.15](corrige.md#e1-15)** — Définis `PROXY_URL=http://10.10.10.1:3128` sans l'exporter, puis
 `export HTTPS_PROXY=http://10.10.10.1:3128`. Trouve la commande qui montre
 uniquement la seconde, et celle qui montre les deux.
 
-**E1.16** — Depuis `~`, empile `/etc/nginx`, puis `/var/log`, affiche la pile
+<a id="e1-16"></a>**[E1.16](corrige.md#e1-16)** — Depuis `~`, empile `/etc/nginx`, puis `/var/log`, affiche la pile
 numérotée, reviens au sommet précédent, puis vide la pile.
 
 ---
 
 ## 1.6 Labs ★★
 
-### **L1.1** — Standardiser le shell du poste d'admin
+### <a id="l1-1"></a>**[L1.1](corrige.md#l1-1)** — Standardiser le shell du poste d'admin
 
-::: contexte
-Tu arrives dans l'équipe. Chaque admin a son `~/.bashrc` bricolé, personne n'a le
-même prompt, et les incidents se diagnostiquent mal parce qu'on ne sait jamais sur
-quelle machine la capture d'écran a été prise. On te demande de produire une
-configuration de shell de référence, sur `lab-adm` d'abord.
-:::
+> **Contexte**
+>
+> Tu arrives dans l'équipe. Chaque admin a son `~/.bashrc` bricolé, personne n'a le
+> même prompt, et les incidents se diagnostiquent mal parce qu'on ne sait jamais sur
+> quelle machine la capture d'écran a été prise. On te demande de produire une
+> configuration de shell de référence, sur `lab-adm` d'abord.
 
 1. Sauvegarde ton `~/.bashrc` actuel dans `~/lab01/backup/` (le script de setup l'a
    déjà fait, vérifie).
@@ -575,25 +590,26 @@ configuration de shell de référence, sur `lab-adm` d'abord.
 7. Vérifie que ta configuration ne produit **aucune sortie** pour un shell non
    interactif : `ssh mathieu@localhost 'echo OK'` ne doit afficher que `OK`.
 
-::: check
-Critère de succès : un nouveau shell de login affiche le prompt attendu, `hostinfo`
-répond depuis `/tmp`, et `ssh mathieu@localhost 'echo OK'` renvoie exactement `OK`.
-
-```bash
-bash check_M01_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : un nouveau shell de login affiche le prompt attendu, `hostinfo`
+> répond depuis `/tmp`, et `ssh mathieu@localhost 'echo OK'` renvoie exactement `OK`.
+>
+> ```bash
+> bash check_M01_01.sh
+> ```
 
 ---
 
-### **L1.2** — Ticket INC-2214 : « le script de sauvegarde ne journalise rien »
+### <a id="l1-2"></a>**[L1.2](corrige.md#l1-2)** — Ticket INC-2214 : « le script de sauvegarde ne journalise rien »
 
-::: contexte
-Un script `~/lab01/bin/sauvegarde.sh` tourne chaque nuit. Quand il échoue, personne
-ne sait pourquoi : le fichier de log est vide ou ne contient que la moitié des
-informations. On te demande un wrapper de journalisation propre, sans toucher au
-script d'origine (il est géré par une autre équipe).
-:::
+> **Contexte**
+>
+> Un script `~/lab01/bin/sauvegarde.sh` tourne chaque nuit. Quand il échoue, personne
+> ne sait pourquoi : le fichier de log est vide ou ne contient que la moitié des
+> informations. On te demande un wrapper de journalisation propre, sans toucher au
+> script d'origine (il est géré par une autre équipe).
 
 1. Lance `~/lab01/bin/sauvegarde.sh` à la main et observe : quelles lignes partent
    sur stdout, lesquelles sur stderr ? Prouve-le en redirigeant un seul des deux
@@ -609,26 +625,27 @@ script d'origine (il est géré par une autre équipe).
 4. Ajoute une option : si la variable `SILENCIEUX=1` est positionnée, le wrapper
    n'écrit que dans le fichier et reste muet à l'écran.
 
-::: check
-Critère de succès : `~/lab01/logs/sauvegarde.log` contient les lignes des deux flux,
-le code retour est celui du script appelé, et `SILENCIEUX=1 sauvegarde-wrap.sh`
-n'affiche rien sur le terminal.
-
-```bash
-bash check_M01_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `~/lab01/logs/sauvegarde.log` contient les lignes des deux flux,
+> le code retour est celui du script appelé, et `SILENCIEUX=1 sauvegarde-wrap.sh`
+> n'affiche rien sur le terminal.
+>
+> ```bash
+> bash check_M01_02.sh
+> ```
 
 ---
 
-### **L1.3** — Une livraison avec des noms de fichiers hostiles
+### <a id="l1-3"></a>**[L1.3](corrige.md#l1-3)** — Une livraison avec des noms de fichiers hostiles
 
-::: contexte
-Un développeur a livré une arborescence générée sous Windows. Les noms contiennent
-des espaces, des apostrophes, un tiret initial et un point d'interrogation. Le
-script de déploiement de l'équipe plante. On te demande de normaliser l'arbo
-**sans perdre un seul fichier**.
-:::
+> **Contexte**
+>
+> Un développeur a livré une arborescence générée sous Windows. Les noms contiennent
+> des espaces, des apostrophes, un tiret initial et un point d'interrogation. Le
+> script de déploiement de l'équipe plante. On te demande de normaliser l'arbo
+> **sans perdre un seul fichier**.
 
 Travaille dans `~/lab01/livraison/`.
 
@@ -643,26 +660,27 @@ Travaille dans `~/lab01/livraison/`.
 6. Archive le résultat dans `~/lab01/livraison.tar.gz` et vérifie le contenu de
    l'archive.
 
-::: check
-Critère de succès : aucun nom de fichier ne contient d'espace, le fichier à tiret
-initial a disparu, `donnees?.csv` existe toujours, et l'archive contient le même
-nombre de fichiers que le répertoire.
-
-```bash
-bash check_M01_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : aucun nom de fichier ne contient d'espace, le fichier à tiret
+> initial a disparu, `donnees?.csv` existe toujours, et l'archive contient le même
+> nombre de fichiers que le répertoire.
+>
+> ```bash
+> bash check_M01_03.sh
+> ```
 
 ---
 
-### **L1.4** — Cartographier les environnements (login / interactif / cron)
+### <a id="l1-4"></a>**[L1.4](corrige.md#l1-4)** — Cartographier les environnements (login / interactif / cron)
 
-::: contexte
-`JAVA_HOME` est défini « quelque part » et personne ne sait où. Résultat : ça marche
-en SSH interactif, ça échoue en cron, et `ssh lab-web 'commande'` donne un troisième
-comportement. On te demande de produire la cartographie réelle des fichiers lus,
-preuve à l'appui, puis de poser la variable au bon endroit.
-:::
+> **Contexte**
+>
+> `JAVA_HOME` est défini « quelque part » et personne ne sait où. Résultat : ça marche
+> en SSH interactif, ça échoue en cron, et `ssh lab-web 'commande'` donne un troisième
+> comportement. On te demande de produire la cartographie réelle des fichiers lus,
+> preuve à l'appui, puis de poser la variable au bon endroit.
 
 1. Instrumente les fichiers de démarrage de `mathieu` sur `lab-adm` : ajoute dans
    chacun (`~/.bash_profile` s'il existe, `~/.profile`, `~/.bashrc`) une ligne qui
@@ -679,32 +697,35 @@ preuve à l'appui, puis de poser la variable au bon endroit.
    **quatre** situations, sans le dupliquer. Applique-le.
 5. Prouve-le : `ssh mathieu@localhost 'echo $JAVA_HOME'` doit répondre `/opt/jdk21`.
 
-::: astuce
-Pour l'étape 1, `printf '%s %s\n' "$(date +%T)" ".bashrc" » ~/lab01/logs/startup.log`
-convient. Pense à ce qui se passe si `~/lab01/logs/` n'existe pas encore au moment
-où le fichier est lu.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour l'étape 1, `printf '%s %s\n' "$(date +%T)" ".bashrc" » ~/lab01/logs/startup.log`
+> convient. Pense à ce qui se passe si `~/lab01/logs/` n'existe pas encore au moment
+> où le fichier est lu.
 
-::: check
-Critère de succès : `~/lab01/cartographie.md` existe et distingue les quatre cas, et
-`ssh mathieu@localhost 'echo $JAVA_HOME'` affiche `/opt/jdk21`.
-
-```bash
-bash check_M01_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `~/lab01/cartographie.md` existe et distingue les quatre cas, et
+> `ssh mathieu@localhost 'echo $JAVA_HOME'` affiche `/opt/jdk21`.
+>
+> ```bash
+> bash check_M01_04.sh
+> ```
 
 ---
 
 ## 1.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf01`. Le snapshot de secours
-reste `snap-clean` (`qm rollback 9001 snap-clean`), mais l'utiliser vaut échec de
-l'exercice : l'objectif est de réparer, pas de rembobiner.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf01`. Le snapshot de secours
+> reste `snap-clean` (`qm rollback 9001 snap-clean`), mais l'utiliser vaut échec de
+> l'exercice : l'objectif est de réparer, pas de rembobiner.
 
-### **BF1.1** — « Plus aucune commande ne marche »
+### <a id="bf1-1"></a>**[BF1.1](corrige.md#bf1-1)** — « Plus aucune commande ne marche »
 
 ```bash
 sudo bash break_M01_01.sh
@@ -721,11 +742,9 @@ ouvrir une session graphique.
 identifier la ligne fautive, la corriger durablement, et expliquer pourquoi
 `sudo` lui-même était inaccessible.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF1.2** — « `df` raconte n'importe quoi sur tous les comptes »
+### <a id="bf1-2"></a>**[BF1.2](corrige.md#bf1-2)** — « `df` raconte n'importe quoi sur tous les comptes »
 
 ```bash
 sudo bash break_M01_02.sh
@@ -741,11 +760,9 @@ habituel, sur tous les comptes de la machine, y compris root. Mais
 (session, système, profil), rétablir `df` pour tous les utilisateurs, et donner la
 commande qui permet d'exécuter la vraie `df` même quand le masquage est en place.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF1.3** — « Mes alias et mon prompt ont disparu en SSH »
+### <a id="bf1-3"></a>**[BF1.3](corrige.md#bf1-3)** — « Mes alias et mon prompt ont disparu en SSH »
 
 ```bash
 sudo bash break_M01_03.sh
@@ -761,21 +778,19 @@ celui par défaut du système (plus de code retour), les alias (`ll`, `hostinfo`
 chose que le shell interactif, corriger, et énoncer la règle générale à retenir
 pour ne plus jamais reproduire l'erreur.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 1.8 Défi du module ★★★
 
-**D1 — Audit et durcissement de l'environnement shell**
+<a id="d1"></a>**[D1](corrige.md#d1) — Audit et durcissement de l'environnement shell**
 
-::: contexte
-Avant l'arrivée de trois nouveaux admins, on te demande un outil d'audit de
-l'environnement shell, exécutable sur n'importe quelle VM du lab, plus la
-configuration de référence qui va avec. Livrable attendu : un script + un rapport.
-:::
+> **Contexte**
+>
+> Avant l'arrivée de trois nouveaux admins, on te demande un outil d'audit de
+> l'environnement shell, exécutable sur n'importe quelle VM du lab, plus la
+> configuration de référence qui va avec. Livrable attendu : un script + un rapport.
 
 Cahier des charges :
 
@@ -805,11 +820,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M01_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M01_05.sh
+> ```
 
 ---
 
@@ -837,3 +853,9 @@ Pour aller plus loin :
   `history-search-backward` sur les flèches haut/bas. Compare avec `Ctrl-R`.
 * Compare ton `~/.bashrc` avec `/etc/skel/.bashrc` d'Ubuntu 24.04 : chaque écart
   doit être justifiable.
+
+<!-- nav:début -->
+---
+
+[Corrigé](corrige.md) · [Module 02 →](../02-filesystem-fhs/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

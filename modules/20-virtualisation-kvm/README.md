@@ -1,49 +1,77 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 20**  
+[← Projet A](../../projets/P1-factura/README.md) · [Corrigé](corrige.md) · [Module 21 →](../21-git/README.md)
+
+<details><summary>Scripts du module (12)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M20.sh`](../../scripts/setup/setup_M20.sh) | prépare le module |
+| [`check_M20_01.sh`](../../scripts/check/check_M20_01.sh) | vérification |
+| [`check_M20_02.sh`](../../scripts/check/check_M20_02.sh) | vérification |
+| [`check_M20_03.sh`](../../scripts/check/check_M20_03.sh) | vérification |
+| [`check_M20_04.sh`](../../scripts/check/check_M20_04.sh) | vérification |
+| [`check_M20_05.sh`](../../scripts/check/check_M20_05.sh) | vérification |
+| [`check_M20_06.sh`](../../scripts/check/check_M20_06.sh) | vérification |
+| [`break_M20_01.sh`](../../scripts/break/break_M20_01.sh) | installe une panne |
+| [`break_M20_02.sh`](../../scripts/break/break_M20_02.sh) | installe une panne |
+| [`break_M20_03.sh`](../../scripts/break/break_M20_03.sh) | installe une panne |
+| [`break_M20_04.sh`](../../scripts/break/break_M20_04.sh) | installe une panne |
+| [`break_M20_05.sh`](../../scripts/break/break_M20_05.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 20 — Virtualisation : KVM, QEMU et libvirt
 
 ## 20.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* expliquer l'empilement **Proxmox → libvirt/`qm` → QEMU → KVM → CPU**, situer
-  un hyperviseur de type 1 et de type 2, et prouver en quatre commandes qu'une
-  machine peut accélérer des VM (`/dev/kvm`, `kvm-ok`, `lscpu`, `lsmod`) ;
-* activer la **virtualisation imbriquée** sur un nœud Proxmox (`cpu: host`,
-  `kvm-intel nested=1`) et la vérifier depuis la VM invitée ;
-* installer la pile `qemu-system-x86` + `libvirt` + `virtinst` sur Ubuntu et
-  Rocky, distinguer `qemu:///system` de `qemu:///session`, et lire
-  `virsh capabilities` / `domcapabilities` ;
-* choisir les bons périphériques **virtio** (`virtio-blk` vs `virtio-scsi`,
-  `virtio-net`, balloon, rng, virtiofs) et justifier pourquoi un pilote
-  paravirtualisé bat une carte émulée ;
-* manipuler des images disque avec `qemu-img` (`create`, `info`, `convert`,
-  `resize`, `rebase`), expliquer raw vs qcow2, le *thin provisioning*, les
-  *backing files*, les modes de cache et `discard` ;
-* créer une VM depuis une **image cloud** avec un seed **cloud-init** (ISO
-  `cidata`), la cloner en quelques secondes, lire et modifier son XML
-  (`virsh dumpxml`, `virsh edit`, `virt-xml`), l'agrandir et lui ajouter des
-  périphériques **à chaud** ;
-* construire les trois réseaux virtuels qui reviennent partout (NAT, bridge
-  sur le LAN, isolé), en lisant leur XML et en reconnaissant le bridge Linux
-  et les règles netfilter qui les portent ;
-* faire un **snapshot externe cohérent**, une sauvegarde à chaud par
-  `blockcommit`, une restauration prouvée, et comparer avec `qm snapshot` et
-  `vzdump` ;
-* décrire une migration à chaud (`virsh migrate --live`) et ce que Proxmox
-  fait à ta place ;
-* diagnostiquer une VM qui refuse de démarrer ou qui rame (logs libvirt,
-  processus `qemu-system-x86_64`, cgroups `machine.slice`, AppArmor/SELinux,
-  *steal time*) ;
-* scripter libvirt en bash et en Python (`libvirt-python`) et livrer une
-  « usine à VM » idempotente ;
-* situer Xen, ESXi/vSphere, Hyper-V, OpenStack, Firecracker et LXC dans un
-  entretien.
-
-Temps estimé : 7 h
-Prérequis : modules 07 (bash), 11 (partitions, `growpart`), 12 (bridge,
-`ip`, Netplan), 14 (clés SSH). Le module 24 reprend cloud-init côté Proxmox
-et OpenTofu : ici, cloud-init est traité côté libvirt uniquement.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * expliquer l'empilement **Proxmox → libvirt/`qm` → QEMU → KVM → CPU**, situer
+>   un hyperviseur de type 1 et de type 2, et prouver en quatre commandes qu'une
+>   machine peut accélérer des VM (`/dev/kvm`, `kvm-ok`, `lscpu`, `lsmod`) ;
+> * activer la **virtualisation imbriquée** sur un nœud Proxmox (`cpu: host`,
+>   `kvm-intel nested=1`) et la vérifier depuis la VM invitée ;
+> * installer la pile `qemu-system-x86` + `libvirt` + `virtinst` sur Ubuntu et
+>   Rocky, distinguer `qemu:///system` de `qemu:///session`, et lire
+>   `virsh capabilities` / `domcapabilities` ;
+> * choisir les bons périphériques **virtio** (`virtio-blk` vs `virtio-scsi`,
+>   `virtio-net`, balloon, rng, virtiofs) et justifier pourquoi un pilote
+>   paravirtualisé bat une carte émulée ;
+> * manipuler des images disque avec `qemu-img` (`create`, `info`, `convert`,
+>   `resize`, `rebase`), expliquer raw vs qcow2, le *thin provisioning*, les
+>   *backing files*, les modes de cache et `discard` ;
+> * créer une VM depuis une **image cloud** avec un seed **cloud-init** (ISO
+>   `cidata`), la cloner en quelques secondes, lire et modifier son XML
+>   (`virsh dumpxml`, `virsh edit`, `virt-xml`), l'agrandir et lui ajouter des
+>   périphériques **à chaud** ;
+> * construire les trois réseaux virtuels qui reviennent partout (NAT, bridge
+>   sur le LAN, isolé), en lisant leur XML et en reconnaissant le bridge Linux
+>   et les règles netfilter qui les portent ;
+> * faire un **snapshot externe cohérent**, une sauvegarde à chaud par
+>   `blockcommit`, une restauration prouvée, et comparer avec `qm snapshot` et
+>   `vzdump` ;
+> * décrire une migration à chaud (`virsh migrate --live`) et ce que Proxmox
+>   fait à ta place ;
+> * diagnostiquer une VM qui refuse de démarrer ou qui rame (logs libvirt,
+>   processus `qemu-system-x86_64`, cgroups `machine.slice`, AppArmor/SELinux,
+>   *steal time*) ;
+> * scripter libvirt en bash et en Python (`libvirt-python`) et livrer une
+>   « usine à VM » idempotente ;
+> * situer Xen, ESXi/vSphere, Hyper-V, OpenStack, Firecracker et LXC dans un
+>   entretien.
+>
+> **Temps estimé** : 7 h
+>
+> **Prérequis** : modules 07 (bash), 11 (partitions, `growpart`), 12 (bridge,
+> `ip`, Netplan), 14 (clés SSH). Le module 24 reprend cloud-init côté Proxmox
+> et OpenTofu : ici, cloud-init est traité côté libvirt uniquement.
 
 ---
 
@@ -94,17 +122,18 @@ réseau `default`. `virtinst` fournit `virt-install`, `virt-clone`,
 fournit `virt-sysprep`, `virt-customize`, `virt-filesystems`.
 `cpu-checker` fournit `kvm-ok`.
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y qemu-kvm libvirt libvirt-client
-virt-install guestfs-tools genisoimage libosinfo python3-libvirt jq` puis
-`sudo usermod -aG libvirt mathieu`.
-Rocky lance libvirt en **démons modulaires** (`virtqemud`, `virtnetworkd`,
-`virtstoraged`…), activés par socket : `for d in qemu network nodedev nwfilter secret storage; do sudo systemctl enable --now virt${d}d{,-ro,-admin}.socket; done` (`libvirtd.service` existe encore mais entre en conflit avec eux); `journalctl -u virtqemud` remplace `journalctl -u libvirtd`.
-Le binaire QEMU est `/usr/libexec/qemu-kvm`, l'utilisateur des processus est
-`qemu` (Ubuntu : `libvirt-qemu`), et le confinement est SELinux (`svirt_t`)
-au lieu d'AppArmor. `cloud-localds` n'est pas packagé : `genisoimage` fait
-le même travail (E20.6).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y qemu-kvm libvirt libvirt-client
+> virt-install guestfs-tools genisoimage libosinfo python3-libvirt jq` puis
+> `sudo usermod -aG libvirt mathieu`.
+> Rocky lance libvirt en **démons modulaires** (`virtqemud`, `virtnetworkd`,
+> `virtstoraged`…), activés par socket : `for d in qemu network nodedev nwfilter secret storage; do sudo systemctl enable --now virt${d}d{,-ro,-admin}.socket; done` (`libvirtd.service` existe encore mais entre en conflit avec eux); `journalctl -u virtqemud` remplace `journalctl -u libvirtd`.
+> Le binaire QEMU est `/usr/libexec/qemu-kvm`, l'utilisateur des processus est
+> `qemu` (Ubuntu : `libvirt-qemu`), et le confinement est SELinux (`svirt_t`)
+> au lieu d'AppArmor. `cloud-localds` n'est pas packagé : `genisoimage` fait
+> le même travail (E20.6).
 
 Préparation (idempotent, relançable) :
 
@@ -132,12 +161,13 @@ Plan d'adressage réservé à ce module sur le LAN de lab : **10.10.10.160 à
 10.10.10.179** pour les VM imbriquées attachées au bridge. Le réseau NAT
 `default` de libvirt utilise `192.168.122.0/24`, invisible depuis `lab-adm`.
 
-::: attention
-`lab-virt` a 6 Go : chaque VM imbriquée prend 512 Mo à 1 Go. Ne laisse jamais
-plus de quatre VM allumées en même temps, et arrête (`virsh shutdown`) celles
-d'un lab terminé. Le Break & Fix BF20.2 touche le Netplan de `lab-virt` :
-garde une console Proxmox (`qm terminal 9007`) sous la main.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `lab-virt` a 6 Go : chaque VM imbriquée prend 512 Mo à 1 Go. Ne laisse jamais
+> plus de quatre VM allumées en même temps, et arrête (`virsh shutdown`) celles
+> d'un lab terminé. Le Break & Fix BF20.2 touche le Netplan de `lab-virt` :
+> garde une console Proxmox (`qm terminal 9007`) sous la main.
 
 ---
 
@@ -171,7 +201,9 @@ garde une console Proxmox (`qm terminal 9007`) sous la main.
 * **Imbriqué** : `kvm_intel nested=1` sur l'hôte + CPU `host` exposé à la VM
   → la VM voit `vmx`/`svm` et a son propre `/dev/kvm`.
 
-@fig(virt-pile): La pile de virtualisation : du VT-x du processeur au module KVM, au processus QEMU par VM, à libvirt et aux outils ; Proxmox parle à QEMU sans libvirt, et lab-virt rejoue la même pile un étage plus bas.
+<p align="center"><img src="../../assets/figures/virt-pile.svg" alt="Schéma : virt-pile"></p>
+
+*Figure — La pile de virtualisation : du VT-x du processeur au module KVM, au processus QEMU par VM, à libvirt et aux outils ; Proxmox parle à QEMU sans libvirt, et lab-virt rejoue la même pile un étage plus bas.*
 
 ```bash
 ls -l /dev/kvm ; kvm-ok ; lscpu | grep -iE 'virtualization|hypervisor'
@@ -291,7 +323,9 @@ Un bridge Netplan sur `lab-virt` (`bridges: br0: interfaces: [eth0]`) est
 exactement ce que Proxmox appelle `vmbr0`/`vmbr1` dans
 `/etc/network/interfaces`.
 
-@fig(virt-reseau): NAT contre bridge : avec `virbr0` la VM sort par masquerade mais reste injoignable depuis le LAN ; avec `br0` elle est un hôte du LAN comme les autres.
+<p align="center"><img src="../../assets/figures/virt-reseau.svg" alt="Schéma : virt-reseau"></p>
+
+*Figure — NAT contre bridge : avec `virbr0` la VM sort par masquerade mais reste injoignable depuis le LAN ; avec `br0` elle est un hôte du LAN comme les autres.*
 
 ### Stockage libvirt
 
@@ -378,7 +412,7 @@ conteneur système partageant le noyau de l'hôte — moins isolé, plus dense
 
 ## 20.3 Quiz — QCM
 
-**Q20.1** — Sur `lab-virt`, `lscpu` affiche :
+<a id="q20-1"></a>**[Q20.1](corrige.md#q20-1)** — Sur `lab-virt`, `lscpu` affiche :
 
 ```text
 Hypervisor vendor:                    KVM
@@ -393,7 +427,7 @@ b) `lab-virt` peut à son tour accélérer des VM avec KVM
 c) `lab-virt` tourne en émulation TCG
 d) le nœud Proxmox utilise Xen
 
-**Q20.2** — Tu as installé libvirt, créé `vm-01` avec `sudo virt-install`,
+<a id="q20-2"></a>**[Q20.2](corrige.md#q20-2)** — Tu as installé libvirt, créé `vm-01` avec `sudo virt-install`,
 puis en tant que `mathieu` : `virsh list --all` affiche une liste vide, sans
 erreur. Explication ?
 
@@ -403,7 +437,7 @@ b) sans URI, `virsh` d'un utilisateur non root se connecte à
 c) `mathieu` n'est pas dans le groupe `kvm`
 d) `virsh list` n'affiche que les VM en cours d'exécution
 
-**Q20.3** — `virsh dumpxml vm-01 | head -1` donne `<domain type='qemu'>`.
+<a id="q20-3"></a>**[Q20.3](corrige.md#q20-3)** — `virsh dumpxml vm-01 | head -1` donne `<domain type='qemu'>`.
 Conséquence ? **Deux réponses correctes.**
 
 a) aucune : `qemu` et `kvm` sont deux noms du même mode
@@ -411,7 +445,7 @@ b) le CPU est émulé par TCG, le démarrage prend des minutes
 c) `ps` montre `-accel tcg` au lieu de `-accel kvm`
 d) la VM ne peut pas avoir plus d'un vCPU
 
-**Q20.4** — `qemu-img info` sur le disque d'une VM :
+<a id="q20-4"></a>**[Q20.4](corrige.md#q20-4)** — `qemu-img info` sur le disque d'une VM :
 
 ```text
 virtual size: 20 GiB (21474836480 bytes)
@@ -427,7 +461,7 @@ b) le fichier ne contient que les blocs modifiés depuis la base ; la base
 c) `disk size` est la taille vue par l'invité
 d) la base est copiée dans le fichier au premier démarrage
 
-**Q20.5** — `virtio-blk` ou `virtio-scsi` ? **Deux réponses correctes.**
+<a id="q20-5"></a>**[Q20.5](corrige.md#q20-5)** — `virtio-blk` ou `virtio-scsi` ? **Deux réponses correctes.**
 
 a) `virtio-scsi` présente les disques en `/dev/sdX` et supporte le TRIM, le
    hotplug massif et le passthrough SCSI
@@ -435,7 +469,7 @@ b) `virtio-blk` est plus simple et consomme un slot PCI par disque
 c) `virtio-scsi` est une émulation, donc plus lente que `virtio-blk`
 d) Proxmox utilise `virtio-blk` par défaut
 
-**Q20.6** — Un disque déclaré avec `cache='none'` :
+<a id="q20-6"></a>**[Q20.6](corrige.md#q20-6)** — Un disque déclaré avec `cache='none'` :
 
 a) désactive le cache de pages de l'invité
 b) ouvre l'image en `O_DIRECT` : le cache de pages de l'**hôte** est
@@ -444,7 +478,7 @@ b) ouvre l'image en `O_DIRECT` : le cache de pages de l'**hôte** est
 c) est plus rapide que `writeback` dans tous les cas
 d) interdit les snapshots
 
-**Q20.7** — Deux hôtes KVM avec des CPU de générations différentes. Tu
+<a id="q20-7"></a>**[Q20.7](corrige.md#q20-7)** — Deux hôtes KVM avec des CPU de générations différentes. Tu
 veux pouvoir migrer à chaud dans les deux sens. Quel mode CPU ?
 
 a) `host-passthrough`
@@ -452,7 +486,7 @@ b) `host-model`, ou un modèle `custom` commun aux deux hôtes
 c) n'importe lequel, la migration renégocie le CPU
 d) `host-passthrough` avec `migratable='on'`
 
-**Q20.8** — `virsh shutdown vm-01` rend la main, mais la VM tourne toujours
+<a id="q20-8"></a>**[Q20.8](corrige.md#q20-8)** — `virsh shutdown vm-01` rend la main, mais la VM tourne toujours
 deux minutes après. `virsh destroy` fonctionne. Cause la plus probable ?
 
 a) libvirt est en panne
@@ -461,7 +495,7 @@ b) `shutdown` envoie un événement ACPI que l'invité doit traiter ; ici rien
 c) la VM a un snapshot interne qui bloque l'arrêt
 d) il faut `--mode agent` en plus de l'agent invité pour tout arrêt
 
-**Q20.9** — Sur `vm-01` en marche, disque `vda` =
+<a id="q20-9"></a>**[Q20.9](corrige.md#q20-9)** — Sur `vm-01` en marche, disque `vda` =
 `/var/lib/libvirt/images/vm-01.qcow2`. Tu lances
 `virsh snapshot-create-as vm-01 s1 --disk-only --atomic`. Juste après :
 
@@ -471,7 +505,7 @@ b) la VM écrit maintenant dans `vm-01.s1`, dont le backing file est
 c) la VM est en pause tant que le snapshot n'est pas supprimé
 d) l'état de la RAM est dans `vm-01.s1`
 
-**Q20.10** — Après la sauvegarde, `virsh blockcommit vm-01 vda --active
+<a id="q20-10"></a>**[Q20.10](corrige.md#q20-10)** — Après la sauvegarde, `virsh blockcommit vm-01 vda --active
 --pivot`. Que se passe-t-il ?
 
 a) les blocs de `vm-01.s1` sont fusionnés dans `vm-01.qcow2`, la VM bascule
@@ -480,7 +514,7 @@ b) `vm-01.qcow2` est fusionné dans `vm-01.s1`
 c) la VM redémarre
 d) libvirt supprime `vm-01.s1` automatiquement
 
-**Q20.11** — `virsh setvcpus vm-01 4 --live` répond
+<a id="q20-11"></a>**[Q20.11](corrige.md#q20-11)** — `virsh setvcpus vm-01 4 --live` répond
 `error: invalid argument: requested vcpus is greater than max allowable
 vcpus for the live domain: 4 > 1`. Que faut-il ?
 
@@ -490,7 +524,7 @@ b) déclarer un maximum supérieur dans le XML (`<vcpu current='1'>4</vcpu>`,
 c) ajouter `--config`
 d) passer `<cpu mode='host-passthrough'/>`
 
-**Q20.12** — Une VM sur `--network network=default` obtient une IP en DHCP.
+<a id="q20-12"></a>**[Q20.12](corrige.md#q20-12)** — Une VM sur `--network network=default` obtient une IP en DHCP.
 La même image sur `--network bridge=br0` n'en obtient pas. Pourquoi ?
 
 a) le bridge est cassé
@@ -500,7 +534,7 @@ b) le DHCP de `default` est le `dnsmasq` de libvirt sur `virbr0` ; sur `br0`
 c) `virtio-net` ne fait pas de DHCP
 d) il manque `<forward mode='nat'/>` sur `br0`
 
-**Q20.13** — `virsh start import-1` échoue avec
+<a id="q20-13"></a>**[Q20.13](corrige.md#q20-13)** — `virsh start import-1` échoue avec
 `Cannot access storage file '/root/import/import- 1.qcow2' (as uid:64055, gid:108): Permission denied` alors que
 le fichier appartient à root en 0600 et que libvirt tourne en root. **Deux
 réponses correctes.**
@@ -512,7 +546,7 @@ b) libvirt change le propriétaire du fichier (`dynamic_ownership`) mais ne
 c) il faut désactiver AppArmor
 d) `chmod 777 /root` est le correctif attendu
 
-**Q20.14** — `virsh domifaddr vm-lan` ne renvoie rien pour une VM sur `br0`,
+<a id="q20-14"></a>**[Q20.14](corrige.md#q20-14)** — `virsh domifaddr vm-lan` ne renvoie rien pour une VM sur `br0`,
 alors que la VM répond au ping. Commande utile ?
 
 a) `virsh domifaddr vm-lan --source agent` (ou `--source arp`)
@@ -520,7 +554,7 @@ b) `virsh net-dhcp-leases br0`
 c) `virsh domiflist vm-lan --ip`
 d) redémarrer `libvirtd`
 
-**Q20.15** — Sur Proxmox, `qm snapshot 9007 s1` sur un disque `local-lvm`.
+<a id="q20-15"></a>**[Q20.15](corrige.md#q20-15)** — Sur Proxmox, `qm snapshot 9007 s1` sur un disque `local-lvm`.
 Mécanisme sous-jacent ?
 
 a) un snapshot interne qcow2, comme `virsh snapshot-create-as`
@@ -528,7 +562,7 @@ b) un snapshot LVM-thin du volume logique, plus un fichier `.conf` versionné
 c) un overlay externe qcow2 dans `/var/lib/vz`
 d) une copie complète du disque
 
-**Q20.16** — *Entretien* : « Où est la frontière entre KVM et QEMU ? »
+<a id="q20-16"></a>**[Q20.16](corrige.md#q20-16)** — *Entretien* : « Où est la frontière entre KVM et QEMU ? »
 
 a) KVM émule le matériel, QEMU exécute le code invité
 b) KVM (noyau) exécute le code invité sur le CPU physique via VT-x ; QEMU
@@ -536,7 +570,7 @@ b) KVM (noyau) exécute le code invité sur le CPU physique via VT-x ; QEMU
 c) QEMU est le nouveau nom de KVM depuis le noyau 5
 d) KVM est un hyperviseur de type 2 posé sur QEMU
 
-**Q20.17** — Dans `vm-01`, `top` affiche `st` à 35 %. Diagnostic ?
+<a id="q20-17"></a>**[Q20.17](corrige.md#q20-17)** — Dans `vm-01`, `top` affiche `st` à 35 %. Diagnostic ?
 
 a) la VM manque de RAM
 b) l'hôte n'a pas assez de CPU pour tous ses vCPU : les vCPU attendent leur
@@ -544,7 +578,7 @@ b) l'hôte n'a pas assez de CPU pour tous ses vCPU : les vCPU attendent leur
 c) les pilotes virtio manquent
 d) le disque est en `cache='writethrough'`
 
-**Q20.18** — Migrer à chaud `vm-01` vers un second hôte **sans** stockage
+<a id="q20-18"></a>**[Q20.18](corrige.md#q20-18)** — Migrer à chaud `vm-01` vers un second hôte **sans** stockage
 partagé :
 
 a) impossible avec libvirt
@@ -558,91 +592,73 @@ d) `scp` du qcow2 pendant que la VM tourne, puis `virsh define`
 
 ## 20.4 Quiz — questions ouvertes
 
-**QO20.1** — Décris le trajet d'une écriture disque depuis un `write()` dans
+<a id="qo20-1"></a>**[QO20.1](corrige.md#qo20-1)** — Décris le trajet d'une écriture disque depuis un `write()` dans
 `vm-01` jusqu'au SSD du nœud Proxmox. Nomme chaque couche (noyau invité,
 pilote virtio-blk, virtqueue, sortie de VM, QEMU, cache hôte, noyau de
 `lab-virt`, puis à nouveau virtio-scsi/QEMU/KVM côté Proxmox) et dis à quel
 endroit `cache='none'` et `discard='unmap'` interviennent.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO20.2** — *On te demande en entretien* : « Explique-moi virtio. Pourquoi
+<a id="qo20-2"></a>**[QO20.2](corrige.md#qo20-2)** — *On te demande en entretien* : « Explique-moi virtio. Pourquoi
 une carte `e1000` émulée est-elle plus lente qu'une `virtio-net`, alors que
 les deux sont du logiciel ? » Réponds avec les notions de *VM exit*, de
 *virtqueue* et de paravirtualisation, puis cite les cinq périphériques virtio
 que tu utilises au quotidien et à quoi sert chacun.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO20.3** — Compare raw et qcow2 : performance, allocation (*thin
+<a id="qo20-3"></a>**[QO20.3](corrige.md#qo20-3)** — Compare raw et qcow2 : performance, allocation (*thin
 provisioning*), snapshots, backing files. Explique pourquoi un qcow2 « thin »
 peut finir par remplir un hôte alors que chaque VM se croit loin d'être
 pleine, ce que change `discard='unmap'` + `fstrim`, et pourquoi Proxmox
 préfère du raw sur LVM-thin.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO20.4** — Déroule la sauvegarde à chaud d'une VM libvirt par snapshot
+<a id="qo20-4"></a>**[QO20.4](corrige.md#qo20-4)** — Déroule la sauvegarde à chaud d'une VM libvirt par snapshot
 externe : chaque commande, ce qui se passe dans les fichiers à chaque
 étape, le rôle de `--quiesce` et de l'agent, ce que garantit `--atomic`, et
 ce qui arrive si l'on oublie le `blockcommit` final pendant trois mois.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO20.5** — *On te demande en entretien* : « Comment fonctionne une
+<a id="qo20-5"></a>**[QO20.5](corrige.md#qo20-5)** — *On te demande en entretien* : « Comment fonctionne une
 migration à chaud ? » Explique le *pre-copy* (copie itérative des pages
 sales), le moment de bascule, ce qui borne le *downtime*, les prérequis
 (CPU compatible, stockage partagé ou `--copy-storage-all`, réseau, même
 version QEMU ou compatible), et ce que Proxmox fait pour toi avec
 `qm migrate --online`.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO20.6** — Décris ta méthode complète quand `virsh start vm` échoue ou
+<a id="qo20-6"></a>**[QO20.6](corrige.md#qo20-6)** — Décris ta méthode complète quand `virsh start vm` échoue ou
 quand la VM démarre mais ne répond pas : dans l'ordre, les commandes et ce
 que tu cherches dans chaque sortie. Couvre au minimum : XML invalide,
 backing file absent, permissions/AppArmor, bridge disparu, `/dev/kvm`
 absent, console série muette, réseau sans DHCP, agent muet.
 
-::: repondre
-lignes: 14
-:::
+<!-- repondre: 14 -->
 
-**QO20.7** — Compare les quatre modes réseau (NAT, bridge, isolé, macvtap) :
+<a id="qo20-7"></a>**[QO20.7](corrige.md#qo20-7)** — Compare les quatre modes réseau (NAT, bridge, isolé, macvtap) :
 qui voit qui, où sont les règles netfilter, quel DHCP, et ce que chacun
 devient dans Proxmox (`vmbr0`, `vmbr1` + NAT du nœud, bridge sans port,
 pare-feu). Donne un cas d'usage par mode.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO20.8** — *On te demande en entretien* : « Proxmox, OpenStack, vSphere,
+<a id="qo20-8"></a>**[QO20.8](corrige.md#qo20-8)** — *On te demande en entretien* : « Proxmox, OpenStack, vSphere,
 Firecracker : tu me les places ? Et quand est-ce que tu prends un conteneur
 plutôt qu'une VM ? » Réponds en cinq points structurés, avec pour chaque
 technologie ce qu'elle apporte que les autres n'ont pas.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO20.9** — Explique le ballooning, KSM et les hugepages : mécanisme, gain
+<a id="qo20-9"></a>**[QO20.9](corrige.md#qo20-9)** — Explique le ballooning, KSM et les hugepages : mécanisme, gain
 attendu, coût, et le scénario d'incident que chacun peut provoquer sur un
 hôte suralloué en mémoire (OOM de l'hôte, VM qui swappe, latence).
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
@@ -651,34 +667,34 @@ lignes: 10
 Sauf mention contraire, tout se passe sur `lab-virt` en tant que `mathieu`,
 dans `~/lab20`. Les exercices E20.7 à E20.15 supposent `vm-01` créée (L20.1).
 
-**E20.1** — Prouve en quatre commandes que `lab-virt` peut accélérer des VM :
+<a id="e20-1"></a>**[E20.1](corrige.md#e20-1)** — Prouve en quatre commandes que `lab-virt` peut accélérer des VM :
 le périphérique, l'outil de `cpu-checker`, les drapeaux CPU, les modules
 noyau chargés. Puis, sur le nœud Proxmox, affiche la valeur du paramètre
 `nested` du module KVM et la ligne `cpu:` de `/etc/pve/qemu-server/9007.conf`.
 
-**E20.2** — En tant que `mathieu` sans option, affiche l'URI à laquelle
+<a id="e20-2"></a>**[E20.2](corrige.md#e20-2)** — En tant que `mathieu` sans option, affiche l'URI à laquelle
 `virsh` se connecte. Fais en sorte que `virsh list --all` montre les VM
 système sans taper `-c` ni `sudo`, de façon persistante. Prouve que la
 socket `/run/libvirt/libvirt-sock` t'est accessible et explique par quoi.
 
-**E20.3** — Affiche les versions de libvirt et de QEMU en une commande, les
+<a id="e20-3"></a>**[E20.3](corrige.md#e20-3)** — Affiche les versions de libvirt et de QEMU en une commande, les
 ressources de l'hôte vues par libvirt, puis extrais de `virsh capabilities`
 uniquement les types de domaine disponibles pour `x86_64` et de
 `virsh domcapabilities` la liste des modes CPU supportés avec leur état.
 
-**E20.4** — Dans `~/lab20/img/` : crée un qcow2 de 20 Go, mesure son
+<a id="e20-4"></a>**[E20.4](corrige.md#e20-4)** — Dans `~/lab20/img/` : crée un qcow2 de 20 Go, mesure son
 occupation réelle avec deux commandes qui ne donnent pas la même réponse
 (explique), convertis-le en raw et compare `ls -l` et `du -h` du raw,
 agrandis le qcow2 de 5 Go, et donne la taille qu'aurait ce raw converti en
 qcow2 compressé (sans le faire).
 
-**E20.5** — Toujours dans `~/lab20/img/` : crée un overlay `test.qcow2` de
+<a id="e20-5"></a>**[E20.5](corrige.md#e20-5)** — Toujours dans `~/lab20/img/` : crée un overlay `test.qcow2` de
 20 Go dont la base est `/var/lib/libvirt/images/ubuntu-24.04-base.qcow2`.
 Affiche la chaîne complète, la taille virtuelle et réelle de chaque maillon.
 Puis déplace la base **fictivement** en changeant uniquement le pointeur de
 `test.qcow2` vers `/tmp/base.qcow2`, constate l'erreur, et remets le pointeur.
 
-**E20.6** — Écris `~/lab20/cloud-init/vm-01/{user-data,meta-data}` :
+<a id="e20-6"></a>**[E20.6](corrige.md#e20-6)** — Écris `~/lab20/cloud-init/vm-01/{user-data,meta-data}` :
 hostname `vm-01`, utilisateur `mathieu` avec tes clés (celle de `lab-virt`
 et celles de `~/.ssh/authorized_keys`), sudo sans mot de passe, paquet
 `qemu-guest-agent` activé, fichier `/etc/lab20-marker` contenant `vm-01`.
@@ -686,12 +702,12 @@ Valide le YAML et le schéma. Fabrique `seed.iso` avec `cloud-localds`, puis
 refais-la avec `genisoimage`, et prouve avec `isoinfo` que les deux ont le
 label de volume attendu et les mêmes fichiers.
 
-**E20.7** — Sans éditeur, à partir du XML de `vm-01`, réponds : type de
+<a id="e20-7"></a>**[E20.7](corrige.md#e20-7)** — Sans éditeur, à partir du XML de `vm-01`, réponds : type de
 machine QEMU, mode CPU, format et cache du disque `vda`, modèle de la carte
 réseau et son MAC, présence du canal de l'agent, type de console. Une
 commande par réponse (`xmllint --xpath` ou `grep` acceptés).
 
-**E20.8** — Vérifie si `virt-install` a posé un générateur `virtio-rng` sur
+<a id="e20-8"></a>**[E20.8](corrige.md#e20-8)** — Vérifie si `virt-install` a posé un générateur `virtio-rng` sur
 `vm-01` et ce qu'il alimente. Retire-le avec `virt-xml` (VM arrêtée),
 constate dans l'invité l'absence de `/dev/hwrng`, puis remets-le **de deux
 façons** : par `virsh edit` (XML écrit à la main), puis, après l'avoir
@@ -699,32 +715,32 @@ retiré de nouveau, par `virt-xml --add-device` sur la VM **allumée**.
 Vérifie `/dev/hwrng` et le pilote chargé. Note laquelle des deux méthodes
 exige un redémarrage et pourquoi.
 
-**E20.9** — Ouvre la console série de `vm-01`, constate qu'on te demande un
+<a id="e20-9"></a>**[E20.9](corrige.md#e20-9)** — Ouvre la console série de `vm-01`, constate qu'on te demande un
 mot de passe que tu n'as pas, sors de la console proprement, pose un mot de
 passe à `mathieu` **sans entrer dans la VM** (l'agent sait faire), puis
 connecte-toi par la console. Explique ce qui rend cette console possible
 (deux conditions : une côté XML, une côté noyau invité).
 
-**E20.10** — Interroge l'agent de `vm-01` : `guest-ping`, informations
+<a id="e20-10"></a>**[E20.10](corrige.md#e20-10)** — Interroge l'agent de `vm-01` : `guest-ping`, informations
 générales (version, commandes supportées), systèmes de fichiers montés,
 nom d'hôte, adresses IP par l'agent, heure de l'invité. Puis, depuis le nœud
 Proxmox, obtiens les mêmes informations sur `lab-virt` (9007) avec `qm`.
 Termine par un `guest-exec` qui exécute `uptime` dans `vm-01` et récupère la
 sortie décodée.
 
-**E20.11** — Trouve le processus QEMU de `vm-01` et, depuis sa ligne de
+<a id="e20-11"></a>**[E20.11](corrige.md#e20-11)** — Trouve le processus QEMU de `vm-01` et, depuis sa ligne de
 commande uniquement, extrais : l'accélérateur, le modèle CPU, la mémoire, la
 topologie SMP, le type de machine. Donne l'utilisateur qui l'exécute, son
 cgroup exact (fichier `/proc`), et l'unité systemd transitoire
 correspondante. Montre enfin ce que `machinectl` en dit.
 
-**E20.12** — À chaud sur `vm-01` : réduis la mémoire à 512 Mo puis remonte
+<a id="e20-12"></a>**[E20.12](corrige.md#e20-12)** — À chaud sur `vm-01` : réduis la mémoire à 512 Mo puis remonte
 à 1 Go, en observant `free -m` dans l'invité et `virsh dommemstat` à chaque
 étape. Ajoute un disque `vdb` de 2 Go (qcow2 dans le pool `default`), vérifie
 `lsblk` dans l'invité, puis retire-le. Chaque changement doit survivre à un
 redémarrage de la VM.
 
-**E20.13** — Lance une charge CPU dans `vm-01` (`yes > /dev/null &` deux
+<a id="e20-13"></a>**[E20.13](corrige.md#e20-13)** — Lance une charge CPU dans `vm-01` (`yes > /dev/null &` deux
 fois) et, depuis `lab-virt`, mesure la consommation avec trois outils
 différents (`virsh cpu-stats`, `virsh domstats`, `virt-top` en mode batch).
 Depuis l'invité, note la colonne `st`. Puis sature `lab-virt` elle-même
@@ -732,19 +748,19 @@ Depuis l'invité, note la colonne `st`. Puis sature `lab-virt` elle-même
 de `%CPU` dans `vm-01`, sans rien y changer. Arrête tout et explique à qui
 appartient le problème.
 
-**E20.14** — Affiche le XML du réseau `default`, les baux DHCP en cours,
+<a id="e20-14"></a>**[E20.14](corrige.md#e20-14)** — Affiche le XML du réseau `default`, les baux DHCP en cours,
 l'interface bridge et ses ports, et les règles NAT netfilter que libvirt a
 posées. Réserve ensuite l'adresse `192.168.122.50` au MAC de `vm-01` **sans
 arrêter le réseau ni la VM**, et prouve la réservation après un
 renouvellement DHCP dans l'invité.
 
-**E20.15** — Depuis le journal QEMU de `vm-01`, extrais la dernière ligne de
+<a id="e20-15"></a>**[E20.15](corrige.md#e20-15)** — Depuis le journal QEMU de `vm-01`, extrais la dernière ligne de
 commande QEMU lancée et la date du dernier arrêt. Dans un terminal, écoute
 les événements libvirt ; dans un autre, redémarre `vm-01` ; colle les
 événements reçus. Enfin, affiche les 20 dernières lignes de `libvirtd`
 dans le journal système.
 
-**E20.16** — Écris `~/lab20/bin/inventaire.py` (`libvirt-python`) qui liste
+<a id="e20-16"></a>**[E20.16](corrige.md#e20-16)** — Écris `~/lab20/bin/inventaire.py` (`libvirt-python`) qui liste
 toutes les VM de `qemu:///system` : nom, état en clair, vCPU, mémoire
 allouée en Mo, chemin des disques ; sortie en JSON. Écris l'équivalent en
 bash (`virsh` + `awk`/`jq`) en moins de 15 lignes. Compare les deux sur
@@ -754,15 +770,15 @@ l'exactitude de l'état d'une VM en `managedsave`.
 
 ## 20.6 Labs ★★
 
-### **L20.1** — Ticket EVO-412 : « Sortir de VMware : premier hôte KVM »
+### <a id="l20-1"></a>**[L20.1](corrige.md#l20-1)** — Ticket EVO-412 : « Sortir de VMware : premier hôte KVM »
 
-::: contexte
-La direction veut évaluer libvirt/KVM avant de renouveler les licences
-vSphere. On te confie une VM de test avec la virtualisation imbriquée et on
-te demande une première VM Ubuntu **créée sans ISO ni installateur**,
-joignable en SSH, avec l'agent invité opérationnel — et une note qui
-explique chaque composant.
-:::
+> **Contexte**
+>
+> La direction veut évaluer libvirt/KVM avant de renouveler les licences
+> vSphere. On te confie une VM de test avec la virtualisation imbriquée et on
+> te demande une première VM Ubuntu **créée sans ISO ni installateur**,
+> joignable en SSH, avec l'agent invité opérationnel — et une note qui
+> explique chaque composant.
 
 1. Sur le nœud Proxmox : vérifie et active la virtualisation imbriquée,
    passe `lab-virt` en `cpu: host`, redémarre-la (§20.1). Dans `lab-virt`,
@@ -796,34 +812,36 @@ explique chaque composant.
    « comment je l'ai vérifié ». Ajoute la ligne de commande QEMU réelle
    (extraite du log) commentée en cinq points.
 
-::: astuce
-`virt-install --osinfo list | grep -i ubuntu` te dit ce que ta base osinfo
-connaît. Si `ubuntu24.04` manque, prends `ubuntu22.04` : l'osinfo ne sert
-qu'à choisir des périphériques par défaut sensés (virtio, q35, agent).
-:::
+> [!TIP]
+> **Astuce**
+>
+> `virt-install --osinfo list | grep -i ubuntu` te dit ce que ta base osinfo
+> connaît. Si `ubuntu24.04` manque, prends `ubuntu22.04` : l'osinfo ne sert
+> qu'à choisir des périphériques par défaut sensés (virtio, q35, agent).
 
-::: check
-Critère de succès : `vm-01` est `running`, de type `kvm`, son disque `vda`
-est un qcow2 du pool `default` dont le backing file est
-`ubuntu-24.04-base.qcow2`, elle a une adresse sur `192.168.122.0/24`, son
-port 22 répond, l'agent répond à `guest-ping`, `autostart` est activé.
-
-```bash
-bash check_M20_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `vm-01` est `running`, de type `kvm`, son disque `vda`
+> est un qcow2 du pool `default` dont le backing file est
+> `ubuntu-24.04-base.qcow2`, elle a une adresse sur `192.168.122.0/24`, son
+> port 22 répond, l'agent répond à `guest-ping`, `autostart` est activé.
+>
+> ```bash
+> bash check_M20_01.sh
+> ```
 
 ---
 
-### **L20.2** — Ticket RES-77 : « La VM de test doit être joignable par l'équipe »
+### <a id="l20-2"></a>**[L20.2](corrige.md#l20-2)** — Ticket RES-77 : « La VM de test doit être joignable par l'équipe »
 
-::: contexte
-L'équipe veut se connecter aux VM imbriquées depuis leur poste (ici
-`lab-adm`), pas seulement depuis `lab-virt`. Le NAT de libvirt les cache. On
-te demande un **bridge** sur le LAN de lab, une VM adressée en statique
-dessus, et, pour les tests de bases de données, un réseau **isolé** que
-personne d'autre ne voit. Tu dois expliquer les trois topologies à l'équipe.
-:::
+> **Contexte**
+>
+> L'équipe veut se connecter aux VM imbriquées depuis leur poste (ici
+> `lab-adm`), pas seulement depuis `lab-virt`. Le NAT de libvirt les cache. On
+> te demande un **bridge** sur le LAN de lab, une VM adressée en statique
+> dessus, et, pour les tests de bases de données, un réseau **isolé** que
+> personne d'autre ne voit. Tu dois expliquer les trois topologies à l'équipe.
 
 1. Sur `lab-virt`, transforme l'interface principale en port d'un bridge
    `br0` qui porte `10.10.10.16/24` : désactive la génération réseau de
@@ -859,34 +877,36 @@ personne d'autre ne voit. Tu dois expliquer les trois topologies à l'équipe.
 7. Tableau dans `~/lab20/rapports/res-77.md` (4 colonnes : mode, qui voit la
    VM, DHCP/adressage, équivalent Proxmox) pour NAT, bridge, isolé, macvtap.
 
-::: attention
-`netplan try` annule au bout de 120 s si tu ne confirmes pas : c'est ta
-ceinture de sécurité. Si tu te retrouves quand même dehors :
-`qm terminal 9007` depuis le nœud, et `netplan apply` après correction.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `netplan try` annule au bout de 120 s si tu ne confirmes pas : c'est ta
+> ceinture de sécurité. Si tu te retrouves quand même dehors :
+> `qm terminal 9007` depuis le nœud, et `netplan apply` après correction.
 
-::: check
-Critère de succès : `br0` porte `10.10.10.16` avec l'interface physique en
-port, `vm-lan` tourne avec une interface sur `br0` et répond au ping en
-`10.10.10.161`, le réseau `isole` est actif sans `<forward>`, et `vm-01`
-comme `vm-lan` ont une interface persistante sur `isole`.
-
-```bash
-bash check_M20_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `br0` porte `10.10.10.16` avec l'interface physique en
+> port, `vm-lan` tourne avec une interface sur `br0` et répond au ping en
+> `10.10.10.161`, le réseau `isole` est actif sans `<forward>`, et `vm-01`
+> comme `vm-lan` ont une interface persistante sur `isole`.
+>
+> ```bash
+> bash check_M20_02.sh
+> ```
 
 ---
 
-### **L20.3** — Ticket STO-208 : « Trois VM de recette en trente secondes »
+### <a id="l20-3"></a>**[L20.3](corrige.md#l20-3)** — Ticket STO-208 : « Trois VM de recette en trente secondes »
 
-::: contexte
-Les testeurs veulent pouvoir demander trois VM identiques et les jeter le
-soir. Le stockage doit vivre dans `/srv/vm` (un disque dédié plus tard), et
-une VM de recette doit pouvoir être agrandie **sans arrêt**. On veut aussi
-savoir ce que coûte un « vrai » clone complet par rapport à un clone par
-backing file.
-:::
+> **Contexte**
+>
+> Les testeurs veulent pouvoir demander trois VM identiques et les jeter le
+> soir. Le stockage doit vivre dans `/srv/vm` (un disque dédié plus tard), et
+> une VM de recette doit pouvoir être agrandie **sans arrêt**. On veut aussi
+> savoir ce que coûte un « vrai » clone complet par rapport à un clone par
+> backing file.
 
 1. Crée le pool `lab20` de type `dir` sur `/srv/vm` (gabarit
    `~/lab20/xml/pool-lab20.xml` ou `pool-define-as`) : build, start,
@@ -921,28 +941,29 @@ backing file.
    et ce qu'il faut absolument nettoyer quand on clone « à plat » (trois
    éléments minimum).
 
-::: check
-Critère de succès : pool `lab20` actif sur `/srv/vm` en autostart,
-`clone-1` tourne avec un disque de capacité ≥ 30 Go dont le backing file est
-la base du pool, `clone-4` existe avec un disque **sans** backing file,
-`clone-2` et `clone-3` n'existent plus (ni domaine ni volume),
-`clone3.sh` existe.
-
-```bash
-bash check_M20_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : pool `lab20` actif sur `/srv/vm` en autostart,
+> `clone-1` tourne avec un disque de capacité ≥ 30 Go dont le backing file est
+> la base du pool, `clone-4` existe avec un disque **sans** backing file,
+> `clone-2` et `clone-3` n'existent plus (ni domaine ni volume),
+> `clone3.sh` existe.
+>
+> ```bash
+> bash check_M20_03.sh
+> ```
 
 ---
 
-### **L20.4** — Ticket SAV-15 : « Sauvegarder `vm-01` sans l'arrêter, et prouver la restauration »
+### <a id="l20-4"></a>**[L20.4](corrige.md#l20-4)** — Ticket SAV-15 : « Sauvegarder `vm-01` sans l'arrêter, et prouver la restauration »
 
-::: contexte
-`vm-01` va héberger une base de recette. On veut une sauvegarde à chaud
-cohérente, sans arrêt, un fichier autoportant qu'on peut copier sur un NAS,
-et une procédure de restauration **testée** — pas « ça devrait marcher ».
-On veut aussi comprendre ce que Proxmox fait différemment.
-:::
+> **Contexte**
+>
+> `vm-01` va héberger une base de recette. On veut une sauvegarde à chaud
+> cohérente, sans arrêt, un fichier autoportant qu'on peut copier sur un NAS,
+> et une procédure de restauration **testée** — pas « ça devrait marcher ».
+> On veut aussi comprendre ce que Proxmox fait différemment.
 
 1. Dans `vm-01`, crée `/srv/data/avant.txt` avec la date, et lance une
    écriture continue (`while true; do date >> /srv/data/journal.log;
@@ -981,28 +1002,29 @@ On veut aussi comprendre ce que Proxmox fait différemment.
    et un tableau interne / externe / `qm snapshot` / `vzdump` (colonnes :
    RAM incluse ?, VM en marche ?, cohérence FS, où sont les données).
 
-::: check
-Critère de succès : un fichier `~/lab20/backups/vm-01-*.qcow2` autoportant
-avec son XML, `vm-01` tourne sur un disque dont le nom ne contient pas
-`.sauv`, aucun overlay orphelin dans le pool, `/srv/data/avant.txt` présent
-et `apres.txt` absent dans l'invité, rapport rédigé.
-
-```bash
-bash check_M20_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : un fichier `~/lab20/backups/vm-01-*.qcow2` autoportant
+> avec son XML, `vm-01` tourne sur un disque dont le nom ne contient pas
+> `.sauv`, aucun overlay orphelin dans le pool, `/srv/data/avant.txt` présent
+> et `apres.txt` absent dans l'invité, rapport rédigé.
+>
+> ```bash
+> bash check_M20_04.sh
+> ```
 
 ---
 
-### **L20.5** — Ticket AUT-3 : « Une commande, une VM »
+### <a id="l20-5"></a>**[L20.5](corrige.md#l20-5)** — Ticket AUT-3 : « Une commande, une VM »
 
-::: contexte
-Les testeurs ne veulent plus lire une procédure de neuf étapes. On te
-demande un script `usine-vm.sh` : nom, RAM, vCPU, clé SSH, réseau en
-paramètres ; la VM est prête (SSH joignable) à la fin ; relancer le script
-sur une VM qui existe ne fait **rien** ; une option la détruit proprement.
-Le squelette est dans `~/lab20/bin/usine-vm.sh`.
-:::
+> **Contexte**
+>
+> Les testeurs ne veulent plus lire une procédure de neuf étapes. On te
+> demande un script `usine-vm.sh` : nom, RAM, vCPU, clé SSH, réseau en
+> paramètres ; la VM est prête (SSH joignable) à la fin ; relancer le script
+> sur une VM qui existe ne fait **rien** ; une option la détruit proprement.
+> Le squelette est dans `~/lab20/bin/usine-vm.sh`.
 
 Cahier des charges de `~/lab20/bin/usine-vm.sh` :
 
@@ -1034,29 +1056,31 @@ Cahier des charges de `~/lab20/bin/usine-vm.sh` :
    `lab-adm` sur `usine-2`, puis `--delete` des deux et vérification que le
    pool est propre. Recrée `usine-1` pour le check.
 
-::: check
-Critère de succès : `bash -n` passe, le script a `set -euo pipefail`,
-`usine-1` tourne et répond sur le port 22, un second lancement identique
-sort en 0 sans rien changer, et `--delete` sur une VM de test laisse le
-pool sans volume orphelin.
-
-```bash
-bash check_M20_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `bash -n` passe, le script a `set -euo pipefail`,
+> `usine-1` tourne et répond sur le port 22, un second lancement identique
+> sort en 0 sans rien changer, et `--delete` sur une VM de test laisse le
+> pool sans volume orphelin.
+>
+> ```bash
+> bash check_M20_05.sh
+> ```
 
 ---
 
 ## 20.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9007 avant-bf20` depuis le nœud. Le
-snapshot `snap-clean` reste ton filet (`qm rollback 9007 snap-clean`), mais
-l'utiliser vaut échec : l'objectif est de réparer. Les scripts de panne
-supposent L20.1 à L20.3 faits (`vm-01`, `vm-lan`, `br0`, pool `lab20`).
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9007 avant-bf20` depuis le nœud. Le
+> snapshot `snap-clean` reste ton filet (`qm rollback 9007 snap-clean`), mais
+> l'utiliser vaut échec : l'objectif est de réparer. Les scripts de panne
+> supposent L20.1 à L20.3 faits (`vm-01`, `vm-lan`, `br0`, pool `lab20`).
 
-### **BF20.1** — « `vm-01` met quatre minutes à démarrer et l'hôte est à 100 % »
+### <a id="bf20-1"></a>**[BF20.1](corrige.md#bf20-1)** — « `vm-01` met quatre minutes à démarrer et l'hôte est à 100 % »
 
 ```bash
 sudo bash break_M20_01.sh
@@ -1076,11 +1100,9 @@ QEMU est lancé, corriger la définition de la VM, redémarrer proprement, et
 mesurer le temps de démarrage avant/après. Expliquer pourquoi la VM
 fonctionnait quand même.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF20.2** — « Après la maintenance réseau, `vm-lan` ne démarre plus »
+### <a id="bf20-2"></a>**[BF20.2](corrige.md#bf20-2)** — « Après la maintenance réseau, `vm-lan` ne démarre plus »
 
 ```bash
 sudo bash break_M20_02.sh
@@ -1100,11 +1122,9 @@ et prouver qu'elle est de nouveau joignable depuis `lab-adm`. Expliquer
 pourquoi `lab-virt` gardait son adresse alors que la VM ne pouvait plus
 démarrer.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF20.3** — « `clone-1` refuse de démarrer : fichier introuvable »
+### <a id="bf20-3"></a>**[BF20.3](corrige.md#bf20-3)** — « `clone-1` refuse de démarrer : fichier introuvable »
 
 ```bash
 sudo bash break_M20_03.sh
@@ -1124,11 +1144,9 @@ même chose sur toutes les VM du pool. Expliquer ce que contient réellement
 le disque de `clone-1` et pourquoi libvirt cherche un fichier absent de
 son XML.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF20.4** — « La VM importée de l'ancien hôte refuse de démarrer : Permission denied »
+### <a id="bf20-4"></a>**[BF20.4](corrige.md#bf20-4)** — « La VM importée de l'ancien hôte refuse de démarrer : Permission denied »
 
 ```bash
 sudo bash break_M20_04.sh
@@ -1148,11 +1166,9 @@ Le fichier appartient à `root`, en `0600`, libvirt tourne en root, et
 puis montrer le profil de sécurité que libvirt a généré pour cette VM et le
 chemin de l'image qu'il autorise.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF20.5** — « Le disque de `lab-virt` se remplit et personne ne sait pourquoi »
+### <a id="bf20-5"></a>**[BF20.5](corrige.md#bf20-5)** — « Le disque de `lab-virt` se remplit et personne ne sait pourquoi »
 
 ```bash
 sudo bash break_M20_05.sh
@@ -1173,24 +1189,22 @@ situation à chaud sans perte de données, récupérer l'espace côté hôte
 revenir à l'hôte), et proposer la ligne de commande qui aurait évité
 l'orphelin.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 20.8 Défi du module ★★★
 
-**D20 — Mini-plateforme de VM à la demande, sauvegardée, inventoriée**
+<a id="d20"></a>**[D20](corrige.md#d20) — Mini-plateforme de VM à la demande, sauvegardée, inventoriée**
 
-::: contexte
-L'évaluation KVM est concluante. Avant la décision, on te demande une
-démonstration complète : un « parc » décrit dans un fichier, créé et
-détruit par une commande, avec un réseau frontal sur le LAN et un réseau
-dorsal isolé, une sauvegarde à chaud tournante testée par une restauration,
-un inventaire exploitable par Ansible, et un rapport qui compare avec ce que
-Proxmox aurait fait.
-:::
+> **Contexte**
+>
+> L'évaluation KVM est concluante. Avant la décision, on te demande une
+> démonstration complète : un « parc » décrit dans un fichier, créé et
+> détruit par une commande, avec un réseau frontal sur le LAN et un réseau
+> dorsal isolé, une sauvegarde à chaud tournante testée par une restauration,
+> un inventaire exploitable par Ansible, et un rapport qui compare avec ce que
+> Proxmox aurait fait.
 
 Cahier des charges, dans `~/lab20/` :
 
@@ -1228,11 +1242,12 @@ Cahier des charges, dans `~/lab20/` :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M20_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M20_06.sh
+> ```
 
 ---
 
@@ -1270,3 +1285,9 @@ Pour aller plus loin :
 * Lis `/etc/apparmor.d/abstractions/libvirt-qemu` et le profil généré
   `/etc/apparmor.d/libvirt/libvirt-<uuid>` d'une VM en marche : tu y verras
   la liste exacte de ce qu'une VM compromise pourrait toucher.
+
+<!-- nav:début -->
+---
+
+[← Projet A](../../projets/P1-factura/README.md) · [Corrigé](corrige.md) · [Module 21 →](../21-git/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

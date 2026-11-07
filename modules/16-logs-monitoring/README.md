@@ -1,41 +1,68 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie III — Exploitation, sécurité et incidents › **Module 16**  
+[← Module 15](../15-services-applicatifs/README.md) · [Corrigé](corrige.md) · [Module 17 →](../17-cron-timers/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M16.sh`](../../scripts/setup/setup_M16.sh) | prépare le module |
+| [`check_M16_01.sh`](../../scripts/check/check_M16_01.sh) | vérification |
+| [`check_M16_02.sh`](../../scripts/check/check_M16_02.sh) | vérification |
+| [`check_M16_03.sh`](../../scripts/check/check_M16_03.sh) | vérification |
+| [`check_M16_04.sh`](../../scripts/check/check_M16_04.sh) | vérification |
+| [`check_M16_05.sh`](../../scripts/check/check_M16_05.sh) | vérification |
+| [`check_M16_06.sh`](../../scripts/check/check_M16_06.sh) | vérification |
+| [`break_M16_01.sh`](../../scripts/break/break_M16_01.sh) | installe une panne |
+| [`break_M16_02.sh`](../../scripts/break/break_M16_02.sh) | installe une panne |
+| [`break_M16_03.sh`](../../scripts/break/break_M16_03.sh) | installe une panne |
+| [`break_M16_04.sh`](../../scripts/break/break_M16_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 16 — Journalisation et supervision système
 
 ## 16.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* dire **qui écrit quoi** sur une machine moderne (application → journald →
-  rsyslog → fichier), et nommer la facilité et la sévérité syslog d'un message
-  donné ;
-* interroger le journal systemd comme un outil d'enquête : filtrer par unité, par
-  priorité, par fenêtre de temps, par PID, par exécutable, et en sortir du JSON
-  exploitable ;
-* rendre le journal persistant, mesurer ce qu'il consomme, le purger de façon
-  contrôlée, et reconnaître un message perdu à cause du limiteur de débit ;
-* configurer rsyslog pour trier les messages par facilité et sévérité, filtrer un
-  service bruyant, et **centraliser** les journaux de plusieurs machines vers un
-  collecteur en TCP ;
-* écrire une règle `logrotate` complète pour une application maison, la tester en
-  dry run, et expliquer pourquoi `copytruncate` perd des lignes ;
-* diagnostiquer un fichier de log qui ne tourne pas, un `/var` qui sature, un
-  journal qui a mangé plusieurs gigaoctets ;
-* localiser et lire les journaux applicatifs classiques (nginx, PostgreSQL,
-  `auth.log`, `dmesg`, cloud-init, `unattended-upgrades`) ;
-* interpréter les métriques essentielles d'un serveur : charge moyenne par
-  rapport au nombre de cœurs, répartition CPU `us/sy/wa/st`, mémoire `available`
-  contre `free`, `%util` et `await` disque ;
-* utiliser `top`, `vmstat`, `iostat -xz`, `pidstat`, `sar` et `/proc` pour passer
-  d'un symptôme à une cause, en appliquant les quatre signaux dorés et la méthode
-  USE ;
-* installer `node_exporter`, lire son `/metrics`, et dire quelle métrique répond
-  à quelle question d'exploitation.
-
-Temps estimé : 6 h
-Prérequis : modules 05 (filtres texte), 07 (scripting bash), 08 (processus et
-systemd). Le module 17 traite la planification (cron, timers), le module 26 monte
-la pile Prometheus/Grafana complète.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * dire **qui écrit quoi** sur une machine moderne (application → journald →
+>   rsyslog → fichier), et nommer la facilité et la sévérité syslog d'un message
+>   donné ;
+> * interroger le journal systemd comme un outil d'enquête : filtrer par unité, par
+>   priorité, par fenêtre de temps, par PID, par exécutable, et en sortir du JSON
+>   exploitable ;
+> * rendre le journal persistant, mesurer ce qu'il consomme, le purger de façon
+>   contrôlée, et reconnaître un message perdu à cause du limiteur de débit ;
+> * configurer rsyslog pour trier les messages par facilité et sévérité, filtrer un
+>   service bruyant, et **centraliser** les journaux de plusieurs machines vers un
+>   collecteur en TCP ;
+> * écrire une règle `logrotate` complète pour une application maison, la tester en
+>   dry run, et expliquer pourquoi `copytruncate` perd des lignes ;
+> * diagnostiquer un fichier de log qui ne tourne pas, un `/var` qui sature, un
+>   journal qui a mangé plusieurs gigaoctets ;
+> * localiser et lire les journaux applicatifs classiques (nginx, PostgreSQL,
+>   `auth.log`, `dmesg`, cloud-init, `unattended-upgrades`) ;
+> * interpréter les métriques essentielles d'un serveur : charge moyenne par
+>   rapport au nombre de cœurs, répartition CPU `us/sy/wa/st`, mémoire `available`
+>   contre `free`, `%util` et `await` disque ;
+> * utiliser `top`, `vmstat`, `iostat -xz`, `pidstat`, `sar` et `/proc` pour passer
+>   d'un symptôme à une cause, en appliquant les quatre signaux dorés et la méthode
+>   USE ;
+> * installer `node_exporter`, lire son `/metrics`, et dire quelle métrique répond
+>   à quelle question d'exploitation.
+>
+> **Temps estimé** : 6 h
+>
+> **Prérequis** : modules 05 (filtres texte), 07 (scripting bash), 08 (processus et
+> systemd). Le module 17 traite la planification (cron, timers), le module 26 monte
+> la pile Prometheus/Grafana complète.
 
 ---
 
@@ -63,14 +90,15 @@ Sur `lab-ops` :
 sudo apt install -y rsyslog sysstat jq curl prometheus-node-exporter
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y rsyslog logrotate sysstat nginx jq`.
-`rsyslog` est installé par défaut mais **pas démarré** sur une installation
-minimale : `sudo systemctl enable --now rsyslog`. Le journal d'authentification
-s'appelle `/var/log/secure` et non `/var/log/auth.log`, et le journal général
-`/var/log/messages` et non `/var/log/syslog`. `node_exporter` n'est pas
-empaqueté : récupère le binaire officiel (voir L16.5).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y rsyslog logrotate sysstat nginx jq`.
+> `rsyslog` est installé par défaut mais **pas démarré** sur une installation
+> minimale : `sudo systemctl enable --now rsyslog`. Le journal d'authentification
+> s'appelle `/var/log/secure` et non `/var/log/auth.log`, et le journal général
+> `/var/log/messages` et non `/var/log/syslog`. `node_exporter` n'est pas
+> empaqueté : récupère le binaire officiel (voir L16.5).
 
 `sysstat` n'enregistre rien tant qu'on ne l'active pas — c'est le piège classique
 de `sar` (« commande introuvable » ou « aucune donnée ») :
@@ -91,12 +119,13 @@ unités systemd, génère une semaine d'historique dans `/var/log/factura/`, des
 échantillons de journaux nginx et d'authentification dans
 `~/lab16/echantillons/`, et crée le bac à sable `~/lab16/`.
 
-::: attention
-Les Break & Fix de ce module remplissent volontairement `/var`. `BF16.2` crée
-plusieurs gigaoctets de fichiers : vérifie d'abord que la VM a au moins 8 Go
-libres (`df -h /var`). Le snapshot `avant-lab16` est ta sortie de secours, mais
-l'utiliser vaut échec de l'exercice.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Les Break & Fix de ce module remplissent volontairement `/var`. `BF16.2` crée
+> plusieurs gigaoctets de fichiers : vérifie d'abord que la VM a au moins 8 Go
+> libres (`df -h /var`). Le snapshot `avant-lab16` est ta sortie de secours, mais
+> l'utiliser vaut échec de l'exercice.
 
 ---
 
@@ -122,7 +151,9 @@ systemd ; rsyslog ne lit plus `/dev/log` sur Ubuntu, il reçoit de journald via 
 module `imjournal` ou le socket de forward. `logrotate` ne concerne **que** les
 fichiers plats : le journal binaire se gère avec `journalctl --vacuum-*`.
 
-@fig(logs-pipeline): De l'application à `/var/log` et au collecteur : journald d'abord (volatile ou persistant), rsyslog ensuite (règles facilité.sévérité, fichiers, envoi TCP `@@lab-ops:10514`), logrotate uniquement sur les fichiers plats.
+<p align="center"><img src="../../assets/figures/logs-pipeline.svg" alt="Schéma : logs-pipeline"></p>
+
+*Figure — De l'application à `/var/log` et au collecteur : journald d'abord (volatile ou persistant), rsyslog ensuite (règles facilité.sévérité, fichiers, envoi TCP `@@lab-ops:10514`), logrotate uniquement sur les fichiers plats.*
 
 ### Facilités syslog
 
@@ -242,12 +273,13 @@ sudo logrotate -f /etc/logrotate.conf   # force, ignore les déclencheurs
 cat /var/lib/logrotate/status           # dernière rotation par fichier
 ```
 
-::: piege
-`logrotate` **ignore en silence** tout fichier de configuration accessible en
-écriture au groupe ou aux autres, ou qui n'appartient pas à root. Le mode 0644,
-propriétaire `root:root`, n'est pas un détail cosmétique. En debug (`-d`), il le
-dit : `Ignoring factura because of bad file mode - must be 0644 or 0444`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `logrotate` **ignore en silence** tout fichier de configuration accessible en
+> écriture au groupe ou aux autres, ou qui n'appartient pas à root. Le mode 0644,
+> propriétaire `root:root`, n'est pas un détail cosmétique. En debug (`-d`), il le
+> dit : `Ignoring factura because of bad file mode - must be 0644 or 0444`.
 
 ### Métriques essentielles
 
@@ -304,7 +336,7 @@ pendant 5 min » réveille pour quelque chose.
 
 ## 16.3 Quiz — QCM
 
-**Q16.1** — Sur `lab-web` (Ubuntu 24.04), tu redémarres la VM et
+<a id="q16-1"></a>**[Q16.1](corrige.md#q16-1)** — Sur `lab-web` (Ubuntu 24.04), tu redémarres la VM et
 `journalctl -b -1` répond `Failed to look up boot -1`. Pourquoi ?
 
 a) l'option `-b` n'accepte pas de valeur négative sous Ubuntu
@@ -313,7 +345,7 @@ c) le journal est volatile : `/var/log/journal` n'existe pas, tout est perdu au
    redémarrage
 d) `--list-boots` doit être exécuté avant pour construire l'index
 
-**Q16.2** — Un développeur envoie ses messages avec
+<a id="q16-2"></a>**[Q16.2](corrige.md#q16-2)** — Un développeur envoie ses messages avec
 `logger -p local3.warning "cache froid"`. Quelle commande les isole ?
 
 a) `journalctl -p warning -t local3`
@@ -321,7 +353,7 @@ b) `journalctl SYSLOG_FACILITY=19 -p warning`
 c) `journalctl -u local3.service -p 4`
 d) `journalctl -p local3.warning`
 
-**Q16.3** — Que fait exactement `journalctl --vacuum-size=200M` ?
+<a id="q16-3"></a>**[Q16.3](corrige.md#q16-3)** — Que fait exactement `journalctl --vacuum-size=200M` ?
 **Deux réponses correctes.**
 
 a) tronque le fichier de journal actif à 200 Mo
@@ -330,7 +362,7 @@ b) supprime les fichiers de journal **archivés** les plus anciens jusqu'à
 c) modifie durablement la configuration de journald
 d) ne touche jamais au fichier `system.journal` actif
 
-**Q16.4** — Cette ligne apparaît dans `journalctl -g Suppressed` :
+<a id="q16-4"></a>**[Q16.4](corrige.md#q16-4)** — Cette ligne apparaît dans `journalctl -g Suppressed` :
 
 ```text
 sept. 18 14:03:11 lab-web systemd-journald[412]: Suppressed 2381 messages
@@ -344,7 +376,7 @@ b) ils sont dans `/var/log/syslog`, journald les a seulement déportés
 c) ils sont récupérables avec `journalctl --flush`
 d) c'est rsyslog qui a limité le débit, pas journald
 
-**Q16.5** — Dans `/etc/rsyslog.d/10-factura.conf` tu écris
+<a id="q16-5"></a>**[Q16.5](corrige.md#q16-5)** — Dans `/etc/rsyslog.d/10-factura.conf` tu écris
 `local5.err  /var/log/factura/erreurs.log`. Quels messages atterrissent dans ce
 fichier ?
 
@@ -353,7 +385,7 @@ b) les messages `local5` de sévérité `err`, `warning`, `notice`, `info`, `deb
 c) tous les messages `local5`, la sévérité n'est qu'indicative
 d) les messages `local5` de sévérité `err`, `crit`, `alert` et `emerg`
 
-**Q16.6** — Tu veux envoyer les journaux de `lab-web` vers `lab-ops` avec accusé
+<a id="q16-6"></a>**[Q16.6](corrige.md#q16-6)** — Tu veux envoyer les journaux de `lab-web` vers `lab-ops` avec accusé
 de réception et sans perte en cas de coupure brève. Quelle ligne ?
 
 a) `*.*  @10.10.10.14:514`
@@ -361,7 +393,7 @@ b) `*.*  @@10.10.10.14:10514`
 c) `*.*  >10.10.10.14:10514`
 d) `*.*  |/dev/tcp/10.10.10.14/10514`
 
-**Q16.7** — Un fichier `/var/log/factura/app.log` fait 4 Go et ne tourne jamais.
+<a id="q16-7"></a>**[Q16.7](corrige.md#q16-7)** — Un fichier `/var/log/factura/app.log` fait 4 Go et ne tourne jamais.
 `/etc/logrotate.d/factura` existe et son contenu est correct. `logrotate -d
 /etc/logrotate.conf` affiche `Ignoring factura because of bad file mode`.
 Quelle est la cause ?
@@ -372,7 +404,7 @@ c) le fichier de **configuration** est accessible en écriture au groupe ou aux
    autres, ou n'appartient pas à root
 d) le répertoire `/var/log/factura` n'a pas le bit `setgid`
 
-**Q16.8** — `copytruncate` est utilisé pour un service qui garde son fichier de
+<a id="q16-8"></a>**[Q16.8](corrige.md#q16-8)** — `copytruncate` est utilisé pour un service qui garde son fichier de
 log ouvert. Quel est le défaut structurel de cette directive ?
 
 a) elle empêche la compression
@@ -380,7 +412,7 @@ b) les lignes écrites entre la copie et la troncature sont perdues
 c) elle double l'espace disque utilisé de façon permanente
 d) elle ne fonctionne pas si le fichier dépasse 100 Mo
 
-**Q16.9** — Un service écrit dans son log **sans** `O_APPEND` et garde le
+<a id="q16-9"></a>**[Q16.9](corrige.md#q16-9)** — Un service écrit dans son log **sans** `O_APPEND` et garde le
 descripteur ouvert. Après un `copytruncate`, que constate-t-on ?
 
 a) le fichier repart de zéro proprement
@@ -389,7 +421,7 @@ c) rien de particulier, `copytruncate` gère ce cas
 d) le fichier réapparaît avec une taille énorme, rempli d'octets nuls jusqu'à la
    position où en était le processus
 
-**Q16.10** — `uptime` affiche `load average: 6.02, 5.88, 5.31` sur une VM à 4
+<a id="q16-10"></a>**[Q16.10](corrige.md#q16-10)** — `uptime` affiche `load average: 6.02, 5.88, 5.31` sur une VM à 4
 vCPU, et `top` montre `0.7 us, 1.1 sy, 96.0 id, 2.0 wa`. Que conclus-tu ?
 
 a) des processus sont bloqués en état `D` (E/S), la charge les compte alors
@@ -398,7 +430,7 @@ b) la machine sature en CPU, il faut ajouter des vCPU
 c) la charge moyenne est un bug connu des noyaux 6.x sous KVM
 d) `top` ment, il faut croire `uptime`
 
-**Q16.11** — `free -h` affiche `total 7,7Gi`, `used 1,2Gi`, `free 0,3Gi`,
+<a id="q16-11"></a>**[Q16.11](corrige.md#q16-11)** — `free -h` affiche `total 7,7Gi`, `used 1,2Gi`, `free 0,3Gi`,
 `buff/cache 6,2Gi`, `available 6,1Gi`. Faut-il s'inquiéter ?
 
 a) oui, il ne reste que 0,3 Gi de mémoire libre
@@ -406,7 +438,7 @@ b) oui, `buff/cache` à 6,2 Gi signale une fuite mémoire du noyau
 c) non, 6,1 Gi sont disponibles : le cache est récupérable à la demande
 d) impossible à dire sans regarder le swap
 
-**Q16.12** — `top` affiche une ligne CPU avec `st 22.4`. Que signifie cette
+<a id="q16-12"></a>**[Q16.12](corrige.md#q16-12)** — `top` affiche une ligne CPU avec `st 22.4`. Que signifie cette
 colonne et que fais-tu ?
 
 a) `st` = *stopped*, des processus sont suspendus, tu les reprends avec `fg`
@@ -415,7 +447,7 @@ b) `st` = *steal*, l'hyperviseur donne du CPU à d'autres VM : le problème est
 c) `st` = *system time*, c'est du temps noyau, tu regardes les appels système
 d) `st` = *storage*, c'est de l'attente disque, équivalent de `wa`
 
-**Q16.13** — `iostat -xz 1` donne pour `sdb` : `%util 99.8`, `r_await 340.00`,
+<a id="q16-13"></a>**[Q16.13](corrige.md#q16-13)** — `iostat -xz 1` donne pour `sdb` : `%util 99.8`, `r_await 340.00`,
 `aqu-sz 28.4`, `r/s 12.0`, `w/s 8.0`. Quelle lecture est correcte ?
 
 a) le disque traite 20 opérations par seconde à saturation, chacune attend 340 ms
@@ -424,7 +456,7 @@ b) le disque est très rapide puisqu'il est utilisé à 99,8 %
 c) `await` à 340 est normal pour un SSD
 d) il faut d'abord regarder le CPU, `iostat` ne prouve rien
 
-**Q16.14** — Tu veux tous les messages de priorité `err` ou pire, du service
+<a id="q16-14"></a>**[Q16.14](corrige.md#q16-14)** — Tu veux tous les messages de priorité `err` ou pire, du service
 `nginx`, entre 14 h et 14 h 30 aujourd'hui, en JSON. Quelle commande ?
 
 a) `journalctl -u nginx -p 3 --since 14:00 --until 14:30 -o json`
@@ -432,7 +464,7 @@ b) `journalctl -u nginx -p err..emerg --since "14:00:00" -o json-pretty --today`
 c) `journalctl nginx err 14:00 14:30 json`
 d) `journalctl -u nginx --priority=error --from 14:00 --to 14:30 --json`
 
-**Q16.15** — `vmstat 1` affiche en régime établi `si 0  so 0` mais `free -h`
+<a id="q16-15"></a>**[Q16.15](corrige.md#q16-15)** — `vmstat 1` affiche en régime établi `si 0  so 0` mais `free -h`
 montre 1,8 Gi de swap `used`. Que conclus-tu ?
 
 a) la machine swappe activement, il faut ajouter de la RAM
@@ -441,7 +473,7 @@ c) le swap est corrompu
 d) des pages inactives ont été parquées en swap par le passé, sans activité
    actuelle : ce n'est pas un problème
 
-**Q16.16** — Sur laquelle de ces conditions vaut-il mieux déclencher une astreinte
+<a id="q16-16"></a>**[Q16.16](corrige.md#q16-16)** — Sur laquelle de ces conditions vaut-il mieux déclencher une astreinte
 de nuit ?
 
 a) `CPU > 85 %` pendant 2 minutes
@@ -449,7 +481,7 @@ b) `latence p99 de /api/paiement > 2 s pendant 5 minutes`
 c) `load average > 4`
 d) `mémoire utilisée > 70 %`
 
-**Q16.17** — `sar -u` répond `Cannot open /var/log/sysstat/sa18: No such file
+<a id="q16-17"></a>**[Q16.17](corrige.md#q16-17)** — `sar -u` répond `Cannot open /var/log/sysstat/sa18: No such file
 or directory`, alors que `sar -u 1 3` fonctionne. Pourquoi ?
 
 a) `sar` exige toujours que la collecte historique soit activée, même avec un intervalle
@@ -458,7 +490,7 @@ b) `sar -u` **sans** intervalle relit le
 c) le paquet `sysstat` est corrompu
 d) il faut lancer `sar` en root
 
-**Q16.18** — `node_exporter` expose `node_filesystem_avail_bytes`. À quelle
+<a id="q16-18"></a>**[Q16.18](corrige.md#q16-18)** — `node_exporter` expose `node_filesystem_avail_bytes`. À quelle
 question d'exploitation cette métrique répond-elle, dans la grille USE ?
 
 a) l'utilisation du CPU
@@ -470,157 +502,139 @@ d) la latence des requêtes HTTP
 
 ## 16.4 Quiz — questions ouvertes
 
-**QO16.1** — Décris le trajet complet d'un message produit par un service systemd
+<a id="qo16-1"></a>**[QO16.1](corrige.md#qo16-1)** — Décris le trajet complet d'un message produit par un service systemd
 qui fait `print("erreur base")` sur sa sortie standard, jusqu'à son arrivée
 éventuelle dans `/var/log/syslog` puis dans `/var/log/syslog.2.gz`. Nomme chaque
 composant traversé, le champ `_TRANSPORT` correspondant, et dis à quel endroit un
 message peut être perdu.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO16.2** — *On te demande en entretien* : « Notre `/var` s'est rempli cette
+<a id="qo16-2"></a>**[QO16.2](corrige.md#qo16-2)** — *On te demande en entretien* : « Notre `/var` s'est rempli cette
 nuit et l'application est tombée. Donne-moi ta démarche, dans l'ordre, pour
 identifier le coupable et remettre le service en ligne en moins de dix minutes,
 sans supprimer un fichier au hasard. » Réponds en listant les commandes.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO16.3** — Compare `logrotate` avec `create` et `logrotate` avec
+<a id="qo16-3"></a>**[QO16.3](corrige.md#qo16-3)** — Compare `logrotate` avec `create` et `logrotate` avec
 `copytruncate` : pour chacun, explique ce qui arrive au descripteur de fichier
 détenu par l'application, ce que devient l'inode, et dans quel cas précis on est
 contraint d'utiliser `copytruncate`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO16.4** — La charge moyenne d'un serveur applicatif à 8 vCPU est de 12.
+<a id="qo16-4"></a>**[QO16.4](corrige.md#qo16-4)** — La charge moyenne d'un serveur applicatif à 8 vCPU est de 12.
 Explique les trois scénarios de cause radicalement différents qui peuvent
 produire ce chiffre, et pour chacun la commande qui tranche en moins d'une minute.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO16.5** — *On te demande en entretien* : « Quelle est la différence entre
+<a id="qo16-5"></a>**[QO16.5](corrige.md#qo16-5)** — *On te demande en entretien* : « Quelle est la différence entre
 `free` et `available` dans la sortie de `free -h` ? Et si je te dis que `free`
 est à 200 Mo sur une machine de 16 Go, c'est grave ? » Réponds comme en entretien.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO16.6** — Un service maison écrit 4 000 lignes de log par seconde en rafale au
+<a id="qo16-6"></a>**[QO16.6](corrige.md#qo16-6)** — Un service maison écrit 4 000 lignes de log par seconde en rafale au
 démarrage. Explique le mécanisme de `RateLimitIntervalSec` / `RateLimitBurst`,
 ce qui est perdu exactement, les trois façons d'y remédier, et les conséquences
 de chacune.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO16.7** — On te demande de centraliser les journaux de 40 serveurs.
+<a id="qo16-7"></a>**[QO16.7](corrige.md#qo16-7)** — On te demande de centraliser les journaux de 40 serveurs.
 Argumente le choix entre UDP (`@`) et TCP (`@@`) : que se passe-t-il dans chaque
 cas si le collecteur redémarre pendant 30 secondes, et quelle configuration de
 file d'attente côté émetteur protège les journaux ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO16.8** — Explique la différence entre les quatre signaux dorés et la méthode
+<a id="qo16-8"></a>**[QO16.8](corrige.md#qo16-8)** — Explique la différence entre les quatre signaux dorés et la méthode
 USE, puis applique les deux à un service HTTP qui répond lentement : cite trois
 métriques « signaux dorés » et trois métriques « USE » que tu regarderais, dans
 l'ordre.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO16.9** — Un développeur te demande quel format de log adopter pour sa nouvelle
+<a id="qo16-9"></a>**[QO16.9](corrige.md#qo16-9)** — Un développeur te demande quel format de log adopter pour sa nouvelle
 application. Rédige ta réponse d'ops : niveaux à utiliser et ce qui va dans
 chacun, format, horodatage, identifiant de corrélation, et ce qu'il ne faut
 **jamais** écrire dans un log.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 16.5 Exercices guidés ★
 
-**E16.1** — Affiche les 30 dernières lignes du journal de `ssh.service`, en
+<a id="e16-1"></a>**[E16.1](corrige.md#e16-1)** — Affiche les 30 dernières lignes du journal de `ssh.service`, en
 horodatage ISO, sans pager, puis suis en temps réel les nouvelles entrées de la
 même unité. Enfin, montre uniquement le texte des messages, sans horodatage ni
 nom d'hôte.
 
-**E16.2** — Sors toutes les entrées de priorité `warning` ou pire produites
+<a id="e16-2"></a>**[E16.2](corrige.md#e16-2)** — Sors toutes les entrées de priorité `warning` ou pire produites
 depuis le début du démarrage courant, puis les mêmes pour le démarrage précédent.
 Si la seconde commande échoue, corrige la cause durablement.
 
-**E16.3** — Rends le journal persistant sur `lab-web`, vérifie où il est
+<a id="e16-3"></a>**[E16.3](corrige.md#e16-3)** — Rends le journal persistant sur `lab-web`, vérifie où il est
 réellement stocké après l'opération, et mesure l'espace qu'il occupe. Enchaîne
 avec les cinq plus gros fichiers de `/var/log` (sous-répertoires compris, taille
 lisible) et la taille totale par sous-répertoire de premier niveau : tu dois
 pouvoir dire en trois commandes qui mange `/var/log` sur cette machine.
 
-**E16.4** — Envoie trois messages de test : un en `local4.info`, un en
+<a id="e16-4"></a>**[E16.4](corrige.md#e16-4)** — Envoie trois messages de test : un en `local4.info`, un en
 `local4.err` avec le tag `factura-test`, et un lu depuis un fichier. Retrouve les
 trois dans le journal en filtrant sur la facilité, puis sur le tag.
 
-**E16.5** — Trouve tous les messages du journal émis par l'exécutable `sudo`,
+<a id="e16-5"></a>**[E16.5](corrige.md#e16-5)** — Trouve tous les messages du journal émis par l'exécutable `sudo`,
 toutes unités confondues, sur les dernières 24 heures. Donne ensuite la même
 information en n'affichant que le champ `MESSAGE` et l'utilisateur d'origine.
 
-**E16.6** — Affiche en JSON indenté la dernière entrée de priorité `err` du
+<a id="e16-6"></a>**[E16.6](corrige.md#e16-6)** — Affiche en JSON indenté la dernière entrée de priorité `err` du
 journal, et extrais avec `jq` le PID, l'unité systemd et la ligne de commande
 complète du processus émetteur.
 
-**E16.7** — Compte, pour le démarrage courant, le nombre d'entrées par unité
+<a id="e16-7"></a>**[E16.7](corrige.md#e16-7)** — Compte, pour le démarrage courant, le nombre d'entrées par unité
 systemd, classées par volume décroissant. Les dix premières suffisent.
 
-**E16.8** — Le journal occupe trop de place. Plafonne-le à 500 Mo de façon
+<a id="e16-8"></a>**[E16.8](corrige.md#e16-8)** — Le journal occupe trop de place. Plafonne-le à 500 Mo de façon
 durable, applique immédiatement la contrainte sans redémarrer la machine, et
 prouve le résultat avant/après.
 
-**E16.9** — Configure rsyslog pour écrire toutes les entrées de facilité `local6`
+<a id="e16-9"></a>**[E16.9](corrige.md#e16-9)** — Configure rsyslog pour écrire toutes les entrées de facilité `local6`
 dans `/var/log/factura/metier.log`, et **uniquement** celles-là. Vérifie que les
 mêmes messages ne polluent plus `/var/log/syslog`.
 
-**E16.10** — Le service `factura-bruyant` inonde `/var/log/syslog`. Filtre-le
+<a id="e16-10"></a>**[E16.10](corrige.md#e16-10)** — Le service `factura-bruyant` inonde `/var/log/syslog`. Filtre-le
 côté rsyslog pour qu'il n'écrive plus rien dans `syslog` ni dans les fichiers
 distants, sans toucher au service lui-même et sans perdre ses messages du
 journal systemd.
 
-**E16.11** — Écris `/etc/logrotate.d/factura` pour `/var/log/factura/app.log` :
+<a id="e16-11"></a>**[E16.11](corrige.md#e16-11)** — Écris `/etc/logrotate.d/factura` pour `/var/log/factura/app.log` :
 rotation quotidienne, 14 générations, compression différée d'un tour, pas de
 rotation si le fichier est vide, fichier recréé en `0640 factura adm`. Teste-le
 en dry run **sans rien modifier**, puis force une rotation et montre le résultat.
 
-**E16.12** — Prouve avec deux terminaux que `copytruncate` perd des lignes :
+<a id="e16-12"></a>**[E16.12](corrige.md#e16-12)** — Prouve avec deux terminaux que `copytruncate` perd des lignes :
 lance un générateur qui écrit une ligne numérotée par seconde, force une rotation
 avec `copytruncate`, puis montre le trou dans la numérotation.
 
-**E16.13** — Relève en une seule commande la charge à 1, 5 et 15 minutes, le
+<a id="e16-13"></a>**[E16.13](corrige.md#e16-13)** — Relève en une seule commande la charge à 1, 5 et 15 minutes, le
 nombre de cœurs de la VM, et le ratio charge/cœur avec deux décimales. Puis
 prends deux relevés de `/proc/stat` à une seconde d'intervalle et calcule, en
 bash, le pourcentage de temps CPU passé en `iowait` entre les deux relevés.
 Compare ta valeur à celle de `vmstat 1 2`.
 
-**E16.14** — Identifie le processus qui génère le plus d'E/S disque sur la
+<a id="e16-14"></a>**[E16.14](corrige.md#e16-14)** — Identifie le processus qui génère le plus d'E/S disque sur la
 machine, puis celui qui provoque le plus de défauts de page, avec `pidstat`.
 Deux commandes distinctes.
 
-**E16.15** — Active la collecte historique `sysstat`, attends un cycle, puis
+<a id="e16-15"></a>**[E16.15](corrige.md#e16-15)** — Active la collecte historique `sysstat`, attends un cycle, puis
 affiche l'utilisation CPU moyenne du jour et l'activité disque entre 09:00 et
 11:00 depuis les données enregistrées.
 
-**E16.16** — Installe `node_exporter` sur `lab-ops`, vérifie qu'il écoute, et
+<a id="e16-16"></a>**[E16.16](corrige.md#e16-16)** — Installe `node_exporter` sur `lab-ops`, vérifie qu'il écoute, et
 extrais de `/metrics` les trois métriques qui te donnent : la charge à 1 minute,
 la mémoire disponible en octets, et l'espace libre du système de fichiers monté
 sur `/`.
@@ -629,14 +643,14 @@ sur `/`.
 
 ## 16.6 Labs ★★
 
-### **L16.1** — Ticket INC-4102 : « des 502 entre 14 h et 14 h 20 »
+### <a id="l16-1"></a>**[L16.1](corrige.md#l16-1)** — Ticket INC-4102 : « des 502 entre 14 h et 14 h 20 »
 
-::: contexte
-Le support a reçu douze appels hier après-midi : la page de facturation renvoyait
-`502 Bad Gateway`. Ce matin tout fonctionne. Aucun monitoring n'est branché sur
-`lab-web`. On te demande une chronologie factuelle de l'incident et une cause
-racine, uniquement à partir des journaux.
-:::
+> **Contexte**
+>
+> Le support a reçu douze appels hier après-midi : la page de facturation renvoyait
+> `502 Bad Gateway`. Ce matin tout fonctionne. Aucun monitoring n'est branché sur
+> `lab-web`. On te demande une chronologie factuelle de l'incident et une cause
+> racine, uniquement à partir des journaux.
 
 Le setup a rejoué l'incident : les entrées de service sont dans le journal
 systemd, la dégradation vue côté frontal est dans `/var/log/nginx/access.log` et
@@ -664,34 +678,36 @@ systemd, la dégradation vue côté frontal est dans `/var/log/nginx/access.log`
    racine, preuve (commande + extrait), impact utilisateur, et **deux** actions
    correctives dont au moins une de supervision.
 
-::: astuce
-`journalctl --since "2026-09-18 13:50" --until "2026-09-18 14:30"` accepte aussi
-`-1h`, `yesterday`, `"09:00"`. Pour une extraction reproductible, écris les dates
-en entier : tu relis ton rapport six mois plus tard. Rappel utile : journald
-horodate au moment où il reçoit le message, pas au moment où l'application dit
-l'avoir produit — d'où l'écart possible avec l'horodatage interne aux fichiers.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `journalctl --since "2026-09-18 13:50" --until "2026-09-18 14:30"` accepte aussi
+> `-1h`, `yesterday`, `"09:00"`. Pour une extraction reproductible, écris les dates
+> en entier : tu relis ton rapport six mois plus tard. Rappel utile : journald
+> horodate au moment où il reçoit le message, pas au moment où l'application dit
+> l'avoir produit — d'où l'écart possible avec l'horodatage interne aux fichiers.
 
-::: check
-Critère de succès : le journal est persistant, `~/lab16/inc-4102/journal-api.log`
-contient la fenêtre demandée, et le rapport cite la cause racine avec sa preuve.
-
-```bash
-bash check_M16_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le journal est persistant, `~/lab16/inc-4102/journal-api.log`
+> contient la fenêtre demandée, et le rapport cite la cause racine avec sa preuve.
+>
+> ```bash
+> bash check_M16_01.sh
+> ```
 
 ---
 
-### **L16.2** — Centraliser les journaux de `lab-web` vers `lab-ops`
+### <a id="l16-2"></a>**[L16.2](corrige.md#l16-2)** — Centraliser les journaux de `lab-web` vers `lab-ops`
 
-::: contexte
-Après l'incident INC-4102, la direction technique demande que les journaux ne
-vivent plus uniquement sur la machine qui les produit : « quand la VM tombe, on
-perd la preuve ». Tu montes un collecteur sur `lab-ops` et tu y raccordes
-`lab-web`. Contrainte : le service `factura-bruyant` ne doit **pas** traverser le
-réseau, il génère 90 % du volume.
-:::
+> **Contexte**
+>
+> Après l'incident INC-4102, la direction technique demande que les journaux ne
+> vivent plus uniquement sur la machine qui les produit : « quand la VM tombe, on
+> perd la preuve ». Tu montes un collecteur sur `lab-ops` et tu y raccordes
+> `lab-web`. Contrainte : le service `factura-bruyant` ne doit **pas** traverser le
+> réseau, il génère 90 % du volume.
 
 Partie 1 — le collecteur, sur `lab-ops` (10.10.10.14) :
 
@@ -720,32 +736,34 @@ Partie 2 — l'émetteur, sur `lab-web` (10.10.10.11) :
     5 messages depuis `lab-web`, redémarre le collecteur, et montre que les 5
     messages sont arrivés.
 
-::: attention
-Un collecteur syslog ouvert est une porte d'entrée : n'écoute jamais sur
-`0.0.0.0` sans filtrage réseau. Ici, le pare-feu limite à `10.10.10.0/24`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Un collecteur syslog ouvert est une porte d'entrée : n'écoute jamais sur
+> `0.0.0.0` sans filtrage réseau. Ici, le pare-feu limite à `10.10.10.0/24`.
 
-::: check
-Critère de succès : `/var/log/central/lab-web/` existe et se remplit,
-`factura-bruyant` n'y apparaît pas, et les messages émis pendant l'arrêt du
-collecteur ont été rattrapés.
-
-```bash
-bash check_M16_02.sh     # à lancer sur lab-ops
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `/var/log/central/lab-web/` existe et se remplit,
+> `factura-bruyant` n'y apparaît pas, et les messages émis pendant l'arrêt du
+> collecteur ont été rattrapés.
+>
+> ```bash
+> bash check_M16_02.sh     # à lancer sur lab-ops
+> ```
 
 ---
 
-### **L16.3** — Rotation propre des journaux de `factura`
+### <a id="l16-3"></a>**[L16.3](corrige.md#l16-3)** — Rotation propre des journaux de `factura`
 
-::: contexte
-`/var/log/factura/` contient quatre fichiers qui n'ont jamais tourné depuis la
-mise en production. Le plus gros fait plusieurs centaines de mégaoctets. Le
-développeur prévient : « l'application garde le fichier ouvert, elle ne sait pas
-rouvrir toute seule, mais elle réagit à `SIGHUP` ». On te demande une rotation
-propre, testée, et un rapport qui justifie tes choix.
-:::
+> **Contexte**
+>
+> `/var/log/factura/` contient quatre fichiers qui n'ont jamais tourné depuis la
+> mise en production. Le plus gros fait plusieurs centaines de mégaoctets. Le
+> développeur prévient : « l'application garde le fichier ouvert, elle ne sait pas
+> rouvrir toute seule, mais elle réagit à `SIGHUP` ». On te demande une rotation
+> propre, testée, et un rapport qui justifie tes choix.
 
 1. Inventorie ce qu'il y a dans `/var/log/factura/` : taille, propriétaire,
    droits, et quel processus détient chaque fichier ouvert (`lsof` ou
@@ -770,27 +788,28 @@ propre, testée, et un rapport qui justifie tes choix.
 8. Vérifie l'état enregistré de la rotation et donne la date de dernière rotation
    d'`app.log` telle que `logrotate` la connaît.
 
-::: check
-Critère de succès : `logrotate -d /etc/logrotate.conf` ne signale ni erreur ni
-fichier ignoré pour `factura`, deux rotations forcées produisent `app.log.1` et
-`app.log.2.gz`, l'application continue d'écrire dans le nouveau fichier, et
-`rotation.md` existe.
-
-```bash
-bash check_M16_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `logrotate -d /etc/logrotate.conf` ne signale ni erreur ni
+> fichier ignoré pour `factura`, deux rotations forcées produisent `app.log.1` et
+> `app.log.2.gz`, l'application continue d'écrire dans le nouveau fichier, et
+> `rotation.md` existe.
+>
+> ```bash
+> bash check_M16_03.sh
+> ```
 
 ---
 
-### **L16.4** — Collecte maison et rapport quotidien
+### <a id="l16-4"></a>**[L16.4](corrige.md#l16-4)** — Collecte maison et rapport quotidien
 
-::: contexte
-Avant de déployer Prometheus (module 26), l'équipe veut une base de mesures
-exploitable dès maintenant sur `lab-web`, et un rapport lisible qu'on puisse
-coller dans le compte rendu d'exploitation du matin. Livrable : deux scripts et
-un rapport.
-:::
+> **Contexte**
+>
+> Avant de déployer Prometheus (module 26), l'équipe veut une base de mesures
+> exploitable dès maintenant sur `lab-web`, et un rapport lisible qu'on puisse
+> coller dans le compte rendu d'exploitation du matin. Livrable : deux scripts et
+> un rapport.
 
 1. Écris `/opt/factura/bin/collecte-metriques.sh` (`#!/usr/bin/env bash`,
    `set -euo pipefail`) qui produit **une ligne CSV** par exécution dans
@@ -819,32 +838,34 @@ un rapport.
 8. Le rapport doit répondre à cette question en une phrase : **le serveur
    a-t-il été limité par le CPU, par les E/S ou par la mémoire ?**
 
-::: astuce
-Pour la charge : `for i in 1 2 3 4; do timeout 180 sh -c 'while :; do :; done' &
-done` pour le CPU, et `dd if=/dev/zero of=/var/tmp/io.tmp bs=1M count=4096
-oflag=direct` pour les E/S. Pense à supprimer le fichier temporaire ensuite.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour la charge : `for i in 1 2 3 4; do timeout 180 sh -c 'while :; do :; done' &
+> done` pour le CPU, et `dd if=/dev/zero of=/var/tmp/io.tmp bs=1M count=4096
+> oflag=direct` pour les E/S. Pense à supprimer le fichier temporaire ensuite.
 
-::: check
-Critère de succès : le CSV contient un en-tête et au moins 20 relevés cohérents,
-`rapport-quotidien.sh` sort du Markdown valide sur stdout et rien sur stderr, et
-le rapport identifie la bonne ressource limitante.
-
-```bash
-bash check_M16_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le CSV contient un en-tête et au moins 20 relevés cohérents,
+> `rapport-quotidien.sh` sort du Markdown valide sur stdout et rien sur stderr, et
+> le rapport identifie la bonne ressource limitante.
+>
+> ```bash
+> bash check_M16_04.sh
+> ```
 
 ---
 
-### **L16.5** — `node_exporter` : brancher la supervision
+### <a id="l16-5"></a>**[L16.5](corrige.md#l16-5)** — `node_exporter` : brancher la supervision
 
-::: contexte
-Le module 26 montera Prometheus et Grafana. Avant ça, on veut valider sur
-`lab-ops` qu'un exportateur de métriques tourne, qu'il est lisible, et surtout
-que l'équipe sait **quelle métrique répond à quelle question**. C'est un lab de
-lecture, pas de déploiement.
-:::
+> **Contexte**
+>
+> Le module 26 montera Prometheus et Grafana. Avant ça, on veut valider sur
+> `lab-ops` qu'un exportateur de métriques tourne, qu'il est lisible, et surtout
+> que l'équipe sait **quelle métrique répond à quelle question**. C'est un lab de
+> lecture, pas de déploiement.
 
 1. Installe et démarre `node_exporter` sur `lab-ops`. Vérifie qu'il écoute et
    sous quel utilisateur il tourne.
@@ -868,28 +889,30 @@ lecture, pas de déploiement.
 8. Conclus en une phrase : quelles alertes de cette liste réveillent quelqu'un la
    nuit, et lesquelles attendent le matin.
 
-::: check
-Critère de succès : `node_exporter` répond sur `10.10.10.14:9100/metrics`, n'écoute
-pas sur `0.0.0.0`, le drop-in existe sous `/etc/systemd/system/`, et
-`use-golden.md` contient les deux tableaux remplis.
-
-```bash
-bash check_M16_05.sh     # à lancer sur lab-ops
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `node_exporter` répond sur `10.10.10.14:9100/metrics`, n'écoute
+> pas sur `0.0.0.0`, le drop-in existe sous `/etc/systemd/system/`, et
+> `use-golden.md` contient les deux tableaux remplis.
+>
+> ```bash
+> bash check_M16_05.sh     # à lancer sur lab-ops
+> ```
 
 ---
 
 ## 16.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf16`. Le snapshot de secours
-reste `avant-lab16` (`qm rollback 9002 avant-lab16`), mais l'utiliser vaut échec
-de l'exercice : l'objectif est de réparer, pas de rembobiner.
-`BF16.2` écrit plusieurs gigaoctets : vérifie `df -h /var` avant.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9002 avant-bf16`. Le snapshot de secours
+> reste `avant-lab16` (`qm rollback 9002 avant-lab16`), mais l'utiliser vaut échec
+> de l'exercice : l'objectif est de réparer, pas de rembobiner.
+> `BF16.2` écrit plusieurs gigaoctets : vérifie `df -h /var` avant.
 
-### **BF16.1** — « `/var` est plein et l'application refuse d'écrire »
+### <a id="bf16-1"></a>**[BF16.1](corrige.md#bf16-1)** — « `/var` est plein et l'application refuse d'écrire »
 
 ```bash
 sudo bash break_M16_01.sh
@@ -908,11 +931,9 @@ fichier alors que le timer tourne, la remettre en service, récupérer l'espace
 disque sans perdre les journaux du jour, et dire quelle vérification tu ajoutes
 pour que ça ne se reproduise pas silencieusement.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF16.2** — « Le journal systemd a mangé 4 Go »
+### <a id="bf16-2"></a>**[BF16.2](corrige.md#bf16-2)** — « Le journal systemd a mangé 4 Go »
 
 ```bash
 sudo bash break_M16_02.sh
@@ -931,11 +952,9 @@ sous 500 Mo par la méthode prévue pour ça, expliquer pourquoi `rm -rf` est un
 mauvaise idée même quand ça « marche », et poser une limite durable qui empêche
 la situation de revenir.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF16.3** — « Les logs de ce service ont des trous »
+### <a id="bf16-3"></a>**[BF16.3](corrige.md#bf16-3)** — « Les logs de ce service ont des trous »
 
 ```bash
 sudo bash break_M16_03.sh
@@ -955,11 +974,9 @@ donner le nombre exact, identifier le mécanisme et sa configuration, le corrige
 pour ce service **sans** désactiver la protection globale de la machine, et dire
 ce que tu aurais recommandé au développeur.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF16.4** — « Le fichier de log fait 800 Mo mais il est presque vide »
+### <a id="bf16-4"></a>**[BF16.4](corrige.md#bf16-4)** — « Le fichier de log fait 800 Mo mais il est presque vide »
 
 ```bash
 sudo bash break_M16_04.sh
@@ -978,22 +995,20 @@ trou de numérotation), nommer le mécanisme en cause dans la configuration de
 rotation, corriger durablement, et dire ce que l'application devrait faire côté
 code pour que le problème disparaisse à la source.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
 ---
 
 ## 16.8 Défi du module ★★★
 
-**D16 — Le poste de pilotage d'un serveur applicatif**
+<a id="d16"></a>**[D16](corrige.md#d16) — Le poste de pilotage d'un serveur applicatif**
 
-::: contexte
-Tu récupères l'exploitation de `lab-web`. Aucune convention, aucun rapport,
-aucune alerte. On te demande un ensemble cohérent : journaux maîtrisés, rotation
-garantie, mesures collectées, et un outil unique qui dit en trente secondes si la
-machine va bien. Livrable : une configuration, un script, un rapport.
-:::
+> **Contexte**
+>
+> Tu récupères l'exploitation de `lab-web`. Aucune convention, aucun rapport,
+> aucune alerte. On te demande un ensemble cohérent : journaux maîtrisés, rotation
+> garantie, mesures collectées, et un outil unique qui dit en trente secondes si la
+> machine va bien. Livrable : une configuration, un script, un rapport.
 
 Cahier des charges :
 
@@ -1039,11 +1054,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M16_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M16_06.sh
+> ```
 
 ---
 
@@ -1072,3 +1088,9 @@ Pour aller plus loin :
   saturation naissante bien avant que `%util` ou `available` ne bougent.
 * Regarde ce que fait `journalctl --output=verbose` sur une seule entrée : tous
   les champs indexés y sont, c'est la carte de ce que tu peux filtrer.
+
+<!-- nav:début -->
+---
+
+[← Module 15](../15-services-applicatifs/README.md) · [Corrigé](corrige.md) · [Module 17 →](../17-cron-timers/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

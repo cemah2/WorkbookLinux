@@ -1,68 +1,80 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 07** · corrigé  
+[← Module 06](../06-vim-archives/corrige.md) · [Énoncé](README.md) · [Module 08 →](../08-processus-systemd/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 07 — Corrigé
 
 ## 7.3 Quiz — QCM
 
-**Q7.1** — *`compte "$@"` puis `compte "$*"`, appelé avec `un "deux trois"`.*
+<a id="q7-1"></a>**[Q7.1](README.md#q7-1)** — *`compte "$@"` puis `compte "$*"`, appelé avec `un "deux trois"`.*
 
 **Réponse : b) `2` puis `1`**
 
-::: pourquoi
-`"$@"` et `"$*"` contiennent les mêmes caractères, mais bash ne les découpe pas
-pareil, et c'est le découpage qui décide de ce que reçoit le programme appelé.
+> [!NOTE]
+> **Pourquoi**
+>
+> `"$@"` et `"$*"` contiennent les mêmes caractères, mais bash ne les découpe pas
+> pareil, et c'est le découpage qui décide de ce que reçoit le programme appelé.
+>
+> * `"$@"` est développé en **autant de mots que d'arguments**, chacun conservant
+>   son quoting d'origine : `compte` reçoit `argv = [compte, un, deux trois]`,
+>   donc `$#` vaut 2.
+> * `"$*"` est développé en **un seul mot**, obtenu en joignant les arguments avec
+>   le premier caractère d'`IFS` (une espace par défaut) : `compte` reçoit
+>   `argv = [compte, "un deux trois"]`, donc `$#` vaut 1.
+>
+> C'est la seule construction de bash qui produit plusieurs mots à partir d'une
+> expansion **quotée** ; elle est là exactement pour ça.
 
-* `"$@"` est développé en **autant de mots que d'arguments**, chacun conservant
-  son quoting d'origine : `compte` reçoit `argv = [compte, un, deux trois]`,
-  donc `$#` vaut 2.
-* `"$*"` est développé en **un seul mot**, obtenu en joignant les arguments avec
-  le premier caractère d'`IFS` (une espace par défaut) : `compte` reçoit
-  `argv = [compte, "un deux trois"]`, donc `$#` vaut 1.
-
-C'est la seule construction de bash qui produit plusieurs mots à partir d'une
-expansion **quotée** ; elle est là exactement pour ça.
-:::
-
-::: piege
-Sans quotes, `$@` et `$*` sont strictement équivalents : tous deux subissent le
-découpage de mots, et `deux trois` devient deux arguments. Un script qui fait
-`autre-script $@` semble fonctionner jusqu'au jour où un chemin contient une
-espace. La règle tient en un caractère : **`"$@"`, toujours avec les quotes**.
-L'exception légitime est le message de journal, où l'on veut une seule chaîne :
-`log_info "$*"`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sans quotes, `$@` et `$*` sont strictement équivalents : tous deux subissent le
+> découpage de mots, et `deux trois` devient deux arguments. Un script qui fait
+> `autre-script $@` semble fonctionner jusqu'au jour où un chemin contient une
+> espace. La règle tient en un caractère : **`"$@"`, toujours avec les quotes**.
+> L'exception légitime est le message de journal, où l'on veut une seule chaîne :
+> `log_info "$*"`.
 
 ---
 
-**Q7.2** — *`set -e` sans `pipefail`, `grep -q ... | tee` où grep échoue.*
+<a id="q7-2"></a>**[Q7.2](README.md#q7-2)** — *`set -e` sans `pipefail`, `grep -q ... | tee` où grep échoue.*
 
 **Réponse : b)** `on continue` est affiché, le script poursuit.
 
-::: pourquoi
-`set -e` déclenche l'arrêt sur le code de retour de la **commande**, et le code
-de retour d'un pipeline est par définition celui de son **dernier** étage.
-Ici `grep` sort en 1, mais `tee` sort en 0 : le pipeline sort en 0, `set -e`
-n'a rien à signaler.
+> [!NOTE]
+> **Pourquoi**
+>
+> `set -e` déclenche l'arrêt sur le code de retour de la **commande**, et le code
+> de retour d'un pipeline est par définition celui de son **dernier** étage.
+> Ici `grep` sort en 1, mais `tee` sort en 0 : le pipeline sort en 0, `set -e`
+> n'a rien à signaler.
+>
+> `set -o pipefail` change cette définition : le pipeline prend le code du
+> **dernier étage qui a échoué**, et le script s'arrête alors comme attendu. Pour
+> savoir *quel* étage a fauté, seul `${PIPESTATUS[@]}` répond :
+>
+> ```bash
+> tar -cf - /srv | gzip > a.gz
+> echo "${PIPESTATUS[@]}"      # ex. « 2 0 » : tar a échoué, gzip non
+> ```
 
-`set -o pipefail` change cette définition : le pipeline prend le code du
-**dernier étage qui a échoué**, et le script s'arrête alors comme attendu. Pour
-savoir *quel* étage a fauté, seul `${PIPESTATUS[@]}` répond :
-
-```bash
-tar -cf - /srv | gzip > a.gz
-echo "${PIPESTATUS[@]}"      # ex. « 2 0 » : tar a échoué, gzip non
-```
-:::
-
-::: piege
-C'est le mécanisme exact de BF7.2. Il frappe surtout les pipelines de
-sauvegarde (`tar | gzip`, `mysqldump | gzip`, `pg_dump | ssh`), où le producteur
-échoue et le consommateur écrit joyeusement un fichier tronqué. Une sauvegarde
-qui « réussit » tous les jours pendant six mois et se révèle vide le jour de la
-restauration, c'est presque toujours cette ligne-là.
-:::
+> [!WARNING]
+> **Piège**
+>
+> C'est le mécanisme exact de BF7.2. Il frappe surtout les pipelines de
+> sauvegarde (`tar | gzip`, `mysqldump | gzip`, `pg_dump | ssh`), où le producteur
+> échoue et le consommateur écrit joyeusement un fichier tronqué. Une sauvegarde
+> qui « réussit » tous les jours pendant six mois et se révèle vide le jour de la
+> restauration, c'est presque toujours cette ligne-là.
 
 ---
 
-**Q7.3** — *Avec `set -u`, quelles formes échouent si `CIBLE` n'est pas définie ?*
+<a id="q7-3"></a>**[Q7.3](README.md#q7-3)** — *Avec `set -u`, quelles formes échouent si `CIBLE` n'est pas définie ?*
 
 **Réponses : b) et c)**
 
@@ -74,466 +86,496 @@ $ bash -c 'set -u; echo "${CIBLE:?obligatoire}"'   # bash: CIBLE: obligatoire
 $ bash -c 'set -u; echo "${CIBLE:+actif}"'         # OK  -> (ligne vide)
 ```
 
-::: pourquoi
-`set -u` fait échouer toute référence à une variable **non définie**, sauf
-lorsque la substitution fournit elle-même une valeur de repli : `${v:-def}` et
-`${v:+x}` sont des expressions complètes, elles ne « lisent » pas une variable
-manquante, elles calculent un résultat.
+> [!NOTE]
+> **Pourquoi**
+>
+> `set -u` fait échouer toute référence à une variable **non définie**, sauf
+> lorsque la substitution fournit elle-même une valeur de repli : `${v:-def}` et
+> `${v:+x}` sont des expressions complètes, elles ne « lisent » pas une variable
+> manquante, elles calculent un résultat.
+>
+> `${v:?msg}` échoue **volontairement** : c'est l'assertion de pré-condition la
+> plus courte de bash. `: "${CIBLE:?cible obligatoire}"` en tête de script remplace
+> dix lignes de `if [ -z ... ]`.
 
-`${v:?msg}` échoue **volontairement** : c'est l'assertion de pré-condition la
-plus courte de bash. `: "${CIBLE:?cible obligatoire}"` en tête de script remplace
-dix lignes de `if [ -z ... ]`.
-:::
-
-::: piege
-`set -u` ne protège **pas** contre une variable définie mais **vide** :
-`CIBLE=""` passe sans broncher, et `rm -rf "$CIBLE/"` devient `rm -rf /`.
-Seules les formes à deux-points (`:-`, `:=`, `:?`, `:+`) traitent « vide » et
-« non défini » de la même façon. Sans deux-points (`${v-def}`), seule l'absence
-compte.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `set -u` ne protège **pas** contre une variable définie mais **vide** :
+> `CIBLE=""` passe sans broncher, et `rm -rf "$CIBLE/"` devient `rm -rf /`.
+> Seules les formes à deux-points (`:-`, `:=`, `:?`, `:+`) traitent « vide » et
+> « non défini » de la même façon. Sans deux-points (`${v-def}`), seule l'absence
+> compte.
 
 ---
 
-**Q7.4** — *`f=""` puis `if [ -n $f ]`.*
+<a id="q7-4"></a>**[Q7.4](README.md#q7-4)** — *`f=""` puis `if [ -n $f ]`.*
 
 **Réponse : b)** `non vide`, parce que `$f` non quoté disparaît et `[ -n ]`
 teste la chaîne `-n`.
 
-::: pourquoi
-`[` est une **commande** qui reçoit des arguments. Bash développe `$f` en une
-chaîne vide non quotée, qui est ensuite éliminée par le découpage de mots : il
-ne reste rien du tout. `[` reçoit donc `argv = [ "[", "-n", "]" ]`, c'est-à-dire
-un test à **un seul argument**.
+> [!NOTE]
+> **Pourquoi**
+>
+> `[` est une **commande** qui reçoit des arguments. Bash développe `$f` en une
+> chaîne vide non quotée, qui est ensuite éliminée par le découpage de mots : il
+> ne reste rien du tout. `[` reçoit donc `argv = [ "[", "-n", "]" ]`, c'est-à-dire
+> un test à **un seul argument**.
+>
+> POSIX est formel : `test` avec un seul argument est vrai si cet argument est une
+> chaîne non vide. `-n` est une chaîne non vide, donc le test est vrai. Ce n'est
+> pas un bug, c'est la conséquence mécanique du découpage des mots.
 
-POSIX est formel : `test` avec un seul argument est vrai si cet argument est une
-chaîne non vide. `-n` est une chaîne non vide, donc le test est vrai. Ce n'est
-pas un bug, c'est la conséquence mécanique du découpage des mots.
-:::
-
-::: piege
-La forme correcte est `[ -n "$f" ]`, ou `[[ -n $f ]]`. Dans `[[ ]]`, les
-variables ne subissent ni découpage ni globbing : le mot-clé reçoit la
-construction syntaxique, pas une liste d'arguments. C'est pourquoi `[[ ]]` est
-beaucoup plus difficile à casser — et pourquoi il faut quand même quoter dans
-`[ ]`, qui reste la seule forme disponible en `#!/bin/sh`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La forme correcte est `[ -n "$f" ]`, ou `[[ -n $f ]]`. Dans `[[ ]]`, les
+> variables ne subissent ni découpage ni globbing : le mot-clé reçoit la
+> construction syntaxique, pas une liste d'arguments. C'est pourquoi `[[ ]]` est
+> beaucoup plus difficile à casser — et pourquoi il faut quand même quoter dans
+> `[ ]`, qui reste la seule forme disponible en `#!/bin/sh`.
 
 ---
 
-**Q7.5** — *Compteur incrémenté dans un `while read` à droite d'un pipe.*
+<a id="q7-5"></a>**[Q7.5](README.md#q7-5)** — *Compteur incrémenté dans un `while read` à droite d'un pipe.*
 
 **Réponse : b) 0**
 
-::: pourquoi
-Chaque étage d'un pipeline s'exécute dans un **sous-shell**, c'est-à-dire un
-processus fils. La boucle `while` incrémente donc `n` dans un autre processus
-que celui qui exécutera le `echo` final. À la fin du pipeline, le sous-shell
-meurt et emporte ses variables : le shell parent n'a jamais vu `n` changer, il
-affiche la valeur initiale, 0.
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque étage d'un pipeline s'exécute dans un **sous-shell**, c'est-à-dire un
+> processus fils. La boucle `while` incrémente donc `n` dans un autre processus
+> que celui qui exécutera le `echo` final. À la fin du pipeline, le sous-shell
+> meurt et emporte ses variables : le shell parent n'a jamais vu `n` changer, il
+> affiche la valeur initiale, 0.
+>
+> Trois façons correctes d'écrire ça :
+>
+> ```bash
+> n=$(grep -c ERROR fichier)                       # le plus simple
+> while read -r l; do n=$((n+1)); done < <(grep ERROR f)   # subst. de processus
+> shopt -s lastpipe                                 # bash, hors mode interactif
+> ```
 
-Trois façons correctes d'écrire ça :
-
-```bash
-n=$(grep -c ERROR fichier)                       # le plus simple
-while read -r l; do n=$((n+1)); done < <(grep ERROR f)   # subst. de processus
-shopt -s lastpipe                                 # bash, hors mode interactif
-```
-:::
-
-::: piege
-Le symptôme trompe : la boucle fonctionne, les `echo` à l'intérieur affichent
-les bonnes valeurs, seul le résultat final est faux. C'est un des rares cas où
-l'on peut « voir » le sous-shell : ajoute `echo "dedans: $BASHPID"` dans la
-boucle et `echo "dehors: $BASHPID"` après, les PID diffèrent.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le symptôme trompe : la boucle fonctionne, les `echo` à l'intérieur affichent
+> les bonnes valeurs, seul le résultat final est faux. C'est un des rares cas où
+> l'on peut « voir » le sous-shell : ajoute `echo "dedans: $BASHPID"` dans la
+> boucle et `echo "dehors: $BASHPID"` après, les PID diffèrent.
 
 ---
 
-**Q7.6** — *`local taille=$(du -sb "$1" | cut -f1)` puis `return $?`.*
+<a id="q7-6"></a>**[Q7.6](README.md#q7-6)** — *`local taille=$(du -sb "$1" | cut -f1)` puis `return $?`.*
 
 **Réponse : b)** `$?` contient le code de `local`, toujours 0.
 
-::: pourquoi
-`local` (comme `declare`, `export`, `readonly`, `typeset`) est une **commande**
-à part entière. Bash évalue d'abord la substitution de commande, puis exécute
-`local` avec le résultat. Le code de retour visible dans `$?` est donc celui de
-`local` — qui échoue seulement si on l'appelle hors d'une fonction. L'échec de
-`du` ou de `cut` est purement et simplement perdu, et `set -e` ne voit rien non
-plus.
-
-```console
-$ f(){ local t=$(false); echo "apres local: $?"; }; f
-apres local: 0
-$ g(){ local t; t=$(false); echo "declare puis affecte: $?"; }; g
-declare puis affecte: 1
-```
-
-La règle : **déclarer d'abord, affecter ensuite**, dès que la valeur vient d'une
-substitution de commande. C'est exactement ce que signale `SC2155` de
-shellcheck.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `local` (comme `declare`, `export`, `readonly`, `typeset`) est une **commande**
+> à part entière. Bash évalue d'abord la substitution de commande, puis exécute
+> `local` avec le résultat. Le code de retour visible dans `$?` est donc celui de
+> `local` — qui échoue seulement si on l'appelle hors d'une fonction. L'échec de
+> `du` ou de `cut` est purement et simplement perdu, et `set -e` ne voit rien non
+> plus.
+>
+> ```console
+> $ f(){ local t=$(false); echo "apres local: $?"; }; f
+> apres local: 0
+> $ g(){ local t; t=$(false); echo "declare puis affecte: $?"; }; g
+> declare puis affecte: 1
+> ```
+>
+> La règle : **déclarer d'abord, affecter ensuite**, dès que la valeur vient d'une
+> substitution de commande. C'est exactement ce que signale `SC2155` de
+> shellcheck.
 
 ---
 
-**Q7.7** — *`tar | gzip` avec `set -euo pipefail`, `tar` échoue.*
+<a id="q7-7"></a>**[Q7.7](README.md#q7-7)** — *`tar | gzip` avec `set -euo pipefail`, `tar` échoue.*
 
 **Réponse : a)** le script s'arrête, le pipeline sort en 2.
 
-::: pourquoi
-Avec `pipefail`, le code du pipeline devient celui du dernier étage à avoir
-échoué — ici `tar`, qui sort en 2 sur une erreur de lecture. `set -e` voit un
-code non nul et arrête le script. Sans `pipefail`, on retombe sur Q7.2.
-
-La proposition c) inverse les indices : `PIPESTATUS` est ordonné **de gauche à
-droite**, donc `${PIPESTATUS[0]}` est le code de `tar` (2) et
-`${PIPESTATUS[1]}` celui de `gzip` (0). Attention, `PIPESTATUS` est écrasé par
-la commande suivante : copie-le tout de suite si tu en as besoin
-(`codes=("${PIPESTATUS[@]}")`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Avec `pipefail`, le code du pipeline devient celui du dernier étage à avoir
+> échoué — ici `tar`, qui sort en 2 sur une erreur de lecture. `set -e` voit un
+> code non nul et arrête le script. Sans `pipefail`, on retombe sur Q7.2.
+>
+> La proposition c) inverse les indices : `PIPESTATUS` est ordonné **de gauche à
+> droite**, donc `${PIPESTATUS[0]}` est le code de `tar` (2) et
+> `${PIPESTATUS[1]}` celui de `gzip` (0). Attention, `PIPESTATUS` est écrasé par
+> la commande suivante : copie-le tout de suite si tu en as besoin
+> (`codes=("${PIPESTATUS[@]}")`).
 
 ---
 
-**Q7.8** — *8 fichiers dont un au nom à espace : itérations de `$(ls)` et du glob.*
+<a id="q7-8"></a>**[Q7.8](README.md#q7-8)** — *8 fichiers dont un au nom à espace : itérations de `$(ls)` et du glob.*
 
 **Réponse : b) A = 9, B = 8**
 
-::: pourquoi
-`for f in $(ls ...)` : la substitution de commande produit une seule chaîne
-contenant tous les noms séparés par des sauts de ligne. Cette chaîne n'étant pas
-quotée, elle subit le **découpage de mots** sur `$IFS`, qui contient l'espace :
-`rapport final.log` devient deux mots. D'où 9 itérations pour 8 fichiers — et,
-pire, deux itérations sur des noms de fichiers qui n'existent pas.
+> [!NOTE]
+> **Pourquoi**
+>
+> `for f in $(ls ...)` : la substitution de commande produit une seule chaîne
+> contenant tous les noms séparés par des sauts de ligne. Cette chaîne n'étant pas
+> quotée, elle subit le **découpage de mots** sur `$IFS`, qui contient l'espace :
+> `rapport final.log` devient deux mots. D'où 9 itérations pour 8 fichiers — et,
+> pire, deux itérations sur des noms de fichiers qui n'existent pas.
+>
+> `for f in rep/*` : le **globbing** produit directement une liste de mots, un par
+> nom de fichier, et cette liste n'est **jamais** re-découpée. Le globbing a lieu
+> après le découpage de mots dans l'ordre des expansions, ce qui le rend immunisé.
+> D'où 8 itérations, correctes, quels que soient les noms.
 
-`for f in rep/*` : le **globbing** produit directement une liste de mots, un par
-nom de fichier, et cette liste n'est **jamais** re-découpée. Le globbing a lieu
-après le découpage de mots dans l'ordre des expansions, ce qui le rend immunisé.
-D'où 8 itérations, correctes, quels que soient les noms.
-:::
-
-::: piege
-Le glob a deux défauts à connaître : il inclut le chemin (`rep/nom`, d'où
-`${f##*/}` pour le basename) et, si aucun fichier ne correspond, il est passé
-**littéralement** (`rep/*.log`) au lieu de produire une liste vide. D'où
-`shopt -s nullglob` dans les scripts sérieux. Pour une descente récursive ou des
-critères (âge, taille), c'est `find ... -print0` avec
-`while IFS= read -r -d ''` qui prend le relais.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le glob a deux défauts à connaître : il inclut le chemin (`rep/nom`, d'où
+> `${f##*/}` pour le basename) et, si aucun fichier ne correspond, il est passé
+> **littéralement** (`rep/*.log`) au lieu de produire une liste vide. D'où
+> `shopt -s nullglob` dans les scripts sérieux. Pour une descente récursive ou des
+> critères (âge, taille), c'est `find ... -print0` avec
+> `while IFS= read -r -d ''` qui prend le relais.
 
 ---
 
-**Q7.9** — *Afficher les clés d'un tableau associatif.*
+<a id="q7-9"></a>**[Q7.9](README.md#q7-9)** — *Afficher les clés d'un tableau associatif.*
 
 **Réponse : b) `echo "${!par_env[@]}"`**
 
-::: pourquoi
-Le `!` devant un nom de tableau demande les **indices** (ou les clés pour un
-tableau associatif) plutôt que les valeurs. `${par_env[@]}` donne les valeurs
-(`4 1`), `${#par_env[@]}` le nombre d'éléments (2), et `${!par_env[@]}` les clés
-(`dev prod`, dans un ordre de hachage non garanti — trie si tu veux une sortie
-stable).
+> [!NOTE]
+> **Pourquoi**
+>
+> Le `!` devant un nom de tableau demande les **indices** (ou les clés pour un
+> tableau associatif) plutôt que les valeurs. `${par_env[@]}` donne les valeurs
+> (`4 1`), `${#par_env[@]}` le nombre d'éléments (2), et `${!par_env[@]}` les clés
+> (`dev prod`, dans un ordre de hachage non garanti — trie si tu veux une sortie
+> stable).
+>
+> Le patron canonique du comptage par catégorie :
+>
+> ```bash
+> declare -A par_env
+> par_env["$env"]=$(( ${par_env["$env"]:-0} + 1 ))     # :-0 pour le 1er passage
+> for e in $(printf '%s\n' "${!par_env[@]}" | sort); do
+>   printf '%s;%s\n' "$e" "${par_env[$e]}"
+> done
+> ```
 
-Le patron canonique du comptage par catégorie :
-
-```bash
-declare -A par_env
-par_env["$env"]=$(( ${par_env["$env"]:-0} + 1 ))     # :-0 pour le 1er passage
-for e in $(printf '%s\n' "${!par_env[@]}" | sort); do
-  printf '%s;%s\n' "$e" "${par_env[$e]}"
-done
-```
-:::
-
-::: piege
-`declare -A` est **obligatoire** avant usage : sans lui, `par_env[prod]=4`
-crée un tableau **indexé** et `prod` est évalué comme une expression
-arithmétique, qui vaut 0. Tout finit alors dans la case 0 et le compteur est
-faux sans le moindre message d'erreur.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `declare -A` est **obligatoire** avant usage : sans lui, `par_env[prod]=4`
+> crée un tableau **indexé** et `prod` est évalué comme une expression
+> arithmétique, qui vaut 0. Tout finit alors dans la case 0 et le compteur est
+> faux sans le moindre message d'erreur.
 
 ---
 
-**Q7.10** — *`trap ... EXIT` puis Ctrl-C pendant l'exécution.*
+<a id="q7-10"></a>**[Q7.10](README.md#q7-10)** — *`trap ... EXIT` puis Ctrl-C pendant l'exécution.*
 
 **Réponse : b)** le répertoire est supprimé.
 
-::: pourquoi
-Le pseudo-signal `EXIT` se déclenche à **chaque** sortie du shell : fin normale,
-`exit` explicite, arrêt par `set -e`, et aussi terminaison provoquée par un
-signal non intercepté. Bash exécute le gestionnaire `EXIT` avant de rendre la
-main. Un `trap 'rm -rf "$TRAVAIL"' EXIT` couvre donc Ctrl-C sans qu'on ait à
-piéger `INT` explicitement.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le pseudo-signal `EXIT` se déclenche à **chaque** sortie du shell : fin normale,
+> `exit` explicite, arrêt par `set -e`, et aussi terminaison provoquée par un
+> signal non intercepté. Bash exécute le gestionnaire `EXIT` avant de rendre la
+> main. Un `trap 'rm -rf "$TRAVAIL"' EXIT` couvre donc Ctrl-C sans qu'on ait à
+> piéger `INT` explicitement.
+>
+> On intercepte tout de même `INT` et `TERM` séparément quand on veut faire plus
+> que nettoyer : journaliser l'interruption, tuer un processus fils, ou sortir
+> avec le code conventionnel `130` / `143` (`128 + n`) au lieu du code par défaut.
 
-On intercepte tout de même `INT` et `TERM` séparément quand on veut faire plus
-que nettoyer : journaliser l'interruption, tuer un processus fils, ou sortir
-avec le code conventionnel `130` / `143` (`128 + n`) au lieu du code par défaut.
-:::
-
-::: piege
-Deux limites réelles. D'abord `SIGKILL` (`kill -9`) ne déclenche **rien** : le
-processus est supprimé par le noyau, aucun trap ne tourne. Ensuite, si tu
-interceptes `INT` toi-même et que tu sors par `exit`, le trap `EXIT` se déclenche
-**aussi** : d'où le `trap - EXIT` avant d'appeler le nettoyage à la main, si tu
-ne veux pas nettoyer deux fois.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux limites réelles. D'abord `SIGKILL` (`kill -9`) ne déclenche **rien** : le
+> processus est supprimé par le noyau, aucun trap ne tourne. Ensuite, si tu
+> interceptes `INT` toi-même et que tu sors par `exit`, le trap `EXIT` se déclenche
+> **aussi** : d'où le `trap - EXIT` avant d'appeler le nettoyage à la main, si tu
+> ne veux pas nettoyer deux fois.
 
 ---
 
-**Q7.11** — *Le deux-points en tête de `getopts ':d:s:vh'`.*
+<a id="q7-11"></a>**[Q7.11](README.md#q7-11)** — *Le deux-points en tête de `getopts ':d:s:vh'`.*
 
 **Réponse : b)** les erreurs sont silencieuses, à toi de traiter `?` et `:`.
 
-::: pourquoi
-En mode « silencieux », `getopts` n'écrit plus ses propres messages
-`illegal option` sur stderr. À la place :
+> [!NOTE]
+> **Pourquoi**
+>
+> En mode « silencieux », `getopts` n'écrit plus ses propres messages
+> `illegal option` sur stderr. À la place :
+>
+> * option inconnue → `opt` vaut `?` et `OPTARG` contient la lettre fautive ;
+> * argument manquant → `opt` vaut `:` et `OPTARG` contient la lettre concernée.
+>
+> Tu contrôles alors entièrement le message, sa destination (stderr) et le code de
+> sortie (2 par convention) :
+>
+> ```bash
+> while getopts ':d:s:vh' opt; do
+>   case "$opt" in
+>     d) REP=$OPTARG ;;
+>     :)  log_error "option -$OPTARG : argument manquant"; exit 2 ;;
+>     \?) log_error "option inconnue : -$OPTARG";          exit 2 ;;
+>   esac
+> done
+> shift $((OPTIND - 1))
+> ```
+>
+> Le `shift $((OPTIND - 1))` final est obligatoire : il retire les options
+> traitées pour que `"$@"` ne contienne plus que les arguments positionnels.
 
-* option inconnue → `opt` vaut `?` et `OPTARG` contient la lettre fautive ;
-* argument manquant → `opt` vaut `:` et `OPTARG` contient la lettre concernée.
-
-Tu contrôles alors entièrement le message, sa destination (stderr) et le code de
-sortie (2 par convention) :
-
-```bash
-while getopts ':d:s:vh' opt; do
-  case "$opt" in
-    d) REP=$OPTARG ;;
-    :)  log_error "option -$OPTARG : argument manquant"; exit 2 ;;
-    \?) log_error "option inconnue : -$OPTARG";          exit 2 ;;
-  esac
-done
-shift $((OPTIND - 1))
-```
-
-Le `shift $((OPTIND - 1))` final est obligatoire : il retire les options
-traitées pour que `"$@"` ne contienne plus que les arguments positionnels.
-:::
-
-::: piege
-`getopts` ne connaît **pas** les options longues : `--verbose` lui apparaît
-comme l'option `-` suivie de bruit. Dès qu'il te faut `--dry-run`, c'est parsing
-manuel `while [ $# -gt 0 ]; do case "$1" in ... shift ...` — et le `shift` dans
-**chaque** branche, sinon boucle infinie (BF7.3).
-:::
+> [!WARNING]
+> **Piège**
+>
+> `getopts` ne connaît **pas** les options longues : `--verbose` lui apparaît
+> comme l'option `-` suivie de bruit. Dès qu'il te faut `--dry-run`, c'est parsing
+> manuel `while [ $# -gt 0 ]; do case "$1" in ... shift ...` — et le `shift` dans
+> **chaque** branche, sinon boucle infinie (BF7.3).
 
 ---
 
-**Q7.12** — *`charge="4.00"` puis `[ "$charge" -gt 2 ]`.*
+<a id="q7-12"></a>**[Q7.12](README.md#q7-12)** — *`charge="4.00"` puis `[ "$charge" -gt 2 ]`.*
 
 **Réponse : b)** message `integer expression expected` sur stderr, test faux.
 
-::: pourquoi
-`-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge` sont des comparateurs d'**entiers**.
-`4.00` n'est pas un entier pour bash, qui n'a pas de type flottant. `test`
-signale l'erreur sur stderr et renvoie **2** — ni 0 ni 1. Comme `if` ne teste
-que « zéro ou pas zéro », la branche `then` n'est pas prise : le script continue
-avec un test silencieusement faux, et un message d'erreur qui finit souvent dans
-`/dev/null`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge` sont des comparateurs d'**entiers**.
+> `4.00` n'est pas un entier pour bash, qui n'a pas de type flottant. `test`
+> signale l'erreur sur stderr et renvoie **2** — ni 0 ni 1. Comme `if` ne teste
+> que « zéro ou pas zéro », la branche `then` n'est pas prise : le script continue
+> avec un test silencieusement faux, et un message d'erreur qui finit souvent dans
+> `/dev/null`.
+>
+> Pour comparer des chaînes, `=` et `!=` (ou `==` dans `[[ ]]`). Pour comparer des
+> décimaux, il faut sortir de bash :
+>
+> ```bash
+> awk -v a="$charge" -v b=2 'BEGIN{ exit !(a > b) }' && echo "dépassement"
+> ```
 
-Pour comparer des chaînes, `=` et `!=` (ou `==` dans `[[ ]]`). Pour comparer des
-décimaux, il faut sortir de bash :
-
-```bash
-awk -v a="$charge" -v b=2 'BEGIN{ exit !(a > b) }' && echo "dépassement"
-```
-:::
-
-::: piege
-Le cousin du même piège : `[ "$mois" -eq 9 ]` avec `mois=09` fonctionne dans
-`test`, mais `$((09 + 1))` échoue avec `value too great for base` parce que le
-zéro initial fait basculer en octal. `10#$mois` force la base 10.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le cousin du même piège : `[ "$mois" -eq 9 ]` avec `mois=09` fonctionne dans
+> `test`, mais `$((09 + 1))` échoue avec `value too great for base` parce que le
+> zéro initial fait basculer en octal. `10#$mois` force la base 10.
 
 ---
 
-**Q7.13** — *`f="factura-2026-09-18.tar.gz"`, que vaut `${f%%.*}` ?*
+<a id="q7-13"></a>**[Q7.13](README.md#q7-13)** — *`f="factura-2026-09-18.tar.gz"`, que vaut `${f%%.*}` ?*
 
 **Réponse : b) `factura-2026-09-18`**
 
-::: pourquoi
-`%` coupe un **suffixe**, `#` coupe un **préfixe** ; doubler le caractère
-demande la correspondance la plus **longue** au lieu de la plus courte.
-Le motif `.*` se lit ici comme un glob (point suivi de n'importe quoi), pas
-comme une regex.
+> [!NOTE]
+> **Pourquoi**
+>
+> `%` coupe un **suffixe**, `#` coupe un **préfixe** ; doubler le caractère
+> demande la correspondance la plus **longue** au lieu de la plus courte.
+> Le motif `.*` se lit ici comme un glob (point suivi de n'importe quoi), pas
+> comme une regex.
+>
+> ```bash
+> f=factura-2026-09-18.tar.gz
+> echo "${f%.*}"    # factura-2026-09-18.tar   (plus court suffixe)
+> echo "${f%%.*}"   # factura-2026-09-18       (plus long suffixe)
+> echo "${f#*.}"    # tar.gz                   (plus court préfixe)
+> echo "${f##*.}"   # gz                       (plus long préfixe)
+> ```
+>
+> Moyen mnémotechnique : sur un clavier, `#` est à gauche de `%`, comme le préfixe
+> est à gauche du suffixe.
 
-```bash
-f=factura-2026-09-18.tar.gz
-echo "${f%.*}"    # factura-2026-09-18.tar   (plus court suffixe)
-echo "${f%%.*}"   # factura-2026-09-18       (plus long suffixe)
-echo "${f#*.}"    # tar.gz                   (plus court préfixe)
-echo "${f##*.}"   # gz                       (plus long préfixe)
-```
-
-Moyen mnémotechnique : sur un clavier, `#` est à gauche de `%`, comme le préfixe
-est à gauche du suffixe.
-:::
-
-::: piege
-`${f%%.*}` sur un chemin complet coupe trop : `/var/log/nginx/access.log.1`
-devient `/var/log/nginx/access`. Prends d'abord le basename avec `${f##*/}`,
-puis retire l'extension. Et si le nom ne contient pas le motif, la substitution
-rend la chaîne **inchangée** — pas une chaîne vide.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `${f%%.*}` sur un chemin complet coupe trop : `/var/log/nginx/access.log.1`
+> devient `/var/log/nginx/access`. Prends d'abord le basename avec `${f##*/}`,
+> puis retire l'extension. Et si le nom ne contient pas le motif, la substitution
+> rend la chaîne **inchangée** — pas une chaîne vide.
 
 ---
 
-**Q7.14** — *Comment une fonction rend-elle une valeur calculée ?*
+<a id="q7-14"></a>**[Q7.14](README.md#q7-14)** — *Comment une fonction rend-elle une valeur calculée ?*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Une fonction bash a deux canaux, et ils n'ont pas le même rôle :
+> [!NOTE]
+> **Pourquoi**
+>
+> Une fonction bash a deux canaux, et ils n'ont pas le même rôle :
+>
+> * le **code de retour** (`return`), un entier de 0 à 255, qui répond à « ça
+>   s'est bien passé ? » et alimente `$?`, `if`, `&&`, `||` ;
+> * la **sortie standard**, qui porte le **résultat** et se récupère par
+>   substitution de commande : `res=$(fonction)`.
+>
+> La variante c) — la fonction écrit dans une variable dont l'appelant a choisi le
+> nom (`declare -n` ou une globale convenue) — est plus rapide (pas de sous-shell)
+> et permet de rendre un tableau, ce que stdout ne sait pas faire proprement.
+>
+> a) est faux dès que la valeur dépasse 255 ou n'est pas un entier : `return 300`
+> donne 44 (300 modulo 256). d) est pire : `exit` termine le script entier.
 
-* le **code de retour** (`return`), un entier de 0 à 255, qui répond à « ça
-  s'est bien passé ? » et alimente `$?`, `if`, `&&`, `||` ;
-* la **sortie standard**, qui porte le **résultat** et se récupère par
-  substitution de commande : `res=$(fonction)`.
-
-La variante c) — la fonction écrit dans une variable dont l'appelant a choisi le
-nom (`declare -n` ou une globale convenue) — est plus rapide (pas de sous-shell)
-et permet de rendre un tableau, ce que stdout ne sait pas faire proprement.
-
-a) est faux dès que la valeur dépasse 255 ou n'est pas un entier : `return 300`
-donne 44 (300 modulo 256). d) est pire : `exit` termine le script entier.
-:::
-
-::: piege
-`res=$(fonction)` crée un sous-shell : tout ce que la fonction modifie
-(variables, `cd`) est perdu au retour. Le code, lui, est bien transmis — sauf si
-l'affectation est préfixée par `local` ou `declare`, qui imposent alors le leur
-(Q7.6). Pour traiter les deux explicitement : `res=$(fonction) || rc=$?`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `res=$(fonction)` crée un sous-shell : tout ce que la fonction modifie
+> (variables, `cd`) est perdu au retour. Le code, lui, est bien transmis — sauf si
+> l'affectation est préfixée par `local` ou `declare`, qui imposent alors le leur
+> (Q7.6). Pour traiter les deux explicitement : `res=$(fonction) || rc=$?`.
 
 ---
 
-**Q7.15** — *Le script tenant `flock -n 9` est tué par `kill -9`.*
+<a id="q7-15"></a>**[Q7.15](README.md#q7-15)** — *Le script tenant `flock -n 9` est tué par `kill -9`.*
 
 **Réponse : b)** le noyau libère le verrou à la fermeture du descripteur.
 
-::: pourquoi
-`flock(2)` pose un verrou consultatif **associé à la description de fichier
-ouverte**, pas au fichier lui-même ni à son contenu. Le verrou disparaît quand
-la dernière référence à cette description est fermée — ce que le noyau fait
-d'office quand le processus meurt, y compris sur `SIGKILL`, y compris sur une
-coupure de courant côté processus. Il n'y a donc **rien à nettoyer** : le
-fichier de verrou peut rester en place indéfiniment, il ne bloque personne.
+> [!NOTE]
+> **Pourquoi**
+>
+> `flock(2)` pose un verrou consultatif **associé à la description de fichier
+> ouverte**, pas au fichier lui-même ni à son contenu. Le verrou disparaît quand
+> la dernière référence à cette description est fermée — ce que le noyau fait
+> d'office quand le processus meurt, y compris sur `SIGKILL`, y compris sur une
+> coupure de courant côté processus. Il n'y a donc **rien à nettoyer** : le
+> fichier de verrou peut rester en place indéfiniment, il ne bloque personne.
+>
+> C'est toute la supériorité sur le « fichier PID » : un PID écrit dans
+> `/var/run/monscript.pid` survit à la mort du processus, et le script suivant
+> refuse de démarrer jusqu'à intervention humaine — ou, pire, teste un PID qui a
+> été recyclé par un processus sans rapport.
 
-C'est toute la supériorité sur le « fichier PID » : un PID écrit dans
-`/var/run/monscript.pid` survit à la mort du processus, et le script suivant
-refuse de démarrer jusqu'à intervention humaine — ou, pire, teste un PID qui a
-été recyclé par un processus sans rapport.
-:::
-
-::: piege
-Le verrou est hérité par les **fils** : si ton script lance
-`( exec 9>lock; flock -n 9 && sleep 3600 )`, tuer le shell ne libère rien tant
-que le `sleep` vit, puisqu'il détient une copie du descripteur. C'est la cause
-classique du « verrou fantôme » : cherche les processus fils avec
-`fuser -v fichier.lock` ou `lsof fichier.lock` avant d'accuser flock.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le verrou est hérité par les **fils** : si ton script lance
+> `( exec 9>lock; flock -n 9 && sleep 3600 )`, tuer le shell ne libère rien tant
+> que le `sleep` vit, puisqu'il détient une copie du descripteur. C'est la cause
+> classique du « verrou fantôme » : cherche les processus fils avec
+> `fuser -v fichier.lock` ou `lsof fichier.lock` avant d'accuser flock.
 
 ---
 
-**Q7.16** — *`while read ligne` sur la ligne `  admin\test  `.*
+<a id="q7-16"></a>**[Q7.16](README.md#q7-16)** — *`while read ligne` sur la ligne `  admin\test  `.*
 
 **Réponse : c) `[admintest]`**
 
-::: pourquoi
-Deux mécanismes distincts frappent la même ligne.
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux mécanismes distincts frappent la même ligne.
+>
+> 1. `read` découpe la ligne selon `IFS` et **supprime les blancs de tête et de
+>    fin** avant d'affecter. Les deux espaces au début et à la fin disparaissent.
+> 2. Sans `-r`, `read` traite l'antislash comme un caractère d'échappement :
+>    `\t` devient un `t` littéral, l'antislash est consommé.
+>
+> D'où `admintest`. La forme canonique neutralise les deux :
+>
+> ```bash
+> while IFS= read -r ligne; do printf '[%s]\n' "$ligne"; done < creds.txt
+> ```
+>
+> `IFS=` (vide, en préfixe de commande, donc seulement pour ce `read`) désactive
+> le découpage et la suppression des blancs ; `-r` rend l'antislash littéral.
 
-1. `read` découpe la ligne selon `IFS` et **supprime les blancs de tête et de
-   fin** avant d'affecter. Les deux espaces au début et à la fin disparaissent.
-2. Sans `-r`, `read` traite l'antislash comme un caractère d'échappement :
-   `\t` devient un `t` littéral, l'antislash est consommé.
-
-D'où `admintest`. La forme canonique neutralise les deux :
-
-```bash
-while IFS= read -r ligne; do printf '[%s]\n' "$ligne"; done < creds.txt
-```
-
-`IFS=` (vide, en préfixe de commande, donc seulement pour ce `read`) désactive
-le découpage et la suppression des blancs ; `-r` rend l'antislash littéral.
-:::
-
-::: piege
-Sur des mots de passe ou des chemins, cette double mutilation est
-catastrophique et silencieuse : l'authentification échoue « sans raison ».
-Retiens `while IFS= read -r ligne` comme un bloc indivisible, au même titre que
-`#!/usr/bin/env bash`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sur des mots de passe ou des chemins, cette double mutilation est
+> catastrophique et silencieuse : l'authentification échoue « sans raison ».
+> Retiens `while IFS= read -r ligne` comme un bloc indivisible, au même titre que
+> `#!/usr/bin/env bash`.
 
 ---
 
-**Q7.17** — *`cd /srv/app` puis `rm -rf ./cache`, le répertoire a été renommé.*
+<a id="q7-17"></a>**[Q7.17](README.md#q7-17)** — *`cd /srv/app` puis `rm -rf ./cache`, le répertoire a été renommé.*
 
 **Réponse : b)** `cd` échoue, le script continue et supprime `./cache` là où il
 se trouve.
 
-::: pourquoi
-Sans `set -e`, l'échec d'une commande n'interrompt rien : bash affiche
-`bash: cd: /srv/app: No such file or directory` sur stderr et passe à la ligne
-suivante. Le répertoire courant est resté celui du lancement — le `$HOME` de
-l'utilisateur, `/` pour un service, ou n'importe quoi en automatique. `rm -rf
-./cache` s'exécute donc **ailleurs**, et le fait sans se plaindre s'il trouve
-une victime.
+> [!NOTE]
+> **Pourquoi**
+>
+> Sans `set -e`, l'échec d'une commande n'interrompt rien : bash affiche
+> `bash: cd: /srv/app: No such file or directory` sur stderr et passe à la ligne
+> suivante. Le répertoire courant est resté celui du lancement — le `$HOME` de
+> l'utilisateur, `/` pour un service, ou n'importe quoi en automatique. `rm -rf
+> ./cache` s'exécute donc **ailleurs**, et le fait sans se plaindre s'il trouve
+> une victime.
+>
+> Les trois écritures sûres :
+>
+> ```bash
+> cd /srv/app || exit 3
+> cd /srv/app || { echo "répertoire absent" >&2; exit 3; }
+> pushd /srv/app >/dev/null || exit 3   # ... popd à la fin
+> ```
+>
+> C'est le sens de `SC2164` (« Use `cd ... || exit` in case `cd` fails »).
 
-Les trois écritures sûres :
-
-```bash
-cd /srv/app || exit 3
-cd /srv/app || { echo "répertoire absent" >&2; exit 3; }
-pushd /srv/app >/dev/null || exit 3   # ... popd à la fin
-```
-
-C'est le sens de `SC2164` (« Use `cd ... || exit` in case `cd` fails »).
-:::
-
-::: piege
-`set -e` sauve ce cas précis, mais pas si le `cd` est dans une condition
-(`if cd /srv/app; then`) ou suivi de `&&`. Et il ne sauve rien du tout si le
-`cd` **réussit** vers un répertoire inattendu, par exemple parce que `$APP` est
-vide et que `cd /srv/$APP` t'envoie dans `/srv`. La vraie garde est de
-travailler en **chemins absolus** : `rm -rf -- "$APP_DIR/cache"` avec `APP_DIR`
-validé, plutôt que `cd` + chemin relatif.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `set -e` sauve ce cas précis, mais pas si le `cd` est dans une condition
+> (`if cd /srv/app; then`) ou suivi de `&&`. Et il ne sauve rien du tout si le
+> `cd` **réussit** vers un répertoire inattendu, par exemple parce que `$APP` est
+> vide et que `cd /srv/$APP` t'envoie dans `/srv`. La vraie garde est de
+> travailler en **chemins absolus** : `rm -rf -- "$APP_DIR/cache"` avec `APP_DIR`
+> validé, plutôt que `cd` + chemin relatif.
 
 ---
 
-**Q7.18** — *Faire définir `PROXY` dans le shell interactif courant.*
+<a id="q7-18"></a>**[Q7.18](README.md#q7-18)** — *Faire définir `PROXY` dans le shell interactif courant.*
 
 **Réponses : c) et d)**
 
-::: pourquoi
-`source fichier` et son synonyme POSIX `. fichier` font lire le fichier **par le
-shell courant** : aucune création de processus, donc les variables, fonctions,
-alias, `cd` et même `exit` affectent ta session.
+> [!NOTE]
+> **Pourquoi**
+>
+> `source fichier` et son synonyme POSIX `. fichier` font lire le fichier **par le
+> shell courant** : aucune création de processus, donc les variables, fonctions,
+> alias, `cd` et même `exit` affectent ta session.
+>
+> `./env.sh` et `bash env.sh` lancent un **processus fils**. Un fils hérite de
+> l'environnement de son père, jamais l'inverse : ses variables meurent avec lui.
+> C'est ce qui explique pourquoi les scripts d'activation d'environnement
+> (`. venv/bin/activate`, `. /etc/profile.d/proxy.sh`) se sourcent toujours.
+>
+> | Invocation | Processus | Shebang | / bit `x` | Effet sur le shell |
+> |---|---|---|---|---|
+> | `./s.sh` | fils | requis / | requis | aucun |
+> | `bash s.sh` | fils | ignoré / | inutile | aucun |
+> | `source s.sh` | courant | ignoré / | inutile | total |
 
-`./env.sh` et `bash env.sh` lancent un **processus fils**. Un fils hérite de
-l'environnement de son père, jamais l'inverse : ses variables meurent avec lui.
-C'est ce qui explique pourquoi les scripts d'activation d'environnement
-(`. venv/bin/activate`, `. /etc/profile.d/proxy.sh`) se sourcent toujours.
-
-| Invocation | Processus | Shebang | / bit `x` | Effet sur le shell |
-|---|---|---|---|---|
-| `./s.sh` | fils | requis / | requis | aucun |
-| `bash s.sh` | fils | ignoré / | inutile | aucun |
-| `source s.sh` | courant | ignoré / | inutile | total |
-:::
-
-::: piege
-Sourcer un script écrit pour être exécuté est dangereux : chaque `exit` ferme
-**ta session**, chaque `set -e` devient permanent, chaque `cd` te déplace. Un
-script destiné à être sourcé ne contient ni `exit` ni `set -e`, et se protège
-souvent par `return 1` (qui n'est légal que dans une fonction ou un fichier
-sourcé — c'est d'ailleurs le test le plus simple pour savoir comment on a été
-appelé : `(return 0 2>/dev/null) && echo "sourcé" || echo "exécuté"`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sourcer un script écrit pour être exécuté est dangereux : chaque `exit` ferme
+> **ta session**, chaque `set -e` devient permanent, chaque `cd` te déplace. Un
+> script destiné à être sourcé ne contient ni `exit` ni `set -e`, et se protège
+> souvent par `return 1` (qui n'est légal que dans une fonction ou un fichier
+> sourcé — c'est d'ailleurs le test le plus simple pour savoir comment on a été
+> appelé : `(return 0 2>/dev/null) && echo "sourcé" || echo "exécuté"`).
 
 ---
 
 ## 7.4 Quiz — questions ouvertes
 
-**QO7.1** — *`"$@"`, `$@`, `"$*"`, `$*` : différences et dégât en production.*
+<a id="qo7-1"></a>**[QO7.1](README.md#qo7-1)** — *`"$@"`, `$@`, `"$*"`, `$*` : différences et dégât en production.*
 
 **Réponse de référence**
 
@@ -556,16 +598,17 @@ Avec `$*`, le hook copie un fichier nommé `conf`, n'échoue pas forcément (il
 peut exister), et le déploiement part avec le mauvais contenu. Rien dans les
 journaux ne le signale : les deux exécutions « réussissent ».
 
-::: pourquoi
-Le point à retenir pour l'entretien : `"$@"` est la **seule** expansion quotée de
-bash qui produit plusieurs mots. Le shell la traite comme un cas spécial
-précisément pour permettre de relayer une ligne de commande sans la dénaturer.
-Tout le reste (`$@`, `$*`, `${arr[*]}`) repasse par le découpage de mots.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point à retenir pour l'entretien : `"$@"` est la **seule** expansion quotée de
+> bash qui produit plusieurs mots. Le shell la traite comme un cas spécial
+> précisément pour permettre de relayer une ligne de commande sans la dénaturer.
+> Tout le reste (`$@`, `$*`, `${arr[*]}`) repasse par le découpage de mots.
 
 ---
 
-**QO7.2** — *`set -euo pipefail` suffit-il ? Trois trous et leurs bouchons.*
+<a id="qo7-2"></a>**[QO7.2](README.md#qo7-2)** — *`set -euo pipefail` suffit-il ? Trois trous et leurs bouchons.*
 
 **Réponse de référence**
 
@@ -592,24 +635,26 @@ substitutions de commande masquées (`local x=$(cmd)`), ni `cmd &` suivi d'un
 `wait` non testé. Bouchon : `${PIPESTATUS[@]}`, déclaration séparée de
 l'affectation, `wait "$pid" || rc=$?`.
 
-::: pourquoi
-Ce qu'on attend d'un candidat, ce n'est pas la récitation des trois options,
-c'est de savoir qu'elles sont un **filet**, pas une ceinture de sécurité. Le
-script robuste ajoute : des pré-conditions explicites, un `trap EXIT` qui
-nettoie, des codes de sortie documentés, un verrou d'exécution unique, et
-l'idempotence. C'est tout le programme de D7.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qu'on attend d'un candidat, ce n'est pas la récitation des trois options,
+> c'est de savoir qu'elles sont un **filet**, pas une ceinture de sécurité. Le
+> script robuste ajoute : des pré-conditions explicites, un `trap EXIT` qui
+> nettoie, des codes de sortie documentés, un verrou d'exécution unique, et
+> l'idempotence. C'est tout le programme de D7.
 
-::: piege
-Deux effets de bord de `set -e` qui surprennent en revue : `((i++))` renvoie 1
-quand `i` valait 0 (l'arithmétique rend le code de la valeur), ce qui arrête le
-script — écris `((i++)) || true` ou `i=$((i+1))`. Et `set -e` ne s'applique pas
-au corps d'une fonction dont l'appel est suivi de `|| true`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux effets de bord de `set -e` qui surprennent en revue : `((i++))` renvoie 1
+> quand `i` valait 0 (l'arithmétique rend le code de la valeur), ce qui arrête le
+> script — écris `((i++)) || true` ou `i=$((i+1))`. Et `set -e` ne s'applique pas
+> au corps d'une fonction dont l'appel est suivi de `|| true`.
 
 ---
 
-**QO7.3** — *`[ ]` vs `[[ ]]` vs `(( ))`.*
+<a id="qo7-3"></a>**[QO7.3](README.md#qo7-3)** — *`[ ]` vs `[[ ]]` vs `(( ))`.*
 
 **Réponse de référence**
 
@@ -635,17 +680,18 @@ v="a b"
 Dans un script `#!/bin/sh` livré à un client : **`[ ]` uniquement**, avec
 quoting systématique, et `case` plutôt que `=~` pour les motifs.
 
-::: pourquoi
-La différence de nature explique tout le reste : `[ ]` est une commande, donc
-soumise aux expansions ; `[[ ]]` est de la syntaxe, donc protégée. C'est aussi
-pourquoi `[[ $v == a* ]]` fait un motif alors que `[[ $v == "a*" ]]` fait une
-comparaison littérale : les quotes **à droite** désactivent l'interprétation du
-motif. Même règle pour `=~` : un motif entre quotes devient une chaîne.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La différence de nature explique tout le reste : `[ ]` est une commande, donc
+> soumise aux expansions ; `[[ ]]` est de la syntaxe, donc protégée. C'est aussi
+> pourquoi `[[ $v == a* ]]` fait un motif alors que `[[ $v == "a*" ]]` fait une
+> comparaison littérale : les quotes **à droite** désactivent l'interprétation du
+> motif. Même règle pour `=~` : un motif entre quotes devient une chaîne.
 
 ---
 
-**QO7.4** — *Les quatre pièges de la lecture ligne à ligne.*
+<a id="qo7-4"></a>**[QO7.4](README.md#qo7-4)** — *Les quatre pièges de la lecture ligne à ligne.*
 
 **Réponse de référence**
 
@@ -674,16 +720,17 @@ découpe sur les espaces (donc sur les **mots**, pas les lignes), et il glob le
 résultat — une ligne contenant `*` est remplacée par la liste des fichiers du
 répertoire courant. Il charge de plus tout le fichier en mémoire.
 
-::: piege
-Piège bonus : à l'intérieur de la boucle, toute commande qui lit stdin
-(`ssh`, `mysql`, `ffmpeg`) **consomme le fichier** et la boucle s'arrête après
-une itération. Remèdes : `ssh -n`, `mysql < /dev/null`, ou lire sur un autre
-descripteur : `while IFS= read -r -u 3 l; do ...; done 3< "$f"`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Piège bonus : à l'intérieur de la boucle, toute commande qui lit stdin
+> (`ssh`, `mysql`, `ffmpeg`) **consomme le fichier** et la boucle s'arrête après
+> une itération. Remèdes : `ssh -n`, `mysql < /dev/null`, ou lire sur un autre
+> descripteur : `while IFS= read -r -u 3 l; do ...; done 3< "$f"`.
 
 ---
 
-**QO7.5** — *`rm -rf "$BASE/$SOUS"/*` a détruit la production.*
+<a id="qo7-5"></a>**[QO7.5](README.md#qo7-5)** — *`rm -rf "$BASE/$SOUS"/*` a détruit la production.*
 
 **Réponse de référence**
 
@@ -715,17 +762,18 @@ tout ce qu'il contient » quand l'intention est « les fichiers de plus de N
 jours ». Le `-r` de `xargs` évite d'appeler `rm` sans argument. Et en
 production, un `--dry-run` par défaut plus une option `--go` explicite.
 
-::: pourquoi
-L'erreur de conception sous-jacente : le script exprimait *comment* supprimer
-(`rm -rf` sur un chemin) au lieu d'exprimer *quoi* supprimer (des fichiers
-répondant à un critère d'âge). Un `find` avec critères est auto-limitant ; un
-`rm -rf` sur une variable est une bombe dont l'amorce est la valeur de la
-variable.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'erreur de conception sous-jacente : le script exprimait *comment* supprimer
+> (`rm -rf` sur un chemin) au lieu d'exprimer *quoi* supprimer (des fichiers
+> répondant à un critère d'âge). Un `find` avec critères est auto-limitant ; un
+> `rm -rf` sur une variable est une bombe dont l'amorce est la valeur de la
+> variable.
 
 ---
 
-**QO7.6** — *Mécanisme de `flock`, `exec 9>` et comparaison au fichier PID.*
+<a id="qo7-6"></a>**[QO7.6](README.md#qo7-6)** — *Mécanisme de `flock`, `exec 9>` et comparaison au fichier PID.*
 
 **Réponse de référence**
 
@@ -755,17 +803,18 @@ la sortie — et chaque étape peut échouer : PID recyclé, fichier laissé par
 crash, condition de concurrence entre le test et l'écriture. `flock` délègue
 tout ça au noyau, atomiquement.
 
-::: piege
-Les fils héritent du descripteur et donc du verrou : un démon détaché lancé par
-le script garde le verrou après la mort du script. Si tu lances un processus qui
-doit survivre, ferme-lui le descripteur (`exec 9>&-` dans le sous-shell) ou
-utilise `flock` sur un descripteur non hérité. Et vérifie que `$LOCK` est sur un
-système de fichiers local : `flock` sur NFS a une histoire compliquée.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Les fils héritent du descripteur et donc du verrou : un démon détaché lancé par
+> le script garde le verrou après la mort du script. Si tu lances un processus qui
+> doit survivre, ferme-lui le descripteur (`exec 9>&-` dans le sous-shell) ou
+> utilise `flock` sur un descripteur non hérité. Et vérifie que `$LOCK` est sur un
+> système de fichiers local : `flock` sur NFS a une histoire compliquée.
 
 ---
 
-**QO7.7** — *Démarche de diagnostic d'un script « qui marche à la main ».*
+<a id="qo7-7"></a>**[QO7.7](README.md#qo7-7)** — *Démarche de diagnostic d'un script « qui marche à la main ».*
 
 **Réponse de référence**
 
@@ -796,16 +845,17 @@ export PS4='+ ${BASH_SOURCE##*/}:$LINENO:${FUNCNAME[0]:-main}() '
    un fichier, et un mode `--verbeux` permanent pour ne plus avoir à instrumenter
    la prochaine fois.
 
-::: pourquoi
-La question n'est pas « sais-tu utiliser `bash -x` » mais « sais-tu que le
-problème est presque toujours une différence d'environnement ». Le réflexe qui
-distingue un candidat : commencer par comparer les environnements, pas par lire
-le code ligne à ligne.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question n'est pas « sais-tu utiliser `bash -x` » mais « sais-tu que le
+> problème est presque toujours une différence d'environnement ». Le réflexe qui
+> distingue un candidat : commencer par comparer les environnements, pas par lire
+> le code ligne à ligne.
 
 ---
 
-**QO7.8** — *Trois critères pour passer de bash à Python ou Ansible.*
+<a id="qo7-8"></a>**[QO7.8](README.md#qo7-8)** — *Trois critères pour passer de bash à Python ou Ansible.*
 
 **Réponse de référence**
 
@@ -836,19 +886,20 @@ Critère inverse, tout aussi important : **reste en bash** tant que le script
 enchaîne des commandes système, tient en une page, et n'a pas d'état. Réécrire
 un `tar | ssh` en Python n'apporte rien et ajoute une dépendance.
 
-::: pourquoi
-Ce qu'on évalue ici, c'est le jugement d'ingénierie, pas la préférence. Une
-réponse « bash c'est sale, Python c'est mieux » vaut zéro : bash est le plus
-court chemin pour orchestrer des processus, et c'est le seul langage garanti
-présent sur toutes les machines. Le passage se justifie par les **données**,
-l'**idempotence** et la **taille**, pas par le goût.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qu'on évalue ici, c'est le jugement d'ingénierie, pas la préférence. Une
+> réponse « bash c'est sale, Python c'est mieux » vaut zéro : bash est le plus
+> court chemin pour orchestrer des processus, et c'est le seul langage garanti
+> présent sur toutes les machines. Le passage se justifie par les **données**,
+> l'**idempotence** et la **taille**, pas par le goût.
 
 ---
 
 ## 7.5 Exercices guidés
 
-**E7.1** — *Faire fonctionner `bonjour.sh` livré sans bit d'exécution.*
+<a id="e7-1"></a>**[E7.1](README.md#e7-1)** — *Faire fonctionner `bonjour.sh` livré sans bit d'exécution.*
 
 ```bash
 cd ~/lab07/bin
@@ -860,22 +911,23 @@ chmod +x bonjour.sh && ./bonjour.sh   # 2. le noyau peut enfin l'exécuter
 source bonjour.sh             # 3. lu par le shell courant, aucun fils
 ```
 
-::: pourquoi
-`./bonjour.sh` demande au **noyau** d'exécuter le fichier : il vérifie le bit
-`x`, lit le shebang, et lance `/usr/bin/env bash ./bonjour.sh`. Sans bit `x`,
-l'appel système `execve` échoue avec `EACCES`, d'où `Permission denied` — le
-message vient du shell, mais la décision vient du noyau.
-
-`bash bonjour.sh` contourne complètement l'affaire : on exécute `/bin/bash`
-(qui, lui, est exécutable) en lui passant un nom de fichier à lire. Le shebang
-n'est alors qu'un commentaire, et le bit `x` est inutile. C'est pour ça que
-`bash script.sh` reste la façon la plus robuste de lancer un script qu'on vient
-de récupérer.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `./bonjour.sh` demande au **noyau** d'exécuter le fichier : il vérifie le bit
+> `x`, lit le shebang, et lance `/usr/bin/env bash ./bonjour.sh`. Sans bit `x`,
+> l'appel système `execve` échoue avec `EACCES`, d'où `Permission denied` — le
+> message vient du shell, mais la décision vient du noyau.
+>
+> `bash bonjour.sh` contourne complètement l'affaire : on exécute `/bin/bash`
+> (qui, lui, est exécutable) en lui passant un nom de fichier à lire. Le shebang
+> n'est alors qu'un commentaire, et le bit `x` est inutile. C'est pour ça que
+> `bash script.sh` reste la façon la plus robuste de lancer un script qu'on vient
+> de récupérer.
 
 ---
 
-**E7.2** — *`./portee.sh` vs `bash portee.sh` vs `source portee.sh`.*
+<a id="e7-2"></a>**[E7.2](README.md#e7-2)** — *`./portee.sh` vs `bash portee.sh` vs `source portee.sh`.*
 
 ```bash
 cd ~/lab07/bin
@@ -891,22 +943,23 @@ source portee.sh ; echo "après source : pwd=$PWD marqueur=${MARQUEUR:-(vide)}"
 | `bash portee.sh` | différent | inchangé | vide |
 | `source portee.sh` | **le tien** | `/tmp` | défini |
 
-::: pourquoi
-Les deux premières formes créent un processus fils : il hérite de
-l'environnement, mais ses modifications (variables, répertoire courant, options
-`set`) meurent avec lui. La troisième fait lire le fichier par le shell courant,
-sans `fork` : `$$` est inchangé, le `cd /tmp` te déplace réellement, et
-`MARQUEUR` reste défini.
-
-D'où la règle : un script qui doit **modifier ta session** (activation
-d'environnement, chargement de variables) se source ; tout le reste s'exécute.
-Et un script destiné à être sourcé ne doit contenir ni `exit` (il fermerait ta
-session) ni `set -e` (il resterait actif après).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les deux premières formes créent un processus fils : il hérite de
+> l'environnement, mais ses modifications (variables, répertoire courant, options
+> `set`) meurent avec lui. La troisième fait lire le fichier par le shell courant,
+> sans `fork` : `$$` est inchangé, le `cd /tmp` te déplace réellement, et
+> `MARQUEUR` reste défini.
+>
+> D'où la règle : un script qui doit **modifier ta session** (activation
+> d'environnement, chargement de variables) se source ; tout le reste s'exécute.
+> Et un script destiné à être sourcé ne doit contenir ni `exit` (il fermerait ta
+> session) ni `set -e` (il resterait actif après).
 
 ---
 
-**E7.3** — *`args.sh` : nom, nombre, arguments numérotés, PID.*
+<a id="e7-3"></a>**[E7.3](README.md#e7-3)** — *`args.sh` : nom, nombre, arguments numérotés, PID.*
 
 ```bash
 #!/usr/bin/env bash
@@ -931,17 +984,18 @@ arguments: 3
 pid      : 24817
 ```
 
-::: pourquoi
-`${0##*/}` retire le plus long préfixe finissant par `/` : c'est un `basename`
-sans processus externe. `for a in "$@"` itère sur les arguments **tels que
-reçus** : les crochets dans le `printf` rendent visibles les espaces conservés,
-y compris les deux espaces de `quatre  cinq`. Avec `$*` ou `$@` non quoté, tu
-verrais 5 arguments au lieu de 3.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `${0##*/}` retire le plus long préfixe finissant par `/` : c'est un `basename`
+> sans processus externe. `for a in "$@"` itère sur les arguments **tels que
+> reçus** : les crochets dans le `printf` rendent visibles les espaces conservés,
+> y compris les deux espaces de `quatre  cinq`. Avec `$*` ou `$@` non quoté, tu
+> verrais 5 arguments au lieu de 3.
 
 ---
 
-**E7.4** — *Substitutions de paramètres sur `/var/log/nginx/access.log.1`.*
+<a id="e7-4"></a>**[E7.4](README.md#e7-4)** — *Substitutions de paramètres sur `/var/log/nginx/access.log.1`.*
 
 ```bash
 f=/var/log/nginx/access.log.1
@@ -952,21 +1006,22 @@ n=${f##*/}; echo "${n%%.*}"   # access          nom sans aucune extension
 echo "${f^^}"            # /VAR/LOG/NGINX/ACCESS.LOG.1
 ```
 
-::: pourquoi
-Les quatre opérateurs de découpe se lisent avec deux règles : `#` travaille par
-la **gauche**, `%` par la **droite** ; doublé, l'opérateur prend la
-correspondance la plus **longue**. Aucun de ces calculs ne lance de processus,
-contrairement à `basename`/`dirname`/`cut`/`sed` : dans une boucle sur 50 000
-fichiers, la différence est de l'ordre de la minute.
-
-Noter l'étape en deux temps pour « le nom sans extension » : appliquer
-directement `${f%%.*}` au chemin complet couperait aussi le répertoire s'il
-contenait un point.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les quatre opérateurs de découpe se lisent avec deux règles : `#` travaille par
+> la **gauche**, `%` par la **droite** ; doublé, l'opérateur prend la
+> correspondance la plus **longue**. Aucun de ces calculs ne lance de processus,
+> contrairement à `basename`/`dirname`/`cut`/`sed` : dans une boucle sur 50 000
+> fichiers, la différence est de l'ordre de la minute.
+>
+> Noter l'étape en deux temps pour « le nom sans extension » : appliquer
+> directement `${f%%.*}` au chemin complet couperait aussi le répertoire s'il
+> contenait un point.
 
 ---
 
-**E7.5** — *`DEST` valorisé, et différence `${1-def}` / `${1:-def}`.*
+<a id="e7-5"></a>**[E7.5](README.md#e7-5)** — *`DEST` valorisé, et différence `${1-def}` / `${1:-def}`.*
 
 ```bash
 DEST=${1-/srv/factura}           # ABSENT seulement -> /srv/factura
@@ -981,21 +1036,22 @@ $ echo "[${1-def}]"    # []      : l'argument EXISTE, il est juste vide
 $ echo "[${1:-def}]"   # [def]   : le deux-points couvre aussi le cas vide
 ```
 
-::: pourquoi
-Toutes les substitutions par défaut existent en deux variantes. Sans
-deux-points, bash ne teste que l'**existence** de la variable ; avec, il teste
-« non définie **ou** vide ». En script d'exploitation, c'est presque toujours la
-forme avec deux-points qu'on veut : une variable vide est une erreur, pas une
-valeur.
-
-`${v:=def}` va plus loin : il **affecte** la valeur de repli, ce qui évite de
-répéter le défaut plus bas. Il ne fonctionne pas sur les paramètres positionnels
-(`${1:=x}` est une erreur), d'où l'affectation explicite à `DEST`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Toutes les substitutions par défaut existent en deux variantes. Sans
+> deux-points, bash ne teste que l'**existence** de la variable ; avec, il teste
+> « non définie **ou** vide ». En script d'exploitation, c'est presque toujours la
+> forme avec deux-points qu'on veut : une variable vide est une erreur, pas une
+> valeur.
+>
+> `${v:=def}` va plus loin : il **affecte** la valeur de repli, ce qui évite de
+> répéter le défaut plus bas. Il ne fonctionne pas sur les paramètres positionnels
+> (`${1:=x}` est une erreur), d'où l'affectation explicite à `DEST`.
 
 ---
 
-**E7.6** — *Fonctions `extension` et `souche`, sans appel externe.*
+<a id="e7-6"></a>**[E7.6](README.md#e7-6)** — *Fonctions `extension` et `souche`, sans appel externe.*
 
 ```bash
 extension() {
@@ -1020,16 +1076,17 @@ $ extension LISEZMOI ; echo "(vide ci-dessus)"
 (vide ci-dessus)
 ```
 
-::: piege
-Sans le `case`, `${nom##*.}` sur un nom **sans** point renvoie le nom entier :
-`extension LISEZMOI` dirait `LISEZMOI`. Une substitution dont le motif ne
-correspond pas rend la chaîne inchangée — jamais une chaîne vide. C'est la
-source classique du fichier renommé `LISEZMOI.LISEZMOI`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sans le `case`, `${nom##*.}` sur un nom **sans** point renvoie le nom entier :
+> `extension LISEZMOI` dirait `LISEZMOI`. Une substitution dont le motif ne
+> correspond pas rend la chaîne inchangée — jamais une chaîne vide. C'est la
+> source classique du fichier renommé `LISEZMOI.LISEZMOI`.
 
 ---
 
-**E7.7** — *Trois tests qui échouent en `[ ]` non quoté.*
+<a id="e7-7"></a>**[E7.7](README.md#e7-7)** — *Trois tests qui échouent en `[ ]` non quoté.*
 
 ```console
 $ v=""    ; [ -n $v ] && echo vrai || echo faux
@@ -1049,17 +1106,18 @@ Versions correctes :
 awk -v a="$v" 'BEGIN{ exit !(a > 2) }' && echo "supérieur"
 ```
 
-::: pourquoi
-Les trois erreurs ont trois causes différentes, et c'est ce qui les rend
-instructives : la première vient du **découpage** qui fait disparaître un
-argument, la deuxième du découpage qui en **ajoute** un, la troisième d'une
-**incompatibilité de type**. Seule la première est silencieuse — et c'est la
-plus dangereuse.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois erreurs ont trois causes différentes, et c'est ce qui les rend
+> instructives : la première vient du **découpage** qui fait disparaître un
+> argument, la deuxième du découpage qui en **ajoute** un, la troisième d'une
+> **incompatibilité de type**. Seule la première est silencieuse — et c'est la
+> plus dangereuse.
 
 ---
 
-**E7.8** — *Récupérer la dernière ligne de `serveurs.txt`.*
+<a id="e7-8"></a>**[E7.8](README.md#e7-8)** — *Récupérer la dernière ligne de `serveurs.txt`.*
 
 ```bash
 f=~/lab07/data/serveurs.txt
@@ -1068,21 +1126,22 @@ m=0; while read -r l || [ -n "$l" ]; do m=$((m+1)); done < "$f"
 echo "naïf=$n corrigé=$m"        # naïf=6 corrigé=7
 ```
 
-::: pourquoi
-`read` renvoie un code non nul quand il rencontre la fin de fichier **avant** un
-séparateur de ligne. Mais avant de renvoyer ce code, il a déjà rempli la
-variable avec ce qu'il a lu. La condition `|| [ -n "$l" ]` rattrape exactement
-ce cas : si `read` a échoué mais que la variable n'est pas vide, on fait un tour
-de boucle de plus.
-
-Vérifier le symptôme sur le fichier : `tail -c 1 fichier | xxd` — pas de `0a`
-final. Beaucoup d'exportateurs (tableurs, API, `printf` mal fini) produisent ce
-genre de fichier, et l'erreur est invisible tant qu'on ne compte pas.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `read` renvoie un code non nul quand il rencontre la fin de fichier **avant** un
+> séparateur de ligne. Mais avant de renvoyer ce code, il a déjà rempli la
+> variable avec ce qu'il a lu. La condition `|| [ -n "$l" ]` rattrape exactement
+> ce cas : si `read` a échoué mais que la variable n'est pas vide, on fait un tour
+> de boucle de plus.
+>
+> Vérifier le symptôme sur le fichier : `tail -c 1 fichier | xxd` — pas de `0a`
+> final. Beaucoup d'exportateurs (tableurs, API, `printf` mal fini) produisent ce
+> genre de fichier, et l'erreur est invisible tant qu'on ne compte pas.
 
 ---
 
-**E7.9** — *Hôtes de production au format `hote (ip)`.*
+<a id="e7-9"></a>**[E7.9](README.md#e7-9)** — *Hôtes de production au format `hote (ip)`.*
 
 ```bash
 {
@@ -1101,20 +1160,21 @@ lab-db (10.10.10.12)
 cache-01 (10.10.10.31)
 ```
 
-::: pourquoi
-`IFS=';'` en préfixe de `read` ne vaut que pour cette commande : le découpage se
-fait sur le point-virgule et **pas** sur les espaces, donc `frontal web` reste un
-seul champ. Le `read -r _` initial consomme l'en-tête sans `if` ni compteur ; le
-`_` est une variable comme une autre, mais la convention signale « je jette ».
-
-Le regroupement `{ ... } < fichier` redirige le bloc entier : le `read`
-d'en-tête et la boucle lisent le **même** descripteur, donc la boucle reprend là
-où l'en-tête s'est arrêté.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `IFS=';'` en préfixe de `read` ne vaut que pour cette commande : le découpage se
+> fait sur le point-virgule et **pas** sur les espaces, donc `frontal web` reste un
+> seul champ. Le `read -r _` initial consomme l'en-tête sans `if` ni compteur ; le
+> `_` est une variable comme une autre, mais la convention signale « je jette ».
+>
+> Le regroupement `{ ... } < fichier` redirige le bloc entier : le `read`
+> d'en-tête et la boucle lisent le **même** descripteur, donc la boucle reprend là
+> où l'en-tête s'est arrêté.
 
 ---
 
-**E7.10** — *Charger `seuils.conf` dans un tableau associatif.*
+<a id="e7-10"></a>**[E7.10](README.md#e7-10)** — *Charger `seuils.conf` dans un tableau associatif.*
 
 ```bash
 declare -A SEUILS
@@ -1128,25 +1188,27 @@ echo "disque_max=${SEUILS[disque_max]}"      # disque_max=85
 echo "clés : ${!SEUILS[*]}"
 ```
 
-::: pourquoi
-`IFS='='` découpe sur le premier `=`, et comme `read` met **tout le reste** dans
-la dernière variable, une valeur contenant elle-même un `=` reste intacte.
-`${cle// /}` supprime toutes les espaces (substitution globale avec un
-remplacement vide), ce qui tolère `cle = valeur`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `IFS='='` découpe sur le premier `=`, et comme `read` met **tout le reste** dans
+> la dernière variable, une valeur contenant elle-même un `=` reste intacte.
+> `${cle// /}` supprime toutes les espaces (substitution globale avec un
+> remplacement vide), ce qui tolère `cle = valeur`.
+>
+> Le `case` filtre commentaires et lignes vides en deux mots, là où un `if` avec
+> `grep` lancerait un processus par ligne.
 
-Le `case` filtre commentaires et lignes vides en deux mots, là où un `if` avec
-`grep` lancerait un processus par ligne.
-:::
-
-::: piege
-Ne **jamais** charger un fichier de configuration avec `source` s'il n'est pas
-sous ton contrôle exclusif : une ligne `retention_jours=7; rm -rf /` serait
-exécutée. Le parsing explicite, lui, ne peut rien exécuter.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ne **jamais** charger un fichier de configuration avec `source` s'il n'est pas
+> sous ton contrôle exclusif : une ligne `retention_jours=7; rm -rf /` serait
+> exécutée. Le parsing explicite, lui, ne peut rien exécuter.
 
 ---
 
-**E7.11** — *Fonction `pair_impair` : résultat sur stdout, code par `return`.*
+<a id="e7-11"></a>**[E7.11](README.md#e7-11)** — *Fonction `pair_impair` : résultat sur stdout, code par `return`.*
 
 ```bash
 pair_impair() {
@@ -1163,27 +1225,28 @@ if pair_impair 4 > /dev/null; then echo "4 est pair"; fi
 mot=$(pair_impair 7); echo "sortie=$mot code=$?"   # sortie=impair code=1
 ```
 
-::: pourquoi
-Les deux canaux ne se mélangent pas parce qu'ils ne voyagent pas ensemble.
-Utilisée en condition, la fonction est évaluée pour son **code** et sa sortie
-part sur le terminal (d'où le `> /dev/null`). Capturée par `$( )`, sa sortie est
-récupérée dans la variable, et `$?` reste celui de la fonction — parce que le
-code de retour d'une affectation simple est celui de sa substitution de
-commande.
-
-Ce confort disparaît dès que l'affectation est préfixée par une commande :
-`local mot=$(pair_impair 7)` donne `$?` = 0, celui de `local` (Q7.6). C'est
-pourquoi on écrit `local mot` puis `mot=$(pair_impair 7)`.
-
-Pour traiter explicitement l'échec : `mot=$(pair_impair 7) || rc=$?`. C'est aussi pourquoi
-une fonction ne doit jamais écrire ses messages de journal sur stdout : ils
-finiraient dans la variable de l'appelant. Journal sur **stderr**, résultat sur
-**stdout**.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les deux canaux ne se mélangent pas parce qu'ils ne voyagent pas ensemble.
+> Utilisée en condition, la fonction est évaluée pour son **code** et sa sortie
+> part sur le terminal (d'où le `> /dev/null`). Capturée par `$( )`, sa sortie est
+> récupérée dans la variable, et `$?` reste celui de la fonction — parce que le
+> code de retour d'une affectation simple est celui de sa substitution de
+> commande.
+>
+> Ce confort disparaît dès que l'affectation est préfixée par une commande :
+> `local mot=$(pair_impair 7)` donne `$?` = 0, celui de `local` (Q7.6). C'est
+> pourquoi on écrit `local mot` puis `mot=$(pair_impair 7)`.
+>
+> Pour traiter explicitement l'échec : `mot=$(pair_impair 7) || rc=$?`. C'est aussi pourquoi
+> une fonction ne doit jamais écrire ses messages de journal sur stdout : ils
+> finiraient dans la variable de l'appelant. Journal sur **stderr**, résultat sur
+> **stdout**.
 
 ---
 
-**E7.12** — *Tableau des noms de journaux.*
+<a id="e7-12"></a>**[E7.12](README.md#e7-12)** — *Tableau des noms de journaux.*
 
 ```bash
 shopt -s nullglob
@@ -1198,19 +1261,20 @@ for i in "${!journaux[@]}"; do
 done
 ```
 
-::: pourquoi
-`journaux+=("$x")` ajoute **un** élément, quotes comprises ; `journaux+=($x)`
-en ajouterait autant que de mots. `${!journaux[@]}` donne les indices, ce qui
-est plus sûr que `for ((i=0; i<${#journaux[@]}; i++))` dès que le tableau est
-creux (un `unset journaux[2]` laisse un trou sans décaler les autres).
-
-`shopt -s nullglob` évite l'élément fantôme `~/lab07/logs/*.log` quand le
-répertoire est vide.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `journaux+=("$x")` ajoute **un** élément, quotes comprises ; `journaux+=($x)`
+> en ajouterait autant que de mots. `${!journaux[@]}` donne les indices, ce qui
+> est plus sûr que `for ((i=0; i<${#journaux[@]}; i++))` dès que le tableau est
+> creux (un `unset journaux[2]` laisse un trou sans décaler les autres).
+>
+> `shopt -s nullglob` évite l'élément fantôme `~/lab07/logs/*.log` quand le
+> répertoire est vide.
 
 ---
 
-**E7.13** — *Répertoire temporaire, avec et sans `trap`.*
+<a id="e7-13"></a>**[E7.13](README.md#e7-13)** — *Répertoire temporaire, avec et sans `trap`.*
 
 ```bash
 # version sans filet
@@ -1249,21 +1313,22 @@ rc=127
 /tmp/essai.0skN
 ```
 
-::: pourquoi
-La leçon n'est pas « mettre un `rm` à la fin » — on en met toujours un, et il
-n'est jamais atteint le jour où ça compte. `trap ... EXIT` déplace le nettoyage
-d'un **point** du code vers un **évènement** : il s'exécute quel que soit le
-chemin de sortie, y compris `exit 3` au milieu, `set -e`, ou Ctrl-C.
-
-Deux précautions : poser le trap **juste après** la création (pas avant, `$T`
-serait vide), et écrire le nettoyage de façon défensive
-(`[ -n "$T" ] && [ -d "$T" ] && rm -rf -- "$T"`), parce qu'un trap qui échoue
-masque le code de sortie réel.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La leçon n'est pas « mettre un `rm` à la fin » — on en met toujours un, et il
+> n'est jamais atteint le jour où ça compte. `trap ... EXIT` déplace le nettoyage
+> d'un **point** du code vers un **évènement** : il s'exécute quel que soit le
+> chemin de sortie, y compris `exit 3` au milieu, `set -e`, ou Ctrl-C.
+>
+> Deux précautions : poser le trap **juste après** la création (pas avant, `$T`
+> serait vide), et écrire le nettoyage de façon défensive
+> (`[ -n "$T" ] && [ -d "$T" ] && rm -rf -- "$T"`), parce qu'un trap qui échoue
+> masque le code de sortie réel.
 
 ---
 
-**E7.14** — *`essai-signaux.sh` : 130 sur INT, 143 sur TERM.*
+<a id="e7-14"></a>**[E7.14](README.md#e7-14)** — *`essai-signaux.sh` : 130 sur INT, 143 sur TERM.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1283,21 +1348,22 @@ $ ./essai-signaux.sh & sleep 3; kill -TERM %1; wait %1; echo $?
 143
 ```
 
-::: pourquoi
-La convention `128 + numéro_de_signal` vient du shell lui-même : quand une
-commande est tuée par le signal `n`, bash rapporte `128+n` dans `$?`. En la
-reproduisant explicitement, ton script reste lisible par tout ce qui l'appelle
-(supervision, ordonnanceur, `make`) : 130 = interrompu au clavier, 143 = arrêt
-demandé par systemd ou un `kill` propre, 137 = tué en SIGKILL (souvent l'OOM
-killer, à reconnaître d'un coup d'œil).
-
-Sans trap, le comportement par défaut donne les mêmes codes, mais sans message
-ni nettoyage. Le trap sert à faire quelque chose **avant** de partir.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La convention `128 + numéro_de_signal` vient du shell lui-même : quand une
+> commande est tuée par le signal `n`, bash rapporte `128+n` dans `$?`. En la
+> reproduisant explicitement, ton script reste lisible par tout ce qui l'appelle
+> (supervision, ordonnanceur, `make`) : 130 = interrompu au clavier, 143 = arrêt
+> demandé par systemd ou un `kill` propre, 137 = tué en SIGKILL (souvent l'OOM
+> killer, à reconnaître d'un coup d'œil).
+>
+> Sans trap, le comportement par défaut donne les mêmes codes, mais sans message
+> ni nettoyage. Le trap sert à faire quelque chose **avant** de partir.
 
 ---
 
-**E7.15** — *Cinq défauts de `~/lab07/casse/compte-erreurs.sh`.*
+<a id="e7-15"></a>**[E7.15](README.md#e7-15)** — *Cinq défauts de `~/lab07/casse/compte-erreurs.sh`.*
 
 Le script livré :
 
@@ -1336,17 +1402,18 @@ for f in "$DIR"/*.log; do
 done
 ```
 
-::: piege
-Le quatrième défaut est le plus vicieux : `[ $n > 10 ]` ne provoque **aucune**
-erreur. Le shell voit une redirection, crée un fichier nommé `10` dans le
-répertoire courant, et `[ $n ]` est vrai dès que `$n` est non vide — donc la
-condition est toujours vraie. Le script « marche », il alerte simplement sur
-tous les fichiers. Et il sème des fichiers nommés `10` partout.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le quatrième défaut est le plus vicieux : `[ $n > 10 ]` ne provoque **aucune**
+> erreur. Le shell voit une redirection, crée un fichier nommé `10` dans le
+> répertoire courant, et `[ $n ]` est vrai dès que `$n` est non vide — donc la
+> condition est toujours vraie. Le script « marche », il alerte simplement sur
+> tous les fichiers. Et il sème des fichiers nommés `10` partout.
 
 ---
 
-**E7.16** — *Réécrire `menage.sh` sans danger.*
+<a id="e7-16"></a>**[E7.16](README.md#e7-16)** — *Réécrire `menage.sh` sans danger.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1385,21 +1452,22 @@ $ ./menage.sh ../../etc
 cible invalide : ../../etc
 ```
 
-::: pourquoi
-Quatre gardes, quatre familles d'attaque. Le `${1:?}` traite l'argument absent
-**et** vide, ce qui neutralise le `rm -rf "$CIBLE/*"` sur racine vide. Le
-premier `case` rejette la traversée de répertoires (`../`). Le `readlink -f`
-résout les liens symboliques **avant** de vérifier le périmètre : sans lui, un
-`ln -s / /tmp/travail/piege` suffirait à sortir de la zone. Enfin, `find` +
-`xargs -0 -r` ne supprime que ce qui a été listé, et `-r` évite d'appeler `rm`
-sans argument si la liste est vide.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Quatre gardes, quatre familles d'attaque. Le `${1:?}` traite l'argument absent
+> **et** vide, ce qui neutralise le `rm -rf "$CIBLE/*"` sur racine vide. Le
+> premier `case` rejette la traversée de répertoires (`../`). Le `readlink -f`
+> résout les liens symboliques **avant** de vérifier le périmètre : sans lui, un
+> `ln -s / /tmp/travail/piege` suffirait à sortir de la zone. Enfin, `find` +
+> `xargs -0 -r` ne supprime que ce qui a été listé, et `-r` évite d'appeler `rm`
+> sans argument si la liste est vide.
 
 ---
 
 ## 7.6 Labs
 
-### **L7.1** — *Rapport d'erreurs : squelette de script de service.*
+### <a id="l7-1"></a>**[L7.1](README.md#l7-1)** — *Rapport d'erreurs : squelette de script de service.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1502,41 +1570,43 @@ $ echo $?
 1
 ```
 
-::: pourquoi
-Trois décisions de conception portent tout le script.
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois décisions de conception portent tout le script.
+>
+> **Le canal de sortie.** Le rapport va sur stdout, le journal sur stderr. C'est
+> ce qui rend `rapport-erreurs.sh > rapport.csv` utilisable directement dans une
+> chaîne de traitement, tout en gardant les messages visibles à l'écran. La
+> convention UNIX est constante : stdout porte le **résultat exploitable**, stderr
+> porte le **récit de l'exécution**.
+>
+> **Le tri.** On construit les lignes dans l'ordre `nombre;nom` pour pouvoir trier
+> numériquement sur le premier champ (`sort -k1,1nr`), puis on inverse les champs
+> à la sortie avec un `while IFS=';' read`. Comme `read` affecte tout le reste de
+> la ligne à sa dernière variable, un nom contenant un `;` ne casserait pas la
+> relecture.
+>
+> **Le stockage en tableau.** `lignes+=("$n;${f##*/}")` accumule en mémoire au
+> lieu d'écrire dans un fichier temporaire : pas de nettoyage à prévoir, pas de
+> course entre instances, et le quoting protège le nom à espace de bout en bout.
+>
+> Le code de sortie, enfin, est `$depasse` : 0 ou 1, directement exploitable par
+> une sonde de supervision (`0 = OK`, `1 = WARNING`), les codes 2 et 3 étant
+> réservés aux erreurs d'invocation.
 
-**Le canal de sortie.** Le rapport va sur stdout, le journal sur stderr. C'est
-ce qui rend `rapport-erreurs.sh > rapport.csv` utilisable directement dans une
-chaîne de traitement, tout en gardant les messages visibles à l'écran. La
-convention UNIX est constante : stdout porte le **résultat exploitable**, stderr
-porte le **récit de l'exécution**.
-
-**Le tri.** On construit les lignes dans l'ordre `nombre;nom` pour pouvoir trier
-numériquement sur le premier champ (`sort -k1,1nr`), puis on inverse les champs
-à la sortie avec un `while IFS=';' read`. Comme `read` affecte tout le reste de
-la ligne à sa dernière variable, un nom contenant un `;` ne casserait pas la
-relecture.
-
-**Le stockage en tableau.** `lignes+=("$n;${f##*/}")` accumule en mémoire au
-lieu d'écrire dans un fichier temporaire : pas de nettoyage à prévoir, pas de
-course entre instances, et le quoting protège le nom à espace de bout en bout.
-
-Le code de sortie, enfin, est `$depasse` : 0 ou 1, directement exploitable par
-une sonde de supervision (`0 = OK`, `1 = WARNING`), les codes 2 et 3 étant
-réservés aux erreurs d'invocation.
-:::
-
-::: piege
-`grep -c` renvoie **1** quand il ne compte rien, ce qui tue le script sous
-`set -e`. Le `|| true` neutralise ce cas particulier sans masquer une vraie
-erreur de lecture (qui renverrait 2). Autre piège évité : `shopt -s nullglob`,
-sans lequel un répertoire sans `.log` produirait une itération sur la chaîne
-littérale `rep/*.log` et un `grep` sur un fichier inexistant.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `grep -c` renvoie **1** quand il ne compte rien, ce qui tue le script sous
+> `set -e`. Le `|| true` neutralise ce cas particulier sans masquer une vraie
+> erreur de lecture (qui renverrait 2). Autre piège évité : `shopt -s nullglob`,
+> sans lequel un répertoire sans `.log` produirait une itération sur la chaîne
+> littérale `rep/*.log` et un `grep` sur un fichier inexistant.
 
 ---
 
-### **L7.2** — *Exploiter l'inventaire CSV.*
+### <a id="l7-2"></a>**[L7.2](README.md#l7-2)** — *Exploiter l'inventaire CSV.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1609,41 +1679,43 @@ mkdir -p "$(dirname "$RAPPORT")"
 } | tee "$RAPPORT"
 ```
 
-::: pourquoi
-Quatre mécanismes se combinent, un par piège de l'énoncé.
+> [!NOTE]
+> **Pourquoi**
+>
+> Quatre mécanismes se combinent, un par piège de l'énoncé.
+>
+> **`IFS=';' read -r ... reste`** : cinq variables pour quatre champs attendus.
+> Comme `read` verse **tout le reste de la ligne** dans sa dernière variable,
+> `reste` est vide pour les lignes normales et contient `a-decommissionner` pour
+> `cache-01`. C'est donc le test `[ -z "$reste" ]` qui détecte le champ
+> surnuméraire — sans compter les champs, sans `awk`.
+>
+> **`|| [ -n "$hote" ]`** : `runner-01` est la dernière ligne et n'a pas de `\n`
+> final. `read` remplit les variables puis renvoie un code non nul ; la condition
+> de secours force un dernier tour de boucle. Sans elle, le total est 9 et
+> `outillage` vaut 1. C'est l'écart que les trois collègues de l'énoncé n'avaient
+> pas vu.
+>
+> **`${par_env["$env"]:-0}`** : à la première rencontre d'un environnement, la
+> case n'existe pas ; `:-0` fournit la valeur de départ. Sans elle, l'arithmétique
+> sur une chaîne vide fonctionnerait par chance, mais `set -u` la refuserait.
+>
+> **Le regroupement `{ ... } | tee`** : une seule construction du rapport,
+> envoyée simultanément à l'écran et au fichier. Pas de double logique, pas de
+> risque de divergence entre ce qu'on voit et ce qu'on archive.
 
-**`IFS=';' read -r ... reste`** : cinq variables pour quatre champs attendus.
-Comme `read` verse **tout le reste de la ligne** dans sa dernière variable,
-`reste` est vide pour les lignes normales et contient `a-decommissionner` pour
-`cache-01`. C'est donc le test `[ -z "$reste" ]` qui détecte le champ
-surnuméraire — sans compter les champs, sans `awk`.
-
-**`|| [ -n "$hote" ]`** : `runner-01` est la dernière ligne et n'a pas de `\n`
-final. `read` remplit les variables puis renvoie un code non nul ; la condition
-de secours force un dernier tour de boucle. Sans elle, le total est 9 et
-`outillage` vaut 1. C'est l'écart que les trois collègues de l'énoncé n'avaient
-pas vu.
-
-**`${par_env["$env"]:-0}`** : à la première rencontre d'un environnement, la
-case n'existe pas ; `:-0` fournit la valeur de départ. Sans elle, l'arithmétique
-sur une chaîne vide fonctionnerait par chance, mais `set -u` la refuserait.
-
-**Le regroupement `{ ... } | tee`** : une seule construction du rapport,
-envoyée simultanément à l'écran et au fichier. Pas de double logique, pas de
-risque de divergence entre ce qu'on voit et ce qu'on archive.
-:::
-
-::: piege
-La redirection `< "$CSV"` est posée sur le `done`, donc la boucle s'exécute dans
-le **shell courant** : `par_env` et `total` survivent. Écrit
-`cat "$CSV" | while ... done`, le même code afficherait 0 partout (Q7.5). C'est
-la faute la plus fréquente sur ce type de script, et elle est indétectable à la
-lecture rapide puisque la boucle « marche ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> La redirection `< "$CSV"` est posée sur le `done`, donc la boucle s'exécute dans
+> le **shell courant** : `par_env` et `total` survivent. Écrit
+> `cat "$CSV" | while ... done`, le même code afficherait 0 partout (Q7.5). C'est
+> la faute la plus fréquente sur ce type de script, et elle est indétectable à la
+> lecture rapide puisque la boucle « marche ».
 
 ---
 
-### **L7.3** — *Collecte robuste : verrou, espace jetable, nettoyage garanti.*
+### <a id="l7-3"></a>**[L7.3](README.md#l7-3)** — *Collecte robuste : verrou, espace jetable, nettoyage garanti.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1771,45 +1843,47 @@ mv -f -- "$TRAVAIL/archive.tar.gz" "$ARCHIVE"
 log_info "$nb journaux archivés dans $ARCHIVE"
 ```
 
-::: pourquoi
-**Le verrou avant tout le reste.** `exec 9>"$LOCK"` ouvre le descripteur pour la
-durée du script ; `flock -n 9` échoue immédiatement si une autre instance le
-détient. Placer cette séquence **avant** la création de l'espace de travail
-évite qu'une instance refusée ne crée puis ne supprime un répertoire pour rien.
-Rien à nettoyer ensuite : le noyau libère le verrou à la mort du processus,
-`kill -9` compris.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Le verrou avant tout le reste.** `exec 9>"$LOCK"` ouvre le descripteur pour la
+> durée du script ; `flock -n 9` échoue immédiatement si une autre instance le
+> détient. Placer cette séquence **avant** la création de l'espace de travail
+> évite qu'une instance refusée ne crée puis ne supprime un répertoire pour rien.
+> Rien à nettoyer ensuite : le noyau libère le verrou à la mort du processus,
+> `kill -9` compris.
+>
+> **Le trap posé juste après `mktemp`.** L'ordre est critique : entre la création
+> et la pose du trap, une interruption laisserait un orphelin. Et `nettoyer`
+> commence par `local rc=$?` afin de **préserver le code de sortie** : sans cette
+> ligne, le `rm -rf` réussi écraserait un code d'erreur par 0.
+>
+> **Le `mourir` qui désarme `ERR`.** `exit 3` ne déclenche pas lui-même le trap `ERR` (et `[ -d ... ] ||` non plus : un test suivi de `||` est exempté), et sans `set -E` le trap `ERR` n'est même pas hérité par les fonctions. Le `trap - ERR` est donc une précaution, utile dès qu'on ajoute `set -E` : un échec secondaire dans `mourir` produirait sinon un second message « échec ligne N » qui noierait le vrai diagnostic.
+>
+> **L'archive écrite à côté puis déplacée.** `mv` dans le même système de fichiers
+> est un `rename(2)`, donc atomique : l'archive finale n'existe jamais dans un
+> état partiel. Un consommateur qui surveille `$DEST` ne verra jamais un fichier
+> en cours d'écriture. C'est le même patron que pour les fichiers de
+> configuration : écrire à côté, `mv` par-dessus.
+>
+> **Le duo `find -print0` / `read -r -d ''`.** L'octet nul est le seul caractère
+> interdit dans un nom de fichier : c'est donc le seul séparateur sûr. La
+> substitution de processus `< <(...)` garde la boucle dans le shell courant —
+> avec un pipe, `nb` resterait à 0.
 
-**Le trap posé juste après `mktemp`.** L'ordre est critique : entre la création
-et la pose du trap, une interruption laisserait un orphelin. Et `nettoyer`
-commence par `local rc=$?` afin de **préserver le code de sortie** : sans cette
-ligne, le `rm -rf` réussi écraserait un code d'erreur par 0.
-
-**Le `mourir` qui désarme `ERR`.** `exit 3` ne déclenche pas lui-même le trap `ERR` (et `[ -d ... ] ||` non plus : un test suivi de `||` est exempté), et sans `set -E` le trap `ERR` n'est même pas hérité par les fonctions. Le `trap - ERR` est donc une précaution, utile dès qu'on ajoute `set -E` : un échec secondaire dans `mourir` produirait sinon un second message « échec ligne N » qui noierait le vrai diagnostic.
-
-**L'archive écrite à côté puis déplacée.** `mv` dans le même système de fichiers
-est un `rename(2)`, donc atomique : l'archive finale n'existe jamais dans un
-état partiel. Un consommateur qui surveille `$DEST` ne verra jamais un fichier
-en cours d'écriture. C'est le même patron que pour les fichiers de
-configuration : écrire à côté, `mv` par-dessus.
-
-**Le duo `find -print0` / `read -r -d ''`.** L'octet nul est le seul caractère
-interdit dans un nom de fichier : c'est donc le seul séparateur sûr. La
-substitution de processus `< <(...)` garde la boucle dans le shell courant —
-avec un pipe, `nb` resterait à 0.
-:::
-
-::: piege
-Deux erreurs classiques que cette version évite. D'abord `tar` qui archive le
-répertoire dans lequel il écrit son propre fichier : GNU tar se plaint
-(`file changed as we read it`) et sort en 1 — d'où le sous-répertoire `contenu`
-séparé. Ensuite `--dry-run` qui « ne fait presque rien » : ici il sort avant le
-moindre `mkdir` sur la destination, ce que le contrôle `check_M07_03.sh` vérifie
-explicitement.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux erreurs classiques que cette version évite. D'abord `tar` qui archive le
+> répertoire dans lequel il écrit son propre fichier : GNU tar se plaint
+> (`file changed as we read it`) et sort en 1 — d'où le sous-répertoire `contenu`
+> séparé. Ensuite `--dry-run` qui « ne fait presque rien » : ici il sort avant le
+> moindre `mkdir` sur la destination, ce que le contrôle `check_M07_03.sh` vérifie
+> explicitement.
 
 ---
 
-### **L7.4** — *Enveloppe d'exécution : journalisation, codes, signaux.*
+### <a id="l7-4"></a>**[L7.4](README.md#l7-4)** — *Enveloppe d'exécution : journalisation, codes, signaux.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1902,50 +1976,52 @@ $ ./exec-tracee.sh -- sleep 30 & sleep 1; kill -TERM %1; wait %1; echo $?
 $ journalctl -t factura -n 3 --no-pager
 ```
 
-::: pourquoi
-**Pourquoi la commande tourne en arrière-plan.** Si l'enveloppe exécutait
-`"$@"` au premier plan, elle resterait bloquée dans `execve`/`wait` interne et
-ne pourrait pas traiter son propre trap avant la fin de la commande. Avec
-`"$@" &` puis `wait "$ENFANT"`, un signal interrompt le `wait`, bash exécute le
-gestionnaire, qui peut alors tuer proprement le fils, tracer et sortir avec le
-bon code. C'est le patron standard de tout script d'enveloppe (`entrypoint.sh`
-de conteneur, wrapper d'ordonnanceur).
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pourquoi la commande tourne en arrière-plan.** Si l'enveloppe exécutait
+> `"$@"` au premier plan, elle resterait bloquée dans `execve`/`wait` interne et
+> ne pourrait pas traiter son propre trap avant la fin de la commande. Avec
+> `"$@" &` puis `wait "$ENFANT"`, un signal interrompt le `wait`, bash exécute le
+> gestionnaire, qui peut alors tuer proprement le fils, tracer et sortir avec le
+> bon code. C'est le patron standard de tout script d'enveloppe (`entrypoint.sh`
+> de conteneur, wrapper d'ordonnanceur).
+>
+> **Pourquoi le gestionnaire envoie `TERM` même sur `INT`.** Dans un shell non interactif, une commande lancée avec `&` démarre avec `SIGINT` **ignoré** (règle POSIX), et cette disposition survit à l'`exec` : `kill -INT "$ENFANT"` ne ferait rien, le `wait` bloquerait jusqu'à la fin naturelle de la commande et le Ctrl-C paraîtrait « sans effet ». `TERM`, lui, n'est jamais ignoré d'office. **Pourquoi `set`** `-e` **est absent.** Ici, l'échec de la commande encapsulée est un
+> **résultat**, pas une erreur du script : il faut le journaliser et le propager,
+> pas interrompre l'enveloppe. On garde `set -u` et `pipefail`, qui protègent le
+> code de l'enveloppe elle-même. Choisir ses options selon le rôle du script fait
+> partie du métier ; `set -euo pipefail` n'est pas un réflexe aveugle.
+>
+> **Pourquoi `wait "$ENFANT" || rc=$?`.** `wait` renvoie le code du processus
+> attendu. Le `|| rc=$?` capture ce code sans laisser `set -u`/`pipefail`
+> interférer, et surtout sans que la ligne suivante n'écrase `$?`.
+>
+> **Pourquoi le journal va sur stderr.** L'enveloppe doit être transparente : ce
+> que produit la commande sur stdout doit rester exactement ce qu'un appelant
+> attend. `exec-tracee.sh -- mysqldump ... > dump.sql` doit produire un dump
+> propre, pas un dump précédé d'une ligne d'horodatage.
+>
+> **`logger`** envoie la même information à syslog avec une étiquette
+> (`-t`) et une priorité (`-p user.info` / `user.err`), ce qui la rend visible à
+> `journalctl -t factura` et exploitable par une collecte centralisée, sans que le
+> script ait à connaître la destination finale.
 
-**Pourquoi le gestionnaire envoie `TERM` même sur `INT`.** Dans un shell non interactif, une commande lancée avec `&` démarre avec `SIGINT` **ignoré** (règle POSIX), et cette disposition survit à l'`exec` : `kill -INT "$ENFANT"` ne ferait rien, le `wait` bloquerait jusqu'à la fin naturelle de la commande et le Ctrl-C paraîtrait « sans effet ». `TERM`, lui, n'est jamais ignoré d'office. **Pourquoi `set`** `-e` **est absent.** Ici, l'échec de la commande encapsulée est un
-**résultat**, pas une erreur du script : il faut le journaliser et le propager,
-pas interrompre l'enveloppe. On garde `set -u` et `pipefail`, qui protègent le
-code de l'enveloppe elle-même. Choisir ses options selon le rôle du script fait
-partie du métier ; `set -euo pipefail` n'est pas un réflexe aveugle.
-
-**Pourquoi `wait "$ENFANT" || rc=$?`.** `wait` renvoie le code du processus
-attendu. Le `|| rc=$?` capture ce code sans laisser `set -u`/`pipefail`
-interférer, et surtout sans que la ligne suivante n'écrase `$?`.
-
-**Pourquoi le journal va sur stderr.** L'enveloppe doit être transparente : ce
-que produit la commande sur stdout doit rester exactement ce qu'un appelant
-attend. `exec-tracee.sh -- mysqldump ... > dump.sql` doit produire un dump
-propre, pas un dump précédé d'une ligne d'horodatage.
-
-**`logger`** envoie la même information à syslog avec une étiquette
-(`-t`) et une priorité (`-p user.info` / `user.err`), ce qui la rend visible à
-`journalctl -t factura` et exploitable par une collecte centralisée, sans que le
-script ait à connaître la destination finale.
-:::
-
-::: piege
-`kill "$ENFANT"` ne tue que le processus direct. Si la commande encapsulée lance
-elle-même des fils (un `make -j`, un pipeline), ils survivent. La parade
-complète consiste à créer un groupe de processus (`set -m`, puis
-`kill -TERM -"$ENFANT"` avec le signe moins), ou à déléguer à
-`systemd-run --scope`. À mentionner en revue de code : l'enveloppe simple couvre
-le cas courant, pas les arbres de processus.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `kill "$ENFANT"` ne tue que le processus direct. Si la commande encapsulée lance
+> elle-même des fils (un `make -j`, un pipeline), ils survivent. La parade
+> complète consiste à créer un groupe de processus (`set -m`, puis
+> `kill -TERM -"$ENFANT"` avec le signe moins), ou à déléguer à
+> `systemd-run --scope`. À mentionner en revue de code : l'enveloppe simple couvre
+> le cas courant, pas les arbres de processus.
 
 ---
 
 ## 7.7 Break & Fix
 
-### **BF7.1** — *La purge nocturne a tout effacé.*
+### <a id="bf7-1"></a>**[BF7.1](README.md#bf7-1)** — *La purge nocturne a tout effacé.*
 
 **Cause racine** : la clé lue dans `purge.conf` a été renommée
 (`sous_dossier` → `sous_repertoire`) sans que le script soit adapté.
@@ -2052,33 +2128,35 @@ factura-2026-09-14.tar.gz  factura-2026-09-17.tar.gz
    **fichiers sélectionnés par un critère**, plus jamais une arborescence
    désignée par un chemin construit.
 
-::: pourquoi
-Le mécanisme exact de la catastrophe mérite d'être énoncé lentement. Les quotes
-ne servent à rien ici : `"$BASE/$SOUS"/*` avec `SOUS` vide donne bien
-`"$BASE/"/*`, et le shell développe le glob sur le contenu de `$BASE`. Le
-problème n'est pas le quoting, c'est qu'**une variable vide s'efface sans laisser
-de trace** dans une chaîne. Un chemin construit par concaténation n'est jamais
-sûr tant que chacun de ses composants n'a pas été validé.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme exact de la catastrophe mérite d'être énoncé lentement. Les quotes
+> ne servent à rien ici : `"$BASE/$SOUS"/*` avec `SOUS` vide donne bien
+> `"$BASE/"/*`, et le shell développe le glob sur le contenu de `$BASE`. Le
+> problème n'est pas le quoting, c'est qu'**une variable vide s'efface sans laisser
+> de trace** dans une chaîne. Un chemin construit par concaténation n'est jamais
+> sûr tant que chacun de ses composants n'a pas été validé.
+>
+> Le second symptôme (le nom à espace) est indépendant : `for f in $(ls)` découpe
+> `export final.tar.gz` en deux mots, et le `find -name "$f"` qui suit ne trouve
+> ni `export` ni `final.tar.gz`. Le fichier n'était donc jamais **signalé** comme
+> vieux — mais il était bel et bien supprimé par le `rm -rf` final, ce qui montre
+> qu'un script peut être faux sur son diagnostic et destructeur en même temps.
 
-Le second symptôme (le nom à espace) est indépendant : `for f in $(ls)` découpe
-`export final.tar.gz` en deux mots, et le `find -name "$f"` qui suit ne trouve
-ni `export` ni `final.tar.gz`. Le fichier n'était donc jamais **signalé** comme
-vieux — mais il était bel et bien supprimé par le `rm -rf` final, ce qui montre
-qu'un script peut être faux sur son diagnostic et destructeur en même temps.
-:::
-
-::: piege
-Prévention à porter en revue de code : un script de suppression doit avoir un
-mode `--dry-run` **par défaut** et ne détruire que sur option explicite ; il doit
-journaliser le chemin ciblé **avant** d'agir (c'est ce qui a permis le
-diagnostic en une ligne ici) ; et il ne doit jamais utiliser `rm -rf` sur un
-chemin contenant une variable non validée. Le trio `set -u` + `${v:?}` +
-`find -print0` couvre 90 % des incidents de ce type.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Prévention à porter en revue de code : un script de suppression doit avoir un
+> mode `--dry-run` **par défaut** et ne détruire que sur option explicite ; il doit
+> journaliser le chemin ciblé **avant** d'agir (c'est ce qui a permis le
+> diagnostic en une ligne ici) ; et il ne doit jamais utiliser `rm -rf` sur un
+> chemin contenant une variable non validée. Le trio `set -u` + `${v:?}` +
+> `find -print0` couvre 90 % des incidents de ce type.
 
 ---
 
-### **BF7.2** — *La sauvegarde dit OK tous les matins.*
+### <a id="bf7-2"></a>**[BF7.2](README.md#bf7-2)** — *La sauvegarde dit OK tous les matins.*
 
 **Cause racine** : trois mécanismes se cumulent pour transformer un échec réel
 en succès annoncé.
@@ -2181,38 +2259,40 @@ $ echo $?
 0
 ```
 
-::: pourquoi
-Le correctif ne se contente pas d'ajouter `pipefail` : il supprime le pipeline.
-`tar -czf fichier` fait la compression lui-même, il n'y a plus deux codes de
-retour à réconcilier. Quand un pipeline est inévitable
-(`mysqldump | gzip | ssh`), `set -o pipefail` plus `${PIPESTATUS[@]}` restent la
-réponse.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le correctif ne se contente pas d'ajouter `pipefail` : il supprime le pipeline.
+> `tar -czf fichier` fait la compression lui-même, il n'y a plus deux codes de
+> retour à réconcilier. Quand un pipeline est inévitable
+> (`mysqldump | gzip | ssh`), `set -o pipefail` plus `${PIPESTATUS[@]}` restent la
+> réponse.
+>
+> Le fichier illisible n'est plus une surprise : il est **détecté avant**
+> (`find ! -readable`), **signalé** dans le journal, et **exclu explicitement**.
+> Différence essentielle avec l'original : la sauvegarde est désormais
+> volontairement partielle et le dit, au lieu d'être accidentellement partielle et
+> de se taire.
+>
+> La vérification finale compare un **entier** (`stat -c '%s'`, des octets) à un
+> entier, et relit l'archive avec `gzip -t` avant publication. Le `mv` n'a lieu
+> qu'après ces deux contrôles : le coffre ne contient jamais d'archive non
+> vérifiée.
 
-Le fichier illisible n'est plus une surprise : il est **détecté avant**
-(`find ! -readable`), **signalé** dans le journal, et **exclu explicitement**.
-Différence essentielle avec l'original : la sauvegarde est désormais
-volontairement partielle et le dit, au lieu d'être accidentellement partielle et
-de se taire.
-
-La vérification finale compare un **entier** (`stat -c '%s'`, des octets) à un
-entier, et relit l'archive avec `gzip -t` avant publication. Le `mv` n'a lieu
-qu'après ces deux contrôles : le coffre ne contient jamais d'archive non
-vérifiée.
-:::
-
-::: piege
-Prévention : une sauvegarde qui ne se restaure pas n'existe pas. Le contrôle
-minimal est `tar -tzf` (l'archive est lisible de bout en bout) plus une taille
-plancher ; le contrôle sérieux est une restauration périodique dans un
-répertoire jetable, comparée à la source par `diff -r`. Et la supervision doit
-surveiller la **taille** et la **date** de l'archive produite, pas seulement le
-code de retour du script — c'est ce qui aurait levé l'alerte ici dès le premier
-matin.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Prévention : une sauvegarde qui ne se restaure pas n'existe pas. Le contrôle
+> minimal est `tar -tzf` (l'archive est lisible de bout en bout) plus une taille
+> plancher ; le contrôle sérieux est une restauration périodique dans un
+> répertoire jetable, comparée à la source par `diff -r`. Et la supervision doit
+> surveiller la **taille** et la **date** de l'archive produite, pas seulement le
+> code de retour du script — c'est ce qui aurait levé l'alerte ici dès le premier
+> matin.
 
 ---
 
-### **BF7.3** — *Le déploiement ne rend plus la main.*
+### <a id="bf7-3"></a>**[BF7.3](README.md#bf7-3)** — *Le déploiement ne rend plus la main.*
 
 **Quatre symptômes, quatre mécanismes distincts.**
 
@@ -2336,33 +2416,35 @@ $ echo $?
 0
 ```
 
-::: pourquoi
-Le point commun des quatre défauts : **le script faisait confiance à ses
-entrées**. L'option qui ne consomme pas d'argument, la version qu'on suppose
-entière, le répertoire temporaire qu'on suppose libre, le chemin qu'on suppose
-sans espace. La version corrigée remplace chaque supposition par une
-vérification explicite, et chaque construction fragile par sa variante sûre :
-`shift` dans toutes les branches, `case` pour les motifs de chaîne, `mktemp -d`
-plus `trap`, quoting systématique.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point commun des quatre défauts : **le script faisait confiance à ses
+> entrées**. L'option qui ne consomme pas d'argument, la version qu'on suppose
+> entière, le répertoire temporaire qu'on suppose libre, le chemin qu'on suppose
+> sans espace. La version corrigée remplace chaque supposition par une
+> vérification explicite, et chaque construction fragile par sa variante sûre :
+> `shift` dans toutes les branches, `case` pour les motifs de chaîne, `mktemp -d`
+> plus `trap`, quoting systématique.
+>
+> Le passage de `cp` à `install -m 644` mérite d'être noté : il pose les droits en
+> une opération, ce qui évite la fenêtre pendant laquelle le fichier déployé
+> existe avec les droits hérités du `umask`.
 
-Le passage de `cp` à `install -m 644` mérite d'être noté : il pose les droits en
-une opération, ce qui évite la fenêtre pendant laquelle le fichier déployé
-existe avec les droits hérités du `umask`.
-:::
-
-::: piege
-Prévention : `shellcheck` ne détecte en une seconde que le défaut de quoting
-(SC2086 sur `$FICHIER`, `$TMP` et `$HOOK`), qui couvre le quatrième symptôme. Les trois autres lui échappent : `-eq` sur une variable quotée dont il ne connaît pas la valeur, le nom temporaire fixe, et le `shift` manquant — ce dernier ne se voit qu'à l'exécution, mais un test de non-régression d'une ligne
-(`timeout 5 ./deploy-conf.sh --verbeux ... || echo "boucle ?"`) le détecte. La
-règle d'équipe qui en découle : aucun script ne part en production sans passer
-shellcheck **et** sans un essai avec chaque option documentée.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Prévention : `shellcheck` ne détecte en une seconde que le défaut de quoting
+> (SC2086 sur `$FICHIER`, `$TMP` et `$HOOK`), qui couvre le quatrième symptôme. Les trois autres lui échappent : `-eq` sur une variable quotée dont il ne connaît pas la valeur, le nom temporaire fixe, et le `shift` manquant — ce dernier ne se voit qu'à l'exécution, mais un test de non-régression d'une ligne
+> (`timeout 5 ./deploy-conf.sh --verbeux ... || echo "boucle ?"`) le détecte. La
+> règle d'équipe qui en découle : aucun script ne part en production sans passer
+> shellcheck **et** sans un essai avec chaque option documentée.
 
 ---
 
 ## 7.8 Défi du module
 
-**D7 — Script de sauvegarde de qualité production**
+<a id="d7"></a>**[D7](README.md#d7) — Script de sauvegarde de qualité production**
 
 ```bash
 #!/usr/bin/env bash
@@ -2572,59 +2654,68 @@ log_info "rapport écrit : $RAPPORT"
 exit 0
 ```
 
-::: pourquoi
-**L'ordre `tar` → vérification → `mv`.** C'est la seule séquence qui garantit
-qu'aucun consommateur ne verra jamais une archive invalide. `tar` écrit dans un
-répertoire jetable ; `tar -tzf` la relit intégralement (une archive tronquée ou
-corrompue échoue ici) ; `mv` la publie par un `rename(2)`, opération **atomique**
-tant que source et destination sont sur le même système de fichiers. Si le
-script meurt entre les deux premières étapes, le `trap EXIT` supprime le
-brouillon et la destination conserve l'archive de la veille — dégradation
-acceptable, jamais de corruption.
+> [!NOTE]
+> **Pourquoi**
+>
+> **L'ordre `tar` → vérification → `mv`.** C'est la seule séquence qui garantit
+> qu'aucun consommateur ne verra jamais une archive invalide. `tar` écrit dans un
+> répertoire jetable ; `tar -tzf` la relit intégralement (une archive tronquée ou
+> corrompue échoue ici) ; `mv` la publie par un `rename(2)`, opération **atomique**
+> tant que source et destination sont sur le même système de fichiers. Si le
+> script meurt entre les deux premières étapes, le `trap EXIT` supprime le
+> brouillon et la destination conserve l'archive de la veille — dégradation
+> acceptable, jamais de corruption.
+>
+> **Le verrou.** `exec 9>"$LOCK"` puis `flock -n 9` est posé avant toute action
+> et couvre la totalité de l'exécution, purge comprise : deux instances ne peuvent
+> pas se marcher dessus au moment où l'une publie et l'autre purge. Le choix de
+> `-n` (échec immédiat, code 9) plutôt que `-w` (attente) se justifie par le
+> contexte : une sauvegarde manquée est visible dans la supervision, alors qu'une
+> file d'attente d'instances masque le problème et finit par saturer la machine.
+>
+> **La séparation des flux.** Le rapport est un fichier, le journal va sur stderr
+> et dans syslog, stdout reste vide. Le script est donc utilisable tel quel par un
+> ordonnanceur qui capture stdout, par un humain qui lit stderr, et par une
+> collecte centralisée qui suit `journalctl -t factura-sauvegarde`.
+>
+> **La rétention en cascade** (option > fichier de conf > défaut codé en dur) est
+> le patron habituel de configuration : elle permet de surcharger ponctuellement
+> sans modifier la conf, tout en gardant un comportement défini si la conf
+> disparaît. Sa validation (`case ... *[!0-9]*`) évite qu'une valeur aberrante
+> n'arrive dans `find -mtime`, où `-mtime +abc` serait une erreur de syntaxe au
+> milieu du traitement.
+>
+> **L'idempotence** tient à deux détails : l'archive du jour porte un nom déduit
+> de la date, donc une seconde exécution la **remplace** au lieu d'accumuler ; et
+> la purge est exprimée par un critère (`-mtime +N`) qui donne le même résultat
+> qu'on l'applique une ou dix fois.
 
-**Le verrou.** `exec 9>"$LOCK"` puis `flock -n 9` est posé avant toute action
-et couvre la totalité de l'exécution, purge comprise : deux instances ne peuvent
-pas se marcher dessus au moment où l'une publie et l'autre purge. Le choix de
-`-n` (échec immédiat, code 9) plutôt que `-w` (attente) se justifie par le
-contexte : une sauvegarde manquée est visible dans la supervision, alors qu'une
-file d'attente d'instances masque le problème et finit par saturer la machine.
+> [!WARNING]
+> **Piège**
+>
+> Les limites à documenter — c'est ce qu'on attend dans
+> `sauvegarde-notes.md`. `tar -czf` sur 800 Go monopolise un cœur pendant des
+> heures : on passerait à `zstd -T0` ou à une sauvegarde incrémentale
+> (`--listed-incremental`), voire à un outil dédié (restic, borg) qui fait la
+> déduplication et le chiffrement. Le `mv` n'est atomique que **dans le même
+> système de fichiers** : si la destination est un point de montage distinct,
+> `mv` devient une copie, et la fenêtre de corruption revient — il faut alors un
+> fichier temporaire **dans la destination** puis un `mv` local. Enfin le script
+> ne vérifie pas l'espace disponible avant d'archiver : `df --output=avail` sur la
+> destination, comparé à la taille de la source, est la pré-condition qui manque
+> le jour où le disque est plein.
 
-**La séparation des flux.** Le rapport est un fichier, le journal va sur stderr
-et dans syslog, stdout reste vide. Le script est donc utilisable tel quel par un
-ordonnanceur qui capture stdout, par un humain qui lit stderr, et par une
-collecte centralisée qui suit `journalctl -t factura-sauvegarde`.
+> [!TIP]
+> **Astuce**
+>
+> Pour le contrôle final, `bash check_M07_05.sh` exécute le script sur une
+> destination temporaire, y dépose une archive de 40 jours, une de 2 jours et un
+> `export final.tar.gz` de 90 jours, puis vérifie que seule la première a disparu.
+> C'est le test de non-régression minimal à garder quand tu adapteras le motif de
+> purge.
 
-**La rétention en cascade** (option > fichier de conf > défaut codé en dur) est
-le patron habituel de configuration : elle permet de surcharger ponctuellement
-sans modifier la conf, tout en gardant un comportement défini si la conf
-disparaît. Sa validation (`case ... *[!0-9]*`) évite qu'une valeur aberrante
-n'arrive dans `find -mtime`, où `-mtime +abc` serait une erreur de syntaxe au
-milieu du traitement.
+<!-- nav:début -->
+---
 
-**L'idempotence** tient à deux détails : l'archive du jour porte un nom déduit
-de la date, donc une seconde exécution la **remplace** au lieu d'accumuler ; et
-la purge est exprimée par un critère (`-mtime +N`) qui donne le même résultat
-qu'on l'applique une ou dix fois.
-:::
-
-::: piege
-Les limites à documenter — c'est ce qu'on attend dans
-`sauvegarde-notes.md`. `tar -czf` sur 800 Go monopolise un cœur pendant des
-heures : on passerait à `zstd -T0` ou à une sauvegarde incrémentale
-(`--listed-incremental`), voire à un outil dédié (restic, borg) qui fait la
-déduplication et le chiffrement. Le `mv` n'est atomique que **dans le même
-système de fichiers** : si la destination est un point de montage distinct,
-`mv` devient une copie, et la fenêtre de corruption revient — il faut alors un
-fichier temporaire **dans la destination** puis un `mv` local. Enfin le script
-ne vérifie pas l'espace disponible avant d'archiver : `df --output=avail` sur la
-destination, comparé à la taille de la source, est la pré-condition qui manque
-le jour où le disque est plein.
-:::
-
-::: astuce
-Pour le contrôle final, `bash check_M07_05.sh` exécute le script sur une
-destination temporaire, y dépose une archive de 40 jours, une de 2 jours et un
-`export final.tar.gz` de 90 jours, puis vérifie que seule la première a disparu.
-C'est le test de non-régression minimal à garder quand tu adapteras le motif de
-purge.
-:::
+[← Module 06](../06-vim-archives/corrige.md) · [Énoncé](README.md) · [Module 08 →](../08-processus-systemd/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

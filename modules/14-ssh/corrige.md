@@ -1,727 +1,771 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 14** · corrigé  
+[← Module 13](../13-reseau-avance/corrige.md) · [Énoncé](README.md) · [Module 15 →](../15-services-applicatifs/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 14 — Corrigé
 
 ## 14.3 Quiz — QCM
 
-**Q14.1** — *Choix d'un type de clé pour un compte de déploiement.*
+<a id="q14-1"></a>**[Q14.1](README.md#q14-1)** — *Choix d'un type de clé pour un compte de déploiement.*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-`ed25519` est un jeu de paramètres **figé** : la courbe est Curve25519, la
-taille est 256 bits, il n'y a rien à choisir. C'est sa première qualité
-opérationnelle : personne ne peut générer une clé trop courte par distraction,
-alors que `ssh-keygen -t rsa` sans `-b` donne encore 3072 bits et que beaucoup
-de documentations traînent avec `-b 1024`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `ed25519` est un jeu de paramètres **figé** : la courbe est Curve25519, la
+> taille est 256 bits, il n'y a rien à choisir. C'est sa première qualité
+> opérationnelle : personne ne peut générer une clé trop courte par distraction,
+> alors que `ssh-keygen -t rsa` sans `-b` donne encore 3072 bits et que beaucoup
+> de documentations traînent avec `-b 1024`.
+>
+> Sur le fond cryptographique : une clé `ed25519` de 256 bits offre environ
+> 128 bits de sécurité, soit l'équivalent d'un RSA de 3072 bits. RSA 4096 monte à
+> ~150 bits — un gain réel mais sans intérêt pratique, payé par des signatures
+> plus lentes et une clé publique de 700 octets contre 68. Sur un parc où chaque
+> connexion signe, et où `authorized_keys` est lu à chaque tentative, ça se voit.
+>
+> L'argument décisif est ailleurs : EdDSA produit une signature **déterministe**,
+> le nonce est dérivé de la clé privée et du message par hachage. Un générateur
+> aléatoire défaillant au moment de la signature ne divulgue donc pas la clé
+> privée, alors que c'est exactement le scénario qui a cassé des implémentations
+> ECDSA par le passé.
+>
+> c) reste vrai : OpenSSH ne connaît `ed25519` que depuis la 6.5 (2014). Face à un
+> commutateur, un vieil appliance ou un HSM limité, RSA 4096 est le repli.
 
-Sur le fond cryptographique : une clé `ed25519` de 256 bits offre environ
-128 bits de sécurité, soit l'équivalent d'un RSA de 3072 bits. RSA 4096 monte à
-~150 bits — un gain réel mais sans intérêt pratique, payé par des signatures
-plus lentes et une clé publique de 700 octets contre 68. Sur un parc où chaque
-connexion signe, et où `authorized_keys` est lu à chaque tentative, ça se voit.
-
-L'argument décisif est ailleurs : EdDSA produit une signature **déterministe**,
-le nonce est dérivé de la clé privée et du message par hachage. Un générateur
-aléatoire défaillant au moment de la signature ne divulgue donc pas la clé
-privée, alors que c'est exactement le scénario qui a cassé des implémentations
-ECDSA par le passé.
-
-c) reste vrai : OpenSSH ne connaît `ed25519` que depuis la 6.5 (2014). Face à un
-commutateur, un vieil appliance ou un HSM limité, RSA 4096 est le repli.
-:::
-
-::: piege
-b) confond longueur de clé et niveau de sécurité : 256 bits sur courbe
-elliptique ne se comparent pas à 256 bits de RSA. d) est faux, toute clé privée
-OpenSSH peut être chiffrée par une passphrase, quel que soit son type — et
-depuis OpenSSH 7.8 le format de stockage est le format OpenSSH natif avec
-dérivation `bcrypt_pbkdf`, bien plus résistant au cassage hors ligne que
-l'ancien format PEM chiffré en MD5+3DES.
-:::
+> [!WARNING]
+> **Piège**
+>
+> b) confond longueur de clé et niveau de sécurité : 256 bits sur courbe
+> elliptique ne se comparent pas à 256 bits de RSA. d) est faux, toute clé privée
+> OpenSSH peut être chiffrée par une passphrase, quel que soit son type — et
+> depuis OpenSSH 7.8 le format de stockage est le format OpenSSH natif avec
+> dérivation `bcrypt_pbkdf`, bien plus résistant au cassage hors ligne que
+> l'ancien format PEM chiffré en MD5+3DES.
 
 ---
 
-**Q14.2** — *`UNPROTECTED PRIVATE KEY FILE`, permissions 0644.*
+<a id="q14-2"></a>**[Q14.2](README.md#q14-2)** — *`UNPROTECTED PRIVATE KEY FILE`, permissions 0644.*
 
 **Réponse : b)** il ignore cette clé et continue avec les autres méthodes.
 
-::: pourquoi
-Le contrôle est purement local et purement préventif : `ssh` refuse de charger
-une clé privée lisible par d'autres comptes de la machine, parce qu'une clé
-lisible est une clé potentiellement déjà copiée. Il l'écarte de la liste des
-identités à proposer, puis poursuit avec ce qui reste : autres `IdentityFile`,
-clés de l'agent, `keyboard-interactive`, mot de passe.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le contrôle est purement local et purement préventif : `ssh` refuse de charger
+> une clé privée lisible par d'autres comptes de la machine, parce qu'une clé
+> lisible est une clé potentiellement déjà copiée. Il l'écarte de la liste des
+> identités à proposer, puis poursuit avec ce qui reste : autres `IdentityFile`,
+> clés de l'agent, `keyboard-interactive`, mot de passe.
+>
+> Conséquence pratique : le symptôme final n'est pas le message d'avertissement,
+> c'est un `Permission denied (publickey)` ou une demande de mot de passe
+> inattendue. Quand un utilisateur te dit « il me redemande mon mot de passe
+> depuis que j'ai restauré mon `/home` », cherche les permissions avant tout le
+> reste : une restauration d'archive sans `-p` ou un `cp` depuis Windows remet
+> couramment du `0644`.
+>
+> Correctif : `chmod 600 ~/.ssh/id_ed25519` (et `700` sur `~/.ssh`).
 
-Conséquence pratique : le symptôme final n'est pas le message d'avertissement,
-c'est un `Permission denied (publickey)` ou une demande de mot de passe
-inattendue. Quand un utilisateur te dit « il me redemande mon mot de passe
-depuis que j'ai restauré mon `/home` », cherche les permissions avant tout le
-reste : une restauration d'archive sans `-p` ou un `cp` depuis Windows remet
-couramment du `0644`.
-
-Correctif : `chmod 600 ~/.ssh/id_ed25519` (et `700` sur `~/.ssh`).
-:::
-
-::: piege
-Le contrôle regarde le mode **et** le propriétaire. Une clé en `0600` mais
-appartenant à root dans le home d'un utilisateur est rejetée de la même façon.
-`ls -l` seul ne suffit donc pas : regarde aussi la colonne propriétaire. Et
-l'avertissement n'apparaît **pas** si la clé est déjà dans l'agent : l'agent
-détient la clé en mémoire, `ssh` n'a pas à lire le fichier.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le contrôle regarde le mode **et** le propriétaire. Une clé en `0600` mais
+> appartenant à root dans le home d'un utilisateur est rejetée de la même façon.
+> `ls -l` seul ne suffit donc pas : regarde aussi la colonne propriétaire. Et
+> l'avertissement n'apparaît **pas** si la clé est déjà dans l'agent : l'agent
+> détient la clé en mémoire, `ssh` n'a pas à lire le fichier.
 
 ---
 
-**Q14.3** — *`Authentication refused: bad ownership or modes` dans le journal serveur.*
+<a id="q14-3"></a>**[Q14.3](README.md#q14-3)** — *`Authentication refused: bad ownership or modes` dans le journal serveur.*
 
 **Réponse : b)** `Permission denied (publickey)`.
 
-::: pourquoi
-C'est le principe même du protocole : le serveur ne dit jamais **pourquoi** une
-authentification échoue. Il ne dira pas « ce compte n'existe pas », ni « tes
-permissions sont mauvaises », ni « ta clé n'est pas dans le fichier ». Toute
-divulgation de ce genre aiderait un attaquant à énumérer les comptes valides ou
-à cartographier la configuration.
+> [!NOTE]
+> **Pourquoi**
+>
+> C'est le principe même du protocole : le serveur ne dit jamais **pourquoi** une
+> authentification échoue. Il ne dira pas « ce compte n'existe pas », ni « tes
+> permissions sont mauvaises », ni « ta clé n'est pas dans le fichier ». Toute
+> divulgation de ce genre aiderait un attaquant à énumérer les comptes valides ou
+> à cartographier la configuration.
+>
+> Le client reçoit donc toujours le même refus générique, et la cause réelle
+> n'existe que dans le journal du serveur. D'où la règle de diagnostic du module :
+> un `Permission denied (publickey)` se diagnostique **sur le serveur**, avec
+> `journalctl -u ssh -n 50`, pas en relançant le client dix fois.
+>
+> Ici la cause est `StrictModes yes` (le défaut) : `sshd` refuse de lire un
+> `authorized_keys` dans un répertoire accessible en écriture à d'autres que le
+> propriétaire, parce que quiconque peut écrire dans `~/.ssh` peut y ajouter sa
+> propre clé et devenir l'utilisateur.
 
-Le client reçoit donc toujours le même refus générique, et la cause réelle
-n'existe que dans le journal du serveur. D'où la règle de diagnostic du module :
-un `Permission denied (publickey)` se diagnostique **sur le serveur**, avec
-`journalctl -u ssh -n 50`, pas en relançant le client dix fois.
-
-Ici la cause est `StrictModes yes` (le défaut) : `sshd` refuse de lire un
-`authorized_keys` dans un répertoire accessible en écriture à d'autres que le
-propriétaire, parce que quiconque peut écrire dans `~/.ssh` peut y ajouter sa
-propre clé et devenir l'utilisateur.
-:::
-
-::: piege
-Le contrôle remonte jusqu'au **home** : un `/home/mathieu` en `0775` avec un
-groupe dont d'autres sont membres suffit à déclencher le refus, même si
-`~/.ssh` est parfait en `700`. Le message du journal nomme alors le répertoire
-fautif — lis-le jusqu'au bout au lieu de corriger `~/.ssh` par réflexe.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le contrôle remonte jusqu'au **home** : un `/home/mathieu` en `0775` avec un
+> groupe dont d'autres sont membres suffit à déclencher le refus, même si
+> `~/.ssh` est parfait en `700`. Le message du journal nomme alors le répertoire
+> fautif — lis-le jusqu'au bout au lieu de corriger `~/.ssh` par réflexe.
 
 ---
 
-**Q14.4** — *`REMOTE HOST IDENTIFICATION HAS CHANGED` sur `lab-db`.*
+<a id="q14-4"></a>**[Q14.4](README.md#q14-4)** — *`REMOTE HOST IDENTIFICATION HAS CHANGED` sur `lab-db`.*
 
 **Réponse : c)** vérifier l'empreinte réelle par un canal indépendant de SSH.
 
-::: pourquoi
-Ce message est le seul moment où SSH te protège d'un attaquant en position
-d'interception. Le supprimer sans réfléchir, c'est désactiver la seule
-protection qui a servi.
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce message est le seul moment où SSH te protège d'un attaquant en position
+> d'interception. Le supprimer sans réfléchir, c'est désactiver la seule
+> protection qui a servi.
+>
+> La démarche correcte tient en trois temps :
+>
+> 1. **Constater** : le message donne l'empreinte reçue et la ligne exacte de
+>    `~/.ssh/known_hosts` en cause. `ssh-keygen -F lab-db` affiche l'entrée
+>    enregistrée.
+> 2. **Vérifier hors bande** : console Proxmox de la VM, puis
+>    `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Autres canaux
+>    acceptables : l'inventaire de ton outil de gestion de configuration, un
+>    enregistrement SSHFP signé, une capture d'écran de la mise en service. Le
+>    canal ne doit pas être SSH vers cette même machine.
+> 3. **Trancher** : si les empreintes correspondent, le changement est légitime
+>    (réinstallation, restauration, régénération des clés d'hôte) et on met à jour
+>    l'entrée. Sinon, on ne se connecte pas et on ouvre un incident.
+>
+> C'est aussi à ce moment qu'on se demande pourquoi l'incident a pu arriver : un
+> parc qui régénère ses clés d'hôte à chaque reconstruction de VM provoque ce
+> message en permanence, et les équipes finissent par prendre le réflexe de
+> l'ignorer. La vraie réponse est ailleurs : certificats d'hôte signés par une CA.
 
-La démarche correcte tient en trois temps :
-
-1. **Constater** : le message donne l'empreinte reçue et la ligne exacte de
-   `~/.ssh/known_hosts` en cause. `ssh-keygen -F lab-db` affiche l'entrée
-   enregistrée.
-2. **Vérifier hors bande** : console Proxmox de la VM, puis
-   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Autres canaux
-   acceptables : l'inventaire de ton outil de gestion de configuration, un
-   enregistrement SSHFP signé, une capture d'écran de la mise en service. Le
-   canal ne doit pas être SSH vers cette même machine.
-3. **Trancher** : si les empreintes correspondent, le changement est légitime
-   (réinstallation, restauration, régénération des clés d'hôte) et on met à jour
-   l'entrée. Sinon, on ne se connecte pas et on ouvre un incident.
-
-C'est aussi à ce moment qu'on se demande pourquoi l'incident a pu arriver : un
-parc qui régénère ses clés d'hôte à chaque reconstruction de VM provoque ce
-message en permanence, et les équipes finissent par prendre le réflexe de
-l'ignorer. La vraie réponse est ailleurs : certificats d'hôte signés par une CA.
-:::
-
-::: piege
-a) est ce que fait tout le monde, et c'est ce qui rend l'attaque viable : si le
-réflexe collectif est `ssh-keygen -R`, l'alerte ne sert plus à rien. b) est pire
-encore : `StrictHostKeyChecking=no` ne désactive pas seulement l'alerte de
-changement, il accepte aussi silencieusement n'importe quel hôte inconnu, sur
-toutes les connexions futures couvertes par le bloc. d) détruit la référence
-pour **toutes** les machines : le prochain vrai incident passera inaperçu.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) est ce que fait tout le monde, et c'est ce qui rend l'attaque viable : si le
+> réflexe collectif est `ssh-keygen -R`, l'alerte ne sert plus à rien. b) est pire
+> encore : `StrictHostKeyChecking=no` ne désactive pas seulement l'alerte de
+> changement, il accepte aussi silencieusement n'importe quel hôte inconnu, sur
+> toutes les connexions futures couvertes par le bloc. d) détruit la référence
+> pour **toutes** les machines : le prochain vrai incident passera inaperçu.
 
 ---
 
-**Q14.5** — *À quoi sert `ssh -G lab-db` ?*
+<a id="q14-5"></a>**[Q14.5](README.md#q14-5)** — *À quoi sert `ssh -G lab-db` ?*
 
 **Réponse : b)** afficher la configuration effective pour cet alias, sans se
 connecter.
 
-::: pourquoi
-`ssh -G` applique toute la chaîne de résolution — `~/.ssh/config`, les
-`Include`, `/etc/ssh/ssh_config`, les options `-o` de la ligne de commande, les
-blocs `Match` — et imprime le résultat final, une directive par ligne, en
-minuscules. Aucun paquet réseau n'est émis.
+> [!NOTE]
+> **Pourquoi**
+>
+> `ssh -G` applique toute la chaîne de résolution — `~/.ssh/config`, les
+> `Include`, `/etc/ssh/ssh_config`, les options `-o` de la ligne de commande, les
+> blocs `Match` — et imprime le résultat final, une directive par ligne, en
+> minuscules. Aucun paquet réseau n'est émis.
+>
+> C'est l'arbitre de tous les débats sur « mais j'ai bien mis `User` dans mon
+> config ». Au lieu de relire le fichier, tu demandes au programme ce qu'il en a
+> compris :
+>
+> ```console
+> $ ssh -G lab-db | grep -E '^(user|hostname|port|identityfile|proxyjump)'
+> user mathieu
+> hostname 10.10.10.12
+> port 22
+> identityfile ~/.ssh/id_ed25519
+> proxyjump bastion
+> ```
+>
+> L'équivalent côté serveur est `sshd -T`. Le couple `ssh -G` / `sshd -T` remplace
+> avantageusement `grep` dans 90 % des diagnostics de ce module.
 
-C'est l'arbitre de tous les débats sur « mais j'ai bien mis `User` dans mon
-config ». Au lieu de relire le fichier, tu demandes au programme ce qu'il en a
-compris :
-
-```console
-$ ssh -G lab-db | grep -E '^(user|hostname|port|identityfile|proxyjump)'
-user mathieu
-hostname 10.10.10.12
-port 22
-identityfile ~/.ssh/id_ed25519
-proxyjump bastion
-```
-
-L'équivalent côté serveur est `sshd -T`. Le couple `ssh -G` / `sshd -T` remplace
-avantageusement `grep` dans 90 % des diagnostics de ce module.
-:::
-
-::: piege
-Attention à `Match exec` : `ssh -G` **exécute** réellement la commande du
-`Match` pour l'évaluer. Une commande lente ou interactive dans un `Match exec`
-rend `ssh -G` (et toutes tes connexions) lent. Et `ssh -G` n'évalue pas les
-`Match` qui dépendent d'informations obtenues après connexion : `Match final`
-est évalué, `Match canonical` dépend de `CanonicalizeHostname`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Attention à `Match exec` : `ssh -G` **exécute** réellement la commande du
+> `Match` pour l'évaluer. Une commande lente ou interactive dans un `Match exec`
+> rend `ssh -G` (et toutes tes connexions) lent. Et `ssh -G` n'évalue pas les
+> `Match` qui dépendent d'informations obtenues après connexion : `Match final`
+> est évalué, `Match canonical` dépend de `CanonicalizeHostname`.
 
 ---
 
-**Q14.6** — *`Host *` placé avant `Host lab-web`.*
+<a id="q14-6"></a>**[Q14.6](README.md#q14-6)** — *`Host *` placé avant `Host lab-web`.*
 
 **Réponse : b)** `root`, la première valeur rencontrée gagne.
 
-::: pourquoi
-C'est la règle de lecture la plus contre-intuitive d'OpenSSH, et celle qui coûte
-le plus de temps aux débutants : `ssh_config` n'est pas un fichier où le plus
-précis l'emporte, ni un fichier où la dernière valeur écrase. **Pour chaque
-mot-clé, la première valeur rencontrée en descendant le fichier est retenue, et
-toutes les suivantes sont ignorées.**
+> [!NOTE]
+> **Pourquoi**
+>
+> C'est la règle de lecture la plus contre-intuitive d'OpenSSH, et celle qui coûte
+> le plus de temps aux débutants : `ssh_config` n'est pas un fichier où le plus
+> précis l'emporte, ni un fichier où la dernière valeur écrase. **Pour chaque
+> mot-clé, la première valeur rencontrée en descendant le fichier est retenue, et
+> toutes les suivantes sont ignorées.**
+>
+> Le fichier se lit donc du plus spécifique au plus général, et `Host *` est
+> toujours **le dernier bloc**. Un `Include` se place en général tout en haut,
+> pour que les fragments spécifiques soient lus avant les réglages globaux.
+>
+> Vérification immédiate : `ssh -G lab-web | grep '^user'` → `user root`.
 
-Le fichier se lit donc du plus spécifique au plus général, et `Host *` est
-toujours **le dernier bloc**. Un `Include` se place en général tout en haut,
-pour que les fragments spécifiques soient lus avant les réglages globaux.
-
-Vérification immédiate : `ssh -G lab-web | grep '^user'` → `user root`.
-:::
-
-::: piege
-Le même piège existe côté serveur, et il est plus grave : `/etc/ssh/sshd_config`
-sur Ubuntu 24.04 commence par `Include /etc/ssh/sshd_config.d/*.conf`. Les
-fragments sont donc lus **avant** tout le fichier principal et gagnent. C'est la
-raison pour laquelle un `PasswordAuthentication no` écrit à la main dans
-`sshd_config` reste sans effet sur une image cloud : le fragment
-`50-cloud-init.conf` a déjà positionné `yes`. Voir BF14.2.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le même piège existe côté serveur, et il est plus grave : `/etc/ssh/sshd_config`
+> sur Ubuntu 24.04 commence par `Include /etc/ssh/sshd_config.d/*.conf`. Les
+> fragments sont donc lus **avant** tout le fichier principal et gagnent. C'est la
+> raison pour laquelle un `PasswordAuthentication no` écrit à la main dans
+> `sshd_config` reste sans effet sur une image cloud : le fragment
+> `50-cloud-init.conf` a déjà positionné `yes`. Voir BF14.2.
 
 ---
 
-**Q14.7** — *`ControlMaster auto` + `ControlPath ~/.ssh/cm/%C` + `ControlPersist 10m`.*
+<a id="q14-7"></a>**[Q14.7](README.md#q14-7)** — *`ControlMaster auto` + `ControlPath ~/.ssh/cm/%C` + `ControlPersist 10m`.*
 
 **Réponse : a)** les sessions suivantes réutilisent la connexion et
 l'authentification de la première.
 
-::: pourquoi
-La première connexion devient le **maître** : elle crée une socket UNIX au
-chemin donné par `ControlPath`. Les connexions suivantes vers le même triplet
-(utilisateur, hôte, port) détectent la socket, s'y branchent et ouvrent un
-simple **canal** supplémentaire dans la session TCP déjà chiffrée et déjà
-authentifiée.
+> [!NOTE]
+> **Pourquoi**
+>
+> La première connexion devient le **maître** : elle crée une socket UNIX au
+> chemin donné par `ControlPath`. Les connexions suivantes vers le même triplet
+> (utilisateur, hôte, port) détectent la socket, s'y branchent et ouvrent un
+> simple **canal** supplémentaire dans la session TCP déjà chiffrée et déjà
+> authentifiée.
+>
+> Ce qui est économisé à chaque connexion suivante : la poignée de main TCP,
+> l'échange de clés (le plus cher, c'est de la cryptographie asymétrique), la
+> vérification de `known_hosts`, et toute la phase d'authentification. En pratique
+> on passe de 300–500 ms à 10–20 ms par commande. Sur une boucle de 30 machines
+> avec 5 commandes chacune, la différence est de l'ordre de la minute.
+>
+> `ControlPersist 10m` garde le maître vivant 10 minutes après la fermeture de la
+> dernière session : la commande suivante est instantanée même si tu as tout
+> fermé. C'est exactement le mécanisme qu'Ansible active par défaut.
 
-Ce qui est économisé à chaque connexion suivante : la poignée de main TCP,
-l'échange de clés (le plus cher, c'est de la cryptographie asymétrique), la
-vérification de `known_hosts`, et toute la phase d'authentification. En pratique
-on passe de 300–500 ms à 10–20 ms par commande. Sur une boucle de 30 machines
-avec 5 commandes chacune, la différence est de l'ordre de la minute.
-
-`ControlPersist 10m` garde le maître vivant 10 minutes après la fermeture de la
-dernière session : la commande suivante est instantanée même si tu as tout
-fermé. C'est exactement le mécanisme qu'Ansible active par défaut.
-:::
-
-::: piege
-c) décrit un vrai risque mais dans le mauvais sens : ce n'est pas la première
-session qui compte, c'est le **processus maître**. Avec `ControlPersist`, le
-maître se détache et survit à la session qui l'a créé. En revanche, tuer le
-maître (`ssh -O exit`, `kill`, reboot du poste) coupe bien **toutes** les
-sessions filles d'un coup.
-
-d) est faux et c'est important : `%C` est un condensat de (hôte local, hôte
-distant, port, utilisateur). Il existe précisément parce que la forme lisible
-`%r@%h:%p` produit des chemins qui dépassent la limite de longueur d'une socket
-UNIX (108 caractères sur Linux) dès que le nom d'hôte est long ou que le home est profond
-— erreur `ControlPath too long`.
-
-Deux autres pièges de production : le répertoire `~/.ssh/cm` doit exister
-(OpenSSH ne le crée pas) et être en `700` ; et un `ControlPath` partagé sur NFS
-ne fonctionne pas, les sockets UNIX ne traversent pas NFS.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) décrit un vrai risque mais dans le mauvais sens : ce n'est pas la première
+> session qui compte, c'est le **processus maître**. Avec `ControlPersist`, le
+> maître se détache et survit à la session qui l'a créé. En revanche, tuer le
+> maître (`ssh -O exit`, `kill`, reboot du poste) coupe bien **toutes** les
+> sessions filles d'un coup.
+>
+> d) est faux et c'est important : `%C` est un condensat de (hôte local, hôte
+> distant, port, utilisateur). Il existe précisément parce que la forme lisible
+> `%r@%h:%p` produit des chemins qui dépassent la limite de longueur d'une socket
+> UNIX (108 caractères sur Linux) dès que le nom d'hôte est long ou que le home est profond
+> — erreur `ControlPath too long`.
+>
+> Deux autres pièges de production : le répertoire `~/.ssh/cm` doit exister
+> (OpenSSH ne le crée pas) et être en `700` ; et un `ControlPath` partagé sur NFS
+> ne fonctionne pas, les sockets UNIX ne traversent pas NFS.
 
 ---
 
-**Q14.8** — *`ForwardAgent yes` sur le bastion.*
+<a id="q14-8"></a>**[Q14.8](README.md#q14-8)** — *`ForwardAgent yes` sur le bastion.*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Le transfert d'agent ne copie rien : il crée sur la machine distante une socket
-UNIX et positionne `SSH_AUTH_SOCK` pour ta session. Toute demande de signature
-écrite dans cette socket remonte le tunnel jusqu'à **ton** agent, qui signe avec
-ta clé privée restée chez toi.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le transfert d'agent ne copie rien : il crée sur la machine distante une socket
+> UNIX et positionne `SSH_AUTH_SOCK` pour ta session. Toute demande de signature
+> écrite dans cette socket remonte le tunnel jusqu'à **ton** agent, qui signe avec
+> ta clé privée restée chez toi.
+>
+> Le problème n'est donc pas le vol de la clé, c'est l'**usage** de la clé.
+> N'importe qui capable de lire cette socket — root sur le bastion, ou tout
+> processus tournant sous ton compte s'il est compromis — peut demander des
+> signatures en ton nom. Autrement dit : pendant toute la durée de ta session,
+> root sur le bastion peut se connecter partout où ta clé est déployée, avec ton
+> identité, sans laisser d'autre trace qu'une connexion normale de ta part. Et un
+> bastion est par construction la machine la plus exposée du parc.
+>
+> `ProxyJump` (`-J`) répond au même besoin sans ce risque : `ssh` ouvre une
+> connexion vers le bastion, y demande une simple redirection d'E/S
+> (`-W hôte:port`), et établit **par-dessus** une seconde session SSH complète
+> avec la machine finale. L'échange de clés et l'authentification de la session
+> finale ont lieu entre ton poste et la machine finale, de bout en bout. Le
+> bastion ne voit passer que des octets chiffrés qu'il ne peut pas déchiffrer, et
+> ne touche jamais à ton agent.
 
-Le problème n'est donc pas le vol de la clé, c'est l'**usage** de la clé.
-N'importe qui capable de lire cette socket — root sur le bastion, ou tout
-processus tournant sous ton compte s'il est compromis — peut demander des
-signatures en ton nom. Autrement dit : pendant toute la durée de ta session,
-root sur le bastion peut se connecter partout où ta clé est déployée, avec ton
-identité, sans laisser d'autre trace qu'une connexion normale de ta part. Et un
-bastion est par construction la machine la plus exposée du parc.
-
-`ProxyJump` (`-J`) répond au même besoin sans ce risque : `ssh` ouvre une
-connexion vers le bastion, y demande une simple redirection d'E/S
-(`-W hôte:port`), et établit **par-dessus** une seconde session SSH complète
-avec la machine finale. L'échange de clés et l'authentification de la session
-finale ont lieu entre ton poste et la machine finale, de bout en bout. Le
-bastion ne voit passer que des octets chiffrés qu'il ne peut pas déchiffrer, et
-ne touche jamais à ton agent.
-:::
-
-::: piege
-a) est l'erreur de compréhension la plus répandue, et elle conduit au mauvais
-raisonnement (« ma clé a une passphrase, donc je suis tranquille » : la
-passphrase protège le fichier, pas l'agent déverrouillé). d) est faux par
-nature : le risque ne vient pas d'une faille du bastion, il vient du modèle
-lui-même.
-
-Si tu ne peux vraiment pas éviter le transfert d'agent, deux atténuations :
-`ssh-add -c` (chaque signature demande une confirmation, tu vois donc les usages
-que tu n'as pas demandés) et `ForwardAgent` posé **par hôte**, jamais dans
-`Host *`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) est l'erreur de compréhension la plus répandue, et elle conduit au mauvais
+> raisonnement (« ma clé a une passphrase, donc je suis tranquille » : la
+> passphrase protège le fichier, pas l'agent déverrouillé). d) est faux par
+> nature : le risque ne vient pas d'une faille du bastion, il vient du modèle
+> lui-même.
+>
+> Si tu ne peux vraiment pas éviter le transfert d'agent, deux atténuations :
+> `ssh-add -c` (chaque signature demande une confirmation, tu vois donc les usages
+> que tu n'as pas demandés) et `ForwardAgent` posé **par hôte**, jamais dans
+> `Host *`.
 
 ---
 
-**Q14.9** — *`ssh lab-web "echo $HOSTNAME"`.*
+<a id="q14-9"></a>**[Q14.9](README.md#q14-9)** — *`ssh lab-web "echo $HOSTNAME"`.*
 
 **Réponse : b)** `lab-adm`.
 
-::: pourquoi
-Il y a deux niveaux d'interprétation et il faut savoir où l'on se trouve.
-Les guillemets **doubles** laissent le shell local développer `$HOSTNAME`
-**avant** que `ssh` ne soit lancé. La commande réellement transmise est donc
-`echo lab-adm`. Le serveur distant l'exécute et renvoie `lab-adm`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Il y a deux niveaux d'interprétation et il faut savoir où l'on se trouve.
+> Les guillemets **doubles** laissent le shell local développer `$HOSTNAME`
+> **avant** que `ssh` ne soit lancé. La commande réellement transmise est donc
+> `echo lab-adm`. Le serveur distant l'exécute et renvoie `lab-adm`.
+>
+> Pour que l'expansion ait lieu à distance, il faut des guillemets **simples** :
+>
+> ```console
+> $ ssh lab-web 'echo $HOSTNAME'
+> lab-web
+> ```
+>
+> Mécanisme côté serveur : `sshd` ne découpe pas la commande lui-même, il la passe
+> au shell de login du compte avec `-c`. C'est donc bien un shell distant qui fait
+> l'expansion — mais un shell **non interactif et non login**, qui ne lit ni
+> `~/.bashrc` (arrêté par la garde `case $- in *i*`), ni `~/.profile`. D'où les
+> `command not found` classiques sur un `PATH` réduit.
+>
+> Astuce de lecture : s'il y a plusieurs arguments, `ssh` les **concatène avec des
+> espaces** avant de les passer au shell distant. `ssh h echo a    b` envoie
+> `echo a b`. Ce qui veut dire qu'un argument contenant des espaces doit être
+> quoté **deux fois** :
+> `ssh h "grep -r 'texte avec espaces' /etc"`.
 
-Pour que l'expansion ait lieu à distance, il faut des guillemets **simples** :
-
-```console
-$ ssh lab-web 'echo $HOSTNAME'
-lab-web
-```
-
-Mécanisme côté serveur : `sshd` ne découpe pas la commande lui-même, il la passe
-au shell de login du compte avec `-c`. C'est donc bien un shell distant qui fait
-l'expansion — mais un shell **non interactif et non login**, qui ne lit ni
-`~/.bashrc` (arrêté par la garde `case $- in *i*`), ni `~/.profile`. D'où les
-`command not found` classiques sur un `PATH` réduit.
-
-Astuce de lecture : s'il y a plusieurs arguments, `ssh` les **concatène avec des
-espaces** avant de les passer au shell distant. `ssh h echo a    b` envoie
-`echo a b`. Ce qui veut dire qu'un argument contenant des espaces doit être
-quoté **deux fois** :
-`ssh h "grep -r 'texte avec espaces' /etc"`.
-:::
-
-::: piege
-Le cas qui fait perdre une heure : `ssh h "rm -rf $DIR/*"`. Si `DIR` n'est pas
-défini localement, la commande transmise est `rm -rf /*`. Toujours vérifier avec
-`echo` d'abord, ou construire la commande avec des quotes simples et passer les
-valeurs par l'environnement : `ssh h "DIR='$DIR' bash -c 'rm -rf \$DIR/*'"` —
-ou, beaucoup plus lisible, `ssh h 'bash -s' <<< "..."`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le cas qui fait perdre une heure : `ssh h "rm -rf $DIR/*"`. Si `DIR` n'est pas
+> défini localement, la commande transmise est `rm -rf /*`. Toujours vérifier avec
+> `echo` d'abord, ou construire la commande avec des quotes simples et passer les
+> valeurs par l'environnement : `ssh h "DIR='$DIR' bash -c 'rm -rf \$DIR/*'"` —
+> ou, beaucoup plus lisible, `ssh h 'bash -s' <<< "..."`.
 
 ---
 
-**Q14.10** — *`sudo: a terminal is required` dans un script.*
+<a id="q14-10"></a>**[Q14.10](README.md#q14-10)** — *`sudo: a terminal is required` dans un script.*
 
 **Réponse : c)** une règle `NOPASSWD` ciblée dans `sudoers`.
 
-::: pourquoi
-Trois façons de faire taire ce message, et une seule est correcte en
-automatisation.
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois façons de faire taire ce message, et une seule est correcte en
+> automatisation.
+>
+> `-t` alloue un pseudo-terminal, ce qui permet à `sudo` de lire le mot de passe.
+> Mais dans un script non interactif, il n'y a personne pour le taper : on a
+> simplement remplacé une erreur immédiate par un blocage jusqu'au timeout. Et
+> `-t` a des effets de bord notables : stdout et stderr sont fusionnés sur le même
+> flux (impossible de les séparer), les fins de ligne deviennent `\r\n`, et `ssh`
+> met le terminal local en mode brut. `-tt` force l'allocation même sans terminal
+> local — c'est la rustine qu'on voit dans les pipelines, et elle rend la sortie
+> inexploitable.
+>
+> La vraie réponse est de supprimer le besoin de mot de passe pour **cette
+> commande précise** :
+>
+> ```text
+> # /etc/sudoers.d/40-deploy-nginx
+> %deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart nginx.service
+> ```
+>
+> Un `NOPASSWD` limité à une commande complète et non paramétrable est une
+> décision de sécurité assumée et auditée ; un `-tt` est un contournement qui
+> laisse le script fragile. d) est à l'opposé de tout ce que fait ce module.
 
-`-t` alloue un pseudo-terminal, ce qui permet à `sudo` de lire le mot de passe.
-Mais dans un script non interactif, il n'y a personne pour le taper : on a
-simplement remplacé une erreur immédiate par un blocage jusqu'au timeout. Et
-`-t` a des effets de bord notables : stdout et stderr sont fusionnés sur le même
-flux (impossible de les séparer), les fins de ligne deviennent `\r\n`, et `ssh`
-met le terminal local en mode brut. `-tt` force l'allocation même sans terminal
-local — c'est la rustine qu'on voit dans les pipelines, et elle rend la sortie
-inexploitable.
-
-La vraie réponse est de supprimer le besoin de mot de passe pour **cette
-commande précise** :
-
-```text
-# /etc/sudoers.d/40-deploy-nginx
-%deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart nginx.service
-```
-
-Un `NOPASSWD` limité à une commande complète et non paramétrable est une
-décision de sécurité assumée et auditée ; un `-tt` est un contournement qui
-laisse le script fragile. d) est à l'opposé de tout ce que fait ce module.
-:::
-
-::: piege
-`NOPASSWD: /usr/bin/systemctl restart *` est une porte ouverte : `systemctl`
-accepte `--host`, et bien d'autres sous-commandes. Une règle `sudoers` doit
-nommer la commande **et** ses arguments en entier. Et n'oublie pas que `-t`
-reste le bon choix en **interactif** : `ssh -t lab-web 'sudo journalctl -u
-nginx -f'` fonctionne bien, le pager et les couleurs aussi.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `NOPASSWD: /usr/bin/systemctl restart *` est une porte ouverte : `systemctl`
+> accepte `--host`, et bien d'autres sous-commandes. Une règle `sudoers` doit
+> nommer la commande **et** ses arguments en entier. Et n'oublie pas que `-t`
+> reste le bon choix en **interactif** : `ssh -t lab-web 'sudo journalctl -u
+> nginx -f'` fonctionne bien, le pager et les couleurs aussi.
 
 ---
 
-**Q14.11** — *Joindre `10.10.10.12:5432` à travers le bastion.*
+<a id="q14-11"></a>**[Q14.11](README.md#q14-11)** — *Joindre `10.10.10.12:5432` à travers le bastion.*
 
 **Réponse : b)** `ssh -L 15432:10.10.10.12:5432 mathieu@10.10.10.10`.
 
-::: pourquoi
-La syntaxe de `-L` se lit dans cet ordre :
-`-L [adresse_locale:]port_local:hôte_cible:port_cible`.
+> [!NOTE]
+> **Pourquoi**
+>
+> La syntaxe de `-L` se lit dans cet ordre :
+> `-L [adresse_locale:]port_local:hôte_cible:port_cible`.
+>
+> Le point qui piège tout le monde : **`hôte_cible` est résolu et joint depuis le
+> serveur SSH**, pas depuis ton poste. C'est le serveur qui ouvre la connexion TCP
+> finale vers `10.10.10.12:5432`. Le tunnel a donc exactement le même pouvoir
+> d'accès réseau que le bastion lui-même.
+>
+> Le flux complet :
+>
+> ```text
+> ton client SQL -> 127.0.0.1:15432 (ton poste)
+>                      | canal chiffré dans la session SSH
+>                   lab-adm (10.10.10.10)
+>                      | connexion TCP en clair sur le réseau de lab
+>                   lab-db:5432
+> ```
+>
+> a) est le cas où la cible est le serveur SSH lui-même : `127.0.0.1` y désigne la
+> boucle locale **du bastion**, donc un PostgreSQL qui tournerait sur `lab-adm`.
+> b) inverse le sens (`-R` ouvre le port sur le serveur). d) ouvre un proxy SOCKS,
+> ce qui suppose déjà de pouvoir joindre `lab-db` en SSH.
 
-Le point qui piège tout le monde : **`hôte_cible` est résolu et joint depuis le
-serveur SSH**, pas depuis ton poste. C'est le serveur qui ouvre la connexion TCP
-finale vers `10.10.10.12:5432`. Le tunnel a donc exactement le même pouvoir
-d'accès réseau que le bastion lui-même.
-
-Le flux complet :
-
-```text
-ton client SQL -> 127.0.0.1:15432 (ton poste)
-                     | canal chiffré dans la session SSH
-                  lab-adm (10.10.10.10)
-                     | connexion TCP en clair sur le réseau de lab
-                  lab-db:5432
-```
-
-a) est le cas où la cible est le serveur SSH lui-même : `127.0.0.1` y désigne la
-boucle locale **du bastion**, donc un PostgreSQL qui tournerait sur `lab-adm`.
-b) inverse le sens (`-R` ouvre le port sur le serveur). d) ouvre un proxy SOCKS,
-ce qui suppose déjà de pouvoir joindre `lab-db` en SSH.
-:::
-
-::: piege
-Par défaut le port local n'est ouvert que sur `127.0.0.1` : ta collègue sur le
-réseau ne pourra pas s'y connecter. Pour l'ouvrir à la machine entière, c'est côté **client** que ça se décide : adresse de bind explicite (
-`-L 0.0.0.0:15432:...` ) ou `-g` ( `GatewayPorts yes` dans `ssh_config` — même nom que la
-directive serveur qui gouverne `-R`, mais autre fichier). À n'utiliser qu'en connaissance de cause : tu viens de créer un
-accès à ta base sans authentification pour tout le monde sur ton réseau.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Par défaut le port local n'est ouvert que sur `127.0.0.1` : ta collègue sur le
+> réseau ne pourra pas s'y connecter. Pour l'ouvrir à la machine entière, c'est côté **client** que ça se décide : adresse de bind explicite (
+> `-L 0.0.0.0:15432:...` ) ou `-g` ( `GatewayPorts yes` dans `ssh_config` — même nom que la
+> directive serveur qui gouverne `-R`, mais autre fichier). À n'utiliser qu'en connaissance de cause : tu viens de créer un
+> accès à ta base sans authentification pour tout le monde sur ton réseau.
 
 ---
 
-**Q14.12** — *`-R 8080:127.0.0.1:3000` et `Connection refused` depuis une autre machine.*
+<a id="q14-12"></a>**[Q14.12](README.md#q14-12)** — *`-R 8080:127.0.0.1:3000` et `Connection refused` depuis une autre machine.*
 
 **Réponse : b)** le port distant n'écoute que sur la boucle locale tant que
 `GatewayPorts` n'est pas activé.
 
-::: pourquoi
-C'est le pendant serveur du piège précédent. `sshd` refuse par défaut d'ouvrir
-un port de redirection inverse sur toutes les interfaces : `GatewayPorts no` est
-le défaut, et le port 8080 n'est alors lié qu'à `127.0.0.1` sur `lab-ops`. Un
-`ss -tlnp` sur `lab-ops` le montre :
+> [!NOTE]
+> **Pourquoi**
+>
+> C'est le pendant serveur du piège précédent. `sshd` refuse par défaut d'ouvrir
+> un port de redirection inverse sur toutes les interfaces : `GatewayPorts no` est
+> le défaut, et le port 8080 n'est alors lié qu'à `127.0.0.1` sur `lab-ops`. Un
+> `ss -tlnp` sur `lab-ops` le montre :
+>
+> ```console
+> $ ss -tlnp | grep 8080
+> LISTEN 0  128  127.0.0.1:8080  0.0.0.0:*
+> ```
+>
+> Depuis `lab-ops` lui-même, `curl http://127.0.0.1:8080/` fonctionne. Depuis
+> ailleurs, le paquet arrive sur l'interface `10.10.10.14` où rien n'écoute : la
+> pile TCP renvoie un RST, d'où `Connection refused`.
+>
+> Pour ouvrir, deux valeurs possibles côté serveur :
+> `GatewayPorts yes` (le port est lié à `0.0.0.0`, sans discussion) ou
+> `GatewayPorts clientspecified`, plus fin : le client choisit l'adresse de bind
+> avec `-R 0.0.0.0:8080:127.0.0.1:3000` ou `-R 10.10.10.14:8080:...`.
 
-```console
-$ ss -tlnp | grep 8080
-LISTEN 0  128  127.0.0.1:8080  0.0.0.0:*
-```
-
-Depuis `lab-ops` lui-même, `curl http://127.0.0.1:8080/` fonctionne. Depuis
-ailleurs, le paquet arrive sur l'interface `10.10.10.14` où rien n'écoute : la
-pile TCP renvoie un RST, d'où `Connection refused`.
-
-Pour ouvrir, deux valeurs possibles côté serveur :
-`GatewayPorts yes` (le port est lié à `0.0.0.0`, sans discussion) ou
-`GatewayPorts clientspecified`, plus fin : le client choisit l'adresse de bind
-avec `-R 0.0.0.0:8080:127.0.0.1:3000` ou `-R 10.10.10.14:8080:...`.
-:::
-
-::: piege
-Ce n'est pas un détail de confort, c'est une décision de sécurité : un port de
-redirection inverse ouvert sur toutes les interfaces expose un service interne,
-sans authentification ni journalisation, à tout le réseau — et il survit tant
-que la session SSH tient. C'est le mécanisme qu'utilisent les logiciels
-malveillants pour se ménager un accès entrant depuis une machine qui n'accepte
-que du sortant. Sur un serveur de production, la bonne valeur est `no`, et les
-exceptions se traitent par un vrai reverse proxy.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ce n'est pas un détail de confort, c'est une décision de sécurité : un port de
+> redirection inverse ouvert sur toutes les interfaces expose un service interne,
+> sans authentification ni journalisation, à tout le réseau — et il survit tant
+> que la session SSH tient. C'est le mécanisme qu'utilisent les logiciels
+> malveillants pour se ménager un accès entrant depuis une machine qui n'accepte
+> que du sortant. Sur un serveur de production, la bonne valeur est `no`, et les
+> exceptions se traitent par un vrai reverse proxy.
 
 ---
 
-**Q14.13** — *`Too many authentication failures` avec 8 clés dans l'agent.*
+<a id="q14-13"></a>**[Q14.13](README.md#q14-13)** — *`Too many authentication failures` avec 8 clés dans l'agent.*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-Le serveur compte les **tentatives d'authentification**, pas les échecs
-« humains ». Or chaque clé proposée par le client compte pour une tentative :
-`ssh` envoie une requête `publickey` par identité connue, dans l'ordre, jusqu'à
-ce que le serveur en accepte une. Avec 8 clés dans l'agent et
-`MaxAuthTries 6` (le défaut), la session est coupée avant même d'arriver à la
-bonne clé — même si elle est la neuvième et qu'elle est parfaitement valide.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le serveur compte les **tentatives d'authentification**, pas les échecs
+> « humains ». Or chaque clé proposée par le client compte pour une tentative :
+> `ssh` envoie une requête `publickey` par identité connue, dans l'ordre, jusqu'à
+> ce que le serveur en accepte une. Avec 8 clés dans l'agent et
+> `MaxAuthTries 6` (le défaut), la session est coupée avant même d'arriver à la
+> bonne clé — même si elle est la neuvième et qu'elle est parfaitement valide.
+>
+> D'où le symptôme déroutant : « ma clé marche pourtant, je la vois dans
+> `ssh-add -l` ». Le `ssh -v` le montre noir sur blanc, une ligne
+> `Offering public key:` par tentative.
+>
+> Les deux corrections agissent au même endroit — réduire le nombre d'identités
+> proposées :
+>
+> * `IdentitiesOnly=yes` avec `-i` : `ssh` ne propose **que** la clé nommée, et
+>   ignore tout ce que l'agent contient par ailleurs. C'est la bonne réponse
+>   durable, à poser par hôte dans `~/.ssh/config`.
+> * `ssh-add -D` purge l'agent, puis on recharge la seule clé utile.
 
-D'où le symptôme déroutant : « ma clé marche pourtant, je la vois dans
-`ssh-add -l` ». Le `ssh -v` le montre noir sur blanc, une ligne
-`Offering public key:` par tentative.
-
-Les deux corrections agissent au même endroit — réduire le nombre d'identités
-proposées :
-
-* `IdentitiesOnly=yes` avec `-i` : `ssh` ne propose **que** la clé nommée, et
-  ignore tout ce que l'agent contient par ailleurs. C'est la bonne réponse
-  durable, à poser par hôte dans `~/.ssh/config`.
-* `ssh-add -D` purge l'agent, puis on recharge la seule clé utile.
-:::
-
-::: piege
-Le piège de a) : `-i` **seul** ne suffit pas. Sans `IdentitiesOnly=yes`, `-i`
-ajoute la clé à la liste, mais `ssh` propose d'abord les identités de l'agent (dans l'ordre de l'agent) et seulement
-ensuite les fichiers qui n'y sont pas — ce que découvre l'apprenant en BF14.4. C'est contre-intuitif et c'est
-documenté : `IdentityFile` est additif, `IdentitiesOnly` est ce qui le rend
-exclusif.
-
-b) traite le symptôme sur le serveur et affaiblit une protection contre le
-bourrinage. d) désinstalle la méthode d'authentification qui doit réussir.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le piège de a) : `-i` **seul** ne suffit pas. Sans `IdentitiesOnly=yes`, `-i`
+> ajoute la clé à la liste, mais `ssh` propose d'abord les identités de l'agent (dans l'ordre de l'agent) et seulement
+> ensuite les fichiers qui n'y sont pas — ce que découvre l'apprenant en BF14.4. C'est contre-intuitif et c'est
+> documenté : `IdentityFile` est additif, `IdentitiesOnly` est ce qui le rend
+> exclusif.
+>
+> b) traite le symptôme sur le serveur et affaiblit une protection contre le
+> bourrinage. d) désinstalle la méthode d'authentification qui doit réussir.
 
 ---
 
-**Q14.14** — *`Connection refused` contre `Connection timed out`.*
+<a id="q14-14"></a>**[Q14.14](README.md#q14-14)** — *`Connection refused` contre `Connection timed out`.*
 
 **Réponse : b)** `lab-web` répond mais rien n'écoute sur 22 ; `lab-db` ne répond
 pas du tout.
 
-::: pourquoi
-La distinction est purement TCP et elle oriente tout le diagnostic :
+> [!NOTE]
+> **Pourquoi**
+>
+> La distinction est purement TCP et elle oriente tout le diagnostic :
+>
+> * **`Connection refused`** : ton `SYN` est arrivé, la machine a répondu par un
+>   `RST`. Il y a donc quelqu'un au bout du fil, la couche réseau et le routage
+>   sont bons. Causes : `sshd` arrêté ou en échec, `sshd` qui écoute sur un autre
+>   port, mauvaise `ListenAddress`, ou un filtre configuré en `REJECT`.
+> * **`Connection timed out`** : aucune réponse, le client a réémis puis
+>   abandonné. Causes : machine éteinte, mauvaise IP, problème de routage ou de
+>   VLAN, ou un filtre en `DROP` (le mode par défaut d'un pare-feu bien réglé).
+>
+> Séquence de tri, dans l'ordre :
+>
+> ```bash
+> ping -c2 10.10.10.11              # la machine répond-elle ?
+> nc -vz 10.10.10.11 22             # le port répond-il ? refused ou timeout ?
+> ssh -v 10.10.10.11                # où ça bloque exactement
+> # et sur la machine, par la console :
+> systemctl status ssh ; ss -tlnp '( sport = :22 )'
+> ```
+>
+> Retenir la formule d'entretien : **`refused` est une réponse, `timeout` est un
+> silence.** Un silence est presque toujours un filtrage ou une erreur d'adresse.
 
-* **`Connection refused`** : ton `SYN` est arrivé, la machine a répondu par un
-  `RST`. Il y a donc quelqu'un au bout du fil, la couche réseau et le routage
-  sont bons. Causes : `sshd` arrêté ou en échec, `sshd` qui écoute sur un autre
-  port, mauvaise `ListenAddress`, ou un filtre configuré en `REJECT`.
-* **`Connection timed out`** : aucune réponse, le client a réémis puis
-  abandonné. Causes : machine éteinte, mauvaise IP, problème de routage ou de
-  VLAN, ou un filtre en `DROP` (le mode par défaut d'un pare-feu bien réglé).
-
-Séquence de tri, dans l'ordre :
-
-```bash
-ping -c2 10.10.10.11              # la machine répond-elle ?
-nc -vz 10.10.10.11 22             # le port répond-il ? refused ou timeout ?
-ssh -v 10.10.10.11                # où ça bloque exactement
-# et sur la machine, par la console :
-systemctl status ssh ; ss -tlnp '( sport = :22 )'
-```
-
-Retenir la formule d'entretien : **`refused` est une réponse, `timeout` est un
-silence.** Un silence est presque toujours un filtrage ou une erreur d'adresse.
-:::
-
-::: piege
-Sur Ubuntu 24.04, `sshd` est démarré par activation de socket. `systemctl status
-ssh` peut afficher `inactive (dead)` alors que tout fonctionne : c'est
-`ssh.socket` qui écoute et qui lance `ssh.service` à la première connexion.
-Regarde `systemctl status ssh.socket` et `ss -tlnp` avant de conclure que le
-service est arrêté.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sur Ubuntu 24.04, `sshd` est démarré par activation de socket. `systemctl status
+> ssh` peut afficher `inactive (dead)` alors que tout fonctionne : c'est
+> `ssh.socket` qui écoute et qui lance `ssh.service` à la première connexion.
+> Regarde `systemctl status ssh.socket` et `ss -tlnp` avant de conclure que le
+> service est arrêté.
 
 ---
 
-**Q14.15** — *`PasswordAuthentication no` sans effet.*
+<a id="q14-15"></a>**[Q14.15](README.md#q14-15)** — *`PasswordAuthentication no` sans effet.*
 
 **Réponse : b)** `sshd -T | grep -i passwordauthentication`.
 
-::: pourquoi
-`sshd -T` imprime la configuration **effective** : après lecture du fichier
-principal, de tous les `Include`, et application des valeurs par défaut. C'est
-la seule source de vérité. Une ligne, une réponse :
+> [!NOTE]
+> **Pourquoi**
+>
+> `sshd -T` imprime la configuration **effective** : après lecture du fichier
+> principal, de tous les `Include`, et application des valeurs par défaut. C'est
+> la seule source de vérité. Une ligne, une réponse :
+>
+> ```console
+> # sshd -T | grep -i passwordauthentication
+> passwordauthentication yes
+> ```
+>
+> À partir de là tu sais qu'il y a un autre fichier, et `grep -r` (réponse a)
+> devient utile pour le **localiser** — dans l'ordre inverse de ce qu'on fait
+> d'habitude : on constate d'abord l'effet, on cherche la cause ensuite. Le
+> coupable habituel sur une image cloud Ubuntu :
+>
+> ```console
+> # grep -r PasswordAuthentication /etc/ssh/
+> /etc/ssh/sshd_config:PasswordAuthentication no
+> /etc/ssh/sshd_config.d/50-cloud-init.conf:PasswordAuthentication yes
+> ```
+>
+> Comme `Include /etc/ssh/sshd_config.d/*.conf` est la **première** ligne utile de
+> `sshd_config` et que la première valeur gagne, le `yes` du fragment l'emporte.
 
-```console
-# sshd -T | grep -i passwordauthentication
-passwordauthentication yes
-```
-
-À partir de là tu sais qu'il y a un autre fichier, et `grep -r` (réponse a)
-devient utile pour le **localiser** — dans l'ordre inverse de ce qu'on fait
-d'habitude : on constate d'abord l'effet, on cherche la cause ensuite. Le
-coupable habituel sur une image cloud Ubuntu :
-
-```console
-# grep -r PasswordAuthentication /etc/ssh/
-/etc/ssh/sshd_config:PasswordAuthentication no
-/etc/ssh/sshd_config.d/50-cloud-init.conf:PasswordAuthentication yes
-```
-
-Comme `Include /etc/ssh/sshd_config.d/*.conf` est la **première** ligne utile de
-`sshd_config` et que la première valeur gagne, le `yes` du fragment l'emporte.
-:::
-
-::: piege
-Deuxième cause classique, indépendante de la première : `PasswordAuthentication
-no` ne coupe pas la méthode `keyboard-interactive`. Avec `UsePAM yes` et
-`KbdInteractiveAuthentication yes`, PAM redemande le mot de passe par un autre
-chemin et l'utilisateur ne voit aucune différence. Pour vraiment couper le mot
-de passe, il faut les deux :
-
-```text
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-```
-
-Contrôle : `ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no
-mathieu@lab-web` doit répondre `Permission denied (publickey)` sans jamais
-afficher d'invite.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deuxième cause classique, indépendante de la première : `PasswordAuthentication
+> no` ne coupe pas la méthode `keyboard-interactive`. Avec `UsePAM yes` et
+> `KbdInteractiveAuthentication yes`, PAM redemande le mot de passe par un autre
+> chemin et l'utilisateur ne voit aucune différence. Pour vraiment couper le mot
+> de passe, il faut les deux :
+>
+> ```text
+> PasswordAuthentication no
+> KbdInteractiveAuthentication no
+> ```
+>
+> Contrôle : `ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no
+> mathieu@lab-web` doit répondre `Permission denied (publickey)` sans jamais
+> afficher d'invite.
 
 ---
 
-**Q14.16** — *Valider avant `reload`.*
+<a id="q14-16"></a>**[Q14.16](README.md#q14-16)** — *Valider avant `reload`.*
 
 **Réponse : b)** `sshd -t`.
 
-::: pourquoi
-`sshd -t` (*test mode*) analyse la configuration, vérifie la syntaxe, contrôle
-les permissions et l'existence des clés d'hôte, puis sort : 0 si tout va bien,
-non nul avec le fichier et le numéro de ligne sinon.
+> [!NOTE]
+> **Pourquoi**
+>
+> `sshd -t` (*test mode*) analyse la configuration, vérifie la syntaxe, contrôle
+> les permissions et l'existence des clés d'hôte, puis sort : 0 si tout va bien,
+> non nul avec le fichier et le numéro de ligne sinon.
+>
+> ```console
+> # sshd -t
+> /etc/ssh/sshd_config.d/60-durcissement.conf: line 7: Bad configuration
+> option: AllowGrups
+> ```
+>
+> C'est le réflexe à automatiser :
+>
+> ```bash
+> sudo sshd -t && sudo systemctl reload ssh
+> ```
+>
+> Sans le `&&`, une faute de frappe dans une directive fait échouer le démarrage
+> de `sshd`. Sur Ubuntu, `systemctl` `reload` `ssh` lance lui-même `sshd -t` (`ExecReload`) et refuse de recharger; sous Rocky, le `SIGHUP` fait se ré- exécuter `sshd`, qui meurt sur la configuration invalide : plus aucune nouvelle connexion, seules les sessions ouvertes survivent. Et si la faute passe inaperçue, au prochain
+> redémarrage de la machine, plus de SSH — l'incident se déclare des semaines
+> plus tard, sans lien apparent avec ta modification.
+>
+> `sshd -T` est le complément : il affiche la configuration effective, mais c'est
+> un outil d'inspection, pas de validation (il sort aussi en erreur sur une
+> syntaxe invalide, mais il déverse tout le reste au passage).
 
-```console
-# sshd -t
-/etc/ssh/sshd_config.d/60-durcissement.conf: line 7: Bad configuration
-option: AllowGrups
-```
-
-C'est le réflexe à automatiser :
-
-```bash
-sudo sshd -t && sudo systemctl reload ssh
-```
-
-Sans le `&&`, une faute de frappe dans une directive fait échouer le démarrage
-de `sshd`. Sur Ubuntu, `systemctl` `reload` `ssh` lance lui-même `sshd -t` (`ExecReload`) et refuse de recharger; sous Rocky, le `SIGHUP` fait se ré- exécuter `sshd`, qui meurt sur la configuration invalide : plus aucune nouvelle connexion, seules les sessions ouvertes survivent. Et si la faute passe inaperçue, au prochain
-redémarrage de la machine, plus de SSH — l'incident se déclare des semaines
-plus tard, sans lien apparent avec ta modification.
-
-`sshd -T` est le complément : il affiche la configuration effective, mais c'est
-un outil d'inspection, pas de validation (il sort aussi en erreur sur une
-syntaxe invalide, mais il déverse tout le reste au passage).
-:::
-
-::: piege
-`sshd -t` ne détecte que les erreurs de **syntaxe et de cohérence locale**. Il
-ne te dira jamais que ton `AllowUsers` exclut ton propre compte, que le groupe
-cité dans `AllowGroups` n'existe pas encore, ou que tu viens de couper la seule
-méthode d'authentification dont tu disposes. Aucun outil ne remplace la règle
-d'or : une session ouverte pendant le test.
-
-Sur Ubuntu 24.04, `ssh.service` exécute déjà `sshd -t` en `ExecStartPre` : un
-`systemctl restart` avec une configuration invalide échoue proprement au lieu de
-laisser la machine sans SSH. Ne compte pas là-dessus pour autant sous Rocky.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `sshd -t` ne détecte que les erreurs de **syntaxe et de cohérence locale**. Il
+> ne te dira jamais que ton `AllowUsers` exclut ton propre compte, que le groupe
+> cité dans `AllowGroups` n'existe pas encore, ou que tu viens de couper la seule
+> méthode d'authentification dont tu disposes. Aucun outil ne remplace la règle
+> d'or : une session ouverte pendant le test.
+>
+> Sur Ubuntu 24.04, `ssh.service` exécute déjà `sshd -t` en `ExecStartPre` : un
+> `systemctl restart` avec une configuration invalide échoue proprement au lieu de
+> laisser la machine sans SSH. Ne compte pas là-dessus pour autant sous Rocky.
 
 ---
 
-**Q14.17** — *`Port 2222` sans effet sur Ubuntu 24.04.*
+<a id="q14-17"></a>**[Q14.17](README.md#q14-17)** — *`Port 2222` sans effet sur Ubuntu 24.04.*
 
 **Réponse : b)** `sshd` est lancé par activation de socket.
 
-::: pourquoi
-Depuis Ubuntu 22.10, le paquet `openssh-server` installe et active
-`ssh.socket` : c'est systemd qui ouvre et détient le port 22, et qui lance
-`ssh.service` à la première connexion entrante, en lui transmettant le socket déjà ouvert (prise en charge de l'activation par socket ajoutée par Ubuntu à `sshd`). Dans
-ce mode, `sshd` n'ouvre plus lui-même ses ports : un `reload` (ou un `restart` de `ssh.service`) ne change pas l'écoute. Sur 24.04, un générateur systemd ( `sshd``-socket-generator`) traduit `Port` et `ListenAddress` de `sshd_config` en un drop-in de `ssh.` socket — mais seulement au prochain `systemctl daemon-reload`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Depuis Ubuntu 22.10, le paquet `openssh-server` installe et active
+> `ssh.socket` : c'est systemd qui ouvre et détient le port 22, et qui lance
+> `ssh.service` à la première connexion entrante, en lui transmettant le socket déjà ouvert (prise en charge de l'activation par socket ajoutée par Ubuntu à `sshd`). Dans
+> ce mode, `sshd` n'ouvre plus lui-même ses ports : un `reload` (ou un `restart` de `ssh.service`) ne change pas l'écoute. Sur 24.04, un générateur systemd ( `sshd``-socket-generator`) traduit `Port` et `ListenAddress` de `sshd_config` en un drop-in de `ssh.` socket — mais seulement au prochain `systemctl daemon-reload`.
+>
+> Diagnostic :
+>
+> ```console
+> $ systemctl is-enabled ssh.socket
+> enabled
+> $ systemctl cat ssh.socket | grep ListenStream
+> ListenStream=22
+> ```
+>
+> Deux solutions, selon ce qu'on veut :
+>
+> ```bash
+> # 1. rester en activation de socket (méthode Ubuntu 24.04) :
+> #    Port 2222 dans sshd_config, puis régénérer l'unité socket
+> sudo sshd -t
+> sudo systemctl daemon-reload && sudo systemctl restart ssh.socket
+> ss -tlnp | grep 2222
+>
+> # 2. revenir à un sshd démon classique, qui relit Port
+> sudo systemctl disable --now ssh.socket
+> sudo systemctl enable --now ssh.service
+> ```
+>
+> Sur une version sans ce générateur (22.10), on surchargeait l'unité à la main (`systemctl edit ssh.socket` : `ListenStream=` vide puis `ListenStream=2222`) ; la ligne vide est obligatoire, sans elle on **ajoute** un port
+> au lieu de le remplacer et le 22 reste ouvert.
 
-Diagnostic :
-
-```console
-$ systemctl is-enabled ssh.socket
-enabled
-$ systemctl cat ssh.socket | grep ListenStream
-ListenStream=22
-```
-
-Deux solutions, selon ce qu'on veut :
-
-```bash
-# 1. rester en activation de socket (méthode Ubuntu 24.04) :
-#    Port 2222 dans sshd_config, puis régénérer l'unité socket
-sudo sshd -t
-sudo systemctl daemon-reload && sudo systemctl restart ssh.socket
-ss -tlnp | grep 2222
-
-# 2. revenir à un sshd démon classique, qui relit Port
-sudo systemctl disable --now ssh.socket
-sudo systemctl enable --now ssh.service
-```
-
-Sur une version sans ce générateur (22.10), on surchargeait l'unité à la main (`systemctl edit ssh.socket` : `ListenStream=` vide puis `ListenStream=2222`) ; la ligne vide est obligatoire, sans elle on **ajoute** un port
-au lieu de le remplacer et le 22 reste ouvert.
-:::
-
-::: piege
-Ce comportement explique aussi pourquoi `systemctl status ssh` affiche parfois
-`inactive (dead)` sur une machine parfaitement joignable : tant que personne ne s'est connecté depuis le démarrage, seul `ssh.socket` est actif; la première connexion démarre `ssh.` service, qui reste ensuite en place. Sous Rocky 9, rien de tout cela : `sshd.service` est un démon
-classique et `Port` fonctionne comme attendu — avec en revanche SELinux à
-prévenir : `semanage port -a -t ssh_port_t -p tcp 2222`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ce comportement explique aussi pourquoi `systemctl status ssh` affiche parfois
+> `inactive (dead)` sur une machine parfaitement joignable : tant que personne ne s'est connecté depuis le démarrage, seul `ssh.socket` est actif; la première connexion démarre `ssh.` service, qui reste ensuite en place. Sous Rocky 9, rien de tout cela : `sshd.service` est un démon
+> classique et `Port` fonctionne comme attendu — avec en revanche SELinux à
+> prévenir : `semanage port -a -t ssh_port_t -p tcp 2222`.
 
 ---
 
-**Q14.18** — *`restrict,from=...,command=...` dans `authorized_keys`.*
+<a id="q14-18"></a>**[Q14.18](README.md#q14-18)** — *`restrict,from=...,command=...` dans `authorized_keys`.*
 
 **Réponse : b)** la commande forcée est exécutée, la commande demandée est
 disponible dans `$SSH_ ORIGINAL_COMMAND`.
 
-::: pourquoi
-`command="..."` est une **commande forcée**, pas un défaut. Quand cette clé est
-utilisée, `sshd` exécute exclusivement la commande indiquée, quoi que le client
-demande — y compris si le client ne demande rien (session interactive). Ce que
-le client avait demandé n'est pas perdu pour autant : il est placé dans la
-variable d'environnement `SSH_ ORIGINAL_COMMAND`, ce qui permet d'écrire un
-aiguilleur :
+> [!NOTE]
+> **Pourquoi**
+>
+> `command="..."` est une **commande forcée**, pas un défaut. Quand cette clé est
+> utilisée, `sshd` exécute exclusivement la commande indiquée, quoi que le client
+> demande — y compris si le client ne demande rien (session interactive). Ce que
+> le client avait demandé n'est pas perdu pour autant : il est placé dans la
+> variable d'environnement `SSH_ ORIGINAL_COMMAND`, ce qui permet d'écrire un
+> aiguilleur :
+>
+> ```bash
+> #!/usr/bin/env bash
+> set -euo pipefail
+> case "${SSH_ORIGINAL_COMMAND:-}" in
+>   liste)        ls -1 /srv/sauvegarde ;;
+>   "depot "*)    cat > "/srv/sauvegarde/${SSH_ORIGINAL_COMMAND#depot }" ;;
+>   *) echo "commande refusée" >&2
+>      logger -t lab14 "refus: ${SSH_ORIGINAL_COMMAND:-<interactif>}"
+>      exit 42 ;;
+> esac
+> ```
+>
+> `restrict` coupe en un mot toutes les fonctions annexes : allocation de
+> terminal, redirections de port, transfert d'agent, X11, exécution de
+> `~/.ssh/rc`. On réactive ensuite au cas par cas (`pty`, `port-forwarding`).
+> C'est plus sûr que d'énumérer les `no-*` : une option ajoutée dans une future
+> version d'OpenSSH sera interdite par défaut au lieu d'être autorisée par oubli.
+>
+> `from="10.10.10.14"` limite l'usage de la clé à une origine : une clé volée ne
+> sert à rien depuis ailleurs. `sshd` compare l'adresse source réelle de la
+> connexion, pas une information fournie par le client.
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-case "${SSH_ORIGINAL_COMMAND:-}" in
-  liste)        ls -1 /srv/sauvegarde ;;
-  "depot "*)    cat > "/srv/sauvegarde/${SSH_ORIGINAL_COMMAND#depot }" ;;
-  *) echo "commande refusée" >&2
-     logger -t lab14 "refus: ${SSH_ORIGINAL_COMMAND:-<interactif>}"
-     exit 42 ;;
-esac
-```
-
-`restrict` coupe en un mot toutes les fonctions annexes : allocation de
-terminal, redirections de port, transfert d'agent, X11, exécution de
-`~/.ssh/rc`. On réactive ensuite au cas par cas (`pty`, `port-forwarding`).
-C'est plus sûr que d'énumérer les `no-*` : une option ajoutée dans une future
-version d'OpenSSH sera interdite par défaut au lieu d'être autorisée par oubli.
-
-`from="10.10.10.14"` limite l'usage de la clé à une origine : une clé volée ne
-sert à rien depuis ailleurs. `sshd` compare l'adresse source réelle de la
-connexion, pas une information fournie par le client.
-:::
-
-::: piege
-Deux erreurs qui vident la protection de son sens :
-
-* le script de commande forcée qui fait
-  `eval "$SSH_ORIGINAL_COMMAND"` « pour plus de souplesse » : on vient de
-  redonner un shell complet à la clé. La validation doit être une liste blanche
-  (`case ... esac`), jamais un `eval`.
-* oublier que `command=` ne protège pas du transfert de port : sans `restrict`
-  ni `no-port-forwarding`, le client peut ouvrir un tunnel **sans jamais
-  exécuter la commande forcée**, avec `ssh -N -L ...`. Le tunnel est établi
-  pendant la phase de session, indépendamment de la commande.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux erreurs qui vident la protection de son sens :
+>
+> * le script de commande forcée qui fait
+>   `eval "$SSH_ORIGINAL_COMMAND"` « pour plus de souplesse » : on vient de
+>   redonner un shell complet à la clé. La validation doit être une liste blanche
+>   (`case ... esac`), jamais un `eval`.
+> * oublier que `command=` ne protège pas du transfert de port : sans `restrict`
+>   ni `no-port-forwarding`, le client peut ouvrir un tunnel **sans jamais
+>   exécuter la commande forcée**, avec `ssh -N -L ...`. Le tunnel est établi
+>   pendant la phase de session, indépendamment de la commande.
 
 ---
 
 ## 14.4 Quiz — questions ouvertes
 
-**QO14.1** — *Ce qui se passe entre `ssh lab-web` et le prompt distant.*
+<a id="qo14-1"></a>**[QO14.1](README.md#qo14-1)** — *Ce qui se passe entre `ssh lab-web` et le prompt distant.*
 
 **Réponse**
 
@@ -760,30 +804,32 @@ dans `authorized_keys`.
 **Phase 4 — session.** Ouverture d'un canal, demande de pseudo-terminal, `shell`
 ou `exec`, et le prompt apparaît.
 
-::: pourquoi
-Ce qui circule à la phase 3 est **une signature**, jamais la clé privée. Et
-comme le blob signé contient l'identifiant de session, la signature est liée à
-cette connexion précise : elle ne peut pas être rejouée ailleurs. C'est la
-propriété qui rend l'authentification par clé immune au rejeu, contrairement à
-un mot de passe qui, lui, est transmis tel quel dans le tunnel et arrive en
-clair dans la mémoire du serveur.
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qui circule à la phase 3 est **une signature**, jamais la clé privée. Et
+> comme le blob signé contient l'identifiant de session, la signature est liée à
+> cette connexion précise : elle ne peut pas être rejouée ailleurs. C'est la
+> propriété qui rend l'authentification par clé immune au rejeu, contrairement à
+> un mot de passe qui, lui, est transmis tel quel dans le tunnel et arrive en
+> clair dans la mémoire du serveur.
+>
+> C'est aussi ce qui explique le fonctionnement de l'agent : l'agent ne rend jamais
+> la clé privée, il rend des signatures. Un client qui a accès à l'agent peut donc
+> faire signer ce qu'il veut, mais ne repartira pas avec la clé.
 
-C'est aussi ce qui explique le fonctionnement de l'agent : l'agent ne rend jamais
-la clé privée, il rend des signatures. Un client qui a accès à l'agent peut donc
-faire signer ce qu'il veut, mais ne repartira pas avec la clé.
-:::
-
-::: piege
-Erreur fréquente en entretien : dire que le serveur « chiffre un défi avec la
-clé publique et le client le déchiffre ». C'était le fonctionnement du protocole
-SSH-1, abandonné depuis 1999. En SSH-2 c'est une **signature**, pas un
-chiffrement — ce qui est d'ailleurs indispensable, puisque `ed25519` est un
-algorithme de signature qui ne sait pas chiffrer.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Erreur fréquente en entretien : dire que le serveur « chiffre un défi avec la
+> clé publique et le client le déchiffre ». C'était le fonctionnement du protocole
+> SSH-1, abandonné depuis 1999. En SSH-2 c'est une **signature**, pas un
+> chiffrement — ce qui est d'ailleurs indispensable, puisque `ed25519` est un
+> algorithme de signature qui ne sait pas chiffrer.
 
 ---
 
-**QO14.2** — *Clé contre mot de passe, en entretien.*
+<a id="qo14-2"></a>**[QO14.2](README.md#qo14-2)** — *Clé contre mot de passe, en entretien.*
 
 **Réponse**
 
@@ -809,32 +855,34 @@ l'information « ces identités-là ont accès à ce compte ». En revanche, s'i
 **écrire** dedans, il ajoute sa propre clé et devient toi : c'est toute la raison
 d'être de `StrictModes` et des permissions `700`/`600`.
 
-::: pourquoi
-Le bon réflexe d'entretien est de distinguer les trois secrets en jeu : la clé
-privée (chez toi, chiffrée), la clé publique (partout, sans valeur), la
-passphrase (dans ta tête, protège le fichier de clé au repos). La passphrase ne
-protège **pas** une session en cours ni un agent déverrouillé — d'où `ssh-add -t`
-pour borner la durée de vie, et `ssh-add -c` pour les clés sensibles.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le bon réflexe d'entretien est de distinguer les trois secrets en jeu : la clé
+> privée (chez toi, chiffrée), la clé publique (partout, sans valeur), la
+> passphrase (dans ta tête, protège le fichier de clé au repos). La passphrase ne
+> protège **pas** une session en cours ni un agent déverrouillé — d'où `ssh-add -t`
+> pour borner la durée de vie, et `ssh-add -c` pour les clés sensibles.
 
-::: piege
-Deux nuances qui font la différence entre une réponse correcte et une bonne
-réponse :
-
-* une clé sans passphrase sur un poste de travail est **moins** sûre qu'un bon
-  mot de passe : n'importe quel processus qui lit ton `$HOME` repart avec un
-  accès permanent à tout le parc. La clé sans passphrase n'a de sens que pour un
-  compte de service, sur une machine dont on maîtrise l'accès, et compensée par
-  `from=` et `command=`.
-* la clé ne résout pas la **révocation** : retirer l'accès à un partant, c'est
-  aller retirer sa clé publique dans le `authorized_keys` de chaque compte de
-  chaque machine. C'est la faiblesse structurelle que les certificats SSH
-  corrigent (voir QO14.9).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux nuances qui font la différence entre une réponse correcte et une bonne
+> réponse :
+>
+> * une clé sans passphrase sur un poste de travail est **moins** sûre qu'un bon
+>   mot de passe : n'importe quel processus qui lit ton `$HOME` repart avec un
+>   accès permanent à tout le parc. La clé sans passphrase n'a de sens que pour un
+>   compte de service, sur une machine dont on maîtrise l'accès, et compensée par
+>   `from=` et `command=`.
+> * la clé ne résout pas la **révocation** : retirer l'accès à un partant, c'est
+>   aller retirer sa clé publique dans le `authorized_keys` de chaque compte de
+>   chaque machine. C'est la faiblesse structurelle que les certificats SSH
+>   corrigent (voir QO14.9).
 
 ---
 
-**QO14.3** — *`ForwardAgent` sur les bastions, en entretien.*
+<a id="qo14-3"></a>**[QO14.3](README.md#qo14-3)** — *`ForwardAgent` sur les bastions, en entretien.*
 
 **Réponse**
 
@@ -874,26 +922,28 @@ poste contient bien la clé d'hôte de `lab-db`, donc **je** vérifie l'identit�
 la machine finale. Avec un rebond manuel (`ssh bastion` puis `ssh lab-db`), c'est
 le bastion qui la vérifie, avec son propre `known_hosts` que je ne contrôle pas.
 
-::: pourquoi
-Le point à faire passer : le risque n'est pas le vol de la clé, c'est
-l'**usage** de la clé. Beaucoup répondent « ma clé a une passphrase, donc c'est
-bon » — la passphrase protège le fichier au repos, pas un agent déverrouillé qui
-signe à la demande.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point à faire passer : le risque n'est pas le vol de la clé, c'est
+> l'**usage** de la clé. Beaucoup répondent « ma clé a une passphrase, donc c'est
+> bon » — la passphrase protège le fichier au repos, pas un agent déverrouillé qui
+> signe à la demande.
 
-::: piege
-Si le transfert d'agent est vraiment imposé (un outil qui ne sait pas faire
-autrement), les atténuations acceptables sont : `ssh-add -c` (chaque signature
-demande une confirmation explicite, donc les usages non sollicités deviennent
-visibles), une clé dédiée à durée de vie courte (`ssh-add -t 900`), et
-`ForwardAgent yes` posé **uniquement** dans le bloc de l'hôte concerné, jamais
-dans `Host *`. Et côté serveur, `AllowAgentForwarding no` sur tout ce qui n'en a
-pas strictement besoin.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Si le transfert d'agent est vraiment imposé (un outil qui ne sait pas faire
+> autrement), les atténuations acceptables sont : `ssh-add -c` (chaque signature
+> demande une confirmation explicite, donc les usages non sollicités deviennent
+> visibles), une clé dédiée à durée de vie courte (`ssh-add -t 900`), et
+> `ForwardAgent yes` posé **uniquement** dans le bloc de l'hôte concerné, jamais
+> dans `Host *`. Et côté serveur, `AllowAgentForwarding no` sur tout ce qui n'en a
+> pas strictement besoin.
 
 ---
 
-**QO14.4** — *Trois causes légitimes de changement de clé d'hôte, et la procédure.*
+<a id="qo14-4"></a>**[QO14.4](README.md#qo14-4)** — *Trois causes légitimes de changement de clé d'hôte, et la procédure.*
 
 **Réponse**
 
@@ -931,28 +981,30 @@ vérification de l'empreinte, ou mise à jour du `known_hosts` de référence de
 l'équipe). Si elles diffèrent : quelqu'un s'interpose entre moi et la machine —
 je ne me connecte pas, je préviens, j'ouvre un incident.
 
-::: pourquoi
-La clé de la démarche est le mot **hors bande**. Vérifier l'empreinte avec
-`ssh-keyscan` ne prouve rien : si un attaquant s'interpose, il répondra à
-`ssh-keyscan` exactement comme il a répondu à `ssh`. Le canal de vérification
-doit être indépendant du canal attaqué : console de l'hyperviseur, inventaire
-d'un outil de gestion de configuration, enregistrement SSHFP dans un DNS signé,
-ou un appel téléphonique à la personne qui a réinstallé la machine.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La clé de la démarche est le mot **hors bande**. Vérifier l'empreinte avec
+> `ssh-keyscan` ne prouve rien : si un attaquant s'interpose, il répondra à
+> `ssh-keyscan` exactement comme il a répondu à `ssh`. Le canal de vérification
+> doit être indépendant du canal attaqué : console de l'hyperviseur, inventaire
+> d'un outil de gestion de configuration, enregistrement SSHFP dans un DNS signé,
+> ou un appel téléphonique à la personne qui a réinstallé la machine.
 
-::: piege
-Le vrai problème d'un parc qui voit ce message une fois par semaine n'est pas le
-message : c'est que les équipes ont pris l'habitude de faire `ssh-keygen -R` sans
-réfléchir. L'alerte ne protège plus personne. La correction structurelle est de
-faire signer les clés d'hôte par une CA SSH et de poser une seule ligne
-`@cert-authority *.lab.local ssh-ed25519 AAAA...` dans `known_hosts` : une VM
-reconstruite reçoit un nouveau certificat signé par la même CA, et aucun client
-ne bronche.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le vrai problème d'un parc qui voit ce message une fois par semaine n'est pas le
+> message : c'est que les équipes ont pris l'habitude de faire `ssh-keygen -R` sans
+> réfléchir. L'alerte ne protège plus personne. La correction structurelle est de
+> faire signer les clés d'hôte par une CA SSH et de poser une seule ligne
+> `@cert-authority *.lab.local ssh-ed25519 AAAA...` dans `known_hosts` : une VM
+> reconstruite reçoit un nouveau certificat signé par la même CA, et aucun client
+> ne bronche.
 
 ---
 
-**QO14.5** — *Démarche de diagnostic d'un `Permission denied (publickey)`.*
+<a id="qo14-5"></a>**[QO14.5](README.md#qo14-5)** — *Démarche de diagnostic d'un `Permission denied (publickey)`.*
 
 **Réponse**
 
@@ -1013,37 +1065,39 @@ La dernière commande est celle qui tranche : elle donne les empreintes des clé
 réellement autorisées, à comparer avec celle du client. C'est plus fiable qu'un
 `diff` visuel sur des lignes de 700 caractères.
 
-::: pourquoi
-Les causes, classées par fréquence réelle en exploitation :
+> [!NOTE]
+> **Pourquoi**
+>
+> Les causes, classées par fréquence réelle en exploitation :
+>
+> 1. mauvais utilisateur (`ssh lab-ops` au lieu de `ssh dev@lab-ops`) ;
+> 2. permissions du home, de `~/.ssh` ou de `authorized_keys` côté serveur —
+>    typiquement après une restauration de sauvegarde ou un `cp -r` d'un home ;
+> 3. la clé n'est pas dans `authorized_keys` (ou y est avec un retour à la ligne
+>    au milieu : une clé publique est **une seule ligne**) ;
+> 4. `AllowUsers`/`AllowGroups` qui ne couvre pas le compte ;
+> 5. trop d'identités proposées, `MaxAuthTries` atteint ;
+> 6. `AuthorizedKeysFile` redéfini ailleurs (fréquent avec un outil de gestion
+>    centralisée : `/etc/ssh/authorized_keys/%u`).
+>
+> `LogLevel VERBOSE` change la vie ici : le journal affiche l'empreinte de la clé
+> proposée, ce qui permet de dire immédiatement « ce n'est pas la clé que tu
+> crois ».
 
-1. mauvais utilisateur (`ssh lab-ops` au lieu de `ssh dev@lab-ops`) ;
-2. permissions du home, de `~/.ssh` ou de `authorized_keys` côté serveur —
-   typiquement après une restauration de sauvegarde ou un `cp -r` d'un home ;
-3. la clé n'est pas dans `authorized_keys` (ou y est avec un retour à la ligne
-   au milieu : une clé publique est **une seule ligne**) ;
-4. `AllowUsers`/`AllowGroups` qui ne couvre pas le compte ;
-5. trop d'identités proposées, `MaxAuthTries` atteint ;
-6. `AuthorizedKeysFile` redéfini ailleurs (fréquent avec un outil de gestion
-   centralisée : `/etc/ssh/authorized_keys/%u`).
-
-`LogLevel VERBOSE` change la vie ici : le journal affiche l'empreinte de la clé
-proposée, ce qui permet de dire immédiatement « ce n'est pas la clé que tu
-crois ».
-:::
-
-::: piege
-Ne pas confondre `Permission denied (publickey)` et
-`Permission denied (publickey,password)`. La liste entre parenthèses est celle
-des méthodes que le serveur **acceptait encore**. S'il n'y a que `publickey`,
-l'authentification par mot de passe est désactivée : inutile de chercher un
-problème de mot de passe. Si la liste contient `password` et qu'aucune invite
-n'est apparue, c'est le **client** qui n'a pas essayé — regarde
-`PreferredAuthentications` et `PasswordAuthentication` dans `ssh -G`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ne pas confondre `Permission denied (publickey)` et
+> `Permission denied (publickey,password)`. La liste entre parenthèses est celle
+> des méthodes que le serveur **acceptait encore**. S'il n'y a que `publickey`,
+> l'authentification par mot de passe est désactivée : inutile de chercher un
+> problème de mot de passe. Si la liste contient `password` et qu'aucune invite
+> n'est apparue, c'est le **client** qui n'a pas essayé — regarde
+> `PreferredAuthentications` et `PasswordAuthentication` dans `ssh -G`.
 
 ---
 
-**QO14.6** — *Mécanisme, gains et pièges du multiplexage.*
+<a id="qo14-6"></a>**[QO14.6](README.md#qo14-6)** — *Mécanisme, gains et pièges du multiplexage.*
 
 **Réponse**
 
@@ -1088,24 +1142,26 @@ active le multiplexage par défaut), pipelines de CI.
    donne pas d'agent transféré — la seconde session réutilise le maître. Même
    chose pour `-X`. Il faut alors `-o ControlMaster=no`. À l'inverse, un `-L` ou `-D` demandé par une session fille est confié au maître et lui survit (`ssh -O forward` / `ssh -O cancel` pour les gérer à chaud).
 
-::: pourquoi
-Le point conceptuel à retenir : le multiplexage ne rend pas SSH plus rapide, il
-**supprime les connexions**. Tout le coût d'une connexion SSH est dans son
-établissement (cryptographie asymétrique + allers-retours réseau) ; une fois
-établie, le débit est celui du réseau. C'est pour ça que le gain est énorme sur
-des milliers de petites commandes et nul sur un gros transfert.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point conceptuel à retenir : le multiplexage ne rend pas SSH plus rapide, il
+> **supprime les connexions**. Tout le coût d'une connexion SSH est dans son
+> établissement (cryptographie asymétrique + allers-retours réseau) ; une fois
+> établie, le débit est celui du réseau. C'est pour ça que le gain est énorme sur
+> des milliers de petites commandes et nul sur un gros transfert.
 
-::: piege
-Un maître oublié maintient une session authentifiée ouverte pendant toute la
-durée de `ControlPersist`. Sur un poste partagé ou une machine de rebond, c'est
-un accès offert à qui prend la main sur ta session locale. Sur un bastion, on
-règle `ControlPersist` court (`1m`) ou on le désactive.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Un maître oublié maintient une session authentifiée ouverte pendant toute la
+> durée de `ControlPersist`. Sur un poste partagé ou une machine de rebond, c'est
+> un accès offert à qui prend la main sur ta session locale. Sur un bastion, on
+> règle `ControlPersist` court (`1m`) ou on le désactive.
 
 ---
 
-**QO14.7** — *`-L`, `-R`, `-D` comparés.*
+<a id="qo14-7"></a>**[QO14.7](README.md#qo14-7)** — *`-L`, `-R`, `-D` comparés.*
 
 **Réponse**
 
@@ -1138,32 +1194,34 @@ elles donnent au client l'accès réseau du serveur. `-R` est **entrante** : ell
 donne au serveur l'accès réseau du client. C'est la différence qui compte pour
 la sécurité.
 
-::: pourquoi
-La règle de lecture qui évite toutes les confusions : **le premier port est
-celui qu'on ouvre, et la lettre dit chez qui.** `-L` = Local, le port s'ouvre
-chez moi. `-R` = Remote, le port s'ouvre chez le serveur. Le reste de la ligne
-(`hôte:port`) est toujours la destination finale, vue **depuis la machine qui
-établit la connexion finale** — le serveur pour `-L` et `-D`, le client pour
-`-R`. C'est pourquoi `-L 15432:127.0.0.1:5432` désigne la boucle locale du
-serveur, et `-R 8080:127.0.0.1:3000` la boucle locale du client.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La règle de lecture qui évite toutes les confusions : **le premier port est
+> celui qu'on ouvre, et la lettre dit chez qui.** `-L` = Local, le port s'ouvre
+> chez moi. `-R` = Remote, le port s'ouvre chez le serveur. Le reste de la ligne
+> (`hôte:port`) est toujours la destination finale, vue **depuis la machine qui
+> établit la connexion finale** — le serveur pour `-L` et `-D`, le client pour
+> `-R`. C'est pourquoi `-L 15432:127.0.0.1:5432` désigne la boucle locale du
+> serveur, et `-R 8080:127.0.0.1:3000` la boucle locale du client.
 
-::: piege
-`-D` a un piège spécifique : la résolution DNS. Si l'application résout le nom
-localement puis demande une IP au proxy, tu fuites tes requêtes DNS et tu
-n'atteins pas les noms internes. Il faut un client SOCKS5 qui délègue la
-résolution : `curl --socks5-hostname` (et non `--socks5`), ou dans Firefox
-l'option « Utiliser un DNS distant ». Le `h` de `socks5h` dans les variables
-d'environnement de proxy signifie exactement ça.
-
-Pour `-R`, le piège est double : le port n'écoute que sur la boucle locale du
-serveur tant que `GatewayPorts` n'est pas activé, et un `-R` laissé en place est
-un canal d'accès entrant permanent vers ton poste.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `-D` a un piège spécifique : la résolution DNS. Si l'application résout le nom
+> localement puis demande une IP au proxy, tu fuites tes requêtes DNS et tu
+> n'atteins pas les noms internes. Il faut un client SOCKS5 qui délègue la
+> résolution : `curl --socks5-hostname` (et non `--socks5`), ou dans Firefox
+> l'option « Utiliser un DNS distant ». Le `h` de `socks5h` dans les variables
+> d'environnement de proxy signifie exactement ça.
+>
+> Pour `-R`, le piège est double : le port n'écoute que sur la boucle locale du
+> serveur tant que `GatewayPorts` n'est pas activé, et un `-R` laissé en place est
+> un canal d'accès entrant permanent vers ton poste.
 
 ---
 
-**QO14.8** — *Les cinq limites de la boucle `for h in ...; do ssh ...; done`.*
+<a id="qo14-8"></a>**[QO14.8](README.md#qo14-8)** — *Les cinq limites de la boucle `for h in ...; do ssh ...; done`.*
 
 **Réponse**
 
@@ -1193,24 +1251,25 @@ un canal d'accès entrant permanent vers ton poste.
 première machine — il faut `ssh -n` ou `< /dev/null`), et les commandes distantes
 tournent dans un shell non interactif au `PATH` réduit.
 
-::: pourquoi
-La bonne façon de formuler ça en entretien : la boucle `ssh` décrit **comment
-faire**, un outil de gestion de configuration décrit **ce qui doit être vrai**.
-Tant qu'on est sur trois machines et une commande de lecture, la boucle est la
-bonne réponse — plus simple, plus rapide à écrire, moins de dépendances. Dès
-qu'on modifie un état, qu'on répète, ou qu'on dépasse la dizaine de machines, le
-coût du script maison dépasse celui de l'outil.
-
-C'est exactement pourquoi Ansible s'appuie sur SSH sans le remplacer : il active
-`ControlMaster` par défaut, pousse un module Python et récupère un résultat
-structuré. Tout ce module reste donc valable — le durcissement, les clés, le
-`~/.ssh/config`, le multiplexage : c'est l'infrastructure sur laquelle Ansible
-repose (module 23).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La bonne façon de formuler ça en entretien : la boucle `ssh` décrit **comment
+> faire**, un outil de gestion de configuration décrit **ce qui doit être vrai**.
+> Tant qu'on est sur trois machines et une commande de lecture, la boucle est la
+> bonne réponse — plus simple, plus rapide à écrire, moins de dépendances. Dès
+> qu'on modifie un état, qu'on répète, ou qu'on dépasse la dizaine de machines, le
+> coût du script maison dépasse celui de l'outil.
+>
+> C'est exactement pourquoi Ansible s'appuie sur SSH sans le remplacer : il active
+> `ControlMaster` par défaut, pousse un module Python et récupère un résultat
+> structuré. Tout ce module reste donc valable — le durcissement, les clés, le
+> `~/.ssh/config`, le multiplexage : c'est l'infrastructure sur laquelle Ansible
+> repose (module 23).
 
 ---
 
-**QO14.9** — *Certificats SSH.*
+<a id="qo14-9"></a>**[QO14.9](README.md#qo14-9)** — *Certificats SSH.*
 
 **Réponse**
 
@@ -1256,40 +1315,42 @@ Côté serveur : `HostCertificate /etc/ssh/ssh_host_ed25519_key-cert.pub` et
 quels *principaux* ont droit à quel compte local. Côté client : le fichier
 `id_ed25519-cert.pub` est présenté automatiquement s'il est à côté de la clé.
 
-::: pourquoi
-Le gain décisif est la **durée de vie**. Un certificat utilisateur de 8 heures
-supprime le problème de la révocation : il n'y a rien à révoquer, ça expire. Le
-départ d'un collaborateur se traite en cessant de lui délivrer des certificats,
-pas en visitant 200 machines. Et le certificat d'hôte supprime le problème du
-TOFU : une VM reconstruite obtient un nouveau certificat signé par la même CA,
-et aucun client ne voit passer d'alerte — alors qu'une vraie interception, elle,
-échouera toujours, faute de signature valide.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le gain décisif est la **durée de vie**. Un certificat utilisateur de 8 heures
+> supprime le problème de la révocation : il n'y a rien à révoquer, ça expire. Le
+> départ d'un collaborateur se traite en cessant de lui délivrer des certificats,
+> pas en visitant 200 machines. Et le certificat d'hôte supprime le problème du
+> TOFU : une VM reconstruite obtient un nouveau certificat signé par la même CA,
+> et aucun client ne voit passer d'alerte — alors qu'une vraie interception, elle,
+> échouera toujours, faute de signature valide.
+>
+> En pratique, on ne signe pas à la main : un service d'émission (Vault SSH
+> Engine, Teleport, `step-ca`) authentifie la personne auprès du SSO de
+> l'entreprise et lui délivre un certificat de quelques heures.
 
-En pratique, on ne signe pas à la main : un service d'émission (Vault SSH
-Engine, Teleport, `step-ca`) authentifie la personne auprès du SSO de
-l'entreprise et lui délivre un certificat de quelques heures.
-:::
-
-::: piege
-Trois erreurs classiques de mise en œuvre :
-
-* **oublier `-n`** : un certificat sans principal est valable pour... rien du
-  tout côté hôte, et pour n'importe quel nom d'utilisateur côté utilisateur si
-  le serveur n'utilise pas `AuthorizedPrincipalsFile`. Les principaux sont le
-  cœur du contrôle d'accès.
-* **oublier `-h`** pour un certificat d'hôte : sans lui, on a signé un
-  certificat d'utilisateur qui ne sera jamais accepté comme identité de machine.
-* **garder la clé de CA sur le bastion** : compromettre la CA, c'est
-  compromettre tout le parc, définitivement. Elle vit hors ligne ou dans un HSM,
-  et on prévoit `RevokedKeys` / une KRL (`ssh-keygen -k`) dès le premier jour,
-  parce qu'un certificat long émis par erreur ne s'annule pas autrement.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Trois erreurs classiques de mise en œuvre :
+>
+> * **oublier `-n`** : un certificat sans principal est valable pour... rien du
+>   tout côté hôte, et pour n'importe quel nom d'utilisateur côté utilisateur si
+>   le serveur n'utilise pas `AuthorizedPrincipalsFile`. Les principaux sont le
+>   cœur du contrôle d'accès.
+> * **oublier `-h`** pour un certificat d'hôte : sans lui, on a signé un
+>   certificat d'utilisateur qui ne sera jamais accepté comme identité de machine.
+> * **garder la clé de CA sur le bastion** : compromettre la CA, c'est
+>   compromettre tout le parc, définitivement. Elle vit hors ligne ou dans un HSM,
+>   et on prévoit `RevokedKeys` / une KRL (`ssh-keygen -k`) dès le premier jour,
+>   parce qu'un certificat long émis par erreur ne s'annule pas autrement.
 
 ---
 
 ## 14.5 Exercices guidés
 
-**E14.1** — *Créer une paire ed25519 commentée, avec passphrase et KDF renforcé.*
+<a id="e14-1"></a>**[E14.1](README.md#e14-1)** — *Créer une paire ed25519 commentée, avec passphrase et KDF renforcé.*
 
 ```bash
 ssh-keygen -t ed25519 -a 100 -C "mathieu@lab-adm-2026-09" \
@@ -1311,35 +1372,37 @@ Load key "/home/mathieu/.ssh/id_ed25519": incorrect passphrase supplied
 La seconde commande est le test fiable : si une passphrase vide suffisait à
 extraire la clé publique, la clé ne serait pas protégée.
 
-::: pourquoi
-`-a 100` fixe le nombre de tours de la fonction de dérivation `bcrypt_pbkdf`
-appliquée à la passphrase (16 par défaut). Chaque tour coûte du temps à toi
-**une fois** à l'ouverture, et à un attaquant **à chaque essai** de son
-dictionnaire : c'est un facteur 6 sur le coût d'un cassage hors ligne, pour
-environ 0,1 seconde de plus au chargement.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-a 100` fixe le nombre de tours de la fonction de dérivation `bcrypt_pbkdf`
+> appliquée à la passphrase (16 par défaut). Chaque tour coûte du temps à toi
+> **une fois** à l'ouverture, et à un attaquant **à chaque essai** de son
+> dictionnaire : c'est un facteur 6 sur le coût d'un cassage hors ligne, pour
+> environ 0,1 seconde de plus au chargement.
+>
+> Le commentaire n'a aucun rôle cryptographique, mais il est la seule information
+> lisible dans `authorized_keys` : quand tu devras retirer une clé dans deux ans,
+> `mathieu@lab-adm-2026-09` te dira de quoi il s'agit, `mathieu@ubuntu` non.
+> Convention utile : utilisateur + machine d'origine + date d'émission.
+>
+> Depuis OpenSSH 7.8, toutes les clés privées sont stockées dans le format
+> OpenSSH natif (`BEGIN OPENSSH PRIVATE KEY`) : chiffrement `aes256-ctr`,
+> dérivation `bcrypt`. L'ancien format PEM chiffré (`Proc-Type: 4,ENCRYPTED`,
+> `DEK-Info: AES-128-CBC`) utilisait une dérivation MD5 à un seul tour, cassable
+> très vite. Si tu croises encore une clé à ce format, régénère-la.
 
-Le commentaire n'a aucun rôle cryptographique, mais il est la seule information
-lisible dans `authorized_keys` : quand tu devras retirer une clé dans deux ans,
-`mathieu@lab-adm-2026-09` te dira de quoi il s'agit, `mathieu@ubuntu` non.
-Convention utile : utilisateur + machine d'origine + date d'émission.
-
-Depuis OpenSSH 7.8, toutes les clés privées sont stockées dans le format
-OpenSSH natif (`BEGIN OPENSSH PRIVATE KEY`) : chiffrement `aes256-ctr`,
-dérivation `bcrypt`. L'ancien format PEM chiffré (`Proc-Type: 4,ENCRYPTED`,
-`DEK-Info: AES-128-CBC`) utilisait une dérivation MD5 à un seul tour, cassable
-très vite. Si tu croises encore une clé à ce format, régénère-la.
-:::
-
-::: piege
-`ssh-keygen -p -f ~/.ssh/id_ed25519` change la passphrase d'une clé existante
-sans changer la clé : la clé publique déployée partout reste valable. C'est ce
-qu'il faut faire quand on découvre une clé sans passphrase, **pas** en générer
-une nouvelle et repartir pour une tournée de déploiement.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `ssh-keygen -p -f ~/.ssh/id_ed25519` change la passphrase d'une clé existante
+> sans changer la clé : la clé publique déployée partout reste valable. C'est ce
+> qu'il faut faire quand on découvre une clé sans passphrase, **pas** en générer
+> une nouvelle et repartir pour une tournée de déploiement.
 
 ---
 
-**E14.2** — *Empreintes SHA256, randomart, et clé d'hôte locale.*
+<a id="e14-2"></a>**[E14.2](README.md#e14-2)** — *Empreintes SHA256, randomart, et clé d'hôte locale.*
 
 ```bash
 ssh-keygen -lf ~/.ssh/id_ed25519.pub          # empreinte SHA256
@@ -1353,26 +1416,27 @@ $ ssh-keygen -lf ~/.ssh/id_ed25519.pub
     mathieu@lab-adm-2026-09 (ED25519)
 ```
 
-::: pourquoi
-La sortie se lit : taille en bits, algorithme d'empreinte et valeur, commentaire,
-type de clé. Depuis OpenSSH 6.8, le défaut est SHA256 encodé en base64 — sans
-le `=` de bourrage final, ce qui surprend quand on compare à un hachage calculé
-autrement.
-
-Le dessin ASCII (*randomart*) n'existe que pour une raison : un humain compare
-mieux deux images que deux chaînes de 43 caractères. Il est destiné à la
-vérification visuelle d'une empreinte d'hôte affichée à la première connexion.
-Il n'a aucune valeur cryptographique propre : c'est une représentation de
-l'empreinte, pas autre chose.
-
-Point pratique : `ssh-keygen -lf` fonctionne aussi sur un `authorized_keys` ou
-un `known_hosts` entier, et liste alors une empreinte par ligne. C'est la façon
-la plus rapide de répondre à « est-ce que ma clé est bien dans ce fichier ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La sortie se lit : taille en bits, algorithme d'empreinte et valeur, commentaire,
+> type de clé. Depuis OpenSSH 6.8, le défaut est SHA256 encodé en base64 — sans
+> le `=` de bourrage final, ce qui surprend quand on compare à un hachage calculé
+> autrement.
+>
+> Le dessin ASCII (*randomart*) n'existe que pour une raison : un humain compare
+> mieux deux images que deux chaînes de 43 caractères. Il est destiné à la
+> vérification visuelle d'une empreinte d'hôte affichée à la première connexion.
+> Il n'a aucune valeur cryptographique propre : c'est une représentation de
+> l'empreinte, pas autre chose.
+>
+> Point pratique : `ssh-keygen -lf` fonctionne aussi sur un `authorized_keys` ou
+> un `known_hosts` entier, et liste alors une empreinte par ligne. C'est la façon
+> la plus rapide de répondre à « est-ce que ma clé est bien dans ce fichier ».
 
 ---
 
-**E14.3** — *Déployer sa clé publique sans `ssh-copy-id`.*
+<a id="e14-3"></a>**[E14.3](README.md#e14-3)** — *Déployer sa clé publique sans `ssh-copy-id`.*
 
 ```bash
 cat ~/.ssh/id_ed25519.pub | ssh mathieu@10.10.10.11 \
@@ -1388,36 +1452,38 @@ ssh mathieu@10.10.10.11 "umask 077; mkdir -p ~/.ssh; \
   printf '%s\n' '$KEY' >> ~/.ssh/authorized_keys"
 ```
 
-::: pourquoi
-Le `umask 077` est le cœur de l'exercice : il fait que **tout** ce qui est créé
-par la suite dans cette commande (le répertoire `.ssh` comme le fichier
-`authorized_keys`) naît en `700` et `600`. Sans lui, `mkdir -p ~/.ssh` crée un
-répertoire en `755` et `sshd` refusera de le lire à cause de `StrictModes`,
-avec pour seul symptôme un `Permission denied (publickey)` côté client.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le `umask 077` est le cœur de l'exercice : il fait que **tout** ce qui est créé
+> par la suite dans cette commande (le répertoire `.ssh` comme le fichier
+> `authorized_keys`) naît en `700` et `600`. Sans lui, `mkdir -p ~/.ssh` crée un
+> répertoire en `755` et `sshd` refusera de le lire à cause de `StrictModes`,
+> avec pour seul symptôme un `Permission denied (publickey)` côté client.
+>
+> Le `»` et non `>` : écraser le fichier supprimerait les clés des collègues et
+> des outils d'automatisation. C'est une erreur qui coupe l'accès à d'autres
+> personnes que soi, donc particulièrement désagréable.
+>
+> `ssh-copy-id` fait exactement ce travail, en plus rigoureux : il vérifie que la
+> clé n'est pas déjà présente, crée les répertoires avec les bons modes, et sait
+> prendre les clés depuis l'agent quand on ne lui donne pas de `-i`. La raison de
+> le faire à la main une fois est de comprendre qu'il n'y a aucune magie : trois
+> opérations de fichier.
 
-Le `»` et non `>` : écraser le fichier supprimerait les clés des collègues et
-des outils d'automatisation. C'est une erreur qui coupe l'accès à d'autres
-personnes que soi, donc particulièrement désagréable.
-
-`ssh-copy-id` fait exactement ce travail, en plus rigoureux : il vérifie que la
-clé n'est pas déjà présente, crée les répertoires avec les bons modes, et sait
-prendre les clés depuis l'agent quand on ne lui donne pas de `-i`. La raison de
-le faire à la main une fois est de comprendre qu'il n'y a aucune magie : trois
-opérations de fichier.
-:::
-
-::: piege
-Une clé publique tient sur **une seule ligne**. Un copier-coller à travers un
-éditeur qui replie les lignes longues (ou un traitement de texte) casse la clé
-en deux et produit un `Permission denied (publickey)` inexplicable. Vérification :
-`awk '{print NR, NF, substr($1,1,20)}' ~/.ssh/authorized_keys` — chaque ligne
-doit avoir 3 champs (type, clé, commentaire) et commencer par `ssh-ed25519` ou
-`ssh-rsa`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Une clé publique tient sur **une seule ligne**. Un copier-coller à travers un
+> éditeur qui replie les lignes longues (ou un traitement de texte) casse la clé
+> en deux et produit un `Permission denied (publickey)` inexplicable. Vérification :
+> `awk '{print NR, NF, substr($1,1,20)}' ~/.ssh/authorized_keys` — chaque ligne
+> doit avoir 3 champs (type, clé, commentaire) et commencer par `ssh-ed25519` ou
+> `ssh-rsa`.
 
 ---
 
-**E14.4** — *Auditer et corriger les permissions de `~/.ssh`.*
+<a id="e14-4"></a>**[E14.4](README.md#e14-4)** — *Auditer et corriger les permissions de `~/.ssh`.*
 
 ```bash
 # lister ce qui est trop ouvert
@@ -1430,31 +1496,33 @@ chmod 644 ~/.ssh/*.pub ~/.ssh/known_hosts 2>/dev/null
 chmod go-w ~
 ```
 
-::: pourquoi
-`-perm /g+rwx,o+rwx` se lit « au moins un de ces bits est positionné » (le `/`).
-À ne pas confondre avec `-perm -g+rwx` (« tous ces bits sont positionnés ») ni
-`-perm 600` (« exactement ce mode »). C'est la distinction qui fait qu'un audit
-de permissions rend le bon résultat ou passe à côté de la moitié des fichiers.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-perm /g+rwx,o+rwx` se lit « au moins un de ces bits est positionné » (le `/`).
+> À ne pas confondre avec `-perm -g+rwx` (« tous ces bits sont positionnés ») ni
+> `-perm 600` (« exactement ce mode »). C'est la distinction qui fait qu'un audit
+> de permissions rend le bon résultat ou passe à côté de la moitié des fichiers.
+>
+> Le `chmod go-w ~` final est celui qu'on oublie : `StrictModes` remonte jusqu'au
+> répertoire personnel. Un home en `775` avec un groupe partagé déclenche le refus
+> même si `~/.ssh` est parfait.
+>
+> Mettre les fichiers publics en `644` n'est pas obligatoire mais c'est propre :
+> `known_hosts` et les `.pub` n'ont aucun secret, et les laisser en `600` gêne les
+> outils qui les lisent sous un autre compte.
 
-Le `chmod go-w ~` final est celui qu'on oublie : `StrictModes` remonte jusqu'au
-répertoire personnel. Un home en `775` avec un groupe partagé déclenche le refus
-même si `~/.ssh` est parfait.
-
-Mettre les fichiers publics en `644` n'est pas obligatoire mais c'est propre :
-`known_hosts` et les `.pub` n'ont aucun secret, et les laisser en `600` gêne les
-outils qui les lisent sous un autre compte.
-:::
-
-::: piege
-`chmod -R 600 ~/.ssh` est l'erreur classique : les répertoires perdent leur bit
-`x` et deviennent intraversables, y compris pour toi. D'où le `find -type f`.
-Et un `chmod 700 ~/.ssh` seul ne corrige rien si c'est le fichier de clé qui est
-en `644` : il faut les deux.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `chmod -R 600 ~/.ssh` est l'erreur classique : les répertoires perdent leur bit
+> `x` et deviennent intraversables, y compris pour toi. D'où le `find -type f`.
+> Et un `chmod 700 ~/.ssh` seul ne corrige rien si c'est le fichier de clé qui est
+> en `644` : il faut les deux.
 
 ---
 
-**E14.5** — *Agent, chargement avec durée de vie, inspection.*
+<a id="e14-5"></a>**[E14.5](README.md#e14-5)** — *Agent, chargement avec durée de vie, inspection.*
 
 ```bash
 eval "$(ssh-agent -s)"                 # démarre et exporte les variables
@@ -1475,41 +1543,43 @@ SSH_AGENT_PID=3413
 Au bout d'une heure, la clé est retirée automatiquement : `ssh-add -l` répond
 `The agent has no identities.` et la connexion suivante redemande la passphrase.
 
-::: pourquoi
-`eval` est indispensable et souvent mal compris : `ssh-agent -s` ne modifie pas
-ton shell, il **imprime** sur sa sortie standard les commandes `export` à
-exécuter. Sans `eval`, tu vois s'afficher `SSH_AUTH_SOCK=...; export SSH_ AUTH_SOCK;` et rien n'est positionné — l'agent tourne, mais aucun client ne
-sait où le joindre.
+> [!NOTE]
+> **Pourquoi**
+>
+> `eval` est indispensable et souvent mal compris : `ssh-agent -s` ne modifie pas
+> ton shell, il **imprime** sur sa sortie standard les commandes `export` à
+> exécuter. Sans `eval`, tu vois s'afficher `SSH_AUTH_SOCK=...; export SSH_ AUTH_SOCK;` et rien n'est positionné — l'agent tourne, mais aucun client ne
+> sait où le joindre.
+>
+> Tout le mécanisme tient dans `SSH_AUTH_SOCK` : c'est le chemin de la socket UNIX
+> que `ssh` interroge pour demander une signature. C'est aussi ce qui explique le
+> risque du transfert d'agent : il suffit de pouvoir lire cette socket pour
+> utiliser les clés.
+>
+> `-t` est la mesure d'hygiène la plus rentable du module : un agent chargé sans
+> limite garde tes clés utilisables jusqu'à la fin de la session, y compris quand
+> tu t'absentes. Pour une clé de production, `ssh-add -c` ajoute une confirmation
+> à chaque usage.
 
-Tout le mécanisme tient dans `SSH_AUTH_SOCK` : c'est le chemin de la socket UNIX
-que `ssh` interroge pour demander une signature. C'est aussi ce qui explique le
-risque du transfert d'agent : il suffit de pouvoir lire cette socket pour
-utiliser les clés.
-
-`-t` est la mesure d'hygiène la plus rentable du module : un agent chargé sans
-limite garde tes clés utilisables jusqu'à la fin de la session, y compris quand
-tu t'absentes. Pour une clé de production, `ssh-add -c` ajoute une confirmation
-à chaque usage.
-:::
-
-::: piege
-Sur un bureau Ubuntu, un agent est déjà démarré par la session graphique
-(`gnome-keyring` ou `ssh-agent` via systemd `--user`). Lancer `eval
-"$(ssh-agent -s)"` dans chaque terminal crée alors un agent de plus à chaque
-fois : on se retrouve avec une dizaine de processus `ssh-agent`, dont un seul
-est joignable. Le bon réflexe est de **tester d'abord** :
-
-```bash
-ssh-add -l >/dev/null 2>&1 || eval "$(ssh-agent -s)"
-```
-
-Et `AddKeysToAgent yes` dans `~/.ssh/config` évite le `ssh-add` manuel : la clé
-est ajoutée à l'agent la première fois qu'on saisit sa passphrase.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sur un bureau Ubuntu, un agent est déjà démarré par la session graphique
+> (`gnome-keyring` ou `ssh-agent` via systemd `--user`). Lancer `eval
+> "$(ssh-agent -s)"` dans chaque terminal crée alors un agent de plus à chaque
+> fois : on se retrouve avec une dizaine de processus `ssh-agent`, dont un seul
+> est joignable. Le bon réflexe est de **tester d'abord** :
+>
+> ```bash
+> ssh-add -l >/dev/null 2>&1 || eval "$(ssh-agent -s)"
+> ```
+>
+> Et `AddKeysToAgent yes` dans `~/.ssh/config` évite le `ssh-add` manuel : la clé
+> est ajoutée à l'agent la première fois qu'on saisit sa passphrase.
 
 ---
 
-**E14.6** — *L'agent OpenSSH natif sous Windows.*
+<a id="e14-6"></a>**[E14.6](README.md#e14-6)** — *L'agent OpenSSH natif sous Windows.*
 
 Dans un PowerShell **administrateur**, une seule fois :
 
@@ -1530,44 +1600,46 @@ Le fichier de configuration client est `C:\Users\<toi>\.ssh\config`, mêmes
 directives et même syntaxe que sous Linux. Les chemins s'y écrivent
 `C:\Users\mathieu\.ssh\id_ed25519` ou, plus portable, `~/.ssh/id_ ed25519`.
 
-::: pourquoi
-Sous Windows, `ssh-agent` n'est pas un processus lancé par le shell : c'est un
-**service Windows**. Deux conséquences qui changent l'usage :
+> [!NOTE]
+> **Pourquoi**
+>
+> Sous Windows, `ssh-agent` n'est pas un processus lancé par le shell : c'est un
+> **service Windows**. Deux conséquences qui changent l'usage :
+>
+> 1. Il n'y a pas de `SSH_AUTH_SOCK` : les clients le joignent par un tube nommé
+>    (`\\.\pipe\openssh-ssh-agent`). Rien à exporter, rien à `eval`.
+> 2. Les clés ajoutées sont **chiffrées par DPAPI et stockées dans le registre**,
+>    liées à ton compte Windows. Elles survivent donc au redémarrage : un
+>    `ssh-add` une fois pour toutes, et la passphrase n'est plus jamais demandée.
+>    C'est très confortable et c'est aussi un choix de sécurité à assumer — si
+>    quelqu'un ouvre ta session Windows, il a tes clés. Sur un poste sensible, on
+>    préfère `ssh-add -t`.
+>
+> Le client OpenSSH est livré avec Windows depuis la version 1809 ; `ssh -V` dans
+> PowerShell donne sa version. Rien à installer dans le cas général.
 
-1. Il n'y a pas de `SSH_AUTH_SOCK` : les clients le joignent par un tube nommé
-   (`\\.\pipe\openssh-ssh-agent`). Rien à exporter, rien à `eval`.
-2. Les clés ajoutées sont **chiffrées par DPAPI et stockées dans le registre**,
-   liées à ton compte Windows. Elles survivent donc au redémarrage : un
-   `ssh-add` une fois pour toutes, et la passphrase n'est plus jamais demandée.
-   C'est très confortable et c'est aussi un choix de sécurité à assumer — si
-   quelqu'un ouvre ta session Windows, il a tes clés. Sur un poste sensible, on
-   préfère `ssh-add -t`.
-
-Le client OpenSSH est livré avec Windows depuis la version 1809 ; `ssh -V` dans
-PowerShell donne sa version. Rien à installer dans le cas général.
-:::
-
-::: piege
-Deux frottements classiques sur un poste Windows :
-
-* **Permissions NTFS.** Le client refuse une clé privée dont les ACL sont trop
-  larges, avec un message équivalent au `UNPROTECTED PRIVATE KEY FILE` de Linux.
-  Correction : propriétés du fichier → Sécurité → Avancé → désactiver l'héritage,
-  ne laisser que ton compte. En ligne :
-  `icacls .\id_ed25519 /inheritance:r /grant:r "${env: USERNAME}:(R)"`.
-* **PuTTY et Pageant** sont un écosystème séparé : format `.ppk`, agent
-  `pageant.exe`, conversion par `puttygen`. Ils ne parlent pas au service
-  `ssh-agent` de Windows. Si l'équipe utilise WinSCP ou PuTTY, il faut soit
-  convertir les clés, soit configurer WinSCP pour utiliser Pageant — ce n'est
-  pas interchangeable. Pour de nouveaux postes, s'en tenir à OpenSSH natif
-  évite ce doublon.
-* **WSL** ne voit pas non plus l'agent Windows : c'est un autre système. Soit on
-  y installe son propre agent, soit on relaie le tube nommé (`npiperelay`).
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux frottements classiques sur un poste Windows :
+>
+> * **Permissions NTFS.** Le client refuse une clé privée dont les ACL sont trop
+>   larges, avec un message équivalent au `UNPROTECTED PRIVATE KEY FILE` de Linux.
+>   Correction : propriétés du fichier → Sécurité → Avancé → désactiver l'héritage,
+>   ne laisser que ton compte. En ligne :
+>   `icacls .\id_ed25519 /inheritance:r /grant:r "${env: USERNAME}:(R)"`.
+> * **PuTTY et Pageant** sont un écosystème séparé : format `.ppk`, agent
+>   `pageant.exe`, conversion par `puttygen`. Ils ne parlent pas au service
+>   `ssh-agent` de Windows. Si l'équipe utilise WinSCP ou PuTTY, il faut soit
+>   convertir les clés, soit configurer WinSCP pour utiliser Pageant — ce n'est
+>   pas interchangeable. Pour de nouveaux postes, s'en tenir à OpenSSH natif
+>   évite ce doublon.
+> * **WSL** ne voit pas non plus l'agent Windows : c'est un autre système. Soit on
+>   y installe son propre agent, soit on relaie le tube nommé (`npiperelay`).
 
 ---
 
-**E14.7** — *Configuration effective pour `lab-db`, sans se connecter.*
+<a id="e14-7"></a>**[E14.7](README.md#e14-7)** — *Configuration effective pour `lab-db`, sans se connecter.*
 
 ```bash
 ssh -G lab-db | grep -E \
@@ -1583,24 +1655,25 @@ identitiesonly yes
 proxyjump bastion
 ```
 
-::: pourquoi
-`ssh -G` est l'outil de diagnostic le plus sous-employé d'OpenSSH. Il applique
-toute la résolution — fichier utilisateur, `Include`, fichier système, options
-`-o` de la ligne de commande, blocs `Match` — et n'émet aucun paquet. Toute
-discussion sur « mais j'ai pourtant écrit `User` » se règle avec cette commande.
-
-Le `-G` sert aussi à écrire des scripts robustes : au lieu de coder une IP en
-dur, on demande `ssh -G "$alias" | awk '/^hostname /{print $2}'`. Le script
-suit alors la configuration au lieu de la dupliquer.
-
-Note de lecture : la sortie est en **minuscules**, quelle que soit la casse
-utilisée dans le fichier, et affiche toutes les directives, y compris celles que
-tu n'as jamais écrites (leurs valeurs par défaut). D'où le `grep`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ssh -G` est l'outil de diagnostic le plus sous-employé d'OpenSSH. Il applique
+> toute la résolution — fichier utilisateur, `Include`, fichier système, options
+> `-o` de la ligne de commande, blocs `Match` — et n'émet aucun paquet. Toute
+> discussion sur « mais j'ai pourtant écrit `User` » se règle avec cette commande.
+>
+> Le `-G` sert aussi à écrire des scripts robustes : au lieu de coder une IP en
+> dur, on demande `ssh -G "$alias" | awk '/^hostname /{print $2}'`. Le script
+> suit alors la configuration au lieu de la dupliquer.
+>
+> Note de lecture : la sortie est en **minuscules**, quelle que soit la casse
+> utilisée dans le fichier, et affiche toutes les directives, y compris celles que
+> tu n'as jamais écrites (leurs valeurs par défaut). D'où le `grep`.
 
 ---
 
-**E14.8** — *Mesurer le gain du multiplexage.*
+<a id="e14-8"></a>**[E14.8](README.md#e14-8)** — *Mesurer le gain du multiplexage.*
 
 ```bash
 mkdir -p ~/.ssh/cm && chmod 700 ~/.ssh/cm
@@ -1625,33 +1698,35 @@ Master running (pid=5120)
 Rapport observé : environ 10. Sur un réseau distant (latence 30 ms), le rapport
 monte à 20 ou 30.
 
-::: pourquoi
-Le coût d'une connexion SSH est presque entièrement dans son établissement :
-poignée de main TCP (1 aller-retour), échange de bannières, `KEXINIT`, échange
-de clés Diffie-Hellman sur courbe (calcul asymétrique des deux côtés,
-1 à 2 allers-retours), vérification de `known_hosts`, puis authentification
-(nouvelle signature, encore un aller-retour). Une fois la session établie,
-ouvrir un canal supplémentaire ne coûte qu'un message.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le coût d'une connexion SSH est presque entièrement dans son établissement :
+> poignée de main TCP (1 aller-retour), échange de bannières, `KEXINIT`, échange
+> de clés Diffie-Hellman sur courbe (calcul asymétrique des deux côtés,
+> 1 à 2 allers-retours), vérification de `known_hosts`, puis authentification
+> (nouvelle signature, encore un aller-retour). Une fois la session établie,
+> ouvrir un canal supplémentaire ne coûte qu'un message.
+>
+> Le multiplexage ne rend donc rien plus rapide : il **supprime** des connexions.
+> D'où un gain énorme sur beaucoup de petites commandes, et nul sur un gros
+> transfert de fichier.
+>
+> C'est exactement ce que fait Ansible par défaut (`ssh_args = -o
+> ControlMaster=auto -o ControlPersist=60s`), et c'est la première chose à
+> vérifier quand un playbook est anormalement lent.
 
-Le multiplexage ne rend donc rien plus rapide : il **supprime** des connexions.
-D'où un gain énorme sur beaucoup de petites commandes, et nul sur un gros
-transfert de fichier.
-
-C'est exactement ce que fait Ansible par défaut (`ssh_args = -o
-ControlMaster=auto -o ControlPersist=60s`), et c'est la première chose à
-vérifier quand un playbook est anormalement lent.
-:::
-
-::: piege
-`-o ControlPath=none` en plus de `ControlMaster=no` : sans lui, le client
-réutilise un maître déjà en place et la mesure « sans multiplexage » est fausse.
-Et `ssh -O exit` avant de commencer, sinon un maître laissé par `ControlPersist`
-fausse la première mesure.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `-o ControlPath=none` en plus de `ControlMaster=no` : sans lui, le client
+> réutilise un maître déjà en place et la mesure « sans multiplexage » est fausse.
+> Et `ssh -O exit` avant de commencer, sinon un maître laissé par `ControlPersist`
+> fausse la première mesure.
 
 ---
 
-**E14.9** — *Vérifier une clé d'hôte et supprimer une entrée hachée.*
+<a id="e14-9"></a>**[E14.9](README.md#e14-9)** — *Vérifier une clé d'hôte et supprimer une entrée hachée.*
 
 ```bash
 # ce que présente le réseau
@@ -1674,37 +1749,39 @@ $ ssh-keygen -R 10.10.10.13
 Original contents retained as /home/mathieu/.ssh/known_hosts.old
 ```
 
-::: pourquoi
-Le hachage (`HashKnownHosts yes`, défaut Debian/Ubuntu) remplace le nom d'hôte
-en clair par un HMAC-SHA1 salé, propre à chaque ligne. On ne peut donc pas faire
-`grep lab-rhel ~/.ssh/known_hosts` : il faut passer par `ssh-keygen -F`, qui
-recalcule le HMAC avec le sel de chaque ligne pour trouver la bonne.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le hachage (`HashKnownHosts yes`, défaut Debian/Ubuntu) remplace le nom d'hôte
+> en clair par un HMAC-SHA1 salé, propre à chaque ligne. On ne peut donc pas faire
+> `grep lab-rhel ~/.ssh/known_hosts` : il faut passer par `ssh-keygen -F`, qui
+> recalcule le HMAC avec le sel de chaque ligne pour trouver la bonne.
+>
+> Raison d'être du hachage : si un poste est compromis, `known_hosts` est une
+> carte toute faite du parc — la liste de toutes les machines auxquelles cette
+> personne se connecte. Le hachage empêche cette énumération. C'est le même
+> raisonnement que pour l'historique du shell.
+>
+> `ssh-keygen -R` gère le hachage, supprime **toutes** les clés associées à cet
+> hôte (`ed25519`, `rsa`, `ecdsa`), et garde une copie du fichier d'origine en
+> `.old` — utile quand on s'est trompé de machine.
 
-Raison d'être du hachage : si un poste est compromis, `known_hosts` est une
-carte toute faite du parc — la liste de toutes les machines auxquelles cette
-personne se connecte. Le hachage empêche cette énumération. C'est le même
-raisonnement que pour l'historique du shell.
-
-`ssh-keygen -R` gère le hachage, supprime **toutes** les clés associées à cet
-hôte (`ed25519`, `rsa`, `ecdsa`), et garde une copie du fichier d'origine en
-`.old` — utile quand on s'est trompé de machine.
-:::
-
-::: piege
-`known_hosts` indexe par **nom et par adresse**, séparément. Supprimer
-`ssh-keygen -R lab-rhel` ne supprime pas l'entrée `10.10.10.13`, et l'alerte
-reviendra dès que tu utiliseras l'IP. Il faut les deux, ou lire attentivement la
-ligne `Offending ... key in /home/mathieu/.ssh/known_hosts:7` du message
-d'alerte, qui donne le numéro de ligne exact.
-
-Et `ssh-keyscan` ne **vérifie** rien : il enregistre ce que le réseau lui
-répond. L'utiliser pour « corriger » une alerte de changement de clé revient à
-demander à l'attaquant de confirmer son identité.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `known_hosts` indexe par **nom et par adresse**, séparément. Supprimer
+> `ssh-keygen -R lab-rhel` ne supprime pas l'entrée `10.10.10.13`, et l'alerte
+> reviendra dès que tu utiliseras l'IP. Il faut les deux, ou lire attentivement la
+> ligne `Offending ... key in /home/mathieu/.ssh/known_hosts:7` du message
+> d'alerte, qui donne le numéro de ligne exact.
+>
+> Et `ssh-keyscan` ne **vérifie** rien : il enregistre ce que le réseau lui
+> répond. L'utiliser pour « corriger » une alerte de changement de clé revient à
+> demander à l'attaquant de confirmer son identité.
 
 ---
 
-**E14.10** — *Valeurs effectives côté serveur, y compris dans un `Match`.*
+<a id="e14-10"></a>**[E14.10](README.md#e14-10)** — *Valeurs effectives côté serveur, y compris dans un `Match`.*
 
 ```bash
 sudo sshd -T | grep -Ei '^(permitrootlogin|maxauthtries) '
@@ -1722,31 +1799,33 @@ logingracetime 20
 allowtcpforwarding yes
 ```
 
-::: pourquoi
-`sshd -T` imprime la configuration **résolue** : fichier principal, tous les
-`Include`, et valeurs par défaut pour tout ce qui n'a pas été écrit. C'est la
-seule réponse fiable à « qu'est-ce qui s'applique vraiment ». Un `grep` dans
-`sshd_config` ne voit ni les fragments de `sshd_config.d/`, ni les défauts, ni
-l'effet de la règle « première valeur gagnante ».
+> [!NOTE]
+> **Pourquoi**
+>
+> `sshd -T` imprime la configuration **résolue** : fichier principal, tous les
+> `Include`, et valeurs par défaut pour tout ce qui n'a pas été écrit. C'est la
+> seule réponse fiable à « qu'est-ce qui s'applique vraiment ». Un `grep` dans
+> `sshd_config` ne voit ni les fragments de `sshd_config.d/`, ni les défauts, ni
+> l'effet de la règle « première valeur gagnante ».
+>
+> `-C` (pour *connection specification*) simule une connexion : utilisateur, hôte,
+> adresse source, et éventuellement `laddr`/`lport`/`rdomain`. Les blocs `Match`
+> sont alors évalués. C'est indispensable dès qu'on a écrit un `Match Group
+> sftponly` ou `Match Address` : sans `-C`, `sshd -T` affiche la configuration
+> **hors** `Match`, ce qui ne correspond à aucune connexion réelle.
 
-`-C` (pour *connection specification*) simule une connexion : utilisateur, hôte,
-adresse source, et éventuellement `laddr`/`lport`/`rdomain`. Les blocs `Match`
-sont alors évalués. C'est indispensable dès qu'on a écrit un `Match Group
-sftponly` ou `Match Address` : sans `-C`, `sshd -T` affiche la configuration
-**hors** `Match`, ce qui ne correspond à aucune connexion réelle.
-:::
-
-::: piege
-`sshd -T` doit être lancé en root : il lit les clés d'hôte pour valider la
-configuration et échoue sinon. Et prends l'habitude de l'espace final dans le `grep` (`'^port '`) :
-sans lui, `^port` attrape aussi
-`ports` ... ou toute directive future à préfixe commun, et `^permit` renvoie
-`permitrootlogin`, `permitemptypasswords`, `permittunnel`… La sortie de `sshd -T` est « directive espace valeur », l'espace est le séparateur fiable.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `sshd -T` doit être lancé en root : il lit les clés d'hôte pour valider la
+> configuration et échoue sinon. Et prends l'habitude de l'espace final dans le `grep` (`'^port '`) :
+> sans lui, `^port` attrape aussi
+> `ports` ... ou toute directive future à préfixe commun, et `^permit` renvoie
+> `permitrootlogin`, `permitemptypasswords`, `permittunnel`… La sortie de `sshd -T` est « directive espace valeur », l'espace est le séparateur fiable.
 
 ---
 
-**E14.11** — *Boucle sur le parc avec délai plafonné et code agrégé.*
+<a id="e14-11"></a>**[E14.11](README.md#e14-11)** — *Boucle sur le parc avec délai plafonné et code agrégé.*
 
 ```bash
 #!/usr/bin/env bash
@@ -1764,81 +1843,85 @@ done
 exit "$rc"
 ```
 
-::: pourquoi
-Trois options portent tout le poids de ce script :
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois options portent tout le poids de ce script :
+>
+> * **`-n`** redirige stdin depuis `/dev/null`. Sans lui, `ssh` **consomme le flux
+>   d'entrée** du script : dans une boucle `while read h; ... done < hotes.txt`,
+>   la première invocation avale tout le fichier et la boucle s'arrête après une
+>   machine. C'est un des bugs les plus déroutants du scripting SSH, parce que le
+>   script « marche » et traite silencieusement une seule ligne. `< /dev/null`
+>   fait la même chose.
+> * **`BatchMode=yes`** désactive toute invite : pas de demande de passphrase, pas
+>   de question `yes/no` sur une clé d'hôte inconnue. Une machine mal configurée
+>   échoue immédiatement au lieu de bloquer le script pour l'éternité. Obligatoire
+>   dans tout ce qui tourne sans humain.
+> * **`ConnectTimeout=5`** plafonne l'attente d'établissement TCP. Sans lui, une
+>   machine éteinte fait attendre le temps du `timeout` système, soit plus de deux
+>   minutes.
+>
+> `set -e` est volontairement absent : on veut continuer après un échec et
+> agréger. C'est le `if` qui capture le code de retour.
 
-* **`-n`** redirige stdin depuis `/dev/null`. Sans lui, `ssh` **consomme le flux
-  d'entrée** du script : dans une boucle `while read h; ... done < hotes.txt`,
-  la première invocation avale tout le fichier et la boucle s'arrête après une
-  machine. C'est un des bugs les plus déroutants du scripting SSH, parce que le
-  script « marche » et traite silencieusement une seule ligne. `< /dev/null`
-  fait la même chose.
-* **`BatchMode=yes`** désactive toute invite : pas de demande de passphrase, pas
-  de question `yes/no` sur une clé d'hôte inconnue. Une machine mal configurée
-  échoue immédiatement au lieu de bloquer le script pour l'éternité. Obligatoire
-  dans tout ce qui tourne sans humain.
-* **`ConnectTimeout=5`** plafonne l'attente d'établissement TCP. Sans lui, une
-  machine éteinte fait attendre le temps du `timeout` système, soit plus de deux
-  minutes.
-
-`set -e` est volontairement absent : on veut continuer après un échec et
-agréger. C'est le `if` qui capture le code de retour.
-:::
-
-::: piege
-`ssh` renvoie **255** pour ses propres erreurs (machine injoignable,
-authentification refusée, clé d'hôte invalide) et le code de la commande
-distante sinon. Ce qui crée une ambiguïté : une commande distante qui sort
-légitimement en 255 est indiscernable d'une panne de connexion. Quand ça compte,
-on distingue :
-
-```bash
-ssh ... "$h" 'cmd; echo "RC=$?"' | tail -1
-```
-
-ou on enveloppe la commande distante pour qu'elle renvoie un code borné.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `ssh` renvoie **255** pour ses propres erreurs (machine injoignable,
+> authentification refusée, clé d'hôte invalide) et le code de la commande
+> distante sinon. Ce qui crée une ambiguïté : une commande distante qui sort
+> légitimement en 255 est indiscernable d'une panne de connexion. Quand ça compte,
+> on distingue :
+>
+> ```bash
+> ssh ... "$h" 'cmd; echo "RC=$?"' | tail -1
+> ```
+>
+> ou on enveloppe la commande distante pour qu'elle renvoie un code borné.
 
 ---
 
-**E14.12** — *Exécuter un script local sur une machine distante.*
+<a id="e14-12"></a>**[E14.12](README.md#e14-12)** — *Exécuter un script local sur une machine distante.*
 
 ```bash
 ssh lab-ops 'bash -s' -- --court < ~/lab14/bin/etat.sh
 ```
 
-::: pourquoi
-Décomposition :
+> [!NOTE]
+> **Pourquoi**
+>
+> Décomposition :
+>
+> * `bash -s` dit à bash de lire le script **sur son entrée standard** au lieu
+>   d'un fichier ;
+> * `<` alimente cette entrée standard depuis le fichier local ; `ssh` transporte
+>   le flux jusqu'au processus distant ;
+> * `--` sépare et les arguments qui suivent deviennent `$1`, `$2`... du script
+>   distant.
+>
+> Rien n'est écrit sur la machine distante : pas de fichier temporaire à nettoyer,
+> pas de question de permissions, pas de version obsolète oubliée dans `/tmp`.
+> C'est la façon propre de pousser une procédure ponctuelle sur un parc.
+>
+> Le même principe avec un interpréteur différent fonctionne :
+> `ssh h 'python3 -' < script.py`, `ssh h 'sudo bash -s' < durcir.sh`.
 
-* `bash -s` dit à bash de lire le script **sur son entrée standard** au lieu
-  d'un fichier ;
-* `<` alimente cette entrée standard depuis le fichier local ; `ssh` transporte
-  le flux jusqu'au processus distant ;
-* `--` sépare et les arguments qui suivent deviennent `$1`, `$2`... du script
-  distant.
-
-Rien n'est écrit sur la machine distante : pas de fichier temporaire à nettoyer,
-pas de question de permissions, pas de version obsolète oubliée dans `/tmp`.
-C'est la façon propre de pousser une procédure ponctuelle sur un parc.
-
-Le même principe avec un interpréteur différent fonctionne :
-`ssh h 'python3 -' < script.py`, `ssh h 'sudo bash -s' < durcir.sh`.
-:::
-
-::: piege
-Le script distant ne peut plus lire l'entrée standard, puisqu'elle contient son
-propre code source. Tout `read` interactif à l'intérieur échoue ou lit une
-portion du script. Si le script a besoin de données, passe-les en argument,
-par variable d'environnement (`ssh h "VAR=x bash -s" < s.sh`) ou via un
-descripteur séparé.
-
-Et `sudo bash -s` demande un mot de passe qu'on ne peut pas taper : il faut soit
-une règle `NOPASSWD`, soit `ssh -t` en interactif.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le script distant ne peut plus lire l'entrée standard, puisqu'elle contient son
+> propre code source. Tout `read` interactif à l'intérieur échoue ou lit une
+> portion du script. Si le script a besoin de données, passe-les en argument,
+> par variable d'environnement (`ssh h "VAR=x bash -s" < s.sh`) ou via un
+> descripteur séparé.
+>
+> Et `sudo bash -s` demande un mot de passe qu'on ne peut pas taper : il faut soit
+> une règle `NOPASSWD`, soit `ssh -t` en interactif.
 
 ---
 
-**E14.13** — *Tunnel local vers `lab-db`, vérification, fermeture propre.*
+<a id="e14-13"></a>**[E14.13](README.md#e14-13)** — *Tunnel local vers `lab-db`, vérification, fermeture propre.*
 
 ```bash
 ssh -f -N -o ExitOnForwardFailure=yes \
@@ -1862,36 +1945,38 @@ ssh -O cancel -L 15432:10.10.10.12:5432 bastion   # si multiplexage actif
 pkill -f 'ssh -f -N.*15432'
 ```
 
-::: pourquoi
-`-f` passe en arrière-plan **après l'authentification** (ce qui permet de saisir
-une passphrase avant), `-N` interdit l'exécution d'une commande distante : on ne
-veut qu'un tuyau, pas un shell. Sans `-N`, `-f` lancerait un shell distant
-détaché, inutile et bruyant dans les journaux.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-f` passe en arrière-plan **après l'authentification** (ce qui permet de saisir
+> une passphrase avant), `-N` interdit l'exécution d'une commande distante : on ne
+> veut qu'un tuyau, pas un shell. Sans `-N`, `-f` lancerait un shell distant
+> détaché, inutile et bruyant dans les journaux.
+>
+> `ExitOnForwardFailure=yes` est l'option qu'il ne faut jamais oublier. Par
+> défaut, si le port local est déjà occupé, `ssh` affiche un avertissement sur
+> stderr — que `-f` envoie dans le vide — et **maintient la session**. Tu crois
+> avoir un tunnel, tu n'en as pas, et ton client SQL se connecte au service qui
+> occupait déjà le port. Avec cette option, `ssh` sort en erreur, bruyamment.
+>
+> La fermeture propre par `ssh -O cancel` retire la redirection sans couper la
+> session maître. `ssh -O exit` ferme tout. Un `kill` fonctionne aussi, mais
+> identifier le bon processus dans une liste de tunnels est fastidieux — d'où
+> l'intérêt de nommer ses tunnels avec des sockets de contrôle dédiées.
 
-`ExitOnForwardFailure=yes` est l'option qu'il ne faut jamais oublier. Par
-défaut, si le port local est déjà occupé, `ssh` affiche un avertissement sur
-stderr — que `-f` envoie dans le vide — et **maintient la session**. Tu crois
-avoir un tunnel, tu n'en as pas, et ton client SQL se connecte au service qui
-occupait déjà le port. Avec cette option, `ssh` sort en erreur, bruyamment.
-
-La fermeture propre par `ssh -O cancel` retire la redirection sans couper la
-session maître. `ssh -O exit` ferme tout. Un `kill` fonctionne aussi, mais
-identifier le bon processus dans une liste de tunnels est fastidieux — d'où
-l'intérêt de nommer ses tunnels avec des sockets de contrôle dédiées.
-:::
-
-::: piege
-En session interactive, les **séquences d'échappement** valent la peine d'être
-connues : `~?` affiche l'aide, `~#` liste les connexions redirigées, `~C` ouvre
-une ligne de commande `ssh>` où l'on peut taper `-L 15432:...` pour ajouter un
-tunnel à chaud, `~.` tue la session (le seul moyen de sortir d'une session
-figée). Elles ne fonctionnent qu'en début de ligne, sur une session avec TTY, et
-`~` doit être le premier caractère après un retour à la ligne.
-:::
+> [!WARNING]
+> **Piège**
+>
+> En session interactive, les **séquences d'échappement** valent la peine d'être
+> connues : `~?` affiche l'aide, `~#` liste les connexions redirigées, `~C` ouvre
+> une ligne de commande `ssh>` où l'on peut taper `-L 15432:...` pour ajouter un
+> tunnel à chaud, `~.` tue la session (le seul moyen de sortir d'une session
+> figée). Elles ne fonctionnent qu'en début de ligne, sur une session avec TTY, et
+> `~` doit être le premier caractère après un retour à la ligne.
 
 ---
 
-**E14.14** — *Proxy SOCKS5 et résolution distante.*
+<a id="e14-14"></a>**[E14.14](README.md#e14-14)** — *Proxy SOCKS5 et résolution distante.*
 
 ```bash
 ssh -f -N -D 1080 bastion
@@ -1900,37 +1985,39 @@ curl --socks5-hostname 127.0.0.1:1080 http://ifconfig.me/ip
 ssh -O exit bastion          # ou pkill -f 'ssh -f -N -D 1080'
 ```
 
-::: pourquoi
-`-D` ne fixe aucune destination : il ouvre un proxy **SOCKS5** local. Pour chaque
-connexion, l'application annonce la cible au proxy, et c'est le serveur SSH qui
-ouvre la connexion TCP finale. Un seul tunnel remplace donc autant de `-L` qu'il
-y a de services à joindre.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-D` ne fixe aucune destination : il ouvre un proxy **SOCKS5** local. Pour chaque
+> connexion, l'application annonce la cible au proxy, et c'est le serveur SSH qui
+> ouvre la connexion TCP finale. Un seul tunnel remplace donc autant de `-L` qu'il
+> y a de services à joindre.
+>
+> `--socks5-hostname` et non `--socks5` : c'est toute la différence.
+> Avec `--socks5`, `curl` résout le nom **localement** puis demande une IP au
+> proxy — donc `lab-web.lab.local`, qui n'existe que dans le DNS du lab, échoue, et
+> tes requêtes DNS fuitent vers ton résolveur. Avec `--socks5-hostname`, le nom est
+> transmis tel quel et résolu par le serveur SSH. C'est ce que signifie le `h` de
+> `socks5h://` dans les variables `ALL_PROXY`.
+>
+> La seconde commande prouve la sortie : l'adresse publique renvoyée est celle du
+> réseau de lab, pas celle de ton poste.
 
-`--socks5-hostname` et non `--socks5` : c'est toute la différence.
-Avec `--socks5`, `curl` résout le nom **localement** puis demande une IP au
-proxy — donc `lab-web.lab.local`, qui n'existe que dans le DNS du lab, échoue, et
-tes requêtes DNS fuitent vers ton résolveur. Avec `--socks5-hostname`, le nom est
-transmis tel quel et résolu par le serveur SSH. C'est ce que signifie le `h` de
-`socks5h://` dans les variables `ALL_PROXY`.
-
-La seconde commande prouve la sortie : l'adresse publique renvoyée est celle du
-réseau de lab, pas celle de ton poste.
-:::
-
-::: piege
-Dans un navigateur, cocher « Proxy SOCKS v5 » ne suffit pas : il faut aussi
-activer la résolution DNS distante (Firefox : *Utiliser un DNS distant*, ou
-`network.proxy.socks_remote_dns=true`). Sinon les noms internes ne résolvent pas
-et la navigation semble cassée à moitié.
-
-Et un proxy SOCKS ouvert sur `0.0.0.0` (`-D 0.0.0.0:1080`) est un relais ouvert
-vers tout ton réseau interne, sans authentification. Toujours laisser le bind
-par défaut sur la boucle locale.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Dans un navigateur, cocher « Proxy SOCKS v5 » ne suffit pas : il faut aussi
+> activer la résolution DNS distante (Firefox : *Utiliser un DNS distant*, ou
+> `network.proxy.socks_remote_dns=true`). Sinon les noms internes ne résolvent pas
+> et la navigation semble cassée à moitié.
+>
+> Et un proxy SOCKS ouvert sur `0.0.0.0` (`-D 0.0.0.0:1080`) est un relais ouvert
+> vers tout ton réseau interne, sans authentification. Toujours laisser le bind
+> par défaut sur la boucle locale.
 
 ---
 
-**E14.15** — *Restreindre la clé du compte `sauvegarde`.*
+<a id="e14-15"></a>**[E14.15](README.md#e14-15)** — *Restreindre la clé du compte `sauvegarde`.*
 
 Dans `/home/sauvegarde/.ssh/authorized_keys`, **une seule ligne** :
 
@@ -1955,44 +2042,46 @@ case "$cmd" in
 esac
 ```
 
-::: pourquoi
-Chaque élément de la ligne fait un travail précis :
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque élément de la ligne fait un travail précis :
+>
+> * `restrict` coupe d'un coup l'allocation de terminal, les redirections de port
+>   (locales et distantes), le transfert d'agent, X11, et l'exécution de
+>   `~/.ssh/rc`. Formulation « tout interdit, puis j'autorise » : une option
+>   ajoutée dans une future version d'OpenSSH sera interdite par défaut. À
+>   l'inverse, énumérer `no-pty,no-port-forwarding,. ..` laisse passer tout ce qui
+>   n'existe pas encore.
+> * `from="10.10.10.10"` limite l'origine. `sshd` compare l'adresse source réelle
+>   du socket TCP, pas une donnée fournie par le client : ce n'est pas
+>   contournable par le client, seulement par usurpation d'adresse sur le réseau.
+>   La liste accepte les motifs et la négation : `from="10.10.10.*,!10.10.10.99"`.
+> * `command="..."` force l'exécution, quoi que demande le client, et range la
+>   demande d'origine dans `SSH_ ORIGINAL_COMMAND`.
+>
+> Le `case` est une liste blanche. `rsync --server ...` est la forme qu'`rsync`
+> envoie réellement au distant quand on lance `rsync -a src/ h:dst/` — c'est cette
+> chaîne-là qu'on autorise, et c'est ce que fait l'outil `rrsync` livré avec
+> `rsync` (`/usr/bin/rrsync` sur Ubuntu 24.04), qui en plus impose un
+> répertoire racine.
 
-* `restrict` coupe d'un coup l'allocation de terminal, les redirections de port
-  (locales et distantes), le transfert d'agent, X11, et l'exécution de
-  `~/.ssh/rc`. Formulation « tout interdit, puis j'autorise » : une option
-  ajoutée dans une future version d'OpenSSH sera interdite par défaut. À
-  l'inverse, énumérer `no-pty,no-port-forwarding,. ..` laisse passer tout ce qui
-  n'existe pas encore.
-* `from="10.10.10.10"` limite l'origine. `sshd` compare l'adresse source réelle
-  du socket TCP, pas une donnée fournie par le client : ce n'est pas
-  contournable par le client, seulement par usurpation d'adresse sur le réseau.
-  La liste accepte les motifs et la négation : `from="10.10.10.*,!10.10.10.99"`.
-* `command="..."` force l'exécution, quoi que demande le client, et range la
-  demande d'origine dans `SSH_ ORIGINAL_COMMAND`.
-
-Le `case` est une liste blanche. `rsync --server ...` est la forme qu'`rsync`
-envoie réellement au distant quand on lance `rsync -a src/ h:dst/` — c'est cette
-chaîne-là qu'on autorise, et c'est ce que fait l'outil `rrsync` livré avec
-`rsync` (`/usr/bin/rrsync` sur Ubuntu 24.04), qui en plus impose un
-répertoire racine.
-:::
-
-::: piege
-`eval "$SSH_ORIGINAL_COMMAND"` dans le script de commande forcée annule tout le
-travail : la clé retrouve un shell complet. De même, `exec $cmd` **non quoté**
-comme ci-dessus n'est acceptable que parce que le motif du `case` a déjà
-contraint la forme de la chaîne ; sur une entrée libre, ce serait une injection.
-
-Et sans `restrict`, `command=` ne protège pas des tunnels : `ssh -N -L
-9999:127.0.0.1:22 sauvegarde@lab-web` ouvre un tunnel **sans jamais exécuter la
-commande forcée**, car la redirection est négociée au niveau de la session, pas
-de la commande.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `eval "$SSH_ORIGINAL_COMMAND"` dans le script de commande forcée annule tout le
+> travail : la clé retrouve un shell complet. De même, `exec $cmd` **non quoté**
+> comme ci-dessus n'est acceptable que parce que le motif du `case` a déjà
+> contraint la forme de la chaîne ; sur une entrée libre, ce serait une injection.
+>
+> Et sans `restrict`, `command=` ne protège pas des tunnels : `ssh -N -L
+> 9999:127.0.0.1:22 sauvegarde@lab-web` ouvre un tunnel **sans jamais exécuter la
+> commande forcée**, car la redirection est négociée au niveau de la session, pas
+> de la commande.
 
 ---
 
-**E14.16** — *Lecture d'un `ssh -v`.*
+<a id="e14-16"></a>**[E14.16](README.md#e14-16)** — *Lecture d'un `ssh -v`.*
 
 **Réponse**
 
@@ -2020,34 +2109,35 @@ Trois hypothèses à vérifier **sur le serveur**, dans cet ordre :
    listed in AllowUsers`, puis `sudo sshd -T | grep -Ei
    'pubkeyauth|authorizedkeysfile|allowusers|allowgroups'`.
 
-::: pourquoi
-La compétence à acquérir est de savoir **s'arrêter de lire**. Un `ssh -vvv`
-produit 200 lignes ; seules quatre comptent :
-
-| Ligne | Ce qu'elle prouve |
-|---|---|
-| `Connecting to ... port 22` | phase 1 commencée, l'adresse utilisée |
-| `is known and matches the ... host key` | phase 2 franchie |
-| `Will attempt key:` / `Offering public key:` | ce que le client propose |
-| `Authentications that can continue:` | ce que le serveur accepte encore |
-
-`Will attempt` liste les identités retenues ; `Offering` marque une tentative
-réellement émise vers le serveur. Si `Offering` n'apparaît jamais, le problème
-est **local** : clé absente, permissions trop larges, agent non joignable. S'il
-apparaît et que le serveur répète `Authentications that can continue`, le
-problème est **distant** : on arrête de jouer avec le client et on va lire le
-journal du serveur.
-
-Le suffixe `agent` en fin de ligne indique que la clé vient de l'agent et non
-d'un fichier : information utile quand on croit utiliser une clé et qu'on en
-utilise une autre.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La compétence à acquérir est de savoir **s'arrêter de lire**. Un `ssh -vvv`
+> produit 200 lignes ; seules quatre comptent :
+>
+> | Ligne | Ce qu'elle prouve |
+> |---|---|
+> | `Connecting to ... port 22` | phase 1 commencée, l'adresse utilisée |
+> | `is known and matches the ... host key` | phase 2 franchie |
+> | `Will attempt key:` / `Offering public key:` | ce que le client propose |
+> | `Authentications that can continue:` | ce que le serveur accepte encore |
+>
+> `Will attempt` liste les identités retenues ; `Offering` marque une tentative
+> réellement émise vers le serveur. Si `Offering` n'apparaît jamais, le problème
+> est **local** : clé absente, permissions trop larges, agent non joignable. S'il
+> apparaît et que le serveur répète `Authentications that can continue`, le
+> problème est **distant** : on arrête de jouer avec le client et on va lire le
+> journal du serveur.
+>
+> Le suffixe `agent` en fin de ligne indique que la clé vient de l'agent et non
+> d'un fichier : information utile quand on croit utiliser une clé et qu'on en
+> utilise une autre.
 
 ---
 
 ## 14.6 Labs
 
-### **L14.1** — *Poser l'accès par clé sur tout le parc*
+### <a id="l14-1"></a>**[L14.1](README.md#l14-1)** — *Poser l'accès par clé sur tout le parc*
 
 **Étape 1 — inventaire des clés existantes**
 
@@ -2145,39 +2235,41 @@ $ ssh -o PubkeyAuthentication=no mathieu@10.10.10.11
 mathieu@10.10.10.11: Permission denied (publickey).
 ```
 
-::: pourquoi
-L'ordre des étapes n'est pas cosmétique, c'est la procédure de sécurité :
-déployer la clé **avant** de couper le mot de passe, vérifier la clé avec
-`PasswordAuthentication=no` côté client **avant** de la couper côté serveur, et
-n'utiliser `reload` qu'après `sshd -t`. Chaque inversion de ces étapes est un
-scénario de verrouillage réel.
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre des étapes n'est pas cosmétique, c'est la procédure de sécurité :
+> déployer la clé **avant** de couper le mot de passe, vérifier la clé avec
+> `PasswordAuthentication=no` côté client **avant** de la couper côté serveur, et
+> n'utiliser `reload` qu'après `sshd -t`. Chaque inversion de ces étapes est un
+> scénario de verrouillage réel.
+>
+> `reload` plutôt que `restart` : `reload` envoie `SIGHUP` au `sshd` maître, qui
+> relit sa configuration et recharge ses écouteurs — les processus enfants qui
+> servent les sessions en cours ne sont pas touchés. `restart` fonctionne aussi
+> pour les sessions en cours (elles sont portées par des processus séparés), mais
+> coupe brièvement l'écoute : si la nouvelle configuration est invalide, plus
+> personne n'entre. `reload` est donc le geste par défaut.
+>
+> `KbdInteractiveAuthentication no` est indispensable : sans lui, PAM continue de
+> proposer une invite de mot de passe par un autre chemin et l'utilisateur ne voit
+> aucune différence. La vérification par `sshd -T` (et non `grep`) est ce qui
+> permet de s'en apercevoir.
 
-`reload` plutôt que `restart` : `reload` envoie `SIGHUP` au `sshd` maître, qui
-relit sa configuration et recharge ses écouteurs — les processus enfants qui
-servent les sessions en cours ne sont pas touchés. `restart` fonctionne aussi
-pour les sessions en cours (elles sont portées par des processus séparés), mais
-coupe brièvement l'écoute : si la nouvelle configuration est invalide, plus
-personne n'entre. `reload` est donc le geste par défaut.
-
-`KbdInteractiveAuthentication no` est indispensable : sans lui, PAM continue de
-proposer une invite de mot de passe par un autre chemin et l'utilisateur ne voit
-aucune différence. La vérification par `sshd -T` (et non `grep`) est ce qui
-permet de s'en apercevoir.
-:::
-
-::: piege
-La suppression de la clé RSA se fait **par empreinte**, pas par `grep` sur le
-commentaire : les commentaires sont éditables, dupliqués, parfois absents.
-Travailler sur l'empreinte SHA256 est la seule méthode qui ne se trompe pas de
-clé — et se tromper ici, c'est retirer l'accès de quelqu'un d'autre.
-
-Et on garde toujours une copie (`authorized_keys.bak`) avant de réécrire le
-fichier : c'est l'unique porte d'entrée de la machine.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La suppression de la clé RSA se fait **par empreinte**, pas par `grep` sur le
+> commentaire : les commentaires sont éditables, dupliqués, parfois absents.
+> Travailler sur l'empreinte SHA256 est la seule méthode qui ne se trompe pas de
+> clé — et se tromper ici, c'est retirer l'accès de quelqu'un d'autre.
+>
+> Et on garde toujours une copie (`authorized_keys.bak`) avant de réécrire le
+> fichier : c'est l'unique porte d'entrée de la machine.
 
 ---
 
-### **L14.2** — *Le fichier de configuration client de référence*
+### <a id="l14-2"></a>**[L14.2](README.md#l14-2)** — *Le fichier de configuration client de référence*
 
 `~/.ssh/config` :
 
@@ -2290,42 +2382,44 @@ noter :
    chiffrées dans le registre) : pas de `SSH_ AUTH_SOCK`, pas d'`eval`, et les
    clés survivent au redémarrage. `AddKeysToAgent yes` fonctionne.
 
-::: pourquoi
-Le point structurant de ce lab est que `ProxyJump` réfère à un **alias**, pas à
-une adresse : `ProxyJump bastion` fait relire tout le bloc `Host bastion`, avec
-son utilisateur, son port et sa clé. On peut donc changer l'adresse du bastion à
-un seul endroit. C'est la même logique que `Include` : une source de vérité par
-information.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point structurant de ce lab est que `ProxyJump` réfère à un **alias**, pas à
+> une adresse : `ProxyJump bastion` fait relire tout le bloc `Host bastion`, avec
+> son utilisateur, son port et sa clé. On peut donc changer l'adresse du bastion à
+> un seul endroit. C'est la même logique que `Include` : une source de vérité par
+> information.
+>
+> Le bloc `Host lab-*` fonctionne parce que les blocs spécifiques, placés
+> au-dessus, ont déjà fixé `HostName` et `ProxyJump` — et que `lab-*` n'y revient
+> pas. Il ne pose que ce qui est commun. Noter au passage que `lab-*` matche aussi
+> `lab-adm` : comme le bloc `bastion lab-adm` est lu avant, `HostName` et `User`
+> sont déjà fixés et rien n'est écrasé. Cette superposition est voulue.
+>
+> `ServerAliveInterval 30` / `ServerAliveCountMax 3` envoie une sonde **chiffrée,
+> dans le canal SSH** toutes les 30 s et coupe après 3 sans réponse. Ça maintient
+> les sessions à travers un routeur NAT qui oublie les connexions inactives, et ça
+> détecte une coupure réseau en 90 s au lieu de laisser une session fantôme. À ne
+> pas confondre avec `TCPKeepAlive`, qui agit au niveau TCP, hors du chiffrement,
+> et qu'un intermédiaire peut falsifier.
 
-Le bloc `Host lab-*` fonctionne parce que les blocs spécifiques, placés
-au-dessus, ont déjà fixé `HostName` et `ProxyJump` — et que `lab-*` n'y revient
-pas. Il ne pose que ce qui est commun. Noter au passage que `lab-*` matche aussi
-`lab-adm` : comme le bloc `bastion lab-adm` est lu avant, `HostName` et `User`
-sont déjà fixés et rien n'est écrasé. Cette superposition est voulue.
-
-`ServerAliveInterval 30` / `ServerAliveCountMax 3` envoie une sonde **chiffrée,
-dans le canal SSH** toutes les 30 s et coupe après 3 sans réponse. Ça maintient
-les sessions à travers un routeur NAT qui oublie les connexions inactives, et ça
-détecte une coupure réseau en 90 s au lieu de laisser une session fantôme. À ne
-pas confondre avec `TCPKeepAlive`, qui agit au niveau TCP, hors du chiffrement,
-et qu'un intermédiaire peut falsifier.
-:::
-
-::: piege
-`ControlPath ~/.ssh/cm/%C` échoue sans bloquer si `~/.ssh/cm` n'existe pas :
-OpenSSH ne crée pas le répertoire, affiche un simple `unix_listener: cannot bind to path ...` et se connecte quand même,
-sans multiplexage. Le symptôme est « mon multiplexage ne marche pas » alors que la connexion réussit; `ssh -v` montre
-l'échec du bind.
-
-Autre piège : `~/.ssh/config` doit appartenir à l'utilisateur et n'être modifiable ni par le groupe ni par les autres (`600` conseillé, `644` toléré),
-sinon `ssh` refuse de démarrer (`Bad owner or permissions on
-/home/mathieu/.ssh/config`) — plus aucune connexion, alias
-ou pas.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `ControlPath ~/.ssh/cm/%C` échoue sans bloquer si `~/.ssh/cm` n'existe pas :
+> OpenSSH ne crée pas le répertoire, affiche un simple `unix_listener: cannot bind to path ...` et se connecte quand même,
+> sans multiplexage. Le symptôme est « mon multiplexage ne marche pas » alors que la connexion réussit; `ssh -v` montre
+> l'échec du bind.
+>
+> Autre piège : `~/.ssh/config` doit appartenir à l'utilisateur et n'être modifiable ni par le groupe ni par les autres (`600` conseillé, `644` toléré),
+> sinon `ssh` refuse de démarrer (`Bad owner or permissions on
+> /home/mathieu/.ssh/config`) — plus aucune connexion, alias
+> ou pas.
 
 ---
 
-### **L14.3** — *Durcir le serveur SSH de `lab-web`*
+### <a id="l14-3"></a>**[L14.3](README.md#l14-3)** — *Durcir le serveur SSH de `lab-web`*
 
 **Étape 3 — le fragment de durcissement**
 
@@ -2428,67 +2522,70 @@ sshd[8123]: Accepted publickey for mathieu from 10.10.10.10 port 46122 ssh2:
             ED25519 SHA256:8kQ3vN1pW+Rr0Tz9c5aXbLd2Hq7mYfJ4uEsKgVnP1oU
 ```
 
-::: pourquoi
-Pourquoi un **fragment** et pas le fichier principal : un fichier séparé se
-versionne, se déploie par outil de configuration, se lit d'un coup d'œil (10
-lignes au lieu de 120), et survit sans conflit à une mise à jour du paquet
-`openssh-server`. La contrepartie est la règle de précédence, qui devient la
-première chose à vérifier — d'où l'étape 5.
+> [!NOTE]
+> **Pourquoi**
+>
+> Pourquoi un **fragment** et pas le fichier principal : un fichier séparé se
+> versionne, se déploie par outil de configuration, se lit d'un coup d'œil (10
+> lignes au lieu de 120), et survit sans conflit à une mise à jour du paquet
+> `openssh-server`. La contrepartie est la règle de précédence, qui devient la
+> première chose à vérifier — d'où l'étape 5.
+>
+> Les directives, une par une :
+>
+> * `LoginGraceTime 20` : au-delà de 20 s sans authentification aboutie, le
+>   serveur ferme. C'est ce qui limite les connexions ouvertes non authentifiées,
+>   levier classique de saturation. `MaxStartups 10:30:60` va dans le même sens :
+>   à partir de 10 connexions en cours d'authentification, 30 % sont rejetées au
+>   hasard ; à 60, tout est rejeté.
+> * `ClientAliveInterval 300` / `ClientAliveCountMax 2` : le **serveur** sonde le
+>   client et ferme après 10 minutes sans réponse. Ça nettoie les sessions
+>   fantômes d'un poste éteint brutalement — et ça libère les processus associés.
+>   Symétrique de `ServerAliveInterval` côté client. Nuance à connaître : un client vivant mais inactif répond aux sondes et n'est **pas** déconnecté; la vraie déconnexion sur inactivité de l'utilisateur relève du shell (`TMOUT`), pas de `sshd`.
+> * `LogLevel VERBOSE` est le meilleur rapport valeur/risque de la liste : il
+>   ajoute l'**empreinte de la clé utilisée** à chaque ligne `Accepted publickey`.
+>   Sans lui, impossible de répondre à « quelle clé a servi à cette connexion »,
+>   donc impossible d'auditer un accès ou de tracer une clé compromise. Il ne
+>   journalise aucun secret.
+> * `PermitUserEnvironment no` (défaut) : sinon un utilisateur peut poser
+>   `LD_PRELOAD` dans `~/.ssh/environment` et détourner l'exécution.
+>
+> Le jeu d'algorithmes retient les échanges de clés sur Curve25519 (dont
+> `sntrup761x25519`, hybride post-quantique, par défaut depuis OpenSSH 9.0), des
+> chiffrements authentifiés (AEAD : `chacha20-poly1305`, `aes-gcm`) et des MAC en
+> mode **EtM** (*encrypt-then-MAC*, suffixe `-etm`), qui authentifient le
+> chiffré — construction saine, contrairement au MAC-then-encrypt historique.
+> Les `diffie-hellman-group14-sha1`, `hmac-sha1` et `cbc` disparaissent.
 
-Les directives, une par une :
+> [!WARNING]
+> **Piège**
+>
+> Sur-durcir coupe des clients légitimes. `Unable to negotiate with 10.10.10.11
+> port 22: no matching key exchange method found` est le message qu'on obtient
+> depuis un poste plus ancien. Avant de restreindre, on vérifie ce que les clients
+> du parc savent faire (`ssh -Q kex`, `ssh -Q cipher`) et on utilise la syntaxe
+> additive/soustractive quand c'est plus sûr : `Ciphers -aes128-cbc,3des-cbc`
+> retire des algorithmes du jeu par défaut sans figer la liste, ce qui laisse les
+> futures versions d'OpenSSH ajouter leurs nouveautés.
+>
+> Supprimer `ssh_host_ecdsa_key` change l'empreinte présentée aux clients qui
+> préféraient ECDSA : ils verront un changement de clé d'hôte. À faire en
+> connaissance de cause, avec communication.
 
-* `LoginGraceTime 20` : au-delà de 20 s sans authentification aboutie, le
-  serveur ferme. C'est ce qui limite les connexions ouvertes non authentifiées,
-  levier classique de saturation. `MaxStartups 10:30:60` va dans le même sens :
-  à partir de 10 connexions en cours d'authentification, 30 % sont rejetées au
-  hasard ; à 60, tout est rejeté.
-* `ClientAliveInterval 300` / `ClientAliveCountMax 2` : le **serveur** sonde le
-  client et ferme après 10 minutes sans réponse. Ça nettoie les sessions
-  fantômes d'un poste éteint brutalement — et ça libère les processus associés.
-  Symétrique de `ServerAliveInterval` côté client. Nuance à connaître : un client vivant mais inactif répond aux sondes et n'est **pas** déconnecté; la vraie déconnexion sur inactivité de l'utilisateur relève du shell (`TMOUT`), pas de `sshd`.
-* `LogLevel VERBOSE` est le meilleur rapport valeur/risque de la liste : il
-  ajoute l'**empreinte de la clé utilisée** à chaque ligne `Accepted publickey`.
-  Sans lui, impossible de répondre à « quelle clé a servi à cette connexion »,
-  donc impossible d'auditer un accès ou de tracer une clé compromise. Il ne
-  journalise aucun secret.
-* `PermitUserEnvironment no` (défaut) : sinon un utilisateur peut poser
-  `LD_PRELOAD` dans `~/.ssh/environment` et détourner l'exécution.
-
-Le jeu d'algorithmes retient les échanges de clés sur Curve25519 (dont
-`sntrup761x25519`, hybride post-quantique, par défaut depuis OpenSSH 9.0), des
-chiffrements authentifiés (AEAD : `chacha20-poly1305`, `aes-gcm`) et des MAC en
-mode **EtM** (*encrypt-then-MAC*, suffixe `-etm`), qui authentifient le
-chiffré — construction saine, contrairement au MAC-then-encrypt historique.
-Les `diffie-hellman-group14-sha1`, `hmac-sha1` et `cbc` disparaissent.
-:::
-
-::: piege
-Sur-durcir coupe des clients légitimes. `Unable to negotiate with 10.10.10.11
-port 22: no matching key exchange method found` est le message qu'on obtient
-depuis un poste plus ancien. Avant de restreindre, on vérifie ce que les clients
-du parc savent faire (`ssh -Q kex`, `ssh -Q cipher`) et on utilise la syntaxe
-additive/soustractive quand c'est plus sûr : `Ciphers -aes128-cbc,3des-cbc`
-retire des algorithmes du jeu par défaut sans figer la liste, ce qui laisse les
-futures versions d'OpenSSH ajouter leurs nouveautés.
-
-Supprimer `ssh_host_ecdsa_key` change l'empreinte présentée aux clients qui
-préféraient ECDSA : ils verront un changement de clé d'hôte. À faire en
-connaissance de cause, avec communication.
-:::
-
-::: rhel
-Sous Rocky 9, la politique cryptographique système est incluse par
-`/etc/ssh/sshd_config`.`d/50-redhat.conf` (`Include`
-`/etc/crypto-policies/back-ends/opensshserver.config`). Comme la première valeur gagne, un `Ciphers`, `MACs` ou `KexAlgorithms` écrit dans `sshd_config` ou dans un fragment nommé après `50-` est **sans effet**. Deux voies : un fragment qui passe avant (`40-algos.conf`), ou — préférable — passer la
-machine en politique forte avec `sudo update-crypto-policies --set FUTURE` (ou
-une sous-politique dans `/etc/crypto-policies/policies/``modules/` ), ce qui durcit
-`sshd`, `openssl` et `gnutls` de façon cohérente. (Le `CRYPTO_POLICY=` de `/etc/sysconfig/sshd` est le mécanisme de RHEL 8.) L'unité s'appelle
-`sshd.service`, le journal se lit avec `journalctl -u sshd`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9, la politique cryptographique système est incluse par
+> `/etc/ssh/sshd_config`.`d/50-redhat.conf` (`Include`
+> `/etc/crypto-policies/back-ends/opensshserver.config`). Comme la première valeur gagne, un `Ciphers`, `MACs` ou `KexAlgorithms` écrit dans `sshd_config` ou dans un fragment nommé après `50-` est **sans effet**. Deux voies : un fragment qui passe avant (`40-algos.conf`), ou — préférable — passer la
+> machine en politique forte avec `sudo update-crypto-policies --set FUTURE` (ou
+> une sous-politique dans `/etc/crypto-policies/policies/``modules/` ), ce qui durcit
+> `sshd`, `openssl` et `gnutls` de façon cohérente. (Le `CRYPTO_POLICY=` de `/etc/sysconfig/sshd` est le mécanisme de RHEL 8.) L'unité s'appelle
+> `sshd.service`, le journal se lit avec `journalctl -u sshd`.
 
 ---
 
-### **L14.4** — *Trois tunnels pour trois demandes*
+### <a id="l14-4"></a>**[L14.4](README.md#l14-4)** — *Trois tunnels pour trois demandes*
 
 **Ticket 1 — tunnel local**
 
@@ -2567,45 +2664,47 @@ pkill -f 'ssh -f -N -D 1080'
 ss -tlnp | grep -E ':(15432|1080)\b' || echo "aucun port résiduel"
 ```
 
-::: pourquoi
-La règle qui range tout : **le premier port de l'option est celui qu'on ouvre,
-et la lettre dit chez qui.** `-L` ouvre chez le client, `-R` ouvre chez le
-serveur. Le couple `hôte:port` qui suit est la destination finale, toujours
-interprétée depuis la machine qui établit la connexion finale — le serveur SSH
-pour `-L` et `-D`, le client pour `-R`.
+> [!NOTE]
+> **Pourquoi**
+>
+> La règle qui range tout : **le premier port de l'option est celui qu'on ouvre,
+> et la lettre dit chez qui.** `-L` ouvre chez le client, `-R` ouvre chez le
+> serveur. Le couple `hôte:port` qui suit est la destination finale, toujours
+> interprétée depuis la machine qui établit la connexion finale — le serveur SSH
+> pour `-L` et `-D`, le client pour `-R`.
+>
+> Conséquence de sécurité à énoncer clairement dans le rapport : `-L` et `-D`
+> donnent au client l'accès réseau du serveur (contournement de segmentation,
+> d'où `AllowTcpForwarding no` sur tout ce qui n'est pas un bastion) ; `-R` donne
+> au serveur l'accès réseau du client et ouvre un point d'entrée entrant (d'où
+> `GatewayPorts no` et, sur les serveurs sensibles,
+> `AllowTcpForwarding remote`/`local` pour n'autoriser qu'un sens).
+>
+> `PermitOpen host:port` mérite d'être connu : il limite les destinations
+> accessibles par `-L`/`-D` à une liste blanche. Sur un bastion, c'est ce qui
+> transforme « accès à tout le réseau interne » en « accès au port 5432 de
+> lab-db ».
 
-Conséquence de sécurité à énoncer clairement dans le rapport : `-L` et `-D`
-donnent au client l'accès réseau du serveur (contournement de segmentation,
-d'où `AllowTcpForwarding no` sur tout ce qui n'est pas un bastion) ; `-R` donne
-au serveur l'accès réseau du client et ouvre un point d'entrée entrant (d'où
-`GatewayPorts no` et, sur les serveurs sensibles,
-`AllowTcpForwarding remote`/`local` pour n'autoriser qu'un sens).
-
-`PermitOpen host:port` mérite d'être connu : il limite les destinations
-accessibles par `-L`/`-D` à une liste blanche. Sur un bastion, c'est ce qui
-transforme « accès à tout le réseau interne » en « accès au port 5432 de
-lab-db ».
-:::
-
-::: piege
-Trois erreurs qui coûtent du temps :
-
-* oublier `ExitOnForwardFailure=yes` avec `-f` : le message
-  `bind: Address already in use` part sur une sortie d'erreur qui n'est plus
-  affichée, la session reste ouverte, et le client se connecte au service qui
-  occupait déjà le port ;
-* croire que fermer le terminal ferme le tunnel : avec `-f`, le processus est
-  détaché, il survit. `ss -tlnp` et `pgrep -af 'ssh -f'` font partie du ménage
-  de fin de journée ;
-* utiliser un tunnel `-L` avec un client qui vérifie le nom du certificat TLS :
-  le client voit `127.0.0.1:15432` et rejettera un certificat émis pour
-  `db.lab.local`. On corrige avec une entrée `/etc/hosts` locale, pas en
-  désactivant la vérification.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Trois erreurs qui coûtent du temps :
+>
+> * oublier `ExitOnForwardFailure=yes` avec `-f` : le message
+>   `bind: Address already in use` part sur une sortie d'erreur qui n'est plus
+>   affichée, la session reste ouverte, et le client se connecte au service qui
+>   occupait déjà le port ;
+> * croire que fermer le terminal ferme le tunnel : avec `-f`, le processus est
+>   détaché, il survit. `ss -tlnp` et `pgrep -af 'ssh -f'` font partie du ménage
+>   de fin de journée ;
+> * utiliser un tunnel `-L` avec un client qui vérifie le nom du certificat TLS :
+>   le client voit `127.0.0.1:15432` et rejettera un certificat émis pour
+>   `db.lab.local`. On corrige avec une entrée `/etc/hosts` locale, pas en
+>   désactivant la vérification.
 
 ---
 
-### **L14.5** — *Une clé de service qui ne peut faire qu'une seule chose*
+### <a id="l14-5"></a>**[L14.5](README.md#l14-5)** — *Une clé de service qui ne peut faire qu'une seule chose*
 
 **Étape 1 — la clé, sur `lab-ops`**
 
@@ -2699,56 +2798,59 @@ tar -czf - -C /srv/app . | \
       "depot app-$(date +%F).tar.gz"
 ```
 
-::: pourquoi
-Le principe est celui du **moindre privilège appliqué à une clé**, pas à un
-compte. Un compte de service classique donne un shell : quiconque met la main
-sur la clé obtient une session sur `lab-web`, et cherche ensuite une élévation.
-Ici, la clé n'ouvre pas de session : elle déclenche un programme, avec un jeu
-d'entrées contraint.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le principe est celui du **moindre privilège appliqué à une clé**, pas à un
+> compte. Un compte de service classique donne un shell : quiconque met la main
+> sur la clé obtient une session sur `lab-web`, et cherche ensuite une élévation.
+> Ici, la clé n'ouvre pas de session : elle déclenche un programme, avec un jeu
+> d'entrées contraint.
+>
+> Trois couches se cumulent, et c'est le cumul qui fait la sécurité :
+>
+> 1. `from=` réduit la surface : la clé volée est inerte ailleurs. `sshd` compare
+>    l'adresse source du socket TCP, information que le client ne contrôle pas.
+> 2. `restrict` supprime tout ce qui n'est pas la commande : pas de terminal, pas
+>    de tunnel, pas d'agent. Sans lui, `command=` laisserait passer
+>    `ssh -N -L ...`, qui n'exécute jamais la commande forcée.
+> 3. le script valide la demande par **liste blanche**, valide le nom de fichier
+>    (pas de `..`, pas de `/`, pas de nom vide ou caché), et journalise chaque
+>    refus. Le dépôt passe par un `.part` renommé à la fin : un transfert
+>    interrompu ne laisse pas d'archive tronquée qui aurait l'air valable.
+>
+> La rotation de cette clé : générer la nouvelle paire sur `lab-ops`, **ajouter**
+> la nouvelle ligne dans `authorized_keys` (deux clés valides simultanément),
+> basculer la CI, vérifier une exécution complète, puis retirer l'ancienne ligne.
+> Jamais de remplacement direct : la fenêtre entre les deux est une coupure de
+> service.
 
-Trois couches se cumulent, et c'est le cumul qui fait la sécurité :
+> [!WARNING]
+> **Piège**
+>
+> Ne pas confondre `from=` et un filtrage par pare-feu : `from=` protège **la
+> clé**, pas le service. Les deux sont complémentaires.
+>
+> Et le piège de journalisation : `journalise` écrit dans un fichier appartenant
+> au compte `sauvegarde`. Un attaquant qui obtiendrait ce compte pourrait effacer
+> ses traces. Pour un usage réel, on journalise avec `logger` vers `journald`
+> (auquel le compte ne peut pas toucher), ou vers un collecteur distant.
 
-1. `from=` réduit la surface : la clé volée est inerte ailleurs. `sshd` compare
-   l'adresse source du socket TCP, information que le client ne contrôle pas.
-2. `restrict` supprime tout ce qui n'est pas la commande : pas de terminal, pas
-   de tunnel, pas d'agent. Sans lui, `command=` laisserait passer
-   `ssh -N -L ...`, qui n'exécute jamais la commande forcée.
-3. le script valide la demande par **liste blanche**, valide le nom de fichier
-   (pas de `..`, pas de `/`, pas de nom vide ou caché), et journalise chaque
-   refus. Le dépôt passe par un `.part` renommé à la fin : un transfert
-   interrompu ne laisse pas d'archive tronquée qui aurait l'air valable.
-
-La rotation de cette clé : générer la nouvelle paire sur `lab-ops`, **ajouter**
-la nouvelle ligne dans `authorized_keys` (deux clés valides simultanément),
-basculer la CI, vérifier une exécution complète, puis retirer l'ancienne ligne.
-Jamais de remplacement direct : la fenêtre entre les deux est une coupure de
-service.
-:::
-
-::: piege
-Ne pas confondre `from=` et un filtrage par pare-feu : `from=` protège **la
-clé**, pas le service. Les deux sont complémentaires.
-
-Et le piège de journalisation : `journalise` écrit dans un fichier appartenant
-au compte `sauvegarde`. Un attaquant qui obtiendrait ce compte pourrait effacer
-ses traces. Pour un usage réel, on journalise avec `logger` vers `journald`
-(auquel le compte ne peut pas toucher), ou vers un collecteur distant.
-:::
-
-::: rhel
-Si `lab-web` était sous Rocky 9, SELinux entrerait en jeu : un
-`authorized_keys` déposé à la main depuis `/tmp` hérite d'un contexte
-`user_tmp_t` et `sshd` ne peut pas le lire — symptôme identique à un problème de
-permissions, `Permission denied (publickey)`, avec un refus visible dans
-`sudo ausearch -m avc -ts recent`. Correction :
-`sudo restorecon -Rv /home/sauvegarde/.ssh`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Si `lab-web` était sous Rocky 9, SELinux entrerait en jeu : un
+> `authorized_keys` déposé à la main depuis `/tmp` hérite d'un contexte
+> `user_tmp_t` et `sshd` ne peut pas le lire — symptôme identique à un problème de
+> permissions, `Permission denied (publickey)`, avec un refus visible dans
+> `sudo ausearch -m avc -ts recent`. Correction :
+> `sudo restorecon -Rv /home/sauvegarde/.ssh`.
 
 ---
 
 ## 14.7 Break & Fix
 
-### **BF14.1** — *Permissions de `~/.ssh` cassées côté serveur*
+### <a id="bf14-1"></a>**[BF14.1](README.md#bf14-1)** — *Permissions de `~/.ssh` cassées côté serveur*
 
 **Démarche de diagnostic**
 
@@ -2822,36 +2924,38 @@ h=$(getent passwd "$u" | cut -d: -f6)
 [ "$(stat -c %a "$h/.ssh/authorized_keys")" = 600 ]             || exit 1
 ```
 
-::: pourquoi
-La raison d'être de `StrictModes` est logique et vaut d'être sue : quiconque
-peut **écrire** dans `~/.ssh` peut y ajouter sa propre clé publique, et devient
-l'utilisateur. Un `~/.ssh` en `777` est donc strictement équivalent à donner son
-mot de passe à toute la machine. Le contrôle remonte au home parce qu'écrire
-dans le home permet de remplacer `.ssh` entièrement.
+> [!NOTE]
+> **Pourquoi**
+>
+> La raison d'être de `StrictModes` est logique et vaut d'être sue : quiconque
+> peut **écrire** dans `~/.ssh` peut y ajouter sa propre clé publique, et devient
+> l'utilisateur. Un `~/.ssh` en `777` est donc strictement équivalent à donner son
+> mot de passe à toute la machine. Le contrôle remonte au home parce qu'écrire
+> dans le home permet de remplacer `.ssh` entièrement.
+>
+> Le mécanisme de silence du protocole est l'autre leçon : `sshd` ne dira jamais
+> au client pourquoi il refuse, pour ne pas aider un attaquant à cartographier la
+> machine. D'où la règle de ce module : **un `Permission denied (publickey)` se
+> diagnostique sur le serveur**, dans `journalctl -u ssh`.
 
-Le mécanisme de silence du protocole est l'autre leçon : `sshd` ne dira jamais
-au client pourquoi il refuse, pour ne pas aider un attaquant à cartographier la
-machine. D'où la règle de ce module : **un `Permission denied (publickey)` se
-diagnostique sur le serveur**, dans `journalctl -u ssh`.
-:::
-
-::: piege
-Causes habituelles de ce désordre en production, à citer en prévention :
-
-* restauration d'une sauvegarde sans préservation des modes (`tar` sans `-p` en
-  tant que non-root, `cp -r` au lieu de `cp -a`, copie depuis un partage
-  Windows/CIFS qui n'a pas de bits UNIX) ;
-* un `chmod -R 775 /home/projet` passé un peu vite ;
-* un `umask` permissif dans un script de création de comptes.
-
-Et le contre-exemple utile : `authorized_keys` en `644` est **accepté** (il n'y a
-pas de secret dedans), c'est l'écriture par autrui qui est refusée. Ce qui n'est
-pas une raison pour ne pas le mettre en `600`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Causes habituelles de ce désordre en production, à citer en prévention :
+>
+> * restauration d'une sauvegarde sans préservation des modes (`tar` sans `-p` en
+>   tant que non-root, `cp -r` au lieu de `cp -a`, copie depuis un partage
+>   Windows/CIFS qui n'a pas de bits UNIX) ;
+> * un `chmod -R 775 /home/projet` passé un peu vite ;
+> * un `umask` permissif dans un script de création de comptes.
+>
+> Et le contre-exemple utile : `authorized_keys` en `644` est **accepté** (il n'y a
+> pas de secret dedans), c'est l'écriture par autrui qui est refusée. Ce qui n'est
+> pas une raison pour ne pas le mettre en `600`.
 
 ---
 
-### **BF14.2** — *`AllowUsers` déposé dans un fragment*
+### <a id="bf14-2"></a>**[BF14.2](README.md#bf14-2)** — *`AllowUsers` déposé dans un fragment*
 
 **Démarche de diagnostic**
 
@@ -2914,38 +3018,40 @@ Puis, **avant de fermer la console** : `ssh lab-web true` depuis `lab-adm`.
   devient `usermod -aG`, sans toucher à `sshd` ni le recharger ;
 * faire de `sshd -T` le premier réflexe de tout diagnostic, avant `grep`.
 
-::: pourquoi
-L'ordre d'évaluation complet des filtres de comptes, à connaître :
-`DenyUsers`, puis `AllowUsers`, puis `DenyGroups`, puis `AllowGroups`. Dès
-qu'`AllowUsers` est présent, **tout compte non listé est refusé**, quelles que
-soient ses clés et ses permissions — et le refus a lieu avant toute
-authentification, d'où la rapidité du rejet observée dans le symptôme.
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre d'évaluation complet des filtres de comptes, à connaître :
+> `DenyUsers`, puis `AllowUsers`, puis `DenyGroups`, puis `AllowGroups`. Dès
+> qu'`AllowUsers` est présent, **tout compte non listé est refusé**, quelles que
+> soient ses clés et ses permissions — et le refus a lieu avant toute
+> authentification, d'où la rapidité du rejet observée dans le symptôme.
+>
+> Les motifs acceptent le joker et la forme `utilisateur@hôte` :
+> `AllowUsers mathieu@10.10.10.* deploiement@10.10.10.14`, ce qui permet un
+> filtrage assez fin sans pare-feu. Attention : la partie hôte est comparée à
+> l'adresse source, et la résolution inverse n'est pas fiable — on y met des
+> adresses.
+>
+> Le message `Connection closed by invalid user` est trompeur : l'utilisateur
+> existe parfaitement. `sshd` le traite comme « invalide » parce qu'il a été
+> écarté avant l'authentification, et bascule dans son mode de traitement des
+> comptes inconnus — qui simule des délais pour ne pas permettre l'énumération des
+> comptes.
 
-Les motifs acceptent le joker et la forme `utilisateur@hôte` :
-`AllowUsers mathieu@10.10.10.* deploiement@10.10.10.14`, ce qui permet un
-filtrage assez fin sans pare-feu. Attention : la partie hôte est comparée à
-l'adresse source, et la résolution inverse n'est pas fiable — on y met des
-adresses.
-
-Le message `Connection closed by invalid user` est trompeur : l'utilisateur
-existe parfaitement. `sshd` le traite comme « invalide » parce qu'il a été
-écarté avant l'authentification, et bascule dans son mode de traitement des
-comptes inconnus — qui simule des délais pour ne pas permettre l'énumération des
-comptes.
-:::
-
-::: piege
-Recharger `sshd` avec un `AllowGroups` dont le groupe **n'existe pas encore**
-verrouille la machine instantanément : plus personne ne satisfait le filtre, et
-seules les sessions déjà ouvertes survivent. Toujours créer le groupe et vérifier
-`id -nG utilisateur` **avant** le `reload`. Et `usermod -aG` n'affecte pas les
-sessions déjà ouvertes : `sshd` lit les groupes à la connexion, donc c'est la
-**nouvelle** connexion qui compte ici — ce qui joue en ta faveur pour une fois.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Recharger `sshd` avec un `AllowGroups` dont le groupe **n'existe pas encore**
+> verrouille la machine instantanément : plus personne ne satisfait le filtre, et
+> seules les sessions déjà ouvertes survivent. Toujours créer le groupe et vérifier
+> `id -nG utilisateur` **avant** le `reload`. Et `usermod -aG` n'affecte pas les
+> sessions déjà ouvertes : `sshd` lit les groupes à la connexion, donc c'est la
+> **nouvelle** connexion qui compte ici — ce qui joue en ta faveur pour une fois.
 
 ---
 
-### **BF14.3** — *Clé d'hôte changée*
+### <a id="bf14-3"></a>**[BF14.3](README.md#bf14-3)** — *Clé d'hôte changée*
 
 **Démarche de diagnostic**
 
@@ -3032,38 +3138,40 @@ client ne voit d'alerte, et une vraie interception échoue toujours faute de
 signature valide. Variante plus légère : distribuer un
 `/etc/ssh/ssh_known_hosts` géré par l'outil de configuration.
 
-::: pourquoi
-Pourquoi le canal de vérification doit être indépendant : si un attaquant est en
-position d'interception, il répondra à `ssh-keyscan` exactement comme il a
-répondu à `ssh`. Toute vérification passant par le même chemin réseau ne prouve
-rien. La console de l'hyperviseur, l'inventaire d'un outil de gestion de
-configuration, un enregistrement SSHFP dans un DNS signé (DNSSEC) ou un appel à
-la personne qui a fait l'opération sont des canaux acceptables.
+> [!NOTE]
+> **Pourquoi**
+>
+> Pourquoi le canal de vérification doit être indépendant : si un attaquant est en
+> position d'interception, il répondra à `ssh-keyscan` exactement comme il a
+> répondu à `ssh`. Toute vérification passant par le même chemin réseau ne prouve
+> rien. La console de l'hyperviseur, l'inventaire d'un outil de gestion de
+> configuration, un enregistrement SSHFP dans un DNS signé (DNSSEC) ou un appel à
+> la personne qui a fait l'opération sont des canaux acceptables.
+>
+> Deuxième point de mécanisme : `known_hosts` indexe **par nom et par adresse**,
+> séparément. Le message ci-dessus le dit explicitement (`the key for the
+> corresponding IP address 10.10.10.11 is unknown`). Ne traiter qu'une des deux
+> entrées fait revenir l'alerte à la première connexion par l'autre forme.
 
-Deuxième point de mécanisme : `known_hosts` indexe **par nom et par adresse**,
-séparément. Le message ci-dessus le dit explicitement (`the key for the
-corresponding IP address 10.10.10.11 is unknown`). Ne traiter qu'une des deux
-entrées fait revenir l'alerte à la première connexion par l'autre forme.
-:::
-
-::: piege
-Le réflexe `ssh-keygen -R` immédiat n'est pas une erreur *technique* : c'est
-d'ailleurs ce qu'on finit par faire. L'erreur est de le faire **avant** la
-vérification, parce qu'on détruit alors la seule preuve dont on disposait —
-l'ancienne empreinte — et qu'on transforme un contrôle de sécurité en formalité.
-Dans une équipe où le geste est automatique, une interception réelle passera
-inaperçue.
-
-`StrictHostKeyChecking=no` est pire : il ne masque pas seulement l'alerte de
-changement, il accepte aussi silencieusement tout hôte inconnu, pour toutes les
-connexions couvertes par le bloc de configuration. En CI, la bonne valeur est
-`accept-new` au minimum, et un `known_hosts` provisionné et vérifié pour les
-accès sensibles.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le réflexe `ssh-keygen -R` immédiat n'est pas une erreur *technique* : c'est
+> d'ailleurs ce qu'on finit par faire. L'erreur est de le faire **avant** la
+> vérification, parce qu'on détruit alors la seule preuve dont on disposait —
+> l'ancienne empreinte — et qu'on transforme un contrôle de sécurité en formalité.
+> Dans une équipe où le geste est automatique, une interception réelle passera
+> inaperçue.
+>
+> `StrictHostKeyChecking=no` est pire : il ne masque pas seulement l'alerte de
+> changement, il accepte aussi silencieusement tout hôte inconnu, pour toutes les
+> connexions couvertes par le bloc de configuration. En CI, la bonne valeur est
+> `accept-new` au minimum, et un `known_hosts` provisionné et vérifié pour les
+> accès sensibles.
 
 ---
 
-### **BF14.4** — *`Too many authentication failures`*
+### <a id="bf14-4"></a>**[BF14.4](README.md#bf14-4)** — *`Too many authentication failures`*
 
 **Démarche de diagnostic**
 
@@ -3144,41 +3252,43 @@ ssh-add -t 28800 ~/.ssh/id_ed25519
 ssh -G lab-web | grep -c '^identityfile '     # doit valoir 1
 ```
 
-::: pourquoi
-Le point conceptuel : `IdentityFile` **ajoute**, `IdentitiesOnly` **restreint**.
-Cette asymétrie est voulue — elle permet d'accumuler des clés sans que chaque
-ajout ne casse les configurations existantes — et elle est la cause de la
-quasi-totalité des `Too many authentication failures`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point conceptuel : `IdentityFile` **ajoute**, `IdentitiesOnly` **restreint**.
+> Cette asymétrie est voulue — elle permet d'accumuler des clés sans que chaque
+> ajout ne casse les configurations existantes — et elle est la cause de la
+> quasi-totalité des `Too many authentication failures`.
+>
+> Deuxième point, plus subtil : la proposition d'une clé publique n'est pas
+> gratuite en information. Chaque `Offering public key` révèle au serveur une clé
+> publique que tu détiens. Un serveur hostile peut ainsi collecter la liste de tes
+> identités et t'identifier d'un site à l'autre. `IdentitiesOnly yes` par hôte
+> n'est donc pas seulement une optimisation, c'est une mesure de cloisonnement.
+>
+> Troisième point, que confirme le symptôme secondaire de l'énoncé (« `lab-db`
+> fonctionne encore, mais plus lentement ») : les 5 tentatives coûtent 5 allers-
+> retours avant la bonne. La correction accélère aussi les
+> machines qui fonctionnaient.
 
-Deuxième point, plus subtil : la proposition d'une clé publique n'est pas
-gratuite en information. Chaque `Offering public key` révèle au serveur une clé
-publique que tu détiens. Un serveur hostile peut ainsi collecter la liste de tes
-identités et t'identifier d'un site à l'autre. `IdentitiesOnly yes` par hôte
-n'est donc pas seulement une optimisation, c'est une mesure de cloisonnement.
-
-Troisième point, que confirme le symptôme secondaire de l'énoncé (« `lab-db`
-fonctionne encore, mais plus lentement ») : les 5 tentatives coûtent 5 allers-
-retours avant la bonne. La correction accélère aussi les
-machines qui fonctionnaient.
-:::
-
-::: piege
-Augmenter `MaxAuthTries` côté serveur « pour que ça passe » traite le symptôme
-et affaiblit la machine : cette limite est ce qui rend coûteux le bourrinage par
-clés. La valeur par défaut de 6 est déjà généreuse ; 3 est raisonnable sur un
-serveur en clés uniquement.
-
-Et attention au compteur : il inclut **toutes** les méthodes, pas seulement les
-clés. Sur un serveur acceptant encore le mot de passe, les propositions de clés
-consomment le budget avant que l'invite de mot de passe n'apparaisse — d'où des
-utilisateurs qui n'ont « même pas eu le droit d'essayer leur mot de passe ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> Augmenter `MaxAuthTries` côté serveur « pour que ça passe » traite le symptôme
+> et affaiblit la machine : cette limite est ce qui rend coûteux le bourrinage par
+> clés. La valeur par défaut de 6 est déjà généreuse ; 3 est raisonnable sur un
+> serveur en clés uniquement.
+>
+> Et attention au compteur : il inclut **toutes** les méthodes, pas seulement les
+> clés. Sur un serveur acceptant encore le mot de passe, les propositions de clés
+> consomment le budget avant que l'invite de mot de passe n'apparaisse — d'où des
+> utilisateurs qui n'ont « même pas eu le droit d'essayer leur mot de passe ».
 
 ---
 
 ## 14.8 Défi du module
 
-**D14 — Faire de `lab-adm` un vrai bastion**
+<a id="d14"></a>**[D14](README.md#d14) — Faire de `lab-adm` un vrai bastion**
 
 ### 1. Configuration client de référence
 
@@ -3240,24 +3350,25 @@ Adaptation Windows, trois lignes : retirer les trois directives `Control*`
 `C:\Users\mathieu\.ssh\id_ed25519` si `~` pose problème, et ne rien changer
 d'autre.
 
-::: pourquoi
-Le bloc `Match exec` est le seul morceau non évident. `Match exec "commande"`
-exécute la commande **localement** au moment de la résolution de configuration
-et applique le bloc si elle sort en 0. Il permet des conditions que `Host` ne
-sait pas exprimer : présence d'un processus, appartenance à un réseau
-(`Match exec "ip route get 10.10.10.1 >/dev/null 2>&1"`), poste professionnel ou
-personnel.
-
-Son coût est réel : la commande est exécutée à **chaque** résolution, y compris
-par `ssh -G` et par la complétion du shell. Elle doit être instantanée et muette.
-
-Note d'honnêteté technique à porter au rapport : ce `Match exec` détecte un
-`rsync` déjà en cours, pas le `rsync` que l'on s'apprête à lancer. La manière
-réellement propre d'exclure un transfert du multiplexage est de le lancer avec
-`rsync -e 'ssh -o ControlMaster=no -o ControlPath=none'`. Le `Match exec` est ici
-un exercice de syntaxe, et savoir dire pourquoi il est imparfait vaut mieux que
-de le recopier.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le bloc `Match exec` est le seul morceau non évident. `Match exec "commande"`
+> exécute la commande **localement** au moment de la résolution de configuration
+> et applique le bloc si elle sort en 0. Il permet des conditions que `Host` ne
+> sait pas exprimer : présence d'un processus, appartenance à un réseau
+> (`Match exec "ip route get 10.10.10.1 >/dev/null 2>&1"`), poste professionnel ou
+> personnel.
+>
+> Son coût est réel : la commande est exécutée à **chaque** résolution, y compris
+> par `ssh -G` et par la complétion du shell. Elle doit être instantanée et muette.
+>
+> Note d'honnêteté technique à porter au rapport : ce `Match exec` détecte un
+> `rsync` déjà en cours, pas le `rsync` que l'on s'apprête à lancer. La manière
+> réellement propre d'exclure un transfert du multiplexage est de le lancer avec
+> `rsync -e 'ssh -o ControlMaster=no -o ControlPath=none'`. Le `Match exec` est ici
+> un exercice de syntaxe, et savoir dire pourquoi il est imparfait vaut mieux que
+> de le recopier.
 
 ### 2. Durcissement du bastion
 
@@ -3355,19 +3466,20 @@ for h in lab-web lab-db lab-rhel lab-ops; do
 done > ~/lab14/conf/empreintes.txt
 ```
 
-::: pourquoi
-Le point qui fait la valeur du script : `ssh-keyscan` **n'authentifie rien**, il
-enregistre ce que le réseau répond. Utilisé seul, il institutionnalise le TOFU
-aveugle. Il ne devient un outil de sécurité que confronté à une référence
-constituée par un autre canal — ici la lecture de la clé sur la machine — et en
-**refusant d'écrire** dès qu'un écart apparaît. Un script qui écrirait quand même
-en affichant un avertissement ne servirait à rien : personne ne lit les
-avertissements d'un job automatique.
-
-Le code de sortie 2 distinct de 1 permet à l'appelant (une CI, par exemple) de
-distinguer « échec technique » de « alerte de sécurité » et de réagir
-différemment.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point qui fait la valeur du script : `ssh-keyscan` **n'authentifie rien**, il
+> enregistre ce que le réseau répond. Utilisé seul, il institutionnalise le TOFU
+> aveugle. Il ne devient un outil de sécurité que confronté à une référence
+> constituée par un autre canal — ici la lecture de la clé sur la machine — et en
+> **refusant d'écrire** dès qu'un écart apparaît. Un script qui écrirait quand même
+> en affichant un avertissement ne servirait à rien : personne ne lit les
+> avertissements d'un job automatique.
+>
+> Le code de sortie 2 distinct de 1 permet à l'appelant (une CI, par exemple) de
+> distinguer « échec technique » de « alerte de sécurité » et de réagir
+> différemment.
 
 ### 4. Outil de parc
 
@@ -3445,52 +3557,54 @@ $ echo $?
 0
 ```
 
-::: pourquoi
-Les choix de conception qui comptent, et qu'il faut savoir défendre :
+> [!NOTE]
+> **Pourquoi**
+>
+> Les choix de conception qui comptent, et qu'il faut savoir défendre :
+>
+> * **`-n` sur `ssh`** : sans lui, `ssh` consomme l'entrée standard du script.
+>   Noter qu'il est retiré dans la branche `-s`, où stdin porte précisément le
+>   script à exécuter — les deux usages sont exclusifs, et c'est le genre de
+>   détail qui distingue un script qui marche d'un script qui marche par hasard.
+> * **`BatchMode=yes`** : aucune invite possible. Un script d'exploitation qui
+>   peut demander une passphrase est un script qui bloquera un jour à 3 h du matin.
+> * **`StrictHostKeyChecking=accept-new`** : accepte un hôte inconnu (sinon le
+>   premier passage échoue partout) mais **refuse** un changement de clé. C'est le
+>   compromis raisonnable pour un outil interne ; l'idéal reste un `known_hosts`
+>   provisionné par le script de l'étape 3, et alors `yes`.
+> * **codes de retour hiérarchisés** : 255 signale une erreur de `ssh` lui-même
+>   (injoignable, refusé), donc un problème d'infrastructure, qu'on distingue d'un
+>   simple échec de la commande. L'appelant peut réagir différemment.
+> * **parallélisme par `wait -n`** : on maintient N tâches en vol sans gestion
+>   manuelle de PID. Les sorties sont écrites dans des fichiers séparés puis
+>   relues en ordre : sans ça, les sorties concurrentes s'entrelacent et le
+>   tableau devient illisible.
 
-* **`-n` sur `ssh`** : sans lui, `ssh` consomme l'entrée standard du script.
-  Noter qu'il est retiré dans la branche `-s`, où stdin porte précisément le
-  script à exécuter — les deux usages sont exclusifs, et c'est le genre de
-  détail qui distingue un script qui marche d'un script qui marche par hasard.
-* **`BatchMode=yes`** : aucune invite possible. Un script d'exploitation qui
-  peut demander une passphrase est un script qui bloquera un jour à 3 h du matin.
-* **`StrictHostKeyChecking=accept-new`** : accepte un hôte inconnu (sinon le
-  premier passage échoue partout) mais **refuse** un changement de clé. C'est le
-  compromis raisonnable pour un outil interne ; l'idéal reste un `known_hosts`
-  provisionné par le script de l'étape 3, et alors `yes`.
-* **codes de retour hiérarchisés** : 255 signale une erreur de `ssh` lui-même
-  (injoignable, refusé), donc un problème d'infrastructure, qu'on distingue d'un
-  simple échec de la commande. L'appelant peut réagir différemment.
-* **parallélisme par `wait -n`** : on maintient N tâches en vol sans gestion
-  manuelle de PID. Les sorties sont écrites dans des fichiers séparés puis
-  relues en ordre : sans ça, les sorties concurrentes s'entrelacent et le
-  tableau devient illisible.
-:::
-
-::: piege
-`set -e` et la capture d'un code de retour cohabitent mal, et c'est le piège
-qui fait échouer la moitié des scripts de parc. Écrit naïvement :
-
-```bash
-out=$(ssh "$h" "$CMD" 2>&1); rc=$?     # FAUX sous set -e
-```
-
-la substitution de commande échoue, `set -e` termine la fonction **avant** la
-ligne `rc=$?`, et l'hôte en échec n'apparaît jamais dans le tableau. La forme
-correcte place l'affectation dans une liste `&&`/`||`, que `set -e` ignore par
-construction :
-
-```bash
-out=$(ssh "$h" "$CMD" 2>&1) && rc=0 || rc=$?
-```
-
-Le `&& rc=0` n'est pas décoratif : sans lui, `rc` garderait la valeur du tour
-précédent quand la commande réussit.
-
-Et `wait -n` n'existe que depuis bash 4.3 — sans importance sur Ubuntu 24.04
-(bash 5.2) et Rocky 9 (bash 5.1), mais à savoir si le script doit tourner
-ailleurs.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `set -e` et la capture d'un code de retour cohabitent mal, et c'est le piège
+> qui fait échouer la moitié des scripts de parc. Écrit naïvement :
+>
+> ```bash
+> out=$(ssh "$h" "$CMD" 2>&1); rc=$?     # FAUX sous set -e
+> ```
+>
+> la substitution de commande échoue, `set -e` termine la fonction **avant** la
+> ligne `rc=$?`, et l'hôte en échec n'apparaît jamais dans le tableau. La forme
+> correcte place l'affectation dans une liste `&&`/`||`, que `set -e` ignore par
+> construction :
+>
+> ```bash
+> out=$(ssh "$h" "$CMD" 2>&1) && rc=0 || rc=$?
+> ```
+>
+> Le `&& rc=0` n'est pas décoratif : sans lui, `rc` garderait la valeur du tour
+> précédent quand la commande réussit.
+>
+> Et `wait -n` n'existe que depuis bash 4.3 — sans importance sur Ubuntu 24.04
+> (bash 5.2) et Rocky 9 (bash 5.1), mais à savoir si le script doit tourner
+> ailleurs.
 
 ### 5. Rapport
 
@@ -3521,20 +3635,27 @@ ailleurs.
   un service adossé au SSO — donc une révocation qui devient « ne plus délivrer »
   au lieu de « aller chercher partout ».
 
-::: pourquoi
-Ce qui est évalué dans ce défi n'est pas la longueur du script mais trois
-décisions d'architecture :
-
-1. **Une source de vérité par information.** L'IP d'une machine est dans le
-   fichier de configuration SSH, nulle part ailleurs — d'où l'interdiction des IP
-   en dur dans `parc.sh`, qui doit passer par les alias.
-2. **Aucune confiance implicite.** `ssh-keyscan` seul ne prouve rien : il est
-   confronté à une référence obtenue autrement, et le script **refuse d'écrire**
-   en cas d'écart.
-3. **Le bastion relaie mais ne détient rien.** `AllowTcpForwarding yes` (c'est
-   son métier) mais `AllowAgentForwarding no` (il ne doit jamais pouvoir
-   s'authentifier à ta place). Cette paire de directives, opposées en apparence,
-   est le cœur de la conception d'un bastion.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qui est évalué dans ce défi n'est pas la longueur du script mais trois
+> décisions d'architecture :
+>
+> 1. **Une source de vérité par information.** L'IP d'une machine est dans le
+>    fichier de configuration SSH, nulle part ailleurs — d'où l'interdiction des IP
+>    en dur dans `parc.sh`, qui doit passer par les alias.
+> 2. **Aucune confiance implicite.** `ssh-keyscan` seul ne prouve rien : il est
+>    confronté à une référence obtenue autrement, et le script **refuse d'écrire**
+>    en cas d'écart.
+> 3. **Le bastion relaie mais ne détient rien.** `AllowTcpForwarding yes` (c'est
+>    son métier) mais `AllowAgentForwarding no` (il ne doit jamais pouvoir
+>    s'authentifier à ta place). Cette paire de directives, opposées en apparence,
+>    est le cœur de la conception d'un bastion.
 
 ---
+
+<!-- nav:début -->
+---
+
+[← Module 13](../13-reseau-avance/corrige.md) · [Énoncé](README.md) · [Module 15 →](../15-services-applicatifs/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

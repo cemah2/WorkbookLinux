@@ -1,3 +1,7 @@
+<!-- nav:début -->
+[Accueil](../README.md) · [Chapitre 0 — Mise en place](00-mise-en-place.md) · [Parcours](parcours.md) · **Annexes** · [Mémo](memo.md)
+<!-- nav:fin -->
+
 # Annexes
 
 ## Annexe A — Grille de progression

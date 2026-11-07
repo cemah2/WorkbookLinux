@@ -1,41 +1,68 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie III — Exploitation, sécurité et incidents › **Module 18**  
+[← Module 17](../17-cron-timers/README.md) · [Corrigé](corrige.md) · [Module 19 →](../19-troubleshooting-perf/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M18.sh`](../../scripts/setup/setup_M18.sh) | prépare le module |
+| [`check_M18_01.sh`](../../scripts/check/check_M18_01.sh) | vérification |
+| [`check_M18_02.sh`](../../scripts/check/check_M18_02.sh) | vérification |
+| [`check_M18_03.sh`](../../scripts/check/check_M18_03.sh) | vérification |
+| [`check_M18_04.sh`](../../scripts/check/check_M18_04.sh) | vérification |
+| [`check_M18_05.sh`](../../scripts/check/check_M18_05.sh) | vérification |
+| [`check_M18_06.sh`](../../scripts/check/check_M18_06.sh) | vérification |
+| [`break_M18_01.sh`](../../scripts/break/break_M18_01.sh) | installe une panne |
+| [`break_M18_02.sh`](../../scripts/break/break_M18_02.sh) | installe une panne |
+| [`break_M18_03.sh`](../../scripts/break/break_M18_03.sh) | installe une panne |
+| [`break_M18_04.sh`](../../scripts/break/break_M18_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 18 — Sécurité et durcissement
 
 ## 18.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* décrire le chemin d'un paquet dans **netfilter** (hooks, tables, chaînes) et dire
-  ce que `ufw`, `firewalld` et `iptables` fabriquent réellement dans `nft list ruleset` ;
-* écrire, relire et corriger une politique de pare-feu complète sur une infra
-  multi-machines, en raisonnant sur l'**ordre des règles** et sur le trafic *establi* ;
-* traduire la même politique en `ufw` (Ubuntu) et en `firewalld` (Rocky), zones et
-  rich rules comprises, sans perdre mes règles au premier `--reload` ;
-* installer et régler **fail2ban** (jail, filtre, action, `bantime`/`findtime`/
-  `maxretry`), écrire un filtre maison pour nginx, le tester avec `fail2ban-regex`,
-  et énoncer ce que fail2ban **ne protège pas** ;
-* diagnostiquer un refus **SELinux** de bout en bout : contexte attendu, AVC dans
-  `audit.log`, `restorecon`, `semanage fcontext`, `semanage port`, booléens — et
-  expliquer pourquoi « passer en `disabled` » n'est jamais un correctif ;
-* lire un profil **AppArmor**, basculer un profil en `complain` le temps d'un
-  diagnostic, et comparer honnêtement AppArmor et SELinux ;
-* durcir un système : mises à jour de sécurité automatiques, surface d'écoute
-  (`ss -tulpn`), `sysctl` de sécurité, `/tmp` en `noexec`, modules noyau interdits,
-  politique de mots de passe, `umask`, bannière ;
-* gérer des **secrets** sans les faire fuir : `.env` et ses droits, ce qui ne va
-  jamais dans Git ni dans une variable de CI, `ansible-vault`, rotation ;
-* produire un certificat TLS (mini-PKI de lab ou Let's Encrypt), le vérifier avec
-  `openssl x509` et `openssl s_client`, configurer nginx en HTTPS correct (HSTS,
-  chaîne complète) et surveiller l'expiration ;
-* poser des règles **auditd** utiles, lancer un audit **lynis**, et reconnaître les
-  signaux d'une intrusion (SUID nouveau, cron suspect, processus sans binaire) ainsi
-  que la conduite à tenir.
-
-Temps estimé : 8 h (module copieux, prévois deux sessions)
-Prérequis : modules 03 (permissions), 04 (utilisateurs et sudo), 08 (systemd),
-12 (réseau), 14 (SSH), 15 (nginx). Le module 14 couvre le durcissement SSH lui-même :
-ici on ne refait pas `sshd_config`, on protège ce qu'il y a autour.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * décrire le chemin d'un paquet dans **netfilter** (hooks, tables, chaînes) et dire
+>   ce que `ufw`, `firewalld` et `iptables` fabriquent réellement dans `nft list ruleset` ;
+> * écrire, relire et corriger une politique de pare-feu complète sur une infra
+>   multi-machines, en raisonnant sur l'**ordre des règles** et sur le trafic *establi* ;
+> * traduire la même politique en `ufw` (Ubuntu) et en `firewalld` (Rocky), zones et
+>   rich rules comprises, sans perdre mes règles au premier `--reload` ;
+> * installer et régler **fail2ban** (jail, filtre, action, `bantime`/`findtime`/
+>   `maxretry`), écrire un filtre maison pour nginx, le tester avec `fail2ban-regex`,
+>   et énoncer ce que fail2ban **ne protège pas** ;
+> * diagnostiquer un refus **SELinux** de bout en bout : contexte attendu, AVC dans
+>   `audit.log`, `restorecon`, `semanage fcontext`, `semanage port`, booléens — et
+>   expliquer pourquoi « passer en `disabled` » n'est jamais un correctif ;
+> * lire un profil **AppArmor**, basculer un profil en `complain` le temps d'un
+>   diagnostic, et comparer honnêtement AppArmor et SELinux ;
+> * durcir un système : mises à jour de sécurité automatiques, surface d'écoute
+>   (`ss -tulpn`), `sysctl` de sécurité, `/tmp` en `noexec`, modules noyau interdits,
+>   politique de mots de passe, `umask`, bannière ;
+> * gérer des **secrets** sans les faire fuir : `.env` et ses droits, ce qui ne va
+>   jamais dans Git ni dans une variable de CI, `ansible-vault`, rotation ;
+> * produire un certificat TLS (mini-PKI de lab ou Let's Encrypt), le vérifier avec
+>   `openssl x509` et `openssl s_client`, configurer nginx en HTTPS correct (HSTS,
+>   chaîne complète) et surveiller l'expiration ;
+> * poser des règles **auditd** utiles, lancer un audit **lynis**, et reconnaître les
+>   signaux d'une intrusion (SUID nouveau, cron suspect, processus sans binaire) ainsi
+>   que la conduite à tenir.
+>
+> **Temps estimé** : 8 h (module copieux, prévois deux sessions)
+>
+> **Prérequis** : modules 03 (permissions), 04 (utilisateurs et sudo), 08 (systemd),
+> 12 (réseau), 14 (SSH), 15 (nginx). Le module 14 couvre le durcissement SSH lui-même :
+> ici on ne refait pas `sshd_config`, on protège ce qu'il y a autour.
 
 ---
 
@@ -45,17 +72,18 @@ VM concernées : **toutes**. Le gros du module se joue sur `lab-web` (10.10.10.1
 `lab-db` (10.10.10.12) pour ufw/TLS/fail2ban, sur `lab-rhel` (10.10.10.13) pour
 firewalld et SELinux, avec `lab-adm` (10.10.10.10) comme poste de pilotage.
 
-::: attention
-Ce module coupe du réseau. Un ordre de règles mal pensé sur `lab-web` te sort de ta
-propre session SSH. **Prends les snapshots avant de commencer**, et garde la console
-Proxmox (`qm terminal <vmid>` ou la console web) ouverte : c'est ton seul accès quand
-le pare-feu te ferme la porte.
-
-```bash
-# depuis le shell Proxmox
-for id in 9001 9002 9003 9004 9005; do qm snapshot $id avant-lab18; done
-```
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Ce module coupe du réseau. Un ordre de règles mal pensé sur `lab-web` te sort de ta
+> propre session SSH. **Prends les snapshots avant de commencer**, et garde la console
+> Proxmox (`qm terminal <vmid>` ou la console web) ouverte : c'est ton seul accès quand
+> le pare-feu te ferme la porte.
+>
+> ```bash
+> # depuis le shell Proxmox
+> for id in 9001 9002 9003 9004 9005; do qm snapshot $id avant-lab18; done
+> ```
 
 Paquets, côté Ubuntu (`lab-adm`, `lab-web`, `lab-db`, `lab-ops`) :
 
@@ -66,19 +94,20 @@ sudo apt install -y ufw fail2ban nftables nginx openssl \
      libpam-pwquality
 ```
 
-::: rhel
-Sur `lab-rhel` (Rocky 9) :
-
-```bash
-sudo dnf install -y firewalld fail2ban nftables nginx openssl \
-     policycoreutils-python-utils setroubleshoot-server audit lynis \
-     dnf-automatic
-```
-
-`policycoreutils-python-utils` fournit `semanage` et `audit2allow` : sans lui, la
-moitié du travail SELinux est impossible. `lynis` vient d'EPEL
-(`sudo dnf install -y epel-release` d'abord).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel` (Rocky 9) :
+>
+> ```bash
+> sudo dnf install -y firewalld fail2ban nftables nginx openssl \
+>      policycoreutils-python-utils setroubleshoot-server audit lynis \
+>      dnf-automatic
+> ```
+>
+> `policycoreutils-python-utils` fournit `semanage` et `audit2allow` : sans lui, la
+> moitié du travail SELinux est impossible. `lynis` vient d'EPEL
+> (`sudo dnf install -y epel-release` d'abord).
 
 Terrain de jeu (idempotent) :
 
@@ -267,7 +296,7 @@ incomplète (il la reconstruit), `curl` et les clients mobiles non.
 
 ## 18.3 Quiz — QCM
 
-**Q18.1** — Sur `lab-web` (Ubuntu 24.04), tu as tout configuré avec `ufw`.
+<a id="q18-1"></a>**[Q18.1](corrige.md#q18-1)** — Sur `lab-web` (Ubuntu 24.04), tu as tout configuré avec `ufw`.
 `sudo iptables -S` affiche les chaînes `ufw-before-input`, `ufw-user-input`… et
 `sudo nft list ruleset` affiche exactement les mêmes règles dans une table
 `ip filter`. Pourquoi les deux outils montrent-ils la même chose ?
@@ -278,7 +307,7 @@ b) `iptables` sur Ubuntu 24.04 est en réalité `iptables-nft` : les règles son
 c) ufw écrit deux fois, une fois dans chaque sous-système, pour la compatibilité
 d) le noyau maintient une synchronisation permanente entre iptables et nftables
 
-**Q18.2** — Tu veux que `lab-db` n'accepte PostgreSQL que depuis `lab-web`. Tu tapes,
+<a id="q18-2"></a>**[Q18.2](corrige.md#q18-2)** — Tu veux que `lab-db` n'accepte PostgreSQL que depuis `lab-web`. Tu tapes,
 dans cet ordre :
 
 ```bash
@@ -295,7 +324,7 @@ b) tout le monde peut se connecter au port 5432
 c) personne ne peut se connecter, les deux règles se neutralisent
 d) `ufw` refuse la troisième règle comme redondante
 
-**Q18.3** — `sudo ufw status numbered` sur `lab-web` :
+<a id="q18-3"></a>**[Q18.3](corrige.md#q18-3)** — `sudo ufw status numbered` sur `lab-web` :
 
 ```console
      To                         Action      From
@@ -312,7 +341,7 @@ b) la connexion est refusée, la règle 1 gagne parce qu'elle vient avant
 c) la connexion aboutit, ufw trie automatiquement par spécificité
 d) ufw refuse d'appliquer un jeu de règles contradictoire
 
-**Q18.4** — Sur `lab-rhel`, tu ouvres le port de ton API :
+<a id="q18-4"></a>**[Q18.4](corrige.md#q18-4)** — Sur `lab-rhel`, tu ouvres le port de ton API :
 
 ```bash
 sudo firewall-cmd --add-port=8080/tcp
@@ -326,7 +355,7 @@ b) `firewall-cmd --permanent --add-port=8080/tcp` puis `--reload`
 c) `firewall-cmd --runtime-to-permanent` juste après le test réussi
 d) il fallait `systemctl enable firewalld`, la règle aurait survécu
 
-**Q18.5** — Sur `lab-rhel`, `firewall-cmd --get-active-zones` renvoie :
+<a id="q18-5"></a>**[Q18.5](corrige.md#q18-5)** — Sur `lab-rhel`, `firewall-cmd --get-active-zones` renvoie :
 
 ```console
 public
@@ -342,7 +371,7 @@ b) non : aucune interface ni source n'est rattachée à `internal`, la zone n'es
 c) oui, mais seulement depuis le réseau local
 d) non, `http` n'est pas un service firewalld valide
 
-**Q18.6** — Ta jail `nginx-scan` est active, et
+<a id="q18-6"></a>**[Q18.6](corrige.md#q18-6)** — Ta jail `nginx-scan` est active, et
 `fail2ban-regex /var/log/nginx/access.log /etc/fail2ban/filter.d/nginx-scan.conf`
 annonce **312 correspondances** provenant de 10.10.10.50. Pourtant
 `fail2ban-client status nginx-scan` affiche `Currently failed: 0` et
@@ -355,7 +384,7 @@ b) `maxretry = 6` est trop élevé pour 312 échecs
 c) `fail2ban-regex` et le démon n'utilisent pas le même moteur d'expressions
 d) il manque `enabled = true`, mais la jail apparaît quand même dans `status`
 
-**Q18.7** — `fail2ban-client status sshd` affiche `Currently banned: 1`, ton IP.
+<a id="q18-7"></a>**[Q18.7](corrige.md#q18-7)** — `fail2ban-client status sshd` affiche `Currently banned: 1`, ton IP.
 Quelle commande te débannit **sans redémarrer le service ni vider la jail** ?
 
 a) `sudo fail2ban-client reload sshd`
@@ -363,7 +392,7 @@ b) `sudo fail2ban-client set sshd unbanip 10.10.10.10`
 c) `sudo iptables -F`
 d) `sudo fail2ban-client stop sshd`
 
-**Q18.8** — Sur `lab-rhel`, un développeur a déposé son site ainsi :
+<a id="q18-8"></a>**[Q18.8](corrige.md#q18-8)** — Sur `lab-rhel`, un développeur a déposé son site ainsi :
 
 ```bash
 sudo mv /home/mathieu/site/index.html /var/www/html/index.html
@@ -378,14 +407,14 @@ b) le fichier a gardé le contexte SELinux `user_home_t`, que nginx n'a pas le d
 c) nginx ne sert pas les fichiers appartenant à root
 d) le fichier a un attribut immuable posé par `mv`
 
-**Q18.9** — Pour corriger la situation de Q18.8 **durablement et proprement** :
+<a id="q18-9"></a>**[Q18.9](corrige.md#q18-9)** — Pour corriger la situation de Q18.8 **durablement et proprement** :
 
 a) `sudo setenforce 0`
 b) `sudo restorecon -v /var/www/html/index.html`
 c) `sudo chcon -t httpd_sys_content_t /var/www/html/index.html`
 d) `sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html(/.*)?"`
 
-**Q18.10** — Ton application PHP sur `lab-rhel` doit appeler une API externe en
+<a id="q18-10"></a>**[Q18.10](corrige.md#q18-10)** — Ton application PHP sur `lab-rhel` doit appeler une API externe en
 HTTPS. SELinux est en enforcing, l'appel échoue, `audit.log` contient un AVC
 `denied { name_connect }` pour `httpd_t`. Le correctif recommandé ?
 
@@ -394,7 +423,7 @@ b) `audit2allow -a -M monmodule && semodule -i monmodule.pp`
 c) passer SELinux en permissive
 d) `semanage port -a -t http_port_t -p tcp 443`
 
-**Q18.11** — Sur Rocky, `/etc/selinux/config` contient `SELINUX=disabled` depuis six
+<a id="q18-11"></a>**[Q18.11](corrige.md#q18-11)** — Sur Rocky, `/etc/selinux/config` contient `SELINUX=disabled` depuis six
 mois. Tu remets `SELINUX=enforcing` et tu redémarres. Que se passe-t-il ?
 
 a) rien de particulier, SELinux redémarre en enforcing
@@ -403,7 +432,7 @@ b) tous les fichiers créés pendant la période `disabled` n'ont pas d'étiquet
 c) SELinux repasse automatiquement en permissive au premier refus
 d) le noyau refuse de démarrer avec un contexte manquant
 
-**Q18.12** — `aa-status` sur `lab-web` affiche :
+<a id="q18-12"></a>**[Q18.12](corrige.md#q18-12)** — `aa-status` sur `lab-web` affiche :
 
 ```console
 32 profiles are loaded.
@@ -419,7 +448,7 @@ b) le profil n'est pas appliqué : les violations sont journalisées mais autori
 c) nginx ne démarrera pas tant que le profil est en complain
 d) complain est l'ancien nom de enforce
 
-**Q18.13** — Tu lis dans `/etc/fstab` de `lab-web` :
+<a id="q18-13"></a>**[Q18.13](corrige.md#q18-13)** — Tu lis dans `/etc/fstab` de `lab-web` :
 
 ```text
 tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev 0 0
@@ -433,7 +462,7 @@ b) certains installeurs (`apt`, scripts `.run`, compilations) qui extraient un
 c) les fichiers de `/tmp` ne seront plus effacés au reboot
 d) `/tmp` deviendra accessible en lecture seule
 
-**Q18.14** — `kernel.kptr_restrict = 2` sert à :
+<a id="q18-14"></a>**[Q18.14](corrige.md#q18-14)** — `kernel.kptr_restrict = 2` sert à :
 
 a) empêcher le chargement de modules noyau
 b) masquer les adresses mémoire du noyau dans `/proc/kallsyms` et les traces, pour
@@ -441,7 +470,7 @@ b) masquer les adresses mémoire du noyau dans `/proc/kallsyms` et les traces, p
 c) restreindre `dmesg` aux utilisateurs privilégiés
 d) activer l'ASLR du noyau
 
-**Q18.15** — Un dev a poussé `.env` contenant le mot de passe de production, puis a
+<a id="q18-15"></a>**[Q18.15](corrige.md#q18-15)** — Un dev a poussé `.env` contenant le mot de passe de production, puis a
 fait `git rm .env & git commit -m "oups"` et poussé. **Deux réponses correctes.**
 
 a) le secret est toujours lisible dans l'historique du dépôt
@@ -449,7 +478,7 @@ b) le `git rm` suffit, l'objet est supprimé du dépôt distant
 c) il faut considérer le secret comme compromis et le **changer**
 d) `.gitignore` ajouté après coup supprime le fichier de l'historique
 
-**Q18.16** — Tu génères un certificat auto-signé pour `app.lab.local` ainsi :
+<a id="q18-16"></a>**[Q18.16](corrige.md#q18-16)** — Tu génères un certificat auto-signé pour `app.lab.local` ainsi :
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -nodes -keyout srv.key \
@@ -463,7 +492,7 @@ b) le certificat n'a pas de `subjectAltName` : les clients modernes ignorent le 
 c) `-nodes` produit une clé illisible par nginx
 d) il manque `-sha256`, la signature est en SHA-1
 
-**Q18.17** — `openssl s_client -connect 10.10.10.11:443 </dev/null` affiche
+<a id="q18-17"></a>**[Q18.17](corrige.md#q18-17)** — `openssl s_client -connect 10.10.10.11:443 </dev/null` affiche
 `Verify return code: 21 (unable to verify the first certificate)`, alors que le
 navigateur, lui, affiche un cadenas vert. Que faut-il en conclure ?
 
@@ -473,7 +502,7 @@ b) il manque le certificat intermédiaire dans le fichier servi par nginx ; le
 c) le certificat est expiré
 d) `s_client` ne sait pas valider les certificats Let's Encrypt
 
-**Q18.18** — Sur une machine suspecte, `ls -l /proc/2481/exe` affiche :
+<a id="q18-18"></a>**[Q18.18](corrige.md#q18-18)** — Sur une machine suspecte, `ls -l /proc/2481/exe` affiche :
 
 ```console
 lrwxrwxrwx 1 root root 0 Sep 18 03:12 /proc/2481/exe -> /tmp/.x (deleted)
@@ -492,188 +521,168 @@ d) tuer immédiatement le processus pour arrêter l'attaque
 
 ## 18.4 Quiz — questions ouvertes
 
-**QO18.1** — Explique, en suivant le chemin d'un paquet TCP entrant, pourquoi une
+<a id="qo18-1"></a>**[QO18.1](corrige.md#qo18-1)** — Explique, en suivant le chemin d'un paquet TCP entrant, pourquoi une
 politique `default deny incoming` ne casse **pas** les réponses aux requêtes que ta
 machine a elle-même initiées. Nomme le mécanisme noyau et l'endroit exact où ufw le
 met en œuvre.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO18.2** — *On te demande en entretien* : « Quelle différence entre `ufw` et
+<a id="qo18-2"></a>**[QO18.2](corrige.md#qo18-2)** — *On te demande en entretien* : « Quelle différence entre `ufw` et
 `firewalld` ? Lequel choisirais-tu pour un parc de 200 serveurs, et pourquoi ? »
 Réponds en distinguant le modèle de données (règles à plat contre zones), la gestion
 du permanent/runtime, et l'automatisation.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO18.3** — Décris ta démarche complète quand un collègue te dit : « le pare-feu a
+<a id="qo18-3"></a>**[QO18.3](corrige.md#qo18-3)** — Décris ta démarche complète quand un collègue te dit : « le pare-feu a
 l'air bon, `ufw status` montre bien la règle, mais le trafic ne passe pas ». Donne
 les commandes dans l'ordre et ce que tu cherches dans chaque sortie.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO18.4** — Un service tourne correctement quand SELinux est en `permissive` et
+<a id="qo18-4"></a>**[QO18.4](corrige.md#qo18-4)** — Un service tourne correctement quand SELinux est en `permissive` et
 échoue en `enforcing`. Décris la méthode complète pour transformer ce constat en
 correctif propre, de la collecte des AVC jusqu'au module de politique. Précise à
 quel moment `audit2allow` est une bonne idée et à quel moment c'en est une mauvaise.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO18.5** — *On te demande en entretien* : « fail2ban protège-t-il contre le
+<a id="qo18-5"></a>**[QO18.5](corrige.md#qo18-5)** — *On te demande en entretien* : « fail2ban protège-t-il contre le
 bruteforce SSH ? » Réponds en nuançant : ce que ça bloque réellement, quatre
 situations où ça ne sert à rien, et ce que tu mets en place à la place ou en
 complément.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO18.6** — Compare AppArmor et SELinux sur cinq axes : modèle (chemin/étiquette),
+<a id="qo18-6"></a>**[QO18.6](corrige.md#qo18-6)** — Compare AppArmor et SELinux sur cinq axes : modèle (chemin/étiquette),
 couverture par défaut, coût d'exploitation, diagnostic d'un refus, et ce qui se passe
 quand un fichier est déplacé. Conclus sur le choix que tu ferais pour un serveur
 applicatif maison.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO18.7** — Une équipe de dev te demande de stocker le mot de passe de la base dans
+<a id="qo18-7"></a>**[QO18.7](corrige.md#qo18-7)** — Une équipe de dev te demande de stocker le mot de passe de la base dans
 une variable d'environnement du runner CI, « c'est masqué dans l'interface ». Liste
 au moins cinq façons dont ce secret peut fuir malgré le masquage, puis propose une
 architecture de gestion des secrets réaliste pour cette équipe.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO18.8** — Explique la chaîne de confiance TLS : ce que contient un certificat, ce
+<a id="qo18-8"></a>**[QO18.8](corrige.md#qo18-8)** — Explique la chaîne de confiance TLS : ce que contient un certificat, ce
 que le client vérifie exactement, dans quel ordre, et ce que nginx doit servir.
 Explique ensuite pourquoi une erreur de chaîne se voit sur `curl` mais parfois pas
 dans le navigateur.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO18.9** — Tu prends l'astreinte et tu reçois cette alerte : « connexion SSH
+<a id="qo18-9"></a>**[QO18.9](corrige.md#qo18-9)** — Tu prends l'astreinte et tu reçois cette alerte : « connexion SSH
 réussie pour le compte `postgres` à 03h14 depuis une IP publique ». Détaille ta
 conduite à tenir dans les 30 premières minutes : ce que tu regardes, dans quel ordre,
 ce que tu **ne fais pas**, et comment tu préserves les preuves.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO18.10** — Qu'est-ce qu'un CIS Benchmark ? Explique la différence entre niveau 1
+<a id="qo18-10"></a>**[QO18.10](corrige.md#qo18-10)** — Qu'est-ce qu'un CIS Benchmark ? Explique la différence entre niveau 1
 et niveau 2, ce que « scored » signifie, et pourquoi appliquer un benchmark à 100 %
 sur un serveur applicatif existant est généralement une mauvaise idée.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 18.5 Exercices guidés ★
 
-**E18.1** — Sur `lab-web`, affiche l'intégralité des règles réellement chargées dans
+<a id="e18-1"></a>**[E18.1](corrige.md#e18-1)** — Sur `lab-web`, affiche l'intégralité des règles réellement chargées dans
 le noyau, avec les compteurs de paquets, sans passer par `ufw` ni `iptables`. Repère
 la chaîne qui reçoit les paquets destinés à la machine elle-même.
 
-**E18.2** — Prouve que la commande `iptables` de `lab-web` n'est pas l'implémentation
+<a id="e18-2"></a>**[E18.2](corrige.md#e18-2)** — Prouve que la commande `iptables` de `lab-web` n'est pas l'implémentation
 historique : donne la commande qui affiche le backend utilisé, et celle qui liste les
 alternatives disponibles sur le système.
 
-**E18.3** — Active ufw sur `lab-web` **sans perdre ta session SSH**. Décris dans ton
+<a id="e18-3"></a>**[E18.3](corrige.md#e18-3)** — Active ufw sur `lab-web` **sans perdre ta session SSH**. Décris dans ton
 compte rendu l'ordre exact des commandes et pourquoi cet ordre évite la coupure.
 
-**E18.4** — Ouvre 80 et 443 sur `lab-web` en utilisant un profil d'application plutôt
+<a id="e18-4"></a>**[E18.4](corrige.md#e18-4)** — Ouvre 80 et 443 sur `lab-web` en utilisant un profil d'application plutôt
 qu'une liste de ports. Affiche la liste des profils disponibles et le contenu de
 celui que tu as choisi.
 
-**E18.5** — Sur `lab-web`, autorise SSH uniquement depuis `lab-adm`, et vérifie avec
+<a id="e18-5"></a>**[E18.5](corrige.md#e18-5)** — Sur `lab-web`, autorise SSH uniquement depuis `lab-adm`, et vérifie avec
 `ufw status numbered` que la règle est bien placée **avant** toute règle de refus.
 Donne la commande qui déplacerait une règle mal placée en position 1.
 
-**E18.6** — Limite les tentatives de connexion SSH à 6 par 30 secondes et par IP, en
+<a id="e18-6"></a>**[E18.6](corrige.md#e18-6)** — Limite les tentatives de connexion SSH à 6 par 30 secondes et par IP, en
 une seule commande ufw. Affiche ensuite dans `nft list ruleset` la structure qui
 implémente ce comptage.
 
-**E18.7** — Active la journalisation ufw en niveau `medium`, provoque un paquet
+<a id="e18-7"></a>**[E18.7](corrige.md#e18-7)** — Active la journalisation ufw en niveau `medium`, provoque un paquet
 refusé depuis `lab-adm`, et extrais du journal la ligne correspondante en affichant
 uniquement l'IP source et le port de destination.
 
-**E18.8** — Sur `lab-rhel`, affiche la zone active, la liste des services ouverts, et
+<a id="e18-8"></a>**[E18.8](corrige.md#e18-8)** — Sur `lab-rhel`, affiche la zone active, la liste des services ouverts, et
 le contenu complet de la zone en une seule commande. Puis ouvre HTTPS de façon
 permanente et rends-le actif immédiatement, en deux commandes.
 
-**E18.9** — Sur `lab-rhel`, écris une rich rule qui autorise le port 5432/tcp
+<a id="e18-9"></a>**[E18.9](corrige.md#e18-9)** — Sur `lab-rhel`, écris une rich rule qui autorise le port 5432/tcp
 uniquement depuis 10.10.10.11, de façon permanente, et vérifie qu'elle apparaît bien
 dans `--list-all`.
 
-**E18.10** — Sur `lab-web`, écris `/etc/fail2ban/jail.local` avec : bannissement de
+<a id="e18-10"></a>**[E18.10](corrige.md#e18-10)** — Sur `lab-web`, écris `/etc/fail2ban/jail.local` avec : bannissement de
 1 h, fenêtre de 10 minutes, 4 échecs, `lab-adm` jamais banni, et la jail `sshd`
 activée. Recharge fail2ban et prouve que la jail est active.
 
-**E18.11** — Utilise `fail2ban-regex` pour tester le filtre `sshd` fourni contre
+<a id="e18-11"></a>**[E18.11](corrige.md#e18-11)** — Utilise `fail2ban-regex` pour tester le filtre `sshd` fourni contre
 `~/lab18/logs/auth-attaque.log` et indique combien de lignes correspondent, combien
 sont ignorées, et quelles IP seraient bannies.
 
-**E18.12** — Sur `lab-rhel`, affiche le contexte SELinux de `/var/www/html`, celui du
+<a id="e18-12"></a>**[E18.12](corrige.md#e18-12)** — Sur `lab-rhel`, affiche le contexte SELinux de `/var/www/html`, celui du
 processus nginx, et l'état du booléen `httpd_can_network_connect`, en trois commandes.
 
-**E18.13** — Sur `lab-rhel`, fais écouter nginx sur le port 8088 avec SELinux en
+<a id="e18-13"></a>**[E18.13](corrige.md#e18-13)** — Sur `lab-rhel`, fais écouter nginx sur le port 8088 avec SELinux en
 enforcing. Donne les deux commandes nécessaires (une pour nginx, une pour SELinux) et
 la commande qui prouve que 8088 est désormais un port HTTP autorisé.
 
-**E18.14** — Sur `lab-web`, liste tous les ports en écoute avec le processus et
+<a id="e18-14"></a>**[E18.14](corrige.md#e18-14)** — Sur `lab-web`, liste tous les ports en écoute avec le processus et
 l'utilisateur associés, puis produis la liste des services qui écoutent sur autre
 chose que `127.0.0.1` — c'est ta surface d'exposition.
 
-**E18.15** — Applique les `sysctl` de durcissement du rappel express via un fichier
+<a id="e18-15"></a>**[E18.15](corrige.md#e18-15)** — Applique les `sysctl` de durcissement du rappel express via un fichier
 dans `/etc/sysctl.d/`, active-les sans reboot, et prouve que `rp_filter` et
 `kptr_restrict` ont bien les valeurs attendues.
 
-**E18.16** — Génère une autorité de certification de lab (clé 4096 bits, certificat
+<a id="e18-16"></a>**[E18.16](corrige.md#e18-16)** — Génère une autorité de certification de lab (clé 4096 bits, certificat
 valable 10 ans, `CN=Lab Local CA`) dans `~/lab18/pki/`, avec des droits interdisant
 la lecture de la clé privée à quiconque sauf son propriétaire. Affiche le sujet et
 les dates du certificat obtenu.
 
-**E18.17** — Toujours dans `~/lab18/pki/`, produis un certificat serveur pour
+<a id="e18-17"></a>**[E18.17](corrige.md#e18-17)** — Toujours dans `~/lab18/pki/`, produis un certificat serveur pour
 `app.lab.local` signé par ta CA, avec un `subjectAltName` contenant
 `DNS:app.lab.local` et `IP:10.10.10.11`. Vérifie la chaîne avec `openssl verify`.
 
-**E18.18** — Écris la commande qui répond par oui ou non (code retour) à la question
+<a id="e18-18"></a>**[E18.18](corrige.md#e18-18)** — Écris la commande qui répond par oui ou non (code retour) à la question
 « ce certificat expire-t-il dans moins de 30 jours ? », utilisable telle quelle dans
 un script de supervision.
 
-**E18.19** — Pose une règle auditd qui trace toute modification de `/etc/passwd` et
+<a id="e18-19"></a>**[E18.19](corrige.md#e18-19)** — Pose une règle auditd qui trace toute modification de `/etc/passwd` et
 `/etc/shadow` avec la clé `identite`, charge-la sans redémarrer auditd, déclenche-la,
 et retrouve l'événement.
 
-**E18.20** — Lance un audit `lynis` sur `lab-web`, récupère l'indice de durcissement
+<a id="e18-20"></a>**[E18.20](corrige.md#e18-20)** — Lance un audit `lynis` sur `lab-web`, récupère l'indice de durcissement
 et les cinq premières suggestions, et dis où se trouve le rapport machine exploitable.
 
 ---
 
 ## 18.6 Labs ★★
 
-### **L18.1** — Politique de pare-feu de l'infrastructure
+### <a id="l18-1"></a>**[L18.1](corrige.md#l18-1)** — Politique de pare-feu de l'infrastructure
 
-::: contexte
-Audit de sécurité dans trois semaines. L'auditeur a demandé le « schéma des flux
-autorisés ». Il n'existe pas : aucune machine du lab n'a de pare-feu actif. On te
-demande d'écrire et d'appliquer la politique, machine par machine, et de produire la
-matrice des flux qui servira de référence.
-:::
+> **Contexte**
+>
+> Audit de sécurité dans trois semaines. L'auditeur a demandé le « schéma des flux
+> autorisés ». Il n'existe pas : aucune machine du lab n'a de pare-feu actif. On te
+> demande d'écrire et d'appliquer la politique, machine par machine, et de produire la
+> matrice des flux qui servira de référence.
 
 Politique cible :
 
@@ -684,7 +693,9 @@ Politique cible :
 | `lab-web` → `lab-db` | 5432/tcp |
 | toute autre combinaison | refusée |
 
-@fig(parefeu-lab): La politique de flux du lab en un schéma : ce qui entre sur lab-web, lab-db, lab-adm et lab-ops, le bastion en 22 partout, la collecte vers lab-ops, et en rouge barré ce qui doit être refusé.
+<p align="center"><img src="../../assets/figures/parefeu-lab.svg" alt="Schéma : parefeu-lab"></p>
+
+*Figure — La politique de flux du lab en un schéma : ce qui entre sur lab-web, lab-db, lab-adm et lab-ops, le bastion en 22 partout, la collecte vers lab-ops, et en rouge barré ce qui doit être refusé.*
 
 1. Sur `lab-web` : politique par défaut refus en entrée, autorisation en sortie,
    ouverture de 80 et 443 depuis n'importe où, et de 22 depuis 10.10.10.10 seulement.
@@ -705,32 +716,34 @@ Politique cible :
 6. Sur `lab-web`, active la journalisation ufw et montre une ligne de refus
    correspondant à un de tes tests négatifs.
 
-::: astuce
-Pour ne pas te couper : ajoute d'abord la règle qui autorise SSH depuis `lab-adm`,
-**puis** `ufw enable`. Et garde la console Proxmox ouverte. Si tu te coupes quand
-même, `ufw disable` depuis la console te rend la main.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour ne pas te couper : ajoute d'abord la règle qui autorise SSH depuis `lab-adm`,
+> **puis** `ufw enable`. Et garde la console Proxmox ouverte. Si tu te coupes quand
+> même, `ufw disable` depuis la console te rend la main.
 
-::: check
-Critère de succès : chaque machine applique sa politique, les six flux de la matrice
-donnent le résultat attendu, et rien ne casse après un reboot.
-
-```bash
-bash check_M18_01.sh     # à lancer sur chaque VM concernée
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : chaque machine applique sa politique, les six flux de la matrice
+> donnent le résultat attendu, et rien ne casse après un reboot.
+>
+> ```bash
+> bash check_M18_01.sh     # à lancer sur chaque VM concernée
+> ```
 
 ---
 
-### **L18.2** — fail2ban : jail SSH et filtre nginx maison
+### <a id="l18-2"></a>**[L18.2](corrige.md#l18-2)** — fail2ban : jail SSH et filtre nginx maison
 
-::: contexte
-Le journal nginx de `lab-web` montre depuis deux jours un scan permanent :
-quelqu'un parcourt `/wp-login.php`, `/.env`, `/admin.php`, `/phpmyadmin/` à raison de
-plusieurs centaines de requêtes par heure. Ça ne casse rien, mais ça pollue les
-métriques et ça finira par trouver quelque chose. On te demande de bannir ces
-sources, sans jamais bannir le bastion ni le monitoring.
-:::
+> **Contexte**
+>
+> Le journal nginx de `lab-web` montre depuis deux jours un scan permanent :
+> quelqu'un parcourt `/wp-login.php`, `/.env`, `/admin.php`, `/phpmyadmin/` à raison de
+> plusieurs centaines de requêtes par heure. Ça ne casse rien, mais ça pollue les
+> métriques et ça finira par trouver quelque chose. On te demande de bannir ces
+> sources, sans jamais bannir le bastion ni le monitoring.
 
 Le setup a déposé un journal d'attaque réaliste dans `~/lab18/logs/acces-scan.log`.
 
@@ -756,26 +769,27 @@ Le setup a déposé un journal d'attaque réaliste dans `~/lab18/logs/acces-scan
 8. Écris dans `~/lab18/fail2ban-limites.md` trois attaques que ta configuration ne
    verra pas, avec une phrase d'explication chacune.
 
-::: check
-Critère de succès : `fail2ban-client status` liste les deux jails, `fail2ban-regex`
-sur `~/lab18/logs/acces-scan.log` renvoie au moins 20 correspondances avec ton filtre,
-et une IP de test est bannie puis débannie.
-
-```bash
-bash check_M18_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `fail2ban-client status` liste les deux jails, `fail2ban-regex`
+> sur `~/lab18/logs/acces-scan.log` renvoie au moins 20 correspondances avec ton filtre,
+> et une IP de test est bannie puis débannie.
+>
+> ```bash
+> bash check_M18_02.sh
+> ```
 
 ---
 
-### **L18.3** — SELinux : mettre une application en production sans le désactiver
+### <a id="l18-3"></a>**[L18.3](corrige.md#l18-3)** — SELinux : mettre une application en production sans le désactiver
 
-::: contexte
-Sur `lab-rhel`, l'équipe applicative livre une API qui doit être servie par nginx
-depuis `/srv/api/public`, écouter sur le port 8088, et appeler un service distant en
-HTTP. Leur procédure d'installation commence par `setenforce 0`. Ta mission : faire
-tourner exactement la même chose en `enforcing`, et leur rendre une procédure propre.
-:::
+> **Contexte**
+>
+> Sur `lab-rhel`, l'équipe applicative livre une API qui doit être servie par nginx
+> depuis `/srv/api/public`, écouter sur le port 8088, et appeler un service distant en
+> HTTP. Leur procédure d'installation commence par `setenforce 0`. Ta mission : faire
+> tourner exactement la même chose en `enforcing`, et leur rendre une procédure propre.
 
 1. Vérifie le mode SELinux courant et celui configuré au démarrage. Note la
    différence entre les deux commandes qui répondent à ces questions.
@@ -796,34 +810,36 @@ tourner exactement la même chose en `enforcing`, et leur rendre une procédure 
 8. Bonus diagnostic : relance `ausearch -m AVC -ts today` et montre qu'il n'y a plus
    de refus pour `httpd_t`.
 
-::: attention
-`audit2allow -a -M tout` suivi de `semodule -i tout.pp` « marcherait » aussi. C'est
-exactement ce qu'on te demande de ne pas faire ici : un module généré sans lecture
-accorde tout ce qui a été refusé, y compris ce qui n'aurait jamais dû l'être. Le
-corrigé explique où est la limite.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `audit2allow -a -M tout` suivi de `semodule -i tout.pp` « marcherait » aussi. C'est
+> exactement ce qu'on te demande de ne pas faire ici : un module généré sans lecture
+> accorde tout ce qui a été refusé, y compris ce qui n'aurait jamais dû l'être. Le
+> corrigé explique où est la limite.
 
-::: check
-Critère de succès : `getenforce` renvoie `Enforcing`, `curl http://10.10.10.13:8088/`
-répond 200, `curl http://10.10.10.13:8088/api/` atteint `lab-web`, et
-`ausearch -m AVC -ts recent` ne remonte plus de refus `httpd_t`.
-
-```bash
-bash check_M18_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `getenforce` renvoie `Enforcing`, `curl http://10.10.10.13:8088/`
+> répond 200, `curl http://10.10.10.13:8088/api/` atteint `lab-web`, et
+> `ausearch -m AVC -ts recent` ne remonte plus de refus `httpd_t`.
+>
+> ```bash
+> bash check_M18_03.sh
+> ```
 
 ---
 
-### **L18.4** — Mini-PKI et HTTPS correct sur `lab-web`
+### <a id="l18-4"></a>**[L18.4](corrige.md#l18-4)** — Mini-PKI et HTTPS correct sur `lab-web`
 
-::: contexte
-Le lab n'a pas d'accès Let's Encrypt (pas de DNS public). On te demande de monter une
-autorité de certification interne, d'émettre le certificat de `app.lab.local`, de
-configurer nginx en HTTPS conforme, de distribuer le CA sur `lab-adm`, et de mettre
-en place une surveillance d'expiration — parce que le vrai incident TLS, c'est
-toujours l'expiration.
-:::
+> **Contexte**
+>
+> Le lab n'a pas d'accès Let's Encrypt (pas de DNS public). On te demande de monter une
+> autorité de certification interne, d'émettre le certificat de `app.lab.local`, de
+> configurer nginx en HTTPS conforme, de distribuer le CA sur `lab-adm`, et de mettre
+> en place une surveillance d'expiration — parce que le vrai incident TLS, c'est
+> toujours l'expiration.
 
 Travaille dans `~/lab18/pki/` sur `lab-adm`, puis déploie sur `lab-web`.
 
@@ -849,31 +865,33 @@ Travaille dans `~/lab18/pki/` sur `lab-adm`, puis déploie sur `lab-web`.
    chacun, affiche le nom, la date d'expiration et le nombre de jours restants, et
    sort en code 2 si un certificat expire dans moins de 15 jours, 1 si moins de 30.
 
-::: rhel
-Sur Rocky, le magasin d'autorités est `/etc/pki/ca-trust/source/anchors/` et la
-commande de mise à jour est `update-ca-trust extract`. Sur Ubuntu :
-`/usr/local/share/ca-certificates/` et `update-ca-certificates`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur Rocky, le magasin d'autorités est `/etc/pki/ca-trust/source/anchors/` et la
+> commande de mise à jour est `update-ca-trust extract`. Sur Ubuntu :
+> `/usr/local/share/ca-certificates/` et `update-ca-certificates`.
 
-::: check
-Critère de succès : `curl -sI https://app.lab.local` depuis `lab-adm` renvoie 200 sans
-`-k`, l'en-tête `Strict-Transport-Security` est présent, `openssl s_client` affiche
-`Verify return code: 0 (ok)`, et `verif-certs.sh` fonctionne sur au moins deux hôtes.
-
-```bash
-bash check_M18_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `curl -sI https://app.lab.local` depuis `lab-adm` renvoie 200 sans
+> `-k`, l'en-tête `Strict-Transport-Security` est présent, `openssl s_client` affiche
+> `Verify return code: 0 (ok)`, et `verif-certs.sh` fonctionne sur au moins deux hôtes.
+>
+> ```bash
+> bash check_M18_04.sh
+> ```
 
 ---
 
-### **L18.5** — Durcissement et audit de `lab-ops`
+### <a id="l18-5"></a>**[L18.5](corrige.md#l18-5)** — Durcissement et audit de `lab-ops`
 
-::: contexte
-`lab-ops` a été montée à l'arrache il y a six mois pour « tester Docker », et elle
-est devenue la machine de CI. Personne ne sait ce qui tourne dessus. On te demande un
-état des lieux, un durcissement, et un avant/après chiffré.
-:::
+> **Contexte**
+>
+> `lab-ops` a été montée à l'arrache il y a six mois pour « tester Docker », et elle
+> est devenue la machine de CI. Personne ne sait ce qui tourne dessus. On te demande un
+> état des lieux, un durcissement, et un avant/après chiffré.
 
 1. État des lieux, à consigner dans `~/lab18/etat-initial.md` : ports en écoute avec
    processus et utilisateur, services actifs, comptes pouvant se connecter (shell
@@ -902,35 +920,38 @@ est devenue la machine de CI. Personne ne sait ce qui tourne dessus. On te deman
 6. Relance `lynis` et consigne l'avant/après : indice, et trois suggestions que tu as
    décidé de **ne pas** appliquer, avec la justification.
 
-::: attention
-`/tmp` en `noexec` casse certains installeurs et certaines compilations. Fais le test
-avant de considérer l'étape terminée : crée un script dans `/tmp`, rends-le
-exécutable, lance-le. Il doit échouer — et tu dois savoir donner à un outil légitime
-un `TMPDIR` de remplacement.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `/tmp` en `noexec` casse certains installeurs et certaines compilations. Fais le test
+> avant de considérer l'étape terminée : crée un script dans `/tmp`, rends-le
+> exécutable, lance-le. Il doit échouer — et tu dois savoir donner à un outil légitime
+> un `TMPDIR` de remplacement.
 
-::: check
-Critère de succès : `~/lab18/etat-initial.md` et `~/lab18/etat-final.md` existent,
-l'indice lynis a progressé, les sysctl sont actifs, `/tmp` refuse l'exécution, et les
-règles auditd sont chargées.
-
-```bash
-bash check_M18_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `~/lab18/etat-initial.md` et `~/lab18/etat-final.md` existent,
+> l'indice lynis a progressé, les sysctl sont actifs, `/tmp` refuse l'exécution, et les
+> règles auditd sont chargées.
+>
+> ```bash
+> bash check_M18_05.sh
+> ```
 
 ---
 
 ## 18.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf18`. Le snapshot `snap-clean`
-reste le filet de sécurité (`qm rollback <vmid> snap-clean`), mais l'utiliser vaut
-échec : l'objectif est de diagnostiquer, pas de rembobiner. Pour BF18.1 et BF18.4,
-garde la **console Proxmox** ouverte : tu risques de perdre SSH.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot <vmid> avant-bf18`. Le snapshot `snap-clean`
+> reste le filet de sécurité (`qm rollback <vmid> snap-clean`), mais l'utiliser vaut
+> échec : l'objectif est de diagnostiquer, pas de rembobiner. Pour BF18.1 et BF18.4,
+> garde la **console Proxmox** ouverte : tu risques de perdre SSH.
 
-### **BF18.1** — « Le pare-feu est bon, pourtant la base est injoignable »
+### <a id="bf18-1"></a>**[BF18.1](corrige.md#bf18-1)** — « Le pare-feu est bon, pourtant la base est injoignable »
 
 À lancer sur `lab-db` :
 
@@ -951,11 +972,9 @@ PostgreSQL sur `lab-db` (`connection timed out` au bout de deux minutes). Sur
 restaurer le flux, expliquer le mécanisme en une phrase, et dire quelle commande tu
 aurais lancée **en premier** pour gagner vingt minutes.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF18.2** — « Le site renvoie 403 sur une seule page »
+### <a id="bf18-2"></a>**[BF18.2](corrige.md#bf18-2)** — « Le site renvoie 403 sur une seule page »
 
 À lancer sur `lab-rhel` :
 
@@ -978,11 +997,9 @@ correction **robuste** : si un collègue refait la même manipulation demain, le
 problème ne doit plus se poser sur ce répertoire. Explique la différence entre les
 deux niveaux de correction.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF18.3** — « HTTPS ne marche plus depuis ce matin »
+### <a id="bf18-3"></a>**[BF18.3](corrige.md#bf18-3)** — « HTTPS ne marche plus depuis ce matin »
 
 À lancer sur `lab-web` :
 
@@ -1003,11 +1020,9 @@ sans toucher à la CA, remettre le service en état, et proposer le mécanisme q
 déclenché une alerte quinze jours avant. Livre ce mécanisme sous forme de commande
 utilisable en supervision.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF18.4** — « Je n'arrive plus à me connecter en SSH, mais seulement depuis le bastion »
+### <a id="bf18-4"></a>**[BF18.4](corrige.md#bf18-4)** — « Je n'arrive plus à me connecter en SSH, mais seulement depuis le bastion »
 
 À lancer sur `lab-web` :
 
@@ -1029,22 +1044,20 @@ corriger la configuration pour que ça ne puisse plus se reproduire. Explique po
 `ufw status` ne montrait rien d'anormal, et où se trouvait réellement le blocage dans
 le noyau.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 18.8 Défi du module ★★★
 
-**D18 — Rapport de conformité et durcissement de l'infrastructure**
+<a id="d18"></a>**[D18](corrige.md#d18) — Rapport de conformité et durcissement de l'infrastructure**
 
-::: contexte
-La direction a signé un contrat qui impose une « revue de sécurité trimestrielle
-documentée ». Tu es seul sur le sujet. On te demande un outil qui produit le rapport
-tout seul, applicable aux cinq VM du lab, Ubuntu comme Rocky, et le rapport de la
-première campagne.
-:::
+> **Contexte**
+>
+> La direction a signé un contrat qui impose une « revue de sécurité trimestrielle
+> documentée ». Tu es seul sur le sujet. On te demande un outil qui produit le rapport
+> tout seul, applicable aux cinq VM du lab, Ubuntu comme Rocky, et le rapport de la
+> première campagne.
 
 Cahier des charges :
 
@@ -1088,11 +1101,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M18_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M18_06.sh
+> ```
 
 ---
 
@@ -1126,3 +1140,9 @@ Pour aller plus loin :
 * Monte `gitleaks` en hook pre-commit sur un dépôt de test et fais-lui trouver une
   clé AWS que tu auras plantée. Puis mesure combien de temps il faut pour la retirer
   de l'historique — et pourquoi tu la changeras quand même.
+
+<!-- nav:début -->
+---
+
+[← Module 17](../17-cron-timers/README.md) · [Corrigé](corrige.md) · [Module 19 →](../19-troubleshooting-perf/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

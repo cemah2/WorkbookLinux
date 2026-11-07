@@ -10,7 +10,9 @@
 #   2. /etc/hosts avec les 7 VM du lab (10.10.10.10-16, domaine lab.local)
 #   3. fuseau horaire Europe/Paris, locale, historique bash horodaté
 #   4. message du jour (motd) qui rappelle le rôle de la machine
-#   5. répertoire ~/workbook accessible à l'utilisateur de lab
+#   5. répertoire ~/workbook accessible à l'utilisateur de lab : déballe
+#      ~/workbook.zip ou ~/workbook-scripts.zip s'il y en a un, sinon clone
+#      le dépôt ($WORKBOOK_REPO), ou le met à jour s'il est déjà cloné
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "lance-moi avec sudo" >&2; exit 1; }
@@ -23,6 +25,10 @@ LAB_HOME="$(getent passwd "$LAB_USER" | cut -d: -f6)"
 HOST="$(hostname -s)"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
+
+# Dépôt du workbook (ton fork, si tu en as un) : WORKBOOK_REPO=... sudo -E bash ...
+WORKBOOK_REPO="${WORKBOOK_REPO:-https://github.com/cemah2/WorkbookLinux.git}"
 
 # ---------------------------------------------------------------------
 # 1. Paquets
@@ -157,15 +163,32 @@ fi
 info "répertoire $LAB_HOME/workbook"
 install -d -o "$LAB_USER" -g "$LAB_USER" "$LAB_HOME/workbook" \
   "$LAB_HOME/workbook/scripts" "$LAB_HOME/carnet"
-# Si le zip du workbook est déjà là, on le déballe (cf. chapitre 0.4) :
-# workbook.zip (scripts/ + src/) ou workbook-scripts.zip (make zip-scripts).
+# Le workbook (cf. chapitre 0.4) : une archive déposée à côté du script
+# (workbook.zip ou workbook-scripts.zip) a la priorité ; sinon, clone Git.
+zip_done=0
 for z in workbook.zip workbook-scripts.zip; do
   if [ -f "$LAB_HOME/$z" ]; then
     su - "$LAB_USER" -c "unzip -o -q ~/$z -d ~/workbook"
     find "$LAB_HOME/workbook/scripts" -name '*.sh' -exec chmod +x {} +
+    zip_done=1
     break
   fi
 done
+if [ "$zip_done" -eq 0 ]; then
+  if [ -d "$LAB_HOME/workbook/.git" ]; then
+    info "workbook déjà cloné : mise à jour (git pull)"
+    su - "$LAB_USER" -c "git -C ~/workbook pull --ff-only -q" \
+      || warn "git pull impossible (réseau, modifications locales ?) : workbook laissé tel quel"
+  elif [ -z "$(ls -A "$LAB_HOME/workbook/scripts" 2>/dev/null)" ] \
+       && [ "$(ls -A "$LAB_HOME/workbook" 2>/dev/null)" = "scripts" ]; then
+    info "clone de $WORKBOOK_REPO dans $LAB_HOME/workbook"
+    rmdir "$LAB_HOME/workbook/scripts" "$LAB_HOME/workbook"
+    if ! su - "$LAB_USER" -c "git clone -q '$WORKBOOK_REPO' ~/workbook"; then
+      install -d -o "$LAB_USER" -g "$LAB_USER" "$LAB_HOME/workbook/scripts"
+      warn "clone impossible : copie les scripts à la main (chapitre 0.4)"
+    fi
+  fi
+fi
 
 # ---------------------------------------------------------------------
 # Bilan

@@ -1,42 +1,68 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 24**  
+[← Module 23](../23-ansible/README.md) · [Corrigé](corrige.md) · [Module 25 →](../25-cicd/README.md)
+
+<details><summary>Scripts du module (10)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M24.sh`](../../scripts/setup/setup_M24.sh) | prépare le module |
+| [`check_M24_01.sh`](../../scripts/check/check_M24_01.sh) | vérification |
+| [`check_M24_02.sh`](../../scripts/check/check_M24_02.sh) | vérification |
+| [`check_M24_03.sh`](../../scripts/check/check_M24_03.sh) | vérification |
+| [`check_M24_04.sh`](../../scripts/check/check_M24_04.sh) | vérification |
+| [`check_M24_05.sh`](../../scripts/check/check_M24_05.sh) | vérification |
+| [`break_M24_01.sh`](../../scripts/break/break_M24_01.sh) | installe une panne |
+| [`break_M24_02.sh`](../../scripts/break/break_M24_02.sh) | installe une panne |
+| [`break_M24_03.sh`](../../scripts/break/break_M24_03.sh) | installe une panne |
+| [`break_M24_04.sh`](../../scripts/break/break_M24_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 24 — Infrastructure as Code : OpenTofu, cloud-init, Proxmox
 
 ## 24.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* expliquer, avec des exemples, ce que signifient **déclaratif**, **état**,
-  **idempotence**, **drift**, **immutable** et **pets vs cattle**, et situer
-  Terraform/OpenTofu (provisionner) par rapport à Ansible (configurer) ;
-* écrire un fichier **`#cloud-config`** valide (users, clés SSH, packages,
-  write_files, runcmd, hostname), le valider avant de l'utiliser, et déboguer
-  une VM dont cloud-init ne s'applique pas (`cloud-init status`, journaux,
-  `cloud-init clean`) ;
-* fabriquer un **template Proxmox cloud-init** à partir de l'image cloud
-  Ubuntu 24.04 officielle avec `qm`, le cloner, l'adresser, le démarrer,
-  le snapshoter, le redimensionner et le détruire depuis la ligne de commande
-  ou l'API (`pvesh`, `curl` + token) ;
-* lire un fichier HCL bloc par bloc (`terraform`, `provider`, `resource`,
-  `data`, `variable`, `output`, `locals`, `module`) et dérouler le cycle
-  `init` → `plan` → `apply` → `destroy` en expliquant ce que fait chaque étape ;
-* lire une **sortie de `plan` ligne par ligne** et dire, avant d'appliquer,
-  ce qui sera créé, modifié sur place, ou détruit-puis-recréé, et pourquoi ;
-* déployer un parc de VM sur Proxmox avec le provider **bpg/proxmox**, un
-  token API, un `for_each` sur une map de variables typées et validées ;
-* gérer l'**état** : le protéger (il contient des secrets), le stocker à
-  distance avec verrouillage, importer une ressource existante, corriger un
-  drift, déplacer une ressource (`state mv`, `moved`) sans rien recréer ;
-* structurer le code en **modules** réutilisables et versionnés, et enchaîner
-  sur **Ansible** avec un inventaire généré depuis les outputs ;
-* outiller la qualité : `fmt`, `validate`, tflint, pre-commit, revue de plan
-  en PR, `tofu test` ;
-* situer Packer, Pulumi, CloudFormation, Bicep et Crossplane en entretien.
-
-Temps estimé : 9 h
-Prérequis : module 07 (bash), module 12 (réseau, `/etc/hosts`), module 14
-(clés SSH, agent), notions d'Ansible (inventaire, `ansible -m ping`) et un
-Docker fonctionnel sur `lab-ops` pour le backend d'état distant.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * expliquer, avec des exemples, ce que signifient **déclaratif**, **état**,
+>   **idempotence**, **drift**, **immutable** et **pets vs cattle**, et situer
+>   Terraform/OpenTofu (provisionner) par rapport à Ansible (configurer) ;
+> * écrire un fichier **`#cloud-config`** valide (users, clés SSH, packages,
+>   write_files, runcmd, hostname), le valider avant de l'utiliser, et déboguer
+>   une VM dont cloud-init ne s'applique pas (`cloud-init status`, journaux,
+>   `cloud-init clean`) ;
+> * fabriquer un **template Proxmox cloud-init** à partir de l'image cloud
+>   Ubuntu 24.04 officielle avec `qm`, le cloner, l'adresser, le démarrer,
+>   le snapshoter, le redimensionner et le détruire depuis la ligne de commande
+>   ou l'API (`pvesh`, `curl` + token) ;
+> * lire un fichier HCL bloc par bloc (`terraform`, `provider`, `resource`,
+>   `data`, `variable`, `output`, `locals`, `module`) et dérouler le cycle
+>   `init` → `plan` → `apply` → `destroy` en expliquant ce que fait chaque étape ;
+> * lire une **sortie de `plan` ligne par ligne** et dire, avant d'appliquer,
+>   ce qui sera créé, modifié sur place, ou détruit-puis-recréé, et pourquoi ;
+> * déployer un parc de VM sur Proxmox avec le provider **bpg/proxmox**, un
+>   token API, un `for_each` sur une map de variables typées et validées ;
+> * gérer l'**état** : le protéger (il contient des secrets), le stocker à
+>   distance avec verrouillage, importer une ressource existante, corriger un
+>   drift, déplacer une ressource (`state mv`, `moved`) sans rien recréer ;
+> * structurer le code en **modules** réutilisables et versionnés, et enchaîner
+>   sur **Ansible** avec un inventaire généré depuis les outputs ;
+> * outiller la qualité : `fmt`, `validate`, tflint, pre-commit, revue de plan
+>   en PR, `tofu test` ;
+> * situer Packer, Pulumi, CloudFormation, Bicep et Crossplane en entretien.
+>
+> **Temps estimé** : 9 h
+>
+> **Prérequis** : module 07 (bash), module 12 (réseau, `/etc/hosts`), module 14
+> (clés SSH, agent), notions d'Ansible (inventaire, `ansible -m ping`) et un
+> Docker fonctionnel sur `lab-ops` pour le backend d'état distant.
 
 ---
 
@@ -75,10 +101,11 @@ Tout ce qui suit vaut mot pour mot pour `terraform` : même syntaxe HCL, mêmes
 sous-commandes, mêmes providers. Si tu préfères Terraform, installe-le depuis
 le dépôt HashiCorp et remplace `tofu` par `terraform` dans les commandes.
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y jq git cloud-init python3-pyyaml`, puis
-`/tmp/install-opentofu.sh --install-method rpm`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y jq git cloud-init python3-pyyaml`, puis
+> `/tmp/install-opentofu.sh --install-method rpm`.
 
 Tu dois pouvoir ouvrir un shell root sur le nœud depuis `lab-adm` (c'est là
 que se fabrique le template) :
@@ -99,12 +126,13 @@ Il crée `~/lab24/` : un fichier `.env.example` pour les identifiants, des
 `02-lab2/`, `03-remote/`, `04-modules/`), un module vide dans
 `modules/vm-ubuntu/` et un gabarit d'inventaire Ansible.
 
-::: attention
-Le token API que tu vas créer en E24.8 donne le droit de détruire des VM.
-Il vit dans `~/lab24/.env` (mode `0600`, jamais dans git, jamais dans un
-fichier `.tf`). Le fichier `.gitignore` posé par le setup exclut `.env`,
-`*.tfstate*`, `*.tfvars` et `.terraform/` : ne le retire pas.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le token API que tu vas créer en E24.8 donne le droit de détruire des VM.
+> Il vit dans `~/lab24/.env` (mode `0600`, jamais dans git, jamais dans un
+> fichier `.tf`). Le fichier `.gitignore` posé par le setup exclut `.env`,
+> `*.tfstate*`, `*.tfvars` et `.terraform/` : ne le retire pas.
 
 ---
 
@@ -297,7 +325,9 @@ ignore_changes, replace_triggered_by }`. Précédence des variables : `-var` >
   appelé par `module "x" { source = "./modules/vm-ubuntu" ... }` ; versionné
   par tag git (`source = "git::ssh://...//modules/vm-ubuntu?ref=v1.2.0"`).
 
-@fig(tofu-cycle): Le cycle OpenTofu : code HCL, `plan` qui compare état et réel via le provider, `apply` qui appelle l'API Proxmox et réécrit le `tfstate` ; le drift d'une modification manuelle, et le handoff vers Ansible par l'inventaire généré.
+<p align="center"><img src="../../assets/figures/tofu-cycle.svg" alt="Schéma : tofu-cycle"></p>
+
+*Figure — Le cycle OpenTofu : code HCL, `plan` qui compare état et réel via le provider, `apply` qui appelle l'API Proxmox et réécrit le `tfstate` ; le drift d'une modification manuelle, et le handoff vers Ansible par l'inventaire généré.*
 
 ### Panorama pour l'entretien
 
@@ -323,7 +353,7 @@ ponctuel, au prix d'un cluster à opérer.
 
 ## 24.3 Quiz — QCM
 
-**Q24.1** — Tu relances `tofu apply` sans avoir modifié ni le code ni
+<a id="q24-1"></a>**[Q24.1](corrige.md#q24-1)** — Tu relances `tofu apply` sans avoir modifié ni le code ni
 l'infrastructure. Le plan affiche `0 to add, 0 to change, 0 to destroy`.
 Cette propriété s'appelle :
 
@@ -332,7 +362,7 @@ b) l'idempotence
 c) l'immutabilité
 d) la convergence Ansible
 
-**Q24.2** — Un collègue a augmenté la RAM d'une VM gérée par OpenTofu depuis
+<a id="q24-2"></a>**[Q24.2](corrige.md#q24-2)** — Un collègue a augmenté la RAM d'une VM gérée par OpenTofu depuis
 l'interface Proxmox. Que montre le prochain `tofu plan` si `memory` est
 déclaré à 2048 dans le code ?
 
@@ -341,7 +371,7 @@ b) `~ update in-place` qui ramène la mémoire à 2048
 c) `-/+ destroy and then create replacement`
 d) une erreur `state lock`
 
-**Q24.3** — Dans cette sortie de plan, quelle ligne indique la **cause** de
+<a id="q24-3"></a>**[Q24.3](corrige.md#q24-3)** — Dans cette sortie de plan, quelle ligne indique la **cause** de
 la recréation ?
 
 ```text
@@ -359,7 +389,7 @@ b) `~ id = "9102" -> (known after apply)`
 c) `~ vm_id = 9100 -> 9200 # forces replacement`
 d) `-/+`
 
-**Q24.4** — Un user-data commence par `# cloud-config` (avec une espace après
+<a id="q24-4"></a>**[Q24.4](corrige.md#q24-4)** — Un user-data commence par `# cloud-config` (avec une espace après
 le dièse). Que fait cloud-init ?
 
 a) il l'applique normalement, l'espace est tolérée
@@ -367,7 +397,7 @@ b) il l'ignore avec un avertissement `Unhandled non-multipart userdata`
 c) il refuse de démarrer la VM
 d) il n'applique que la section `users`
 
-**Q24.5** — Tu passes `--cicustom user=local:snippets/web.yaml` sur une VM
+<a id="q24-5"></a>**[Q24.5](corrige.md#q24-5)** — Tu passes `--cicustom user=local:snippets/web.yaml` sur une VM
 qui avait `--ciuser mathieu --sshkeys ...`. Au prochain premier démarrage :
 
 a) les deux sources sont fusionnées
@@ -375,7 +405,7 @@ b) `mathieu` et sa clé sont créés, puis le snippet est appliqué
 c) seul le snippet est appliqué ; `--ciuser`/`--sshkeys` sont ignorés
 d) Proxmox refuse la commande car les options sont exclusives
 
-**Q24.6** — Tu as trois VM créées avec `count = 3` et tu supprimes la
+<a id="q24-6"></a>**[Q24.6](corrige.md#q24-6)** — Tu as trois VM créées avec `count = 3` et tu supprimes la
 première de la liste `var.names`. Que propose le plan ?
 
 a) 1 to destroy
@@ -383,7 +413,7 @@ b) 1 to destroy, 2 to change (renommage sur place)
 c) 2 to add, 3 to destroy : les index se décalent
 d) 3 to destroy, 3 to add
 
-**Q24.7** — `variable "token" { sensitive = true }`. Que se passe-t-il avec
+<a id="q24-7"></a>**[Q24.7](corrige.md#q24-7)** — `variable "token" { sensitive = true }`. Que se passe-t-il avec
 `output "t" { value = var.token }` ? **Trois réponses correctes.**
 
 a) `tofu plan` refuse : « Output refers to sensitive values »
@@ -391,7 +421,7 @@ b) avec `sensitive = true` sur l'output, `tofu output -raw t` affiche la valeur
 c) le token n'est jamais écrit dans le tfstate
 d) le token est stocké en clair dans le tfstate quoi qu'il arrive
 
-**Q24.8** — Quelle commande fait oublier une ressource à OpenTofu **sans**
+<a id="q24-8"></a>**[Q24.8](corrige.md#q24-8)** — Quelle commande fait oublier une ressource à OpenTofu **sans**
 la détruire ?
 
 a) `tofu destroy -target=adr`
@@ -399,7 +429,7 @@ b) `tofu state rm adr`
 c) `tofu apply -replace=adr`
 d) `tofu taint adr`
 
-**Q24.9** — Sur Proxmox, `qm clone 9100 9110 --full 1` puis `qm start 9110`.
+<a id="q24-9"></a>**[Q24.9](corrige.md#q24-9)** — Sur Proxmox, `qm clone 9100 9110 --full 1` puis `qm start 9110`.
 La VM démarre mais n'a aucune adresse IP et le user `mathieu` n'existe pas.
 `qm config 9110` montre `ipconfig0: ip=10.10.10.110/24,gw=10.10.10.1` mais
 pas de ligne `ide2`. Cause la plus probable :
@@ -409,7 +439,7 @@ b) il manque le lecteur cloud-init : rien ne transporte les données vers la VM
 c) `--full 1` a désactivé cloud-init
 d) l'image cloud Ubuntu exige DHCP
 
-**Q24.10** — Le backend S3 est configuré avec `use_lockfile = true`.
+<a id="q24-10"></a>**[Q24.10](corrige.md#q24-10)** — Le backend S3 est configuré avec `use_lockfile = true`.
 Un `tofu apply` plante brutalement (coupure réseau). Au lancement suivant :
 
 a) l'état est perdu, il faut réimporter
@@ -418,7 +448,7 @@ b) `Error acquiring the state lock` ; on vérifie que personne ne travaille,
 c) le verrou est libéré automatiquement après 60 s
 d) OpenTofu recrée toutes les ressources
 
-**Q24.11** — Lequel de ces changements peut être fait **sans** recréer la
+<a id="q24-11"></a>**[Q24.11](corrige.md#q24-11)** — Lequel de ces changements peut être fait **sans** recréer la
 VM avec le provider bpg/proxmox ? **Deux réponses correctes.**
 
 a) passer `memory.dedicated` de 1024 à 2048
@@ -426,7 +456,7 @@ b) changer `clone.vm_id` (template source)
 c) agrandir `disk.size` de 20 à 30
 d) changer `vm_id`
 
-**Q24.12** — Tu importes `lab-rhel` (VMID 9004) dans un `resource`
+<a id="q24-12"></a>**[Q24.12](corrige.md#q24-12)** — Tu importes `lab-rhel` (VMID 9004) dans un `resource`
 `proxmox_virtual_environment_vm "rhel"`. Quel identifiant passes-tu à
 `tofu import` ?
 
@@ -435,7 +465,7 @@ b) `lab-rhel`
 c) `pve/9004`
 d) `qemu/9004`
 
-**Q24.13** — Où `local_file.inventory` avec
+<a id="q24-13"></a>**[Q24.13](corrige.md#q24-13)** — Où `local_file.inventory` avec
 `content = templatefile("inv.tftpl", { vms = local.ips })` échoue-t-il si
 `inv.tftpl` contient `%{ for k, v in vms }${k} ansible_host=${v}\n%{ endfor }` ?
 
@@ -444,7 +474,7 @@ b) `templatefile` ne lit pas les fichiers hors `path.module`
 c) `%{ for }` n'existe pas dans les templates
 d) `ansible_host` est un mot réservé HCL
 
-**Q24.14** — Le premier démarrage d'une VM clonée dure 4 minutes et
+<a id="q24-14"></a>**[Q24.14](corrige.md#q24-14)** — Le premier démarrage d'une VM clonée dure 4 minutes et
 `cloud-init-output.log` montre des dizaines de lignes `apt`. Explication :
 
 a) `package_update: true` est lent par nature
@@ -453,7 +483,7 @@ b) l'option Proxmox `--ciupgrade` vaut 1 par défaut : upgrade complet au
 c) le miroir Ubuntu est injoignable
 d) qemu-guest-agent force une mise à jour
 
-**Q24.15** — Pour qu'OpenTofu attende qu'une VM soit joignable avant de
+<a id="q24-15"></a>**[Q24.15](corrige.md#q24-15)** — Pour qu'OpenTofu attende qu'une VM soit joignable avant de
 générer l'inventaire Ansible, tu t'appuies sur :
 
 a) `depends_on` explicite, car `local_file` ne référence rien de la VM
@@ -462,7 +492,7 @@ b) le graphe de dépendances implicite dès que `content` référence un
 c) `provisioner "local-exec"` avec `sleep 60`
 d) `lifecycle { create_before_destroy = true }`
 
-**Q24.16** — *Entretien* : « Terraform ou Ansible pour installer nginx sur
+<a id="q24-16"></a>**[Q24.16](corrige.md#q24-16)** — *Entretien* : « Terraform ou Ansible pour installer nginx sur
 100 VM ? » La réponse attendue :
 
 a) Terraform, avec des `provisioner "remote-exec"`
@@ -475,77 +505,61 @@ d) Terraform, car il a un état
 
 ## 24.4 Quiz — questions ouvertes
 
-**QO24.1** — Explique le rôle du fichier d'état : pourquoi un outil
+<a id="qo24-1"></a>**[QO24.1](corrige.md#qo24-1)** — Explique le rôle du fichier d'état : pourquoi un outil
 déclaratif en a besoin alors qu'il pourrait interroger l'API à chaque fois,
 ce qu'il contient, ce qui arrive si deux personnes appliquent en même temps
 sans verrou, et pourquoi on ne le commite jamais dans git.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO24.2** — *On te demande en entretien* : « Décris ce qui se passe entre
+<a id="qo24-2"></a>**[QO24.2](corrige.md#qo24-2)** — *On te demande en entretien* : « Décris ce qui se passe entre
 `qm clone` et le moment où tu peux faire `ssh mathieu@10.10.10.110`. » Détaille
 le rôle de l'ISO `cidata`, du datasource NoCloud, de l'`instance-id`, des
 modules per-instance et per-boot, et ce qui rejoue ou non à un redémarrage.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO24.3** — Compare `count` et `for_each` : indexation, comportement à la
+<a id="qo24-3"></a>**[QO24.3](corrige.md#qo24-3)** — Compare `count` et `for_each` : indexation, comportement à la
 suppression d'un élément intermédiaire, contraintes sur les clés (connues au
 plan). Donne le cas où `count` reste le bon choix et la procédure pour migrer
 de l'un à l'autre sans rien recréer.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO24.4** — Une VM gérée par OpenTofu a été supprimée à la main, puis son
+<a id="qo24-4"></a>**[QO24.4](corrige.md#qo24-4)** — Une VM gérée par OpenTofu a été supprimée à la main, puis son
 VMID a été réutilisé pour une VM de test d'un collègue. Décris ce que montre
 `tofu plan`, pourquoi le provider ne voit pas la différence, et la procédure
 qui remet les choses d'équerre **sans** détruire la VM du collègue.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO24.5** — *On te demande en entretien* : « Immutable infrastructure :
+<a id="qo24-5"></a>**[QO24.5](corrige.md#qo24-5)** — *On te demande en entretien* : « Immutable infrastructure :
 concrètement, qu'est-ce que ça change dans ta façon de patcher ? » Réponds
 avec le triptyque Packer → Terraform → cloud-init, les avantages (rollback,
 reproductibilité) et les coûts (données, temps de build, IP flottantes).
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO24.6** — Explique pourquoi `sensitive = true` ne protège pas un secret,
+<a id="qo24-6"></a>**[QO24.6](corrige.md#qo24-6)** — Explique pourquoi `sensitive = true` ne protège pas un secret,
 ce que fait réellement l'attribut, où le secret finit quand même (état,
 `plan -out`, logs CI), et trois mesures concrètes pour un token Proxmox.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO24.7** — Tu reçois une PR qui modifie `main.tf` et joint la sortie de
+<a id="qo24-7"></a>**[QO24.7](corrige.md#qo24-7)** — Tu reçois une PR qui modifie `main.tf` et joint la sortie de
 `tofu plan`. Décris ta grille de revue : ce que tu vérifies dans le plan avant
 même de lire le code, les symboles qui déclenchent une discussion, et le
 mécanisme CI qui garantit que le plan joint est bien celui qui sera appliqué.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO24.8** — Décris ta démarche de diagnostic quand une VM clonée démarre
+<a id="qo24-8"></a>**[QO24.8](corrige.md#qo24-8)** — Décris ta démarche de diagnostic quand une VM clonée démarre
 mais que cloud-init « n'a rien fait » : ordre des vérifications côté Proxmox
 (`qm config`, `qm cloudinit dump`), côté VM (`cloud-init status`, journaux,
 `query`), et le test qui distingue « pas de datasource » de « user-data
 invalide ».
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
@@ -555,43 +569,43 @@ Sauf mention contraire, travaille sur `lab-adm` dans `~/lab24`. Les
 exercices E24.1 à E24.7 et E24.13 à E24.16 ne touchent pas Proxmox : ils
 utilisent les providers `local` et `random` pour manipuler HCL sans risque.
 
-**E24.1** — Installe OpenTofu et prouve que `tofu version` répond. Montre
+<a id="e24-1"></a>**[E24.1](corrige.md#e24-1)** — Installe OpenTofu et prouve que `tofu version` répond. Montre
 ensuite que `TF_LOG=DEBUG tofu version` est verbeux et que `tofu -help plan`
 liste `-out`, `-replace`, `-refresh-only`, `-target` et `-var`. Note dans
 `~/lab24/notes.md` ce que change chacune de ces cinq options.
 
-**E24.2** — Dans `~/lab24/e02/`, écris un `main.tf` qui crée un fichier
+<a id="e24-2"></a>**[E24.2](corrige.md#e24-2)** — Dans `~/lab24/e02/`, écris un `main.tf` qui crée un fichier
 `hello.txt` (provider `hashicorp/local`) dont le contenu contient un nom
 d'animal aléatoire (provider `hashicorp/random`, `random_pet`). Déroule
 `init`, `plan`, `apply`. Puis réponds en observant les fichiers produits :
 que contient `.terraform.lock.hcl`, quelle est la taille de `.terraform/`,
 et que donne `tofu state list` puis `tofu state show random_pet.nom` ?
 
-**E24.3** — Toujours dans `e02/`, ajoute une variable `longueur` de type
+<a id="e24-3"></a>**[E24.3](corrige.md#e24-3)** — Toujours dans `e02/`, ajoute une variable `longueur` de type
 `number`, valeur par défaut 2, avec une `validation` qui refuse les valeurs
 hors de 1 à 4, et branche-la sur `random_pet.length`. Teste
 `tofu plan -var longueur=9` (doit échouer avec ton message), puis un fichier
 `terraform.tfvars`, puis `TF_VAR_longueur=3`. Établis l'ordre de précédence
 observé.
 
-**E24.4** — Dans `tofu console` (répertoire `~/lab24/e04/` préparé par le
+<a id="e24-4"></a>**[E24.4](corrige.md#e24-4)** — Dans `tofu console` (répertoire `~/lab24/e04/` préparé par le
 setup avec une variable `vms` de type map), calcule : la liste des noms
 triés, l'adresse de chaque VM avec `cidrhost("10.10.10.0/24", v.host)`, la
 map `nom => ip`, et la chaîne `lab2-adm,lab2-web,...` avec `join`. Reporte
 ces quatre expressions dans `locals` et un `output` par expression.
 
-**E24.5** — Écris `~/lab24/e04/templates/hosts.tftpl` et une ressource
+<a id="e24-5"></a>**[E24.5](corrige.md#e24-5)** — Écris `~/lab24/e04/templates/hosts.tftpl` et une ressource
 `local_file` qui génère `hosts.lab2` au format `/etc/hosts` (une ligne
 `ip nom nom.lab.local` par VM, triée par IP). Vérifie que deux `apply`
 successifs ne changent rien, puis modifie le template et lis le plan : le fichier est-il modifié sur place (`~`) ou recréé ( `-/+`)? Explique.
 
-**E24.6** — Dans `~/lab24/e06/`, crée trois fichiers `vm-<nom>.txt` avec
+<a id="e24-6"></a>**[E24.6](corrige.md#e24-6)** — Dans `~/lab24/e06/`, crée trois fichiers `vm-<nom>.txt` avec
 `count` sur la liste `["adm", "web", "db"]`. Applique. Retire `"adm"` de la
 liste et lis le plan sans appliquer : combien de destructions, combien de
 créations, et pourquoi ? Réécris avec `for_each` sur `toset(...)`, réapplique
 la liste complète, retire `"adm"` et compare le plan.
 
-**E24.7** — Écris `~/lab24/cloud-init/ci-test.yaml` : hostname `ci-test`,
+<a id="e24-7"></a>**[E24.7](corrige.md#e24-7)** — Écris `~/lab24/cloud-init/ci-test.yaml` : hostname `ci-test`,
 utilisateur `mathieu` avec ta clé publique et sudo sans mot de passe, paquets
 `qemu-guest-agent` et `htop`, un fichier `/etc/lab24-marker` contenant
 `ci-test provisionne par cloud-init`, et un `runcmd` qui active l'agent.
@@ -600,7 +614,7 @@ la première ligne (`#cloud-config` → `#cloud config`) et montre ce que dit le
 validateur. Enfin vérifie avec `python3 -c 'import yaml,sys; ...'` que le YAML
 est syntaxiquement correct.
 
-**E24.8** — Sur le nœud (`ssh root@10.10.10.1`), crée l'utilisateur
+<a id="e24-8"></a>**[E24.8](corrige.md#e24-8)** — Sur le nœud (`ssh root@10.10.10.1`), crée l'utilisateur
 `terraform@pve`, un rôle `TofuLab` avec les privilèges nécessaires au clonage
 et à la gestion de VM (liste-les), l'ACL sur `/`, puis un token `tofu` sans
 séparation de privilèges. Reporte le token dans `~/lab24/.env` (copie
@@ -608,27 +622,27 @@ séparation de privilèges. Reporte le token dans `~/lab24/.env` (copie
 `GET /api2/json/version` et `GET /api2/json/nodes/pve/qemu` répondent avec le
 token, et que sans token la réponse est `401`.
 
-**E24.9** — Copie `~/lab24/proxmox/make-template.sh` sur le nœud, lis-le
+<a id="e24-9"></a>**[E24.9](corrige.md#e24-9)** — Copie `~/lab24/proxmox/make-template.sh` sur le nœud, lis-le
 **en entier** (chaque `qm set` doit t'être clair), exécute-le. Vérifie
 `qm config 9100` : disque `scsi0`, `ide2` en `cloudinit`, `agent: 1`,
 `template: 1`, `serial0`. Explique à quoi servent `--serial0 socket
 --vga serial0` et `--cpu x86-64-v2-AES` sur une image cloud.
 
-**E24.10** — Sur le nœud, clone le template en 9110 (`ci-test`), adresse-le
+<a id="e24-10"></a>**[E24.10](corrige.md#e24-10)** — Sur le nœud, clone le template en 9110 (`ci-test`), adresse-le
 en `10.10.10.110/24`, démarre-le, attends que `qm agent 9110 ping` réponde,
 puis obtiens son adresse par l'agent (`qm guest cmd 9110
 network-get-interfaces`, ou `pvesh get .../agent/network-get-interfaces`).
 Depuis `lab-adm`, connecte-toi en SSH. Mesure le temps entre `qm start` et le
 premier `ssh` réussi.
 
-**E24.11** — Sur `ci-test`, réponds avec des commandes : quel datasource a
+<a id="e24-11"></a>**[E24.11](corrige.md#e24-11)** — Sur `ci-test`, réponds avec des commandes : quel datasource a
 été utilisé, quel `instance-id`, le user-data reçu tel quel, combien de
 secondes a duré le premier boot (`cloud-init analyze show`), et la liste des
 modules per-instance exécutés. Puis, depuis le nœud, remplace la clé SSH
 (`qm set 9110 --sshkeys .. .`) et redémarre : la nouvelle clé est-elle
 déployée ? Explique le résultat avec `instance-id`.
 
-**E24.12** — Écris un script `~/lab24/bin/pve.sh` (bash, `set -euo pipefail`)
+<a id="e24-12"></a>**[E24.12](corrige.md#e24-12)** — Écris un script `~/lab24/bin/pve.sh` (bash, `set -euo pipefail`)
 qui pilote Proxmox **depuis `lab-adm` via l'API** (`curl` + token de `.env`),
 avec les sous-commandes `list` (vmid, nom, statut en TSV, via `jq`),
 `snap <vmid> <nom>`, `rollback <vmid> <nom>`, `resize <vmid> +5G`, et
@@ -636,25 +650,25 @@ avec les sous-commandes `list` (vmid, nom, statut en TSV, via `jq`),
 doivent être attendues jusqu'à `stopped` en lisant le statut de l'UPID.
 Démontre snapshot → modification → rollback sur `ci-test`.
 
-**E24.13** — Dans `~/lab24/e13/` (provider proxmox, aucune ressource),
+<a id="e24-13"></a>**[E24.13](corrige.md#e24-13)** — Dans `~/lab24/e13/` (provider proxmox, aucune ressource),
 déclare un `data "proxmox_virtual_environment_nodes"` et un output qui
 affiche les noms des nœuds. `tofu init` puis `tofu apply` : quelle valeur ?
 Puis montre avec `tofu providers` et `tofu providers lock` d'où vient le
 provider et à quoi sert le fichier de verrou en CI.
 
-**E24.14** — Dans `e02/`, ajoute `lifecycle { prevent_destroy = true }` sur
+<a id="e24-14"></a>**[E24.14](corrige.md#e24-14)** — Dans `e02/`, ajoute `lifecycle { prevent_destroy = true }` sur
 le `local_file`, tente `tofu destroy` et lis l'erreur. Retire-le, puis
 force la recréation du seul `random_pet` avec `-replace` : combien de
 ressources sont touchées et pourquoi le fichier suit ?
 
-**E24.15** — Dans `e02/`, déclare une variable `secret` marquée `sensitive`,
+<a id="e24-15"></a>**[E24.15](corrige.md#e24-15)** — Dans `e02/`, déclare une variable `secret` marquée `sensitive`,
 écris-la dans le contenu du fichier, et ajoute un output qui la retourne.
 Observe : l'erreur d'`apply`, la correction avec `sensitive = true` sur
 l'output, ce qu'affichent `tofu output` puis `tofu output -raw secret`, et
 enfin `tofu show -json | jq '.values.root_module.resources[].values'`.
 Conclus en une phrase sur ce que protège `sensitive`.
 
-**E24.16** — Renomme la ressource `random_pet.nom` en `random_pet.animal`
+<a id="e24-16"></a>**[E24.16](corrige.md#e24-16)** — Renomme la ressource `random_pet.nom` en `random_pet.animal`
 dans le code. Lis le plan (que veut-il faire ?), annule, puis obtiens
 `0 to add` avec un bloc `moved`. Refais la même chose avec
 `tofu state mv` et compare les deux approches du point de vue d'une revue
@@ -664,15 +678,15 @@ de code.
 
 ## 24.6 Labs ★★
 
-### **L24.1** — Template cloud-init et VM sur mesure avec `qm` et un snippet
+### <a id="l24-1"></a>**[L24.1](corrige.md#l24-1)** — Template cloud-init et VM sur mesure avec `qm` et un snippet
 
-::: contexte
-L'équipe CI a besoin de VM de test jetables, prêtes en moins de deux minutes,
-avec `mathieu` connecté, `docker.io` et `qemu-guest-agent` installés, et un
-marqueur dans `/etc/lab24-marker`. Aujourd'hui, un collègue clone une VM
-« modèle » qu'il maintient à la main depuis 2023. On te demande de remplacer
-ça par un template cloud-init officiel et un user-data versionné.
-:::
+> **Contexte**
+>
+> L'équipe CI a besoin de VM de test jetables, prêtes en moins de deux minutes,
+> avec `mathieu` connecté, `docker.io` et `qemu-guest-agent` installés, et un
+> marqueur dans `/etc/lab24-marker`. Aujourd'hui, un collègue clone une VM
+> « modèle » qu'il maintient à la main depuis 2023. On te demande de remplacer
+> ça par un template cloud-init officiel et un user-data versionné.
 
 Sur le nœud Proxmox, puis sur `lab-adm`.
 
@@ -699,27 +713,28 @@ Sur le nœud Proxmox, puis sur `lab-adm`.
    attente agent → `ssh` de test, et sort en code non nul si l'agent ne répond
    pas en 180 s. Lance-le pour créer `9111` / `ci-test2` / `10.10.10.111`.
 
-::: check
-Critère de succès : `ssh mathieu@10.10.10.110 'cat /etc/lab24-marker; id -nG;
-cloud-init status'` répond `ci-test provisionne par cloud-init`, contient
-`docker` et `status: done` ; `qm config 9100` contient `template: 1` ;
-`ci-vm.sh` a créé `ci-test2` joignable en 10.10.10.111.
-
-```bash
-bash check_M24_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `ssh mathieu@10.10.10.110 'cat /etc/lab24-marker; id -nG;
+> cloud-init status'` répond `ci-test provisionne par cloud-init`, contient
+> `docker` et `status: done` ; `qm config 9100` contient `template: 1` ;
+> `ci-vm.sh` a créé `ci-test2` joignable en 10.10.10.111.
+>
+> ```bash
+> bash check_M24_01.sh
+> ```
 
 ---
 
-### **L24.2** — Le lab en code : cinq VM avec OpenTofu et `for_each`
+### <a id="l24-2"></a>**[L24.2](corrige.md#l24-2)** — Le lab en code : cinq VM avec OpenTofu et `for_each`
 
-::: contexte
-Le lab de formation doit pouvoir être recréé pour chaque session dans un
-second environnement, `lab2`, sans passer par l'interface Proxmox. Cinq VM,
-mêmes rôles que le lab, VMID 9101 à 9105, adresses 10.10.10.101 à 105. On
-veut un seul `tofu apply`, une variable par VM, et un `plan` lisible en revue.
-:::
+> **Contexte**
+>
+> Le lab de formation doit pouvoir être recréé pour chaque session dans un
+> second environnement, `lab2`, sans passer par l'interface Proxmox. Cinq VM,
+> mêmes rôles que le lab, VMID 9101 à 9105, adresses 10.10.10.101 à 105. On
+> veut un seul `tofu apply`, une variable par VM, et un `plan` lisible en revue.
 
 Travaille dans `~/lab24/02-lab2/`. Le token vient de `~/lab24/.env`
 (`set -a; . ~/lab24/.env; set +a`).
@@ -755,34 +770,36 @@ Travaille dans `~/lab24/02-lab2/`. Le token vient de `~/lab24/.env`
 7. Modifie `memory` de `lab2-ops` dans le tfvars : le plan doit être un `~`
    sur place. Applique et vérifie côté Proxmox.
 
-::: astuce
-`agent { enabled = true }` fait attendre l'apply jusqu'à ce que l'agent
-réponde (15 min par défaut). Si le template n'a pas `qemu-guest-agent`
-installé et activé, l'apply « pend ». C'est aussi ce qui permet au provider de
-remplir `ipv4_addresses`.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `agent { enabled = true }` fait attendre l'apply jusqu'à ce que l'agent
+> réponde (15 min par défaut). Si le template n'a pas `qemu-guest-agent`
+> installé et activé, l'apply « pend ». C'est aussi ce qui permet au provider de
+> remplir `ipv4_addresses`.
 
-::: check
-Critère de succès : `tofu state list` donne 5 entrées
-`proxmox_virtual_environment_vm.lab["..."]`, `tofu plan` est vide,
-`tofu output -json ips` liste 5 adresses joignables en SSH.
-
-```bash
-bash check_M24_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `tofu state list` donne 5 entrées
+> `proxmox_virtual_environment_vm.lab["..."]`, `tofu plan` est vide,
+> `tofu output -json ips` liste 5 adresses joignables en SSH.
+>
+> ```bash
+> bash check_M24_02.sh
+> ```
 
 ---
 
-### **L24.3** — État distant, verrou, import et drift
+### <a id="l24-3"></a>**[L24.3](corrige.md#l24-3)** — État distant, verrou, import et drift
 
-::: contexte
-Deux personnes vont maintenant travailler sur `lab2`. L'état local dans le
-dépôt de Mathieu ne convient plus. On monte un MinIO sur `lab-ops` comme
-backend S3 avec verrouillage, on y migre l'état, on adopte dans le code la
-VM `lab-rhel` (9004) que personne n'a jamais décrite, et on s'entraîne à
-absorber un drift sans casser quoi que ce soit.
-:::
+> **Contexte**
+>
+> Deux personnes vont maintenant travailler sur `lab2`. L'état local dans le
+> dépôt de Mathieu ne convient plus. On monte un MinIO sur `lab-ops` comme
+> backend S3 avec verrouillage, on y migre l'état, on adopte dans le code la
+> VM `lab-rhel` (9004) que personne n'a jamais décrite, et on s'entraîne à
+> absorber un drift sans casser quoi que ce soit.
 
 1. Sur `lab-ops`, lance MinIO en conteneur (`quay.io/minio/minio`, données
    dans `/srv/minio`, API `9000`, console `9001`), crée un bucket `tfstate`
@@ -817,33 +834,35 @@ absorber un drift sans casser quoi que ce soit.
    instances: (.instances | length)}'`, `serial`, `lineage`. Cherche ta clé
    SSH publique dedans. Conclus sur les droits à poser sur le bucket.
 
-::: attention
-Ne modifie jamais le JSON de l'état à la main : `state mv`, `state rm`,
-`import`, `apply -refresh-only` et les blocs `moved`/`removed`/`import`
-couvrent tous les cas courants. L'édition manuelle est le dernier recours
-d'un état corrompu, après `state pull` sauvegardé et à deux.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Ne modifie jamais le JSON de l'état à la main : `state mv`, `state rm`,
+> `import`, `apply -refresh-only` et les blocs `moved`/`removed`/`import`
+> couvrent tous les cas courants. L'édition manuelle est le dernier recours
+> d'un état corrompu, après `state pull` sauvegardé et à deux.
 
-::: check
-Critère de succès : `.terraform/terraform.tfstate` déclare le backend `s3`,
-aucun `terraform.tfstate` local non vide, `tofu state list` contient
-`proxmox_virtual_environment_vm.rhel`, `tofu plan` vide.
-
-```bash
-bash check_M24_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `.terraform/terraform.tfstate` déclare le backend `s3`,
+> aucun `terraform.tfstate` local non vide, `tofu state list` contient
+> `proxmox_virtual_environment_vm.rhel`, `tofu plan` vide.
+>
+> ```bash
+> bash check_M24_03.sh
+> ```
 
 ---
 
-### **L24.4** — Module `vm-ubuntu`, versionnage et inventaire Ansible généré
+### <a id="l24-4"></a>**[L24.4](corrige.md#l24-4)** — Module `vm-ubuntu`, versionnage et inventaire Ansible généré
 
-::: contexte
-Trois autres équipes veulent créer des VM « comme lab2 ». On extrait un
-module `vm-ubuntu` réutilisable, on le versionne, on migre `lab2` dessus
-sans recréer une seule VM, et on produit l'inventaire Ansible depuis les
-outputs pour que le playbook de base tourne juste après l'apply.
-:::
+> **Contexte**
+>
+> Trois autres équipes veulent créer des VM « comme lab2 ». On extrait un
+> module `vm-ubuntu` réutilisable, on le versionne, on migre `lab2` dessus
+> sans recréer une seule VM, et on produit l'inventaire Ansible depuis les
+> outputs pour que le playbook de base tourne juste après l'apply.
 
 1. Remplis `~/lab24/modules/vm-ubuntu/` : `variables.tf` (name, vm_id, ip,
    gateway, node_name, template_id, cores, memory, disk_gb, ssh_keys,
@@ -884,30 +903,32 @@ outputs pour que le playbook de base tourne juste après l'apply.
    mode `plan` qui vérifie que le module produit exactement 5 instances et
    que chaque IP est dans `10.10.10.0/24`.
 
-::: check
-Critère de succès : `tofu state list` montre `module.vm["lab2-web"]...`,
-plan vide, `inventory.ini` présent avec 5 hôtes, `ansible ... -m ping` vert,
-`tofu test` vert.
-
-```bash
-bash check_M24_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `tofu state list` montre `module.vm["lab2-web"]...`,
+> plan vide, `inventory.ini` présent avec 5 hôtes, `ansible ... -m ping` vert,
+> `tofu test` vert.
+>
+> ```bash
+> bash check_M24_04.sh
+> ```
 
 ---
 
 ## 24.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf24` (poste de travail)
-et une copie de l'état : `tofu state pull > ~/lab24/backup-$(date +%s).json`.
-Les scripts de panne lisent `~/lab24/.env` et agissent sur les VM 9100+
-uniquement. Ils s'exécutent avec `sudo` depuis `lab-adm` ; la réparation se
-fait sans `sudo`. Le snapshot `snap-clean` reste ton filet, mais l'utiliser
-vaut échec : ici on répare un **état**, pas un système.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf24` (poste de travail)
+> et une copie de l'état : `tofu state pull > ~/lab24/backup-$(date +%s).json`.
+> Les scripts de panne lisent `~/lab24/.env` et agissent sur les VM 9100+
+> uniquement. Ils s'exécutent avec `sudo` depuis `lab-adm` ; la réparation se
+> fait sans `sudo`. Le snapshot `snap-clean` reste ton filet, mais l'utiliser
+> vaut échec : ici on répare un **état**, pas un système.
 
-### **BF24.1** — « Le plan veut reconfigurer une VM qui n'est pas à nous »
+### <a id="bf24-1"></a>**[BF24.1](corrige.md#bf24-1)** — « Le plan veut reconfigurer une VM qui n'est pas à nous »
 
 ```bash
 sudo bash break_M24_01.sh
@@ -930,11 +951,9 @@ un VMID libre, et proposer la mesure qui empêche un collègue de « prendre un
 VMID libre » dans la plage gérée par le code. `tofu plan` final : exactement
 `1 to add`, rien d'autre, et `sandbox-julien` intacte.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF24.2** — « Le refactoring veut tout détruire »
+### <a id="bf24-2"></a>**[BF24.2](corrige.md#bf24-2)** — « Le refactoring veut tout détruire »
 
 ```bash
 sudo bash break_M24_02.sh
@@ -954,11 +973,9 @@ utilisant le mécanisme prévu pour ce cas, de façon **relisible en PR**
 terminal). Explique pourquoi la première méthode est préférable à
 `tofu state mv` en équipe.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF24.3** — « Le token est dans le pipeline »
+### <a id="bf24-3"></a>**[BF24.3](corrige.md#bf24-3)** — « Le token est dans le pipeline »
 
 ```bash
 sudo bash break_M24_03.sh
@@ -978,11 +995,9 @@ que le secret ne puisse plus apparaître (variable, output, fichier généré),
 faire tourner le token, et vérifier que l'état ne contient plus l'ancien.
 `tofu plan` doit rester vide après remédiation.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF24.4** — « La VM démarre mais cloud-init n'a rien fait »
+### <a id="bf24-4"></a>**[BF24.4](corrige.md#bf24-4)** — « La VM démarre mais cloud-init n'a rien fait »
 
 ```bash
 sudo bash break_M24_04.sh
@@ -1004,22 +1019,20 @@ bien trouvé et appliqué. Explique pourquoi cloud-init s'est lancé quand même
 au premier boot et pourquoi le correctif fonctionne au second sans
 `cloud-init clean`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 24.8 Défi du module ★★★
 
-**D24 — `lab2` reconstruit de zéro, prêt pour Ansible, en une commande**
+<a id="d24"></a>**[D24](corrige.md#d24) — `lab2` reconstruit de zéro, prêt pour Ansible, en une commande**
 
-::: contexte
-Le formateur veut, la veille de chaque session, détruire `lab2` et le
-reconstruire en un seul `make deploy`, puis lancer la configuration de base.
-Il veut aussi une PR propre : `fmt`, `validate`, tests, plan joint, et
-aucune donnée sensible dans le dépôt.
-:::
+> **Contexte**
+>
+> Le formateur veut, la veille de chaque session, détruire `lab2` et le
+> reconstruire en un seul `make deploy`, puis lancer la configuration de base.
+> Il veut aussi une PR propre : `fmt`, `validate`, tests, plan joint, et
+> aucune donnée sensible dans le dépôt.
 
 Cahier des charges, dans `~/lab24/04-modules/` (état distant sur MinIO) :
 
@@ -1053,11 +1066,12 @@ Cahier des charges, dans `~/lab24/04-modules/` (état distant sur MinIO) :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M24_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M24_05.sh
+> ```
 
 ---
 
@@ -1094,3 +1108,9 @@ Pour aller plus loin :
 * Lance `tflint --init` puis `tflint` sur `04-modules/` avec le ruleset
   `terraform` : classe les avertissements (naming, variables non utilisées,
   version de provider non épinglée) et corrige-les.
+
+<!-- nav:début -->
+---
+
+[← Module 23](../23-ansible/README.md) · [Corrigé](corrige.md) · [Module 25 →](../25-cicd/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

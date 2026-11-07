@@ -1,35 +1,61 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie I — Fondamentaux du shell et du système de fichiers › **Module 05**  
+[← Module 04](../04-users-groups-sudo/README.md) · [Corrigé](corrige.md) · [Module 06 →](../06-vim-archives/README.md)
+
+<details><summary>Scripts du module (10)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M05.sh`](../../scripts/setup/setup_M05.sh) | prépare le module |
+| [`check_M05_01.sh`](../../scripts/check/check_M05_01.sh) | vérification |
+| [`check_M05_02.sh`](../../scripts/check/check_M05_02.sh) | vérification |
+| [`check_M05_03.sh`](../../scripts/check/check_M05_03.sh) | vérification |
+| [`check_M05_04.sh`](../../scripts/check/check_M05_04.sh) | vérification |
+| [`check_M05_05.sh`](../../scripts/check/check_M05_05.sh) | vérification |
+| [`check_M05_06.sh`](../../scripts/check/check_M05_06.sh) | vérification |
+| [`break_M05_01.sh`](../../scripts/break/break_M05_01.sh) | installe une panne |
+| [`break_M05_02.sh`](../../scripts/break/break_M05_02.sh) | installe une panne |
+| [`break_M05_03.sh`](../../scripts/break/break_M05_03.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 05 — Traitement de texte et flux de données
 
 ## 5.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* manipuler les descripteurs de fichiers à la main (`2>&1`, `&>`, `>&2`, `exec 3>`),
-  expliquer pourquoi l'ordre des redirections change le résultat, et alimenter une
-  commande avec un here-doc, un here-string ou une substitution de processus ;
-* construire un pipeline qui échoue quand il doit échouer (`set -o pipefail`,
-  `PIPESTATUS`), le dupliquer avec `tee`, et paralléliser une tâche avec `xargs -P` ;
-* découper et recomposer des données tabulaires avec `cut`, `paste`, `join`, `tr`,
-  `column`, `split`, et dire quand ces outils ne suffisent plus ;
-* trier et dédoublonner proprement : `sort -t -k -n -h -u -s`, `uniq -c/-d/-u`,
-  `comm`, et produire un « top N » correct du premier coup ;
-* écrire une expression régulière POSIX de base et étendue, choisir entre `grep`,
-  `grep -E` et `grep -P`, et exploiter `-o`, `-c`, `-w`, `-v`, `-r`, `-A/-B/-C` ;
-* transformer un flux avec `sed` : substitution avec drapeaux, groupes de capture,
-  adressage par ligne, par plage et par motif, suppression, insertion, `-i` sauvegardé ;
-* écrire un programme `awk` lisible : `BEGIN/END`, champs, `NR`/`FNR`/`NF`/`FS`/`OFS`,
-  tableaux associatifs, accumulateurs par clé, `printf` aligné, jointure de deux fichiers ;
-* interroger du JSON avec `jq` (sélection, `map`, `select`, `-r`, construction d'objets)
-  et du YAML avec `yq`, sans jamais parser du JSON à coups de `grep` ;
-* diagnostiquer un problème d'encodage ou de fin de ligne (`file`, `iconv`, CRLF, BOM)
-  et comparer deux fichiers avec `diff -u` / `patch` / `comm` ;
-* produire, à partir d'un `access.log` ou d'un journal applicatif, un rapport chiffré
-  exploitable par un chef de projet en moins de dix minutes.
-
-Temps estimé : 6 h
-Prérequis : module 01 (quoting, expansion, redirections de base), module 02 (arborescence).
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * manipuler les descripteurs de fichiers à la main (`2>&1`, `&>`, `>&2`, `exec 3>`),
+>   expliquer pourquoi l'ordre des redirections change le résultat, et alimenter une
+>   commande avec un here-doc, un here-string ou une substitution de processus ;
+> * construire un pipeline qui échoue quand il doit échouer (`set -o pipefail`,
+>   `PIPESTATUS`), le dupliquer avec `tee`, et paralléliser une tâche avec `xargs -P` ;
+> * découper et recomposer des données tabulaires avec `cut`, `paste`, `join`, `tr`,
+>   `column`, `split`, et dire quand ces outils ne suffisent plus ;
+> * trier et dédoublonner proprement : `sort -t -k -n -h -u -s`, `uniq -c/-d/-u`,
+>   `comm`, et produire un « top N » correct du premier coup ;
+> * écrire une expression régulière POSIX de base et étendue, choisir entre `grep`,
+>   `grep -E` et `grep -P`, et exploiter `-o`, `-c`, `-w`, `-v`, `-r`, `-A/-B/-C` ;
+> * transformer un flux avec `sed` : substitution avec drapeaux, groupes de capture,
+>   adressage par ligne, par plage et par motif, suppression, insertion, `-i` sauvegardé ;
+> * écrire un programme `awk` lisible : `BEGIN/END`, champs, `NR`/`FNR`/`NF`/`FS`/`OFS`,
+>   tableaux associatifs, accumulateurs par clé, `printf` aligné, jointure de deux fichiers ;
+> * interroger du JSON avec `jq` (sélection, `map`, `select`, `-r`, construction d'objets)
+>   et du YAML avec `yq`, sans jamais parser du JSON à coups de `grep` ;
+> * diagnostiquer un problème d'encodage ou de fin de ligne (`file`, `iconv`, CRLF, BOM)
+>   et comparer deux fichiers avec `diff -u` / `patch` / `comm` ;
+> * produire, à partir d'un `access.log` ou d'un journal applicatif, un rapport chiffré
+>   exploitable par un chef de projet en moins de dix minutes.
+>
+> **Temps estimé** : 6 h
+>
+> **Prérequis** : module 01 (quoting, expansion, redirections de base), module 02 (arborescence).
 
 ---
 
@@ -53,19 +79,21 @@ sudo apt install -y gawk jq yq bsdextrautils dos2unix moreutils \
 `bsdextrautils` fournit `column` sur Ubuntu 24.04 ; `moreutils` fournit `sponge`,
 utilisé une fois dans le défi.
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y gawk jq util-linux dos2unix`. Le paquet `yq`
-n'existe pas dans les dépôts de base : `sudo dnf install -y python3-pip && pip3 install yq`.
-`sponge` vient d'EPEL, à activer d'abord : `sudo dnf install -y epel-release` puis `sudo dnf install -y moreutils`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y gawk jq util-linux dos2unix`. Le paquet `yq`
+> n'existe pas dans les dépôts de base : `sudo dnf install -y python3-pip && pip3 install yq`.
+> `sponge` vient d'EPEL, à activer d'abord : `sudo dnf install -y epel-release` puis `sudo dnf install -y moreutils`.
 
-::: attention
-Sur Ubuntu, `awk` est **mawk** par défaut. Installer `gawk` bascule le lien
-`/etc/alternatives/awk` vers gawk. Les corrigés de ce module n'utilisent que des
-constructions POSIX communes aux deux, et trient systématiquement les sorties :
-tu obtiens donc les mêmes chiffres avec l'un comme avec l'autre. Vérifie avec
-`awk -W version 2>&1 | head -1`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Sur Ubuntu, `awk` est **mawk** par défaut. Installer `gawk` bascule le lien
+> `/etc/alternatives/awk` vers gawk. Les corrigés de ce module n'utilisent que des
+> constructions POSIX communes aux deux, et trient systématiquement les sorties :
+> tu obtiens donc les mêmes chiffres avec l'un comme avec l'autre. Vérifie avec
+> `awk -W version 2>&1 | head -1`.
 
 Génération du jeu de données :
 
@@ -151,7 +179,9 @@ tee >(gzip > copie.gz) > sortie.txt
 | `set -o pipefail` | le pipeline renvoie le dernier code non nul rencontré |
 | `\| tee f` / `\| tee -a f` | duplique le flux vers l'écran et le fichier |
 
-@fig(text-pipeline): Un pipeline classique d'analyse de journal, avec la forme des lignes qui circulent entre chaque maillon.
+<p align="center"><img src="../../assets/figures/text-pipeline.svg" alt="Schéma : text-pipeline"></p>
+
+*Figure — Un pipeline classique d'analyse de journal, avec la forme des lignes qui circulent entre chaque maillon.*
 
 `xargs` : `-n N` (N arguments par appel), `-I{}` (placeholder, une ligne d'entrée par appel),
 `-P N` (N processus parallèles), `-0` avec `find -print0` (noms à espaces),
@@ -264,7 +294,7 @@ diff -u ancien nouveau > p.patch ; patch -p0 < p.patch ; patch -R -p0 < p.patch
 
 ## 5.3 Quiz — QCM
 
-**Q5.1** — Ce pipeline tourne dans un script de production :
+<a id="q5-1"></a>**[Q5.1](corrige.md#q5-1)** — Ce pipeline tourne dans un script de production :
 
 ```bash
 grep 'ERROR' /var/log/app.log | wc -l
@@ -277,7 +307,7 @@ b) 0, car c'est le code de `wc` qui compte
 c) 2, car `grep` considère l'absence de correspondance comme une erreur
 d) indéterminé, il faut lire `PIPESTATUS`
 
-**Q5.2** — Tu veux journaliser sortie **et** erreurs d'un script dans un fichier tout
+<a id="q5-2"></a>**[Q5.2](corrige.md#q5-2)** — Tu veux journaliser sortie **et** erreurs d'un script dans un fichier tout
 en gardant l'affichage. Deux écritures sont proposées :
 
 ```bash
@@ -290,7 +320,7 @@ b) A journalise les deux flux, B seulement stdout
 c) B journalise les deux flux, A seulement stdout
 d) B est invalide
 
-**Q5.3** — Que renvoie exactement cette ligne ?
+<a id="q5-3"></a>**[Q5.3](corrige.md#q5-3)** — Que renvoie exactement cette ligne ?
 
 ```bash
 printf 'b\na\nb\na\n' | uniq -c
@@ -301,7 +331,7 @@ b) quatre lignes, chacune préfixée de `1`
 c) `1 b`, `1 a`, `1 b`, `1 a`
 d) une erreur : `uniq` exige une entrée triée
 
-**Q5.4** — Ces deux commandes ne donnent pas le même ordre sur `serveurs.csv`
+<a id="q5-4"></a>**[Q5.4](corrige.md#q5-4)** — Ces deux commandes ne donnent pas le même ordre sur `serveurs.csv`
 (10 colonnes, `site` en 9e position, `cout_eur` en 10e) :
 
 ```bash
@@ -317,7 +347,7 @@ b) A trie sur le champ 9 seul ; B trie sur tout ce qui va du champ 9 à la **fin
 c) B est invalide : `-k` exige toujours une borne de fin
 d) A trie numériquement, B lexicographiquement
 
-**Q5.5** — Tu veux compter les requêtes émises par l'adresse `10.10.10.14`, et
+<a id="q5-5"></a>**[Q5.5](corrige.md#q5-5)** — Tu veux compter les requêtes émises par l'adresse `10.10.10.14`, et
 seulement par elle. Quelle commande est **rigoureusement** correcte ?
 
 a) `grep -c '10.10.10.14' access.log`
@@ -325,7 +355,7 @@ b) `grep -c '10\.10\.10\.14' access.log`
 c) `awk '$1 == "10.10.10.14" { n++ } END { print n+0 }' access.log`
 d) `grep -cw '10.10.10.14' access.log`
 
-**Q5.6** — Que produit `grep -o 'GET [^ ]*' access.log | head -1` sur la ligne
+<a id="q5-6"></a>**[Q5.6](corrige.md#q5-6)** — Que produit `grep -o 'GET [^ ]*' access.log | head -1` sur la ligne
 `... "GET /panier HTTP/1.1" 200 ...` ?
 
 a) la ligne entière
@@ -333,7 +363,7 @@ b) `GET /panier`
 c) `"GET /panier HTTP/1.1"`
 d) `GET`
 
-**Q5.7** — Tu veux remplacer toutes les occurrences de `30s` par `60s` dans un fichier,
+<a id="q5-7"></a>**[Q5.7](corrige.md#q5-7)** — Tu veux remplacer toutes les occurrences de `30s` par `60s` dans un fichier,
 en gardant une copie de l'original. Quelle commande ?
 
 a) `sed 's/30s/60s/' -i.bak shop.conf`
@@ -341,7 +371,7 @@ b) `sed -i.bak 's/30s/60s/g' shop.conf`
 c) `sed -i 's/30s/60s/g' shop.conf.bak`
 d) `sed -g -i 's/30s/60s/' shop.conf`
 
-**Q5.8** — Que fait `sed -n '/^server {/,/^}/p' shop.conf` ?
+<a id="q5-8"></a>**[Q5.8](corrige.md#q5-8)** — Que fait `sed -n '/^server {/,/^}/p' shop.conf` ?
 
 a) affiche la première ligne `server {` et la dernière `}`
 b) affiche toutes les lignes entre la première `server {` et la première `}` en début
@@ -349,7 +379,7 @@ b) affiche toutes les lignes entre la première `server {` et la première `}` e
 c) supprime le bloc `server`
 d) rien : `-n` annule le `p`
 
-**Q5.9** — Sur ce fichier, que vaut la sortie ?
+<a id="q5-9"></a>**[Q5.9](corrige.md#q5-9)** — Sur ce fichier, que vaut la sortie ?
 
 ```bash
 printf 'a 1\nb 2\na 3\n' | awk '{ s[$1] += $2 } END { print s["a"] }'
@@ -357,7 +387,7 @@ printf 'a 1\nb 2\na 3\n' | awk '{ s[$1] += $2 } END { print s["a"] }'
 
 a) `1` b) `3` c) `4` d) rien, `s` n'est pas déclaré
 
-**Q5.10** — Dans `awk`, quelle différence entre `NR` et `FNR` quand on traite deux
+<a id="q5-10"></a>**[Q5.10](corrige.md#q5-10)** — Dans `awk`, quelle différence entre `NR` et `FNR` quand on traite deux
 fichiers `a.txt` (3 lignes) puis `b.txt` (2 lignes) ?
 
 a) aucune, ce sont des synonymes
@@ -365,7 +395,7 @@ b) à la dernière ligne, `NR` vaut 5 et `FNR` vaut 2
 c) à la dernière ligne, `NR` vaut 2 et `FNR` vaut 5
 d) `FNR` compte les champs, `NR` les lignes
 
-**Q5.11** — Pourquoi `awk -F, '{ print $2 }' serveurs-piege.csv` renvoie-t-il des
+<a id="q5-11"></a>**[Q5.11](corrige.md#q5-11)** — Pourquoi `awk -F, '{ print $2 }' serveurs-piege.csv` renvoie-t-il des
 valeurs tronquées comme `"Equipe Paiement` ?
 
 a) parce que `-F,` n'accepte pas les fichiers avec en-tête
@@ -374,14 +404,14 @@ b) parce que `awk` ne gère pas les guillemets du format CSV : une virgule dans 
 c) parce qu'il manque `-v OFS=,`
 d) parce que le fichier est en CRLF
 
-**Q5.12** — Quel filtre `jq` affiche, sans guillemets, le nom des hôtes de production ?
+<a id="q5-12"></a>**[Q5.12](corrige.md#q5-12)** — Quel filtre `jq` affiche, sans guillemets, le nom des hôtes de production ?
 
 a) `jq '.results[] | select(.env=="prod") | .hostname' f.json`
 b) `jq -r '.results[] | select(.env=="prod") | .hostname' f.json`
 c) `jq -r '.results | select(.env=="prod") | .hostname' f.json`
 d) `jq -r '.results[].hostname | select(.env=="prod")' f.json`
 
-**Q5.13** — Un script livré par un dev sous Windows échoue à la première ligne avec
+<a id="q5-13"></a>**[Q5.13](corrige.md#q5-13)** — Un script livré par un dev sous Windows échoue à la première ligne avec
 `$'\r': command not found`. Quelle commande diagnostique le problème le plus vite ?
 
 a) `bash -x script.sh`
@@ -389,7 +419,7 @@ b) `file script.sh`
 c) `stat script.sh`
 d) `head -1 script.sh`
 
-**Q5.14** — À propos de stderr dans un pipeline `cmd1 | cmd2`.
+<a id="q5-14"></a>**[Q5.14](corrige.md#q5-14)** — À propos de stderr dans un pipeline `cmd1 | cmd2`.
 **Deux réponses correctes.**
 
 a) par défaut, stderr de `cmd1` part sur le terminal et ne traverse pas le tube
@@ -397,7 +427,7 @@ b) par défaut, stderr de `cmd1` est mélangé à stdout dans le tube
 c) `cmd1 2>&1 | cmd2` fait passer les deux flux de `cmd1` dans le tube
 d) `cmd1 | cmd2 2>&1` fait passer les deux flux de `cmd1` dans le tube
 
-**Q5.15** — Quelle commande liste les hôtes présents dans `hosts-cmdb.txt` mais
+<a id="q5-15"></a>**[Q5.15](corrige.md#q5-15)** — Quelle commande liste les hôtes présents dans `hosts-cmdb.txt` mais
 **absents** de `hosts-supervision.txt` (les deux fichiers sont triés) ?
 
 a) `comm -12 hosts-cmdb.txt hosts-supervision.txt`
@@ -405,7 +435,7 @@ b) `comm -23 hosts-cmdb.txt hosts-supervision.txt`
 c) `comm -13 hosts-cmdb.txt hosts-supervision.txt`
 d) `diff hosts-cmdb.txt hosts-supervision.txt | grep '>'`
 
-**Q5.16** — Tu lances :
+<a id="q5-16"></a>**[Q5.16](corrige.md#q5-16)** — Tu lances :
 
 ```bash
 find /var/log -name '*.log' -print0 | xargs -0 -n 20 -P 4 gzip
@@ -418,14 +448,14 @@ b) lance jusqu'à 4 `gzip` en parallèle
 c) mélange potentiellement les sorties des processus sur le terminal
 d) impose l'ordre de traitement des fichiers
 
-**Q5.17** — Dans un here-doc, quelle différence entre `<<EOF` et `<<'EOF'` ?
+<a id="q5-17"></a>**[Q5.17](corrige.md#q5-17)** — Dans un here-doc, quelle différence entre `<<EOF` et `<<'EOF'` ?
 
 a) aucune, les quotes sont cosmétiques
 b) avec `<<'EOF'`, ni `$VAR` ni `$(cmd)` ne sont développés
 c) avec `<<'EOF'`, les tabulations de tête sont supprimées
 d) `<<'EOF'` interdit les lignes vides
 
-**Q5.18** — Tu veux comparer les listes de paquets de deux serveurs sans créer de
+<a id="q5-18"></a>**[Q5.18](corrige.md#q5-18)** — Tu veux comparer les listes de paquets de deux serveurs sans créer de
 fichiers temporaires. Quelle écriture ?
 
 a) `diff $(ssh lab-web dpkg -l) $(ssh lab-db dpkg -l)`
@@ -437,32 +467,26 @@ d) `ssh lab-web dpkg -l | diff <(ssh lab-db dpkg -l)`, le tube fournissant le se
 
 ## 5.4 Quiz — questions ouvertes
 
-**QO5.1** — Explique, descripteurs à l'appui, la différence entre
+<a id="qo5-1"></a>**[QO5.1](corrige.md#qo5-1)** — Explique, descripteurs à l'appui, la différence entre
 `cmd > f 2>&1` et `cmd 2>&1 > f`. Puis décris un cas réel où la seconde forme est
 exactement ce qu'on veut.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.2** — *On te demande en entretien* : « Notre script de sauvegarde se termine
+<a id="qo5-2"></a>**[QO5.2](corrige.md#qo5-2)** — *On te demande en entretien* : « Notre script de sauvegarde se termine
 toujours en succès, même quand le `pg_dump` plante. Le pipeline est
 `pg_dump ... | gzip > dump.sql.gz`. Explique le problème et donne deux corrections
 différentes. »
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.3** — Compare `grep`, `sed` et `awk` pour extraire la troisième colonne d'un
+<a id="qo5-3"></a>**[QO5.3](corrige.md#qo5-3)** — Compare `grep`, `sed` et `awk` pour extraire la troisième colonne d'un
 fichier délimité. Donne la commande dans chaque outil, puis explique dans quel cas
 chacun est le bon choix — et lequel tu interdirais en revue de code.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.4** — On te donne ce pipeline :
+<a id="qo5-4"></a>**[QO5.4](corrige.md#qo5-4)** — On te donne ce pipeline :
 
 ```bash
 awk '{ print $1 }' access.log | sort | uniq -c | sort -rn | head -10
@@ -472,59 +496,45 @@ Détaille ce que fait **chaque** maillon et ce qui casse si on retire le premier
 Estime ensuite le coût : que se passe-t-il sur un fichier de 40 Go, et que
 proposerais-tu à la place ?
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO5.5** — *On te demande en entretien* : « Un `sort -k2 -n` sur un fichier de logs
+<a id="qo5-5"></a>**[QO5.5](corrige.md#qo5-5)** — *On te demande en entretien* : « Un `sort -k2 -n` sur un fichier de logs
 donne un ordre incohérent en production alors qu'il est correct sur ton poste.
 Cite trois causes possibles et la commande qui tranche pour chacune. »
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.6** — Explique la différence entre une substitution de commande `$(cmd)`, un
+<a id="qo5-6"></a>**[QO5.6](corrige.md#qo5-6)** — Explique la différence entre une substitution de commande `$(cmd)`, un
 here-string `<<<`, et une substitution de processus `<(cmd)`. Donne pour chacune un
 cas où les deux autres ne conviennent pas.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.7** — Un développeur veut extraire le champ `"version"` d'un JSON avec
+<a id="qo5-7"></a>**[QO5.7](corrige.md#qo5-7)** — Un développeur veut extraire le champ `"version"` d'un JSON avec
 `grep -o '"version":"[^"]*"'`. Explique pourquoi tu refuses en revue de code, en
 citant au moins trois cas concrets où ça casse, et ce que tu proposes.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.8** — Décris ta démarche complète, commande par commande, pour répondre à
+<a id="qo5-8"></a>**[QO5.8](corrige.md#qo5-8)** — Décris ta démarche complète, commande par commande, pour répondre à
 « pourquoi le site a-t-il été lent hier entre 14 h et 16 h ? » avec pour seule
 donnée un `access.log` au format `combined` + `$request_time`. Précise, pour chaque
 étape, la question à laquelle elle répond.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO5.9** — Explique le mécanisme de `awk 'NR==FNR { ... ; next } { ... }'`.
+<a id="qo5-9"></a>**[QO5.9](corrige.md#qo5-9)** — Explique le mécanisme de `awk 'NR==FNR { ... ; next } { ... }'`.
 Pourquoi `next` est-il indispensable ? Que se passe-t-il si le premier fichier est
 vide, et comment t'en prémunir ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO5.10** — Un `.csv` généré par un tableur fait échouer un script qui fonctionnait
+<a id="qo5-10"></a>**[QO5.10](corrige.md#qo5-10)** — Un `.csv` généré par un tableur fait échouer un script qui fonctionnait
 jusque-là. Liste cinq causes possibles liées au format (encodage, fins de ligne,
 séparateur, quoting, en-tête), et pour chacune la commande de diagnostic et le
 correctif en une ligne.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
@@ -533,64 +543,64 @@ lignes: 10
 Tous les exercices se font dans `~/lab05`. Sauf mention contraire, une seule ligne
 de commande suffit.
 
-**E5.1** — Affiche les 15 dernières lignes de `access.log` puis reste à l'écoute des
+<a id="e5-1"></a>**[E5.1](corrige.md#e5-1)** — Affiche les 15 dernières lignes de `access.log` puis reste à l'écoute des
 nouvelles lignes. Explique ensuite, en une phrase, pourquoi `tail -f` perd la trace du
 fichier après une rotation logrotate et quelle option corrige ça.
 
-**E5.2** — Donne la répartition des codes HTTP de `access.log`, du plus fréquent au
+<a id="e5-2"></a>**[E5.2](corrige.md#e5-2)** — Donne la répartition des codes HTTP de `access.log`, du plus fréquent au
 plus rare, sous la forme `nombre code`.
 
-**E5.3** — Donne le top 10 des IP clientes, **en excluant** la sonde de monitoring
+<a id="e5-3"></a>**[E5.3](corrige.md#e5-3)** — Donne le top 10 des IP clientes, **en excluant** la sonde de monitoring
 `10.10.10.14` et le scanner `203.0.113.242`.
 
-**E5.4** — Combien d'URL **distinctes** ont renvoyé un 404 ? Affiche ensuite les 5 URL
+<a id="e5-4"></a>**[E5.4](corrige.md#e5-4)** — Combien d'URL **distinctes** ont renvoyé un 404 ? Affiche ensuite les 5 URL
 en 404 les plus demandées avec leur nombre de hits.
 
-**E5.5** — À partir de `passwd.exemple` : liste les comptes dont l'UID est compris
+<a id="e5-5"></a>**[E5.5](corrige.md#e5-5)** — À partir de `passwd.exemple` : liste les comptes dont l'UID est compris
 entre 1000 et 59999, avec leur shell, triés par UID croissant, en colonnes alignées.
 Puis compte les comptes par shell, du plus fréquent au plus rare.
 
-**E5.6** — Dans `serveurs.csv` : affiche les 5 serveurs les plus chers (hostname et
+<a id="e5-6"></a>**[E5.6](corrige.md#e5-6)** — Dans `serveurs.csv` : affiche les 5 serveurs les plus chers (hostname et
 coût uniquement). Puis produis un tri « environnement par ordre alphabétique, et à
 l'intérieur de chaque environnement, coût décroissant ».
 
-**E5.7** — Sans utiliser `awk` ni `cut`, extrais toutes les adresses IP clientes de
+<a id="e5-7"></a>**[E5.7](corrige.md#e5-7)** — Sans utiliser `awk` ni `cut`, extrais toutes les adresses IP clientes de
 `access.log` et compte combien d'adresses distinctes apparaissent.
 
-**E5.8** — Combien de requêtes vers `/api/` ont mis plus de 2 secondes ? Affiche la
+<a id="e5-8"></a>**[E5.8](corrige.md#e5-8)** — Combien de requêtes vers `/api/` ont mis plus de 2 secondes ? Affiche la
 requête la plus lente du fichier avec son horodatage, son URL et son temps.
 
-**E5.9** — Dans `app.log` : combien d'événements de niveau `ERROR` ? Puis la liste des
+<a id="e5-9"></a>**[E5.9](corrige.md#e5-9)** — Dans `app.log` : combien d'événements de niveau `ERROR` ? Puis la liste des
 types d'exception rencontrés, avec leur nombre d'occurrences, du plus fréquent au
 plus rare.
 
-**E5.10** — Affiche la pile d'appel complète de la **première** `OutOfMemoryError` de
+<a id="e5-10"></a>**[E5.10](corrige.md#e5-10)** — Affiche la pile d'appel complète de la **première** `OutOfMemoryError` de
 `app.log` : la ligne du journal qui la précède, la ligne d'exception, et les 10 lignes
 suivantes.
 
-**E5.11** — Les URL de `access.log` contiennent des paramètres et des identifiants
+<a id="e5-11"></a>**[E5.11](corrige.md#e5-11)** — Les URL de `access.log` contiennent des paramètres et des identifiants
 numériques (`/api/v1/orders/12937?x=1`). Normalise-les (suppression de la chaîne de
 requête, identifiants remplacés par `:id`) et donne le top 10 des endpoints
 normalisés.
 
-**E5.12** — Affiche uniquement le bloc `location /static/ { ... }` de
+<a id="e5-12"></a>**[E5.12](corrige.md#e5-12)** — Affiche uniquement le bloc `location /static/ { ... }` de
 `conf/shop.conf`, accolade fermante comprise, en utilisant un adressage par plage de
 motifs. Puis produis une version de ce fichier sans lignes vides.
 
-**E5.13** — Dans `commandes.csv` : chiffre d'affaires total, puis par région le
+<a id="e5-13"></a>**[E5.13](corrige.md#e5-13)** — Dans `commandes.csv` : chiffre d'affaires total, puis par région le
 nombre de commandes, le total et le panier moyen, alignés en colonnes, régions triées
 par chiffre d'affaires décroissant.
 
-**E5.14** — Enrichis `serveurs.csv` avec le datacenter : pour chaque serveur, affiche
+<a id="e5-14"></a>**[E5.14](corrige.md#e5-14)** — Enrichis `serveurs.csv` avec le datacenter : pour chaque serveur, affiche
 `hostname site datacenter` en utilisant `sites.csv` comme table de correspondance, en
 un seul `awk`.
 
-**E5.15** — Avec `jq` : liste les hôtes dont le disque dépasse 85 % sous la forme
+<a id="e5-15"></a>**[E5.15](corrige.md#e5-15)** — Avec `jq` : liste les hôtes dont le disque dépasse 85 % sous la forme
 `hostname ip pourcentage`, puis produis un tableau JSON d'objets
 `{"hote": ..., "disque": ...}` pour les mêmes hôtes. Avec `yq` : affiche le nombre
 total de replicas déclarés dans `services.yaml`.
 
-**E5.16** — Écris un pipeline qui compte les lignes `ERROR` de `app.log`, écrit le
+<a id="e5-16"></a>**[E5.16](corrige.md#e5-16)** — Écris un pipeline qui compte les lignes `ERROR` de `app.log`, écrit le
 résultat à l'écran **et** dans `rapports/nb-erreurs.txt`, et qui **échoue** (code
 retour non nul) si le motif n'est trouvé nulle part. Prouve-le en cherchant un motif
 inexistant, puis affiche les codes retour de chaque maillon.
@@ -599,15 +609,15 @@ inexistant, puis affiche les codes retour de chaque maillon.
 
 ## 5.6 Labs ★★
 
-### **L5.1** — INC-4412 : « le site est lent depuis mardi »
+### <a id="l5-1"></a>**[L5.1](corrige.md#l5-1)** — INC-4412 : « le site est lent depuis mardi »
 
-::: contexte
-Mardi 15 septembre, le support remonte des lenteurs sur `shop.lab.local`. Le chef de
-projet veut « des chiffres, pas des impressions », pour arbitrer entre une montée en
-charge et un correctif applicatif. Tu n'as que `~/lab05/access.log` (format combined +
-+ `$request_time`). Livrable attendu : un fichier texte lisible, chiffré,
-`~/lab05/rapports/rapport-acces.txt`.
-:::
+> **Contexte**
+>
+> Mardi 15 septembre, le support remonte des lenteurs sur `shop.lab.local`. Le chef de
+> projet veut « des chiffres, pas des impressions », pour arbitrer entre une montée en
+> charge et un correctif applicatif. Tu n'as que `~/lab05/access.log` (format combined +
+> + `$request_time`). Livrable attendu : un fichier texte lisible, chiffré,
+> `~/lab05/rapports/rapport-acces.txt`.
 
 1. Vérifie d'abord ce que tu manipules : nombre de lignes, période couverte
    (première et dernière date), nombre d'IP distinctes.
@@ -625,32 +635,34 @@ charge et un correctif applicatif. Tu n'as que `~/lab05/access.log` (format comb
    lisibles, et termine par trois lignes de conclusion : ce qui est lent, qui en
    souffre, ce que tu proposes.
 
-::: astuce
-Pour l'étape 8, un here-doc vers `tee` est plus lisible que quinze `>>` successifs.
-Et `exec 3> rapport.txt` permet d'écrire dans le rapport (`>&3`) tout en gardant
-l'écran pour tes essais.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour l'étape 8, un here-doc vers `tee` est plus lisible que quinze `>>` successifs.
+> Et `exec 3> rapport.txt` permet d'écrire dans le rapport (`>&3`) tout en gardant
+> l'écran pour tes essais.
 
-::: check
-Critère de succès : le rapport existe, contient les huit sections, et les chiffres
-correspondent au fichier (le script de vérification les recalcule).
-
-```bash
-bash check_M05_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le rapport existe, contient les huit sections, et les chiffres
+> correspondent au fichier (le script de vérification les recalcule).
+>
+> ```bash
+> bash check_M05_01.sh
+> ```
 
 ---
 
-### **L5.2** — Réconcilier la CMDB, l'API et la supervision
+### <a id="l5-2"></a>**[L5.2](corrige.md#l5-2)** — Réconcilier la CMDB, l'API et la supervision
 
-::: contexte
-Trois sources décrivent le même parc et aucune n'est d'accord : `serveurs.csv`
-(export CMDB), `api-inventaire.json` (l'API de la CMDB, plus riche : métriques,
-tags, état de l'agent) et `hosts-supervision.txt` (ce que la supervision voit
-vraiment). L'audit annuel commence dans deux jours ; on te demande la liste des
-écarts et un inventaire consolidé.
-:::
+> **Contexte**
+>
+> Trois sources décrivent le même parc et aucune n'est d'accord : `serveurs.csv`
+> (export CMDB), `api-inventaire.json` (l'API de la CMDB, plus riche : métriques,
+> tags, état de l'agent) et `hosts-supervision.txt` (ce que la supervision voit
+> vraiment). L'audit annuel commence dans deux jours ; on te demande la liste des
+> écarts et un inventaire consolidé.
 
 1. Vérifie que `serveurs.csv` et `api-inventaire.json` décrivent bien les mêmes hôtes,
    sans créer de fichier temporaire.
@@ -668,27 +680,29 @@ vraiment). L'audit annuel commence dans deux jours ; on te demande la liste des
 7. Écris `rapports/ecarts-parc.txt` : les deux listes d'écarts, les hôtes inactifs,
    les disques pleins, et une ligne de synthèse par point.
 
-::: attention
-`serveurs-piege.csv` montre pourquoi `awk -F,` n'est pas un parseur CSV : regarde ce
-que donne `awk -F, '{ print $2 }'` dessus avant de généraliser ta méthode.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> `serveurs-piege.csv` montre pourquoi `awk -F,` n'est pas un parseur CSV : regarde ce
+> que donne `awk -F, '{ print $2 }'` dessus avant de généraliser ta méthode.
 
-::: check
-```bash
-bash check_M05_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M05_02.sh
+> ```
 
 ---
 
-### **L5.3** — Autopsie d'un journal applicatif multi-lignes
+### <a id="l5-3"></a>**[L5.3](corrige.md#l5-3)** — Autopsie d'un journal applicatif multi-lignes
 
-::: contexte
-L'application `factura` a passé une mauvaise journée le 18 septembre. Le dev réclame
-« la liste des erreurs », mais son journal empile des piles d'appel Java de dix lignes :
-un `grep ERROR` ne montre que la pointe de l'iceberg, et un `wc -l` donne un chiffre
-faux. Livrable : `~/lab05/rapports/erreurs-app.txt`.
-:::
+> **Contexte**
+>
+> L'application `factura` a passé une mauvaise journée le 18 septembre. Le dev réclame
+> « la liste des erreurs », mais son journal empile des piles d'appel Java de dix lignes :
+> un `grep ERROR` ne montre que la pointe de l'iceberg, et un `wc -l` donne un chiffre
+> faux. Livrable : `~/lab05/rapports/erreurs-app.txt`.
 
 1. Combien de **lignes** dans `app.log` ? Combien d'**événements** de journal
    (les lignes commençant par un horodatage) ? Explique l'écart.
@@ -705,29 +719,31 @@ faux. Livrable : `~/lab05/rapports/erreurs-app.txt`.
 8. Rédige `rapports/erreurs-app.txt` : les chiffres des étapes 1 à 7 et, en trois
    lignes, ce que tu dis au dev.
 
-::: astuce
-Une ligne d'événement commence par `2026-09-18 ` ; une ligne de pile commence par une
-tabulation ; une ligne d'exception commence par un nom de classe qualifié. Trois
-familles, trois expressions régulières ancrées. `grep -A` et `sed` savent travailler
-par plage : `sed -n '/ligne de debut/,/ligne de fin/p'`.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Une ligne d'événement commence par `2026-09-18 ` ; une ligne de pile commence par une
+> tabulation ; une ligne d'exception commence par un nom de classe qualifié. Trois
+> familles, trois expressions régulières ancrées. `grep -A` et `sed` savent travailler
+> par plage : `sed -n '/ligne de debut/,/ligne de fin/p'`.
 
-::: check
-```bash
-bash check_M05_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M05_03.sh
+> ```
 
 ---
 
-### **L5.4** — Le livrable venu de Windows
+### <a id="l5-4"></a>**[L5.4](corrige.md#l5-4)** — Le livrable venu de Windows
 
-::: contexte
-Une équipe externe livre un script de déploiement, un export client et un CSV
-« corrigé dans Excel ». Rien ne fonctionne : le script refuse de démarrer, les accents
-sont illisibles et un `grep` sur l'en-tête du CSV ne trouve rien. Tu as trente minutes
-avant la réunion de recette. Travaille dans `~/lab05/encodages/`.
-:::
+> **Contexte**
+>
+> Une équipe externe livre un script de déploiement, un export client et un CSV
+> « corrigé dans Excel ». Rien ne fonctionne : le script refuse de démarrer, les accents
+> sont illisibles et un `grep` sur l'en-tête du CSV ne trouve rien. Tu as trente minutes
+> avant la réunion de recette. Travaille dans `~/lab05/encodages/`.
 
 1. Pour chacun des trois fichiers, établis un diagnostic **avec preuve** : quelle
    commande, quelle sortie, quelle conclusion.
@@ -745,22 +761,23 @@ avant la réunion de recette. Travaille dans `~/lab05/encodages/`.
 7. Écris `../rapports/recette-livraison.txt` : trois lignes de diagnostic, trois de
    correctif, et la règle que tu imposeras au prestataire pour la prochaine livraison.
 
-::: check
-```bash
-bash check_M05_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M05_04.sh
+> ```
 
 ---
 
-### **L5.5** — Brute force SSH : produire une liste de bannissement
+### <a id="l5-5"></a>**[L5.5](corrige.md#l5-5)** — Brute force SSH : produire une liste de bannissement
 
-::: contexte
-`lab-web` prend des tentatives de connexion SSH en continu. Avant d'installer quoi que
-ce soit, l'équipe sécurité veut savoir ce qu'on encaisse exactement et une liste d'IP
-à bloquer, avec les éléments qui justifient chaque blocage. Source :
-`~/lab05/journal-ssh.txt` (extrait de `journalctl -u ssh -o short-iso`).
-:::
+> **Contexte**
+>
+> `lab-web` prend des tentatives de connexion SSH en continu. Avant d'installer quoi que
+> ce soit, l'équipe sécurité veut savoir ce qu'on encaisse exactement et une liste d'IP
+> à bloquer, avec les éléments qui justifient chaque blocage. Source :
+> `~/lab05/journal-ssh.txt` (extrait de `journalctl -u ssh -o short-iso`).
 
 1. Combien de lignes au total, combien d'échecs d'authentification par mot de passe,
    combien de connexions acceptées ?
@@ -777,31 +794,34 @@ ce soit, l'équipe sécurité veut savoir ce qu'on encaisse exactement et une li
 7. Fabrique la synthèse dans `rapports/rapport-ssh.txt` : les chiffres, le top 5 des
    IP, le top 5 des comptes, et la phrase que tu mets dans le ticket.
 
-::: astuce
-`journal-ssh.txt` mélange plusieurs formulations : `Failed password for root from ...`
-et `Failed password for invalid user admin from ...`. Une seule expression régulière
-doit couvrir les deux, sinon tes comptes seront faux — et c'est exactement le genre
-d'erreur qu'on te reprochera.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `journal-ssh.txt` mélange plusieurs formulations : `Failed password for root from ...`
+> et `Failed password for invalid user admin from ...`. Une seule expression régulière
+> doit couvrir les deux, sinon tes comptes seront faux — et c'est exactement le genre
+> d'erreur qu'on te reprochera.
 
-::: check
-```bash
-bash check_M05_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M05_05.sh
+> ```
 
 ---
 
 ## 5.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf05`. Rien ici ne touche au
-système : les scripts n'agissent que sur `~/lab05` et sauvegardent ce qu'ils modifient
-dans `~/.breakfix-backup/M05/`. En dernier recours, `bash setup_M05.sh` régénère les
-données — mais l'utiliser avant d'avoir compris vaut échec de l'exercice.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf05`. Rien ici ne touche au
+> système : les scripts n'agissent que sur `~/lab05` et sauvegardent ce qu'ils modifient
+> dans `~/.breakfix-backup/M05/`. En dernier recours, `bash setup_M05.sh` régénère les
+> données — mais l'utiliser avant d'avoir compris vaut échec de l'exercice.
 
-### **BF5.1** — « Le rapport quotidien est vide, et personne n'a été prévenu »
+### <a id="bf5-1"></a>**[BF5.1](corrige.md#bf5-1)** — « Le rapport quotidien est vide, et personne n'a été prévenu »
 
 ```bash
 bash break_M05_01.sh
@@ -818,11 +838,9 @@ supervision n'a rien signalé et personne ne s'en est aperçu pendant trois jour
 même en 0, corriger les deux problèmes séparément, et dire quelle ligne de bash aurait
 évité trois jours de silence.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF5.2** — « Le déploiement échoue avec une erreur qui n'a aucun sens »
+### <a id="bf5-2"></a>**[BF5.2](corrige.md#bf5-2)** — « Le déploiement échoue avec une erreur qui n'a aucun sens »
 
 ```bash
 bash break_M05_02.sh
@@ -840,11 +858,9 @@ avait mangé le début de la ligne. La valeur affichée est pourtant la bonne, e
 comparaison échouait alors que `cat` semble donner raison à l'utilisateur, et donner
 la commande qui aurait montré le problème en une seconde.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-### **BF5.3** — « Le top 10 des IP compte deux fois la même adresse »
+### <a id="bf5-3"></a>**[BF5.3](corrige.md#bf5-3)** — « Le top 10 des IP compte deux fois la même adresse »
 
 ```bash
 bash break_M05_03.sh
@@ -860,22 +876,20 @@ n'a pas changé de format, juste de provenance (il vient maintenant d'un agréga
 corriger le pipeline pour que le classement soit juste quelle que soit la provenance
 du fichier, et expliquer pourquoi `uniq` n'a pas fait son travail.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 5.8 Défi du module ★★★
 
-**D5 — Le rapport d'exploitation hebdomadaire, sans ouvrir un tableur**
+<a id="d5"></a>**[D5](corrige.md#d5) — Le rapport d'exploitation hebdomadaire, sans ouvrir un tableur**
 
-::: contexte
-Tous les lundis, l'équipe passe une demi-journée à copier-coller des chiffres dans un
-document. On te demande de produire le rapport de la semaine du 14 au 18 septembre
-uniquement avec les outils de ce module, et de livrer **les pipelines** en même temps
-que le rapport pour que ce soit rejouable la semaine suivante.
-:::
+> **Contexte**
+>
+> Tous les lundis, l'équipe passe une demi-journée à copier-coller des chiffres dans un
+> document. On te demande de produire le rapport de la semaine du 14 au 18 septembre
+> uniquement avec les outils de ce module, et de livrer **les pipelines** en même temps
+> que le rapport pour que ce soit rejouable la semaine suivante.
 
 Cahier des charges :
 
@@ -908,11 +922,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M05_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M05_06.sh
+> ```
 
 ---
 
@@ -942,3 +957,9 @@ Pour aller plus loin :
   `LC_ALL=C grep -c` sur `access.log` avec `time` : l'écart de locale surprend.
 * Reprends E5.11 avec `grep -P` et un lookahead : mesure si le gain en concision vaut
   la perte de portabilité (`grep -P` n'existe pas sur BusyBox ni sur macOS).
+
+<!-- nav:début -->
+---
+
+[← Module 04](../04-users-groups-sudo/README.md) · [Corrigé](corrige.md) · [Module 06 →](../06-vim-archives/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

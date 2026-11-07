@@ -1,323 +1,351 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 27** · corrigé  
+[← Module 26](../26-kubernetes-observabilite/corrige.md) · [Énoncé](README.md) · [Projet B →](../../projets/P2-factura-devops/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 27 — Corrigé
 
 ## 27.3 Quiz — QCM
 
-**Q27.1** — *`sudo pip install requests` répond `externally-managed-environment`.*
+<a id="q27-1"></a>**[Q27.1](README.md#q27-1)** — *`sudo pip install requests` répond `externally-managed-environment`.*
 
 **Réponse : b)** `apt install python3-requests` pour un besoin système, sinon
 un venv du projet.
 
-::: pourquoi
-Depuis la PEP 668, Debian et Ubuntu marquent le Python système comme « géré
-de l'extérieur » : un fichier `EXTERNALLY-MANAGED` dans
-`/usr/lib/python3.12/` fait refuser `pip` hors venv. La raison est
-mécanique : `apt` et `pip` écriraient dans le même `site-packages`. Le jour
-où `apt upgrade` remplace `python3-requests` et que `pip` avait posé une
-autre version par-dessus, les fichiers se mélangent, et c'est `apt` (donc
-`cloud-init`, `unattended-upgrades`, `ufw`…) qui casse.
+> [!NOTE]
+> **Pourquoi**
+>
+> Depuis la PEP 668, Debian et Ubuntu marquent le Python système comme « géré
+> de l'extérieur » : un fichier `EXTERNALLY-MANAGED` dans
+> `/usr/lib/python3.12/` fait refuser `pip` hors venv. La raison est
+> mécanique : `apt` et `pip` écriraient dans le même `site-packages`. Le jour
+> où `apt upgrade` remplace `python3-requests` et que `pip` avait posé une
+> autre version par-dessus, les fichiers se mélangent, et c'est `apt` (donc
+> `cloud-init`, `unattended-upgrades`, `ufw`…) qui casse.
+>
+> Règle à trois tiroirs : le système par `apt`, le projet par `venv`, l'outil
+> par `pipx`. `--break-system-packages` existe pour les conteneurs jetables,
+> pas pour un serveur.
 
-Règle à trois tiroirs : le système par `apt`, le projet par `venv`, l'outil
-par `pipx`. `--break-system-packages` existe pour les conteneurs jetables,
-pas pour un serveur.
-:::
-
-::: piege
-`pip install --user` (c) contourne le message mais installe dans
-`~/.local/lib/python3.12/site-packages`, que le Python système **charge
-aussi** : on retrouve le même conflit, en plus discret. Et depuis 24.04,
-`--user` est lui aussi bloqué par la PEP 668.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `pip install --user` (c) contourne le message mais installe dans
+> `~/.local/lib/python3.12/site-packages`, que le Python système **charge
+> aussi** : on retrouve le même conflit, en plus discret. Et depuis 24.04,
+> `--user` est lui aussi bloqué par la PEP 668.
 
 ---
 
-**Q27.2** — *Timer systemd, shebang `#!/usr/bin/env python3`, module du venv.*
+<a id="q27-2"></a>**[Q27.2](README.md#q27-2)** — *Timer systemd, shebang `#!/usr/bin/env python3`, module du venv.*
 
 **Réponse : b)** `ModuleNotFoundError`.
 
-::: pourquoi
-`#!/usr/bin/env python3` demande à `env` de chercher `python3` dans le
-`PATH` du processus. Sous systemd, ce `PATH` est celui de l'unité
-(`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`), pas celui
-de ton shell où `activate` avait mis `~/lab27/venv/bin` en tête. `env`
-trouve donc `/usr/bin/python3`, qui ne connaît que `/usr/lib/python3` et
-`dist-packages`. Le venv n'est jamais « activé » par magie : c'est un
-répertoire avec un interpréteur et un `pyvenv.cfg`, et c'est **l'interpréteur
-qu'on appelle** qui décide des modules visibles.
-
-Le correctif est une ligne : `ExecStart=/home/mathieu/lab27/venv/bin/python
-/home/mathieu/lab27/bin/sante.py`. Le shebang reste utile pour l'usage
-interactif.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `#!/usr/bin/env python3` demande à `env` de chercher `python3` dans le
+> `PATH` du processus. Sous systemd, ce `PATH` est celui de l'unité
+> (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`), pas celui
+> de ton shell où `activate` avait mis `~/lab27/venv/bin` en tête. `env`
+> trouve donc `/usr/bin/python3`, qui ne connaît que `/usr/lib/python3` et
+> `dist-packages`. Le venv n'est jamais « activé » par magie : c'est un
+> répertoire avec un interpréteur et un `pyvenv.cfg`, et c'est **l'interpréteur
+> qu'on appelle** qui décide des modules visibles.
+>
+> Le correctif est une ligne : `ExecStart=/home/mathieu/lab27/venv/bin/python
+> /home/mathieu/lab27/bin/sante.py`. Le shebang reste utile pour l'usage
+> interactif.
 
 ---
 
-**Q27.3** — *`def ajouter(nom, liste=[])` appelé deux fois.*
+<a id="q27-3"></a>**[Q27.3](README.md#q27-3)** — *`def ajouter(nom, liste=[])` appelé deux fois.*
 
 **Réponse : b)** `['lab-web', 'lab-db']`.
 
-::: pourquoi
-La valeur par défaut d'un paramètre est évaluée **une seule fois**, à la
-définition de la fonction, et l'objet obtenu est stocké dans
-`ajouter.__defaults__`. Chaque appel sans argument reçoit **le même objet
-liste** ; `append` le modifie en place ; le second appel voit donc ce que le
-premier a ajouté. Ce n'est pas un bug de CPython, c'est la sémantique : les
-défauts sont des objets, pas des expressions rejouées.
-
-Idiome : `liste: list[str] | None = None` puis `if liste is None: liste = []`.
-`ruff` le signale (`B006`), c'est un des premiers réglages à activer.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La valeur par défaut d'un paramètre est évaluée **une seule fois**, à la
+> définition de la fonction, et l'objet obtenu est stocké dans
+> `ajouter.__defaults__`. Chaque appel sans argument reçoit **le même objet
+> liste** ; `append` le modifie en place ; le second appel voit donc ce que le
+> premier a ajouté. Ce n'est pas un bug de CPython, c'est la sémantique : les
+> défauts sont des objets, pas des expressions rejouées.
+>
+> Idiome : `liste: list[str] | None = None` puis `if liste is None: liste = []`.
+> `ruff` le signale (`B006`), c'est un des premiers réglages à activer.
 
 ---
 
-**Q27.4** — *`shell=True` et un chemin avec une espace.*
+<a id="q27-4"></a>**[Q27.4](README.md#q27-4)** — *`shell=True` et un chemin avec une espace.*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-Avec `shell=True`, Python passe la chaîne à `/bin/sh -c`. Le shell la
-découpe sur les espaces : `tar` reçoit `/srv/rapport` puis `final`, deux
-fichiers inexistants. `tar` sort en 2, mais `subprocess.run` sans
-`check=True` se contente de renvoyer un `CompletedProcess` dont personne ne
-regarde `.returncode` : le script continue et affiche « archive écrite ».
+> [!NOTE]
+> **Pourquoi**
+>
+> Avec `shell=True`, Python passe la chaîne à `/bin/sh -c`. Le shell la
+> découpe sur les espaces : `tar` reçoit `/srv/rapport` puis `final`, deux
+> fichiers inexistants. `tar` sort en 2, mais `subprocess.run` sans
+> `check=True` se contente de renvoyer un `CompletedProcess` dont personne ne
+> regarde `.returncode` : le script continue et affiche « archive écrite ».
+>
+> La chaîne est aussi une **injection** : un fichier nommé `x; rm -rf ~` fait
+> exécuter `rm` par le shell. La bonne forme est une liste, où chaque élément
+> devient exactement un argument, sans passage par un shell :
+> `subprocess.run(["tar", "-czf", dest, "--", rep], check=True)`.
 
-La chaîne est aussi une **injection** : un fichier nommé `x; rm -rf ~` fait
-exécuter `rm` par le shell. La bonne forme est une liste, où chaque élément
-devient exactement un argument, sans passage par un shell :
-`subprocess.run(["tar", "-czf", dest, "--", rep], check=True)`.
-:::
-
-::: piege
-Mettre des guillemets dans la f-string (`f'tar -czf "{dest}" "{rep}"'`)
-repousse le problème jusqu'au premier nom contenant un guillemet ou un `$`.
-`shlex.quote()` protège correctement, mais si tu en as besoin, c'est que tu
-n'aurais pas dû passer par un shell.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Mettre des guillemets dans la f-string (`f'tar -czf "{dest}" "{rep}"'`)
+> repousse le problème jusqu'au premier nom contenant un guillemet ou un `$`.
+> `shlex.quote()` protège correctement, mais si tu en as besoin, c'est que tu
+> n'aurais pas dû passer par un shell.
 
 ---
 
-**Q27.5** — *Lancer `systemctl is-active nginx` avec exception sur échec.*
+<a id="q27-5"></a>**[Q27.5](README.md#q27-5)** — *Lancer `systemctl is-active nginx` avec exception sur échec.*
 
 **Réponse : b)** `subprocess.run(["systemctl", "is-active", "nginx"],
 check=True)`.
 
-::: pourquoi
-Sans `shell=True`, le premier argument est une liste : `argv[0]` est le
-programme (cherché dans `PATH`), les suivants sont ses arguments, tels quels.
-`check=True` transforme un code de retour non nul en
-`subprocess.CalledProcessError`, qui porte `.returncode`, `.stdout` et
-`.stderr`. La proposition a) passe une chaîne sans `shell=True` : Python
-cherche un exécutable nommé littéralement `systemctl is-active nginx`, avec
-les espaces, et lève `FileNotFoundError`. c) a le même défaut dans une liste
-à un seul élément. d) est une erreur de syntaxe.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sans `shell=True`, le premier argument est une liste : `argv[0]` est le
+> programme (cherché dans `PATH`), les suivants sont ses arguments, tels quels.
+> `check=True` transforme un code de retour non nul en
+> `subprocess.CalledProcessError`, qui porte `.returncode`, `.stdout` et
+> `.stderr`. La proposition a) passe une chaîne sans `shell=True` : Python
+> cherche un exécutable nommé littéralement `systemctl is-active nginx`, avec
+> les espaces, et lève `FileNotFoundError`. c) a le même défaut dans une liste
+> à un seul élément. d) est une erreur de syntaxe.
 
 ---
 
-**Q27.6** — *`except: pass` puis `sys.exit(0)` sur un site injoignable.*
+<a id="q27-6"></a>**[Q27.6](README.md#q27-6)** — *`except: pass` puis `sys.exit(0)` sur un site injoignable.*
 
 **Réponse : b)** rien, code 0.
 
-::: pourquoi
-`urlopen` lève `URLError` ; l'`except` nu l'attrape et `pass` l'oublie ;
-le script atteint `sys.exit(0)`. Pour le superviseur, la sonde a réussi. Le
-défaut est double : attraper trop large, et ne rien faire de l'exception. Un
-`except` doit toujours faire au moins une chose : journaliser, changer un
-état, relever. Ici : `except urllib.error.URLError as exc:
-log.error("%s : %s", url, exc); return False`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `urlopen` lève `URLError` ; l'`except` nu l'attrape et `pass` l'oublie ;
+> le script atteint `sys.exit(0)`. Pour le superviseur, la sonde a réussi. Le
+> défaut est double : attraper trop large, et ne rien faire de l'exception. Un
+> `except` doit toujours faire au moins une chose : journaliser, changer un
+> état, relever. Ici : `except urllib.error.URLError as exc:
+> log.error("%s : %s", url, exc); return False`.
 
 ---
 
-**Q27.7** — *`UnicodeDecodeError` sous le timer, pas dans le shell.*
+<a id="q27-7"></a>**[Q27.7](README.md#q27-7)** — *`UnicodeDecodeError` sous le timer, pas dans le shell.*
 
 **Réponse : b)** l'encodage par défaut dépend de la locale.
 
-::: pourquoi
-`open()` sans `encoding=` utilise `locale.getpreferredencoding()`. Dans ton
-shell, `LANG=fr_FR.UTF-8` donne UTF-8. Sous systemd, `LANG` n'est pas
-défini ; Python 3.7+ coerce alors la locale C vers `C.UTF-8`… sauf si l'unité
-ou le système fixe `LC_ALL=C` ou une locale non UTF-8 (`Environment=` hérité
-d'un vieux modèle d'unité, `/etc/default/locale` d'une image minimale).
-Le point à retenir : **le comportement dépend de l'environnement**, donc il
-n'est pas reproductible. `encoding="utf-8"` (et `errors="replace"` pour un
-journal) fige le contrat. `python3 -X warn_default_encoding` liste les
-`open()` fautifs.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `open()` sans `encoding=` utilise `locale.getpreferredencoding()`. Dans ton
+> shell, `LANG=fr_FR.UTF-8` donne UTF-8. Sous systemd, `LANG` n'est pas
+> défini ; Python 3.7+ coerce alors la locale C vers `C.UTF-8`… sauf si l'unité
+> ou le système fixe `LC_ALL=C` ou une locale non UTF-8 (`Environment=` hérité
+> d'un vieux modèle d'unité, `/etc/default/locale` d'une image minimale).
+> Le point à retenir : **le comportement dépend de l'environnement**, donc il
+> n'est pas reproductible. `encoding="utf-8"` (et `errors="replace"` pour un
+> journal) fige le contrat. `python3 -X warn_default_encoding` liste les
+> `open()` fautifs.
 
 ---
 
-**Q27.8** — *3 000 fichiers ouverts d'un coup.*
+<a id="q27-8"></a>**[Q27.8](README.md#q27-8)** — *3 000 fichiers ouverts d'un coup.*
 
 **Réponse : b)** ouvrir dans un `with` à l'intérieur de la boucle.
 
-::: pourquoi
-Chaque `open()` consomme un descripteur du processus, plafonné par
-`ulimit -n` (1024 par défaut sur Ubuntu). La liste en compréhension ouvre
-tout avant de lire quoi que ce soit : au 1 021e fichier, le noyau refuse
-(`EMFILE`). Le `with` ferme le descripteur à la sortie du bloc ; on ne garde
-en mémoire que le compte. a) déplace le mur ; c) ne libère que ce qui n'est
-plus référencé, et la liste référence tout ; d) `read_text` ouvre bien un
-fichier, mais le ferme immédiatement — ce serait correct dans la boucle, pas
-en gardant les handles.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque `open()` consomme un descripteur du processus, plafonné par
+> `ulimit -n` (1024 par défaut sur Ubuntu). La liste en compréhension ouvre
+> tout avant de lire quoi que ce soit : au 1 021e fichier, le noyau refuse
+> (`EMFILE`). Le `with` ferme le descripteur à la sortie du bloc ; on ne garde
+> en mémoire que le compte. a) déplace le mur ; c) ne libère que ce qui n'est
+> plus référencé, et la liste référence tout ; d) `read_text` ouvre bien un
+> fichier, mais le ferme immédiatement — ce serait correct dans la boucle, pas
+> en gardant les handles.
 
 ---
 
-**Q27.9** — *Rapport lu par une sonde, jamais tronqué.*
+<a id="q27-9"></a>**[Q27.9](README.md#q27-9)** — *Rapport lu par une sonde, jamais tronqué.*
 
 **Réponse : b)**
 
-::: pourquoi
-`open(cible, "w")` tronque le fichier à 0 octet **avant** d'écrire : une
-lecture entre les deux voit un fichier vide ou partiel. `rename(2)` est
-atomique sur un même système de fichiers : les lecteurs voient soit
-l'ancien inode, soit le nouveau, jamais un intermédiaire. D'où la séquence :
-temporaire créé par `mkstemp` **dans le répertoire de la cible** (même
-système de fichiers, sinon `os.replace` échoue avec `EXDEV`), écriture,
-`flush` + `fsync` (les données sont sur le disque avant que le nom ne les
-désigne), puis `os.replace`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `open(cible, "w")` tronque le fichier à 0 octet **avant** d'écrire : une
+> lecture entre les deux voit un fichier vide ou partiel. `rename(2)` est
+> atomique sur un même système de fichiers : les lecteurs voient soit
+> l'ancien inode, soit le nouveau, jamais un intermédiaire. D'où la séquence :
+> temporaire créé par `mkstemp` **dans le répertoire de la cible** (même
+> système de fichiers, sinon `os.replace` échoue avec `EXDEV`), écriture,
+> `flush` + `fsync` (les données sont sur le disque avant que le nom ne les
+> désigne), puis `os.replace`.
 
 ---
 
-**Q27.10** — *`requests.get` renvoie 401 sans `raise_for_status`.*
+<a id="q27-10"></a>**[Q27.10](README.md#q27-10)** — *`requests.get` renvoie 401 sans `raise_for_status`.*
 
 **Réponse : b)** le corps d'erreur, et le script continue.
 
-::: pourquoi
-`requests` ne lève **jamais** sur un code HTTP : un 401 est une réponse
-valide du point de vue transport. `r.ok` est faux, `r.status_code` vaut 401,
-`r.json()` décode ce que l'API a renvoyé (Proxmox : `{"data": null}`).
-`r.raise_for_status()` lève `requests.HTTPError` pour tout 4xx/5xx. Sans
-lui, un token expiré donne un inventaire vide « normal » et un script qui
-sort en 0. Il n'y a pas de retry par défaut (d) : c'est `HTTPAdapter` +
-`urllib3.util.Retry` qui l'ajoutent.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `requests` ne lève **jamais** sur un code HTTP : un 401 est une réponse
+> valide du point de vue transport. `r.ok` est faux, `r.status_code` vaut 401,
+> `r.json()` décode ce que l'API a renvoyé (Proxmox : `{"data": null}`).
+> `r.raise_for_status()` lève `requests.HTTPError` pour tout 4xx/5xx. Sans
+> lui, un token expiré donne un inventaire vide « normal » et un script qui
+> sort en 0. Il n'y a pas de retry par défaut (d) : c'est `HTTPAdapter` +
+> `urllib3.util.Retry` qui l'ajoutent.
 
 ---
 
-**Q27.11** — *Affirmation fausse sur `logging`.*
+<a id="q27-11"></a>**[Q27.11](README.md#q27-11)** — *Affirmation fausse sur `logging`.*
 
 **Réponse : d)**
 
-::: pourquoi
-`print(..., file=sys.stderr)` écrit toujours, sans niveau, sans horodatage,
-sans nom de logger, sans possibilité de rediriger vers syslog ou un fichier
-sans toucher au code. `logging` sépare **l'émission** (le code appelle
-`log.info`) de **la destination et du format** (configurés une fois par
-l'entrée du programme). C'est exactement ce qui permet à un même module de
-tourner en CLI (stderr) et sous systemd (journal) sans modification.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `print(..., file=sys.stderr)` écrit toujours, sans niveau, sans horodatage,
+> sans nom de logger, sans possibilité de rediriger vers syslog ou un fichier
+> sans toucher au code. `logging` sépare **l'émission** (le code appelle
+> `log.info`) de **la destination et du format** (configurés une fois par
+> l'entrée du programme). C'est exactement ce qui permet à un même module de
+> tourner en CLI (stderr) et sous systemd (journal) sans modification.
 
 ---
 
-**Q27.12** — *Valeur d'une série Prometheus.*
+<a id="q27-12"></a>**[Q27.12](README.md#q27-12)** — *Valeur d'une série Prometheus.*
 
 **Réponse : b)** `float(...["value"][1])`.
 
-::: pourquoi
-L'API Prometheus renvoie `value: [timestamp, "valeur"]` : le timestamp est un
-nombre, la valeur est une **chaîne** (pour transporter `NaN`, `+Inf` sans
-ambiguïté JSON). Comparer `"1" == 1` en Python est faux sans lever d'erreur :
-un test `if valeur == 0` ne verra jamais une cible tombée. `float()` est
-obligatoire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'API Prometheus renvoie `value: [timestamp, "valeur"]` : le timestamp est un
+> nombre, la valeur est une **chaîne** (pour transporter `NaN`, `+Inf` sans
+> ambiguïté JSON). Comparer `"1" == 1` en Python est faux sans lever d'erreur :
+> un test `if valeur == 0` ne verra jamais une cible tombée. `float()` est
+> obligatoire.
 
 ---
 
-**Q27.13** — *`pytest`, affirmations vraies.*
+<a id="q27-13"></a>**[Q27.13](README.md#q27-13)** — *`pytest`, affirmations vraies.*
 
 **Réponses : a) et b)**
 
-::: pourquoi
-`tmp_path` est un `pathlib.Path` unique par test, sous
-`/tmp/pytest-of-<user>/`, purgé par rotation. `monkeypatch` annule ses
-modifications à la fin du test, quel que soit son résultat. c) est faux :
-`logging` n'écrit pas dans `sys.stderr` capturé par `capsys` quand le
-gestionnaire a été installé avant (et pytest installe le sien) — c'est
-`caplog.text` qui contient les messages. d) : les fonctions collectées sont
-`test_*` dans des fichiers `test_*.py` ou `*_test.py`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `tmp_path` est un `pathlib.Path` unique par test, sous
+> `/tmp/pytest-of-<user>/`, purgé par rotation. `monkeypatch` annule ses
+> modifications à la fin du test, quel que soit son résultat. c) est faux :
+> `logging` n'écrit pas dans `sys.stderr` capturé par `capsys` quand le
+> gestionnaire a été installé avant (et pytest installe le sien) — c'est
+> `caplog.text` qui contient les messages. d) : les fonctions collectées sont
+> `test_*` dans des fichiers `test_*.py` ou `*_test.py`.
 
 ---
 
-**Q27.14** — *`dates[-n:]` avec `n = 0`.*
+<a id="q27-14"></a>**[Q27.14](README.md#q27-14)** — *`dates[-n:]` avec `n = 0`.*
 
 **Réponse : b)** toute la liste.
 
-::: pourquoi
-`-0` vaut `0` : `dates[-0:]` est `dates[0:]`, la copie complète. Une
-politique « garder 0 quotidiennes » qui garde tout est le genre de bug qu'un
-test unitaire attrape en une ligne et qu'une relecture ne voit jamais. La
-forme sûre : `dates[-n:] if n > 0 else []`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-0` vaut `0` : `dates[-0:]` est `dates[0:]`, la copie complète. Une
+> politique « garder 0 quotidiennes » qui garde tout est le genre de bug qu'un
+> test unitaire attrape en une ligne et qu'une relecture ne voit jamais. La
+> forme sûre : `dates[-n:] if n > 0 else []`.
 
 ---
 
-**Q27.15** — *`[project.scripts]` après `pip install .`.*
+<a id="q27-15"></a>**[Q27.15](README.md#q27-15)** — *`[project.scripts]` après `pip install .`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`pip` génère dans le `bin/` de l'environnement cible un petit lanceur dont
-le shebang pointe sur **le python de ce venv** et qui importe
-`pilotage.cli` puis appelle `main()`. Il embarque donc son interpréteur et
-ses dépendances : c'est ce chemin absolu qu'on met dans `ExecStart=`. Rien
-n'est écrit hors du venv ; `pipx install .` fait la même chose dans un venv
-privé et ajoute un lien dans `~/.local/bin`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `pip` génère dans le `bin/` de l'environnement cible un petit lanceur dont
+> le shebang pointe sur **le python de ce venv** et qui importe
+> `pilotage.cli` puis appelle `main()`. Il embarque donc son interpréteur et
+> ses dépendances : c'est ce chemin absolu qu'on met dans `ExecStart=`. Rien
+> n'est écrit hors du venv ; `pipx install .` fait la même chose dans un venv
+> privé et ajoute un lien dans `~/.local/bin`.
 
 ---
 
-**Q27.16** — *Inventaire Proxmox croisé avec Gitea, issues à ouvrir.*
+<a id="q27-16"></a>**[Q27.16](README.md#q27-16)** — *Inventaire Proxmox croisé avec Gitea, issues à ouvrir.*
 
 **Réponse : b)** Python.
 
-::: pourquoi
-Deux API à interroger avec authentification, deux structures à croiser
-(ensembles, dictionnaires), une logique de décision qu'on veut tester sans
-réseau, et des effets de bord (ouvrir une issue) qu'on veut pouvoir simuler
-en `--dry-run`. Bash + `jq` tiendrait vingt lignes pour le cas nominal et
-deux cents pour gérer les erreurs ; Ansible n'a pas de boucle de décision
-naturelle et ce n'est pas un état à converger.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux API à interroger avec authentification, deux structures à croiser
+> (ensembles, dictionnaires), une logique de décision qu'on veut tester sans
+> réseau, et des effets de bord (ouvrir une issue) qu'on veut pouvoir simuler
+> en `--dry-run`. Bash + `jq` tiendrait vingt lignes pour le cas nominal et
+> deux cents pour gérer les erreurs ; Ansible n'a pas de boucle de décision
+> naturelle et ce n'est pas un état à converger.
 
 ---
 
-**Q27.17** — *Comparer avec l'expiration d'un certificat.*
+<a id="q27-17"></a>**[Q27.17](README.md#q27-17)** — *Comparer avec l'expiration d'un certificat.*
 
 **Réponse : d)** b et c.
 
-::: pourquoi
-`ssl.cert_time_to_seconds("Sep 18 12:00:00 2027 GMT")` rend un timestamp
-POSIX (secondes depuis l'epoch, UTC). On le compare à `time.time()`, ou à
-`datetime.now(UTC).timestamp()`, qui sont la même chose. `datetime.now()`
-sans fuseau est **naïf** : le comparer à un `datetime` aware lève
-`TypeError`, et le convertir en timestamp suppose l'heure locale — faux dès
-que le serveur est en UTC et l'exploitant à Paris.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ssl.cert_time_to_seconds("Sep 18 12:00:00 2027 GMT")` rend un timestamp
+> POSIX (secondes depuis l'epoch, UTC). On le compare à `time.time()`, ou à
+> `datetime.now(UTC).timestamp()`, qui sont la même chose. `datetime.now()`
+> sans fuseau est **naïf** : le comparer à un `datetime` aware lève
+> `TypeError`, et le convertir en timestamp suppose l'heure locale — faux dès
+> que le serveur est en UTC et l'exploitant à Paris.
 
 ---
 
-**Q27.18** — *`print` qui apparaît après la sortie d'une commande.*
+<a id="q27-18"></a>**[Q27.18](README.md#q27-18)** — *`print` qui apparaît après la sortie d'une commande.*
 
 **Réponse : b)**
 
-::: pourquoi
-Quand stdout n'est pas un terminal (pipe, fichier, journald), Python le
-bufferise par blocs de 8 Ko : `print` écrit dans un tampon, vidé à la fin ou
-quand il est plein. stderr, lui, est toujours écrit immédiatement. La
-commande fille écrit directement sur le descripteur 2 pendant que ton
-« étape 1 » attend dans le tampon. `PYTHONUNBUFFERED=1` dans l'unité, ou
-`print(..., flush=True)`, ou mieux : `logging` sur stderr pour tout ce qui
-est chronologie.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Quand stdout n'est pas un terminal (pipe, fichier, journald), Python le
+> bufferise par blocs de 8 Ko : `print` écrit dans un tampon, vidé à la fin ou
+> quand il est plein. stderr, lui, est toujours écrit immédiatement. La
+> commande fille écrit directement sur le descripteur 2 pendant que ton
+> « étape 1 » attend dans le tampon. `PYTHONUNBUFFERED=1` dans l'unité, ou
+> `print(..., flush=True)`, ou mieux : `logging` sur stderr pour tout ce qui
+> est chronologie.
 
 ---
 
 ## 27.4 Quiz — questions ouvertes
 
-**QO27.1** — *`activate`, timers, `python3 -m pip`.*
+<a id="qo27-1"></a>**[QO27.1](README.md#qo27-1)** — *`activate`, timers, `python3 -m pip`.*
 
 **Réponse de référence**
 
@@ -339,16 +367,17 @@ install x` exécute le module `pip` **de ce `python3`-là** : l'installation
 atterrit là où l'import aura lieu. Même logique pour `python3 -m pytest`,
 `python3 -m venv`, `python3 -m json.tool`.
 
-::: pourquoi
-Ce qu'on évalue : comprendre que le venv est une propriété de
-l'interpréteur appelé, pas de l'environnement du shell. Un candidat qui
-propose `source activate` dans `ExecStart` ou dans un wrapper bash n'a pas
-compris le mécanisme (et `activate` n'est même pas un exécutable).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qu'on évalue : comprendre que le venv est une propriété de
+> l'interpréteur appelé, pas de l'environnement du shell. Un candidat qui
+> propose `source activate` dans `ExecStart` ou dans un wrapper bash n'a pas
+> compris le mécanisme (et `activate` n'est même pas un exécutable).
 
 ---
 
-**QO27.2** — *Reprise d'un script à `shell=True` partout.*
+<a id="qo27-2"></a>**[QO27.2](README.md#qo27-2)** — *Reprise d'un script à `shell=True` partout.*
 
 **Réponse de référence**
 
@@ -373,16 +402,17 @@ un shell est incontournable.
 Je finis par un test avec un nom de fichier contenant une espace et un `;`,
 que j'ajoute à la suite de tests.
 
-::: pourquoi
-La question mesure si tu sais **nommer** les mécanismes (découpage,
-métacaractères, code de retour ignoré) et si tu as une méthode incrémentale
-défendable en revue. « Je réécris tout en Python propre » n'est pas une
-réponse : c'est un risque de régression sans test.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question mesure si tu sais **nommer** les mécanismes (découpage,
+> métacaractères, code de retour ignoré) et si tu as une méthode incrémentale
+> défendable en revue. « Je réécris tout en Python propre » n'est pas une
+> réponse : c'est un risque de régression sans test.
 
 ---
 
-**QO27.3** — *`except:`, `except Exception:`, `except (OSError, ValueError):`.*
+<a id="qo27-3"></a>**[QO27.3](README.md#qo27-3)** — *`except:`, `except Exception:`, `except (OSError, ValueError):`.*
 
 **Réponse de référence**
 
@@ -406,15 +436,16 @@ sous-arbre : les erreurs « normales » (`OSError`, `ValueError`, `KeyError`,
 Dans un timer, un `except:` transforme une panne en succès : la supervision
 voit un code 0, l'incident est découvert des semaines plus tard.
 
-::: pourquoi
-Le bon réflexe s'exprime ainsi : « j'attrape ce que je sais réparer ou
-signaler ; je laisse remonter ce que je ne comprends pas ». Et jamais un
-`except` sans corps utile : au minimum `log.exception(...)`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le bon réflexe s'exprime ainsi : « j'attrape ce que je sais réparer ou
+> signaler ; je laisse remonter ce que je ne comprends pas ». Et jamais un
+> `except` sans corps utile : au minimum `log.exception(...)`.
 
 ---
 
-**QO27.4** — *Lecture en flux, `.gz`, stdin, latin-1.*
+<a id="qo27-4"></a>**[QO27.4](README.md#qo27-4)** — *Lecture en flux, `.gz`, stdin, latin-1.*
 
 **Réponse de référence**
 
@@ -438,15 +469,16 @@ selon le cas : `encoding="latin-1"` si on connaît la source ;
 `errors="replace"` pour un journal où perdre un caractère est acceptable ;
 mode binaire et détection si on ne sait pas.
 
-::: pourquoi
-L'objet fichier Python est un itérateur paresseux : c'est le concept à
-nommer. Un candidat qui connaît `readlines()` mais pas `for ligne in f`
-écrira des scripts qui marchent sur ses tests et meurent en production.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'objet fichier Python est un itérateur paresseux : c'est le concept à
+> nommer. Un candidat qui connaît `readlines()` mais pas `for ligne in f`
+> écrira des scripts qui marchent sur ses tests et meurent en production.
 
 ---
 
-**QO27.5** — *Rétention qui a supprimé une mensuelle.*
+<a id="qo27-5"></a>**[QO27.5](README.md#qo27-5)** — *Rétention qui a supprimé une mensuelle.*
 
 **Réponse de référence**
 
@@ -469,15 +501,16 @@ nommer. Un candidat qui connaît `readlines()` mais pas `for ligne in f`
 5. La date vient du **nom** du fichier, pas du mtime, qu'une restauration
    ou un `cp` modifie.
 
-::: pourquoi
-Ce qu'on attend : que la réponse à « comment tu t'assures » soit un test
-qui **reproduit l'incident**, pas « je ferai plus attention ». Et que la
-testabilité découle d'un découpage (pur / effets), pas d'un outil.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce qu'on attend : que la réponse à « comment tu t'assures » soit un test
+> qui **reproduit l'incident**, pas « je ferai plus attention ». Et que la
+> testabilité découle d'un découpage (pur / effets), pas d'un outil.
 
 ---
 
-**QO27.6** — *Écriture atomique.*
+<a id="qo27-6"></a>**[QO27.6](README.md#qo27-6)** — *Écriture atomique.*
 
 **Réponse de référence**
 
@@ -503,7 +536,7 @@ bonus, on pose les droits voulus (`os.chmod`) avant le `replace`, puisque
 
 ---
 
-**QO27.7** — *`urllib.request` contre `requests` pour Proxmox.*
+<a id="qo27-7"></a>**[QO27.7](README.md#qo27-7)** — *`urllib.request` contre `requests` pour Proxmox.*
 
 **Réponse de référence**
 
@@ -527,7 +560,7 @@ bugs.
 
 ---
 
-**QO27.8** — *Cinq critères bash / Python.*
+<a id="qo27-8"></a>**[QO27.8](README.md#qo27-8)** — *Cinq critères bash / Python.*
 
 **Réponse de référence**
 
@@ -552,18 +585,19 @@ Critère inverse, toujours valable : `regen-sauvegardes.sh` et
 état. Et une boucle `for h in $(cat hotes); do ssh "$h" uptime; done` n'a
 pas besoin de Python.
 
-::: pourquoi
-La réponse attendue croise les critères du module 07 avec deux critères
-nouveaux (tests, durée de vie) **et** garde le critère inverse. Un candidat
-qui ne sait pas dire quand rester en bash n'a pas de jugement, il a une
-préférence.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La réponse attendue croise les critères du module 07 avec deux critères
+> nouveaux (tests, durée de vie) **et** garde le critère inverse. Un candidat
+> qui ne sait pas dire quand rester en bash n'a pas de jugement, il a une
+> préférence.
 
 ---
 
 ## 27.5 Exercices guidés
 
-**E27.1** — *Ce que change l'activation du venv.*
+<a id="e27-1"></a>**[E27.1](README.md#e27-1)** — *Ce que change l'activation du venv.*
 
 ```console
 $ which python3 ; python3 -c 'import sys; print(sys.prefix)' ; pip --version
@@ -579,17 +613,18 @@ $ ~/lab27/venv/bin/python -c 'import yaml; print(yaml.__file__)'
 /home/mathieu/lab27/venv/lib/python3.12/site-packages/yaml/__init__.py
 ```
 
-::: pourquoi
-Le seul effet observable de `activate` est `PATH` (et `VIRTUAL_ENV`).
-L'appel direct `venv/bin/python` fonctionne sans activation parce que
-l'interpréteur lit le `pyvenv.cfg` situé à côté de lui et en déduit son
-`sys.prefix`, donc son `site-packages`. C'est cette propriété qui rend les
-timers et les crons simples : un chemin absolu, rien d'autre.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le seul effet observable de `activate` est `PATH` (et `VIRTUAL_ENV`).
+> L'appel direct `venv/bin/python` fonctionne sans activation parce que
+> l'interpréteur lit le `pyvenv.cfg` situé à côté de lui et en déduit son
+> `sys.prefix`, donc son `site-packages`. C'est cette propriété qui rend les
+> timers et les crons simples : un chemin absolu, rien d'autre.
 
 ---
 
-**E27.2** — *`ruff` via `pip` et via `pipx`.*
+<a id="e27-2"></a>**[E27.2](README.md#e27-2)** — *`ruff` via `pip` et via `pipx`.*
 
 ```bash
 pip install ruff          # dans le venv actif
@@ -599,19 +634,20 @@ pipx list
 pip uninstall -y ruff ; hash -r ; which ruff   # ~/.local/bin/ruff
 ```
 
-::: pourquoi
-`ruff` est un **outil** : on veut la même version sur tous les projets et
-on ne l'importe jamais. `pipx` le met dans un venv privé et expose un lien
-dans `~/.local/bin`. `requests` est une **dépendance** : chaque projet peut
-en vouloir une version différente, et le code l'importe — il va dans le venv
-du projet, épinglé dans `requirements.txt`. Mettre `ruff` dans chaque venv
-n'est pas faux (certaines équipes l'épinglent en `dev`), c'est juste
-redondant.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ruff` est un **outil** : on veut la même version sur tous les projets et
+> on ne l'importe jamais. `pipx` le met dans un venv privé et expose un lien
+> dans `~/.local/bin`. `requests` est une **dépendance** : chaque projet peut
+> en vouloir une version différente, et le code l'importe — il va dans le venv
+> du projet, épinglé dans `requirements.txt`. Mettre `ruff` dans chaque venv
+> n'est pas faux (certaines équipes l'épinglent en `dev`), c'est juste
+> redondant.
 
 ---
 
-**E27.3** — *Épingler et reproduire.*
+<a id="e27-3"></a>**[E27.3](README.md#e27-3)** — *Épingler et reproduire.*
 
 ```bash
 ~/lab27/venv/bin/pip freeze > ~/lab27/requirements.txt
@@ -622,19 +658,20 @@ diff <(~/lab27/venv/bin/pip list --format=freeze) \
      <(~/lab27/venv2/bin/pip list --format=freeze) && echo identiques
 ```
 
-::: pourquoi
-`requirements.in` dit ce qu'on **veut** (`requests>=2.32,<3`) ;
-`requirements.txt` dit ce qu'on **a** (`requests==2.32.5`, plus ses
-dépendances transitives `urllib3`, `certifi`, `idna`, `charset-normalizer`).
-Sans épinglage, deux déploiements à un mois d'intervalle installent des
-versions différentes, et l'incident « ça marchait hier » commence. Les deux
-fichiers se committent ; on met à jour `requirements.txt` volontairement,
-en relançant les tests.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `requirements.in` dit ce qu'on **veut** (`requests>=2.32,<3`) ;
+> `requirements.txt` dit ce qu'on **a** (`requests==2.32.5`, plus ses
+> dépendances transitives `urllib3`, `certifi`, `idna`, `charset-normalizer`).
+> Sans épinglage, deux déploiements à un mois d'intervalle installent des
+> versions différentes, et l'incident « ça marchait hier » commence. Les deux
+> fichiers se committent ; on met à jour `requirements.txt` volontairement,
+> en relançant les tests.
 
 ---
 
-**E27.4** — *`hotes.py` : fixture, dataclass, compréhension.*
+<a id="e27-4"></a>**[E27.4](README.md#e27-4)** — *`hotes.py` : fixture, dataclass, compréhension.*
 
 ```python
 #!/usr/bin/env python3
@@ -671,17 +708,18 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-::: pourquoi
-`frozen=True` rend l'objet immuable et hachable (utilisable dans un `set`),
-et génère `__init__`, `__repr__`, `__eq__`. L'expression génératrice entre
-parenthèses ne construit pas de liste intermédiaire : `sorted` la consomme.
-`f"{vm.nom:<16}"` aligne à gauche sur 16 colonnes, `{vm.vmid:>6}` à droite :
-c'est le `printf '%-16s%6d'` de bash, sans l'appel externe.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `frozen=True` rend l'objet immuable et hachable (utilisable dans un `set`),
+> et génère `__init__`, `__repr__`, `__eq__`. L'expression génératrice entre
+> parenthèses ne construit pas de liste intermédiaire : `sorted` la consomme.
+> `f"{vm.nom:<16}"` aligne à gauche sur 16 colonnes, `{vm.vmid:>6}` à droite :
+> c'est le `printf '%-16s%6d'` de bash, sans l'appel externe.
 
 ---
 
-**E27.5** — *Mutable par défaut, compter.*
+<a id="e27-5"></a>**[E27.5](README.md#e27-5)** — *Mutable par défaut, compter.*
 
 ```console
 $ python3 casse/mutable.py
@@ -710,16 +748,17 @@ def compter2(mots: list[str]) -> dict[str, int]:
 # Counter(mots).most_common(3) : le « top 3 » gratuit
 ```
 
-::: pourquoi
-Les deux variables `prod` et `recette` sont **le même objet** : `prod is
-recette` vaut `True`. La liste par défaut a été créée une fois à la
-définition. `Counter` est un `dict` spécialisé ; `most_common(n)` remplace
-`sort | uniq -c | sort -rn | head -n`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les deux variables `prod` et `recette` sont **le même objet** : `prod is
+> recette` vaut `True`. La liste par défaut a été créée une fois à la
+> définition. `Counter` est un `dict` spécialisé ; `most_common(n)` remplace
+> `sort | uniq -c | sort -rn | head -n`.
 
 ---
 
-**E27.6** — *`purge.py` sans `os.system`.*
+<a id="e27-6"></a>**[E27.6](README.md#e27-6)** — *`purge.py` sans `os.system`.*
 
 ```python
 #!/usr/bin/env python3
@@ -755,17 +794,18 @@ $ mkdir -p "/tmp/rép avec espace" && touch "/tmp/rép avec espace/x.tmp"
 $ ./purge.py "/tmp/rép avec espace" ; ls casse/tmp   # important.txt intact
 ```
 
-::: pourquoi
-`os.system("rm -f " + rep + "/*.tmp")` passe par un shell : une espace dans
-`rep` découpe la commande, un `rep` vide donne `rm -f /*.tmp`, et le glob
-est interprété par le shell, pas par Python. `Path.glob` rend des objets
-`Path` qu'on supprime un par un, sans shell, et un `--dry-run` devient
-trivial puisque la décision et l'action sont séparées.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `os.system("rm -f " + rep + "/*.tmp")` passe par un shell : une espace dans
+> `rep` découpe la commande, un `rep` vide donne `rm -f /*.tmp`, et le glob
+> est interprété par le shell, pas par Python. `Path.glob` rend des objets
+> `Path` qu'on supprime un par un, sans shell, et un `--dry-run` devient
+> trivial puisque la décision et l'action sont séparées.
 
 ---
 
-**E27.7** — *Encodages : latin-1 et BOM.*
+<a id="e27-7"></a>**[E27.7](README.md#e27-7)** — *Encodages : latin-1 et BOM.*
 
 ```console
 $ python3 casse/lecture.py data/clients-latin1.csv
@@ -784,19 +824,20 @@ with open(chemin, encoding=enc, newline="") as f:
         print(ligne.get("ville") or ligne.get("ip"))
 ```
 
-::: pourquoi
-`0xE9` est `é` en latin-1 ; en UTF-8, `é` s'écrit `0xC3 0xA9`, et `0xE9`
-seul est un début de séquence invalide. `utf-8-sig` lit un fichier UTF-8
-avec ou sans BOM (`EF BB BF`) : sans lui, le BOM se retrouve collé au nom de
-la première colonne (`hote`) et `ligne["hote"]` lève `KeyError` —
-l'erreur classique après un export Excel. `csv.DictReader` gère les champs
-entre guillemets contenant le séparateur, ce qu'un `split(";")` ne fait pas ;
-`newline=""` est exigé par le module `csv`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `0xE9` est `é` en latin-1 ; en UTF-8, `é` s'écrit `0xC3 0xA9`, et `0xE9`
+> seul est un début de séquence invalide. `utf-8-sig` lit un fichier UTF-8
+> avec ou sans BOM (`EF BB BF`) : sans lui, le BOM se retrouve collé au nom de
+> la première colonne (`hote`) et `ligne["hote"]` lève `KeyError` —
+> l'erreur classique après un export Excel. `csv.DictReader` gère les champs
+> entre guillemets contenant le séparateur, ce qu'un `split(";")` ne fait pas ;
+> `newline=""` est exigé par le module `csv`.
 
 ---
 
-**E27.8** — *`ssh-check.py` depuis stdin.*
+<a id="e27-8"></a>**[E27.8](README.md#e27-8)** — *`ssh-check.py` depuis stdin.*
 
 ```python
 #!/usr/bin/env python3
@@ -831,17 +872,18 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-::: pourquoi
-Lire `sys.stdin` ligne à ligne rend le script composable : `< hotes.txt`,
-`| tee`, ou une sortie d'`inventaire.py`. `socket.create_connection` fait la
-résolution DNS et l'essai TCP ; toutes ses erreurs (refus, délai, nom
-inconnu) sont des `OSError`, une seule clause suffit. `time.monotonic()` ne
-recule jamais, contrairement à `time.time()` en cas de réglage NTP.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Lire `sys.stdin` ligne à ligne rend le script composable : `< hotes.txt`,
+> `| tee`, ou une sortie d'`inventaire.py`. `socket.create_connection` fait la
+> résolution DNS et l'essai TCP ; toutes ses erreurs (refus, délai, nom
+> inconnu) sont des `OSError`, une seule clause suffit. `time.monotonic()` ne
+> recule jamais, contrairement à `time.time()` en cas de réglage NTP.
 
 ---
 
-**E27.9** — *`stock.py` avec `logging` et syslog.*
+<a id="e27-9"></a>**[E27.9](README.md#e27-9)** — *`stock.py` avec `logging` et syslog.*
 
 ```python
 #!/usr/bin/env python3
@@ -890,18 +932,19 @@ $ ./stock.py > /dev/null          # les ERROR restent visibles (stderr)
 $ journalctl -t stock -n 5        # les mêmes, dans le journal
 ```
 
-::: pourquoi
-Trois destinations, une seule ligne de code métier : `log.error(...)`.
-`basicConfig` installe le gestionnaire stderr ; `SysLogHandler` sur
-`/dev/log` parle au socket de journald/rsyslog, avec la priorité déduite du
-niveau (`ERROR` → `err`). Le nom `stock:` en tête du message sert
-d'identifiant (`-t stock`). `print` n'aurait offert ni le niveau, ni le
-filtrage `-v`, ni syslog.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois destinations, une seule ligne de code métier : `log.error(...)`.
+> `basicConfig` installe le gestionnaire stderr ; `SysLogHandler` sur
+> `/dev/log` parle au socket de journald/rsyslog, avec la priorité déduite du
+> niveau (`ERROR` → `err`). Le nom `stock:` en tête du message sert
+> d'identifiant (`-t stock`). `print` n'aurait offert ni le niveau, ni le
+> filtrage `-v`, ni syslog.
 
 ---
 
-**E27.10** — *`exec-tracee.py`.*
+<a id="e27-10"></a>**[E27.10](README.md#e27-10)** — *`exec-tracee.py`.*
 
 ```python
 #!/usr/bin/env python3
@@ -943,18 +986,19 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-::: pourquoi
-`nargs=argparse.REMAINDER` récupère tout ce qui suit, y compris des options
-destinées à la commande fille. Sans `capture_output`, la commande hérite de
-stdout/stderr : sa sortie n'est ni réordonnée ni préfixée, comme dans
-`exec-tracee.sh`. Le code est transmis **tel quel** ; `127` et `124` sont
-les conventions de bash et de `timeout(1)`, réutilisées volontairement.
-Chaque argument de la liste arrive intact : `'a b'` reste un seul argument.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `nargs=argparse.REMAINDER` récupère tout ce qui suit, y compris des options
+> destinées à la commande fille. Sans `capture_output`, la commande hérite de
+> stdout/stderr : sa sortie n'est ni réordonnée ni préfixée, comme dans
+> `exec-tracee.sh`. Le code est transmis **tel quel** ; `127` et `124` sont
+> les conventions de bash et de `timeout(1)`, réutilisées volontairement.
+> Chaque argument de la liste arrive intact : `'a b'` reste un seul argument.
 
 ---
 
-**E27.11** — *Dates, fuseaux, naïf contre aware.*
+<a id="e27-11"></a>**[E27.11](README.md#e27-11)** — *Dates, fuseaux, naïf contre aware.*
 
 ```python
 #!/usr/bin/env python3
@@ -974,19 +1018,20 @@ except TypeError as exc:
     print("naïf vs aware :", exc)
 ```
 
-::: pourquoi
-Un `datetime` **aware** porte un `tzinfo` ; un naïf n'en a pas et Python
-refuse de les comparer (`can't compare offset-naive and offset-aware
-datetimes`). La règle en exploitation : tout en UTC en interne
-(`datetime.now(UTC)`), conversion en `Europe/Paris` uniquement à
-l'affichage. `%z` lit `+0200` ; `%b` lit `Sep` — en locale C, ce que
-`strptime` utilise par défaut. `zoneinfo` lit `/usr/share/zoneinfo` : le
-paquet `tzdata` doit être présent (il l'est sur Ubuntu).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un `datetime` **aware** porte un `tzinfo` ; un naïf n'en a pas et Python
+> refuse de les comparer (`can't compare offset-naive and offset-aware
+> datetimes`). La règle en exploitation : tout en UTC en interne
+> (`datetime.now(UTC)`), conversion en `Europe/Paris` uniquement à
+> l'affichage. `%z` lit `+0200` ; `%b` lit `Sep` — en locale C, ce que
+> `strptime` utilise par défaut. `zoneinfo` lit `/usr/share/zoneinfo` : le
+> paquet `tzdata` doit être présent (il l'est sur Ubuntu).
 
 ---
 
-**E27.12** — *Empreintes SHA-256, écriture atomique, diff.*
+<a id="e27-12"></a>**[E27.12](README.md#e27-12)** — *Empreintes SHA-256, écriture atomique, diff.*
 
 ```python
 #!/usr/bin/env python3
@@ -1015,17 +1060,18 @@ with os.fdopen(fd, "w", encoding="utf-8") as out:
 os.replace(tmp, cible)
 ```
 
-::: pourquoi
-`hashlib.file_digest` (3.11+) lit par blocs : un fichier de 4 Go ne passe
-pas en mémoire. La séquence `mkstemp` dans le **même répertoire** →
-`fsync` → `os.replace` garantit qu'un lecteur concurrent voit toujours un
-JSON complet. Le temporaire commence par `.` pour ne pas être pris pour un
-fichier à hacher lors d'une exécution simultanée.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `hashlib.file_digest` (3.11+) lit par blocs : un fichier de 4 Go ne passe
+> pas en mémoire. La séquence `mkstemp` dans le **même répertoire** →
+> `fsync` → `os.replace` garantit qu'un lecteur concurrent voit toujours un
+> JSON complet. Le temporaire commence par `.` pour ne pas être pris pour un
+> fichier à hacher lors d'une exécution simultanée.
 
 ---
 
-**E27.13** — *Prometheus avec `urllib.request`.*
+<a id="e27-13"></a>**[E27.13](README.md#e27-13)** — *Prometheus avec `urllib.request`.*
 
 ```python
 #!/usr/bin/env python3
@@ -1055,16 +1101,17 @@ $ ./prom.py          # lab-ops éteint
 injoignable : [Errno 111] Connection refused
 ```
 
-::: pourquoi
-`urlencode` encode la requête PromQL (espaces, accolades, guillemets) :
-construire l'URL à la main casse dès le premier `{job="node"}`. `HTTPError`
-**hérite** de `URLError` : il faut l'attraper en premier, sinon la clause
-générique le prend et on perd le code. La valeur est une chaîne : `float()`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `urlencode` encode la requête PromQL (espaces, accolades, guillemets) :
+> construire l'URL à la main casse dès le premier `{job="node"}`. `HTTPError`
+> **hérite** de `URLError` : il faut l'attraper en premier, sinon la clause
+> générique le prend et on perd le code. La valeur est une chaîne : `float()`.
 
 ---
 
-**E27.14** — *`requests`, `Session`, retries, Gitea.*
+<a id="e27-14"></a>**[E27.14](README.md#e27-14)** — *`requests`, `Session`, retries, Gitea.*
 
 ```python
 #!/usr/bin/env python3
@@ -1101,20 +1148,21 @@ except requests.RequestException as exc:
     sys.exit(1)
 ```
 
-::: pourquoi
-`timeout=(3.05, 10)` distingue le délai de **connexion** (3,05 s, un peu
-plus qu'un multiple de 3 s, le retransmit TCP) et de **lecture** (10 s
-entre deux octets). `Retry` avec `backoff_factor=0.5` attend 0, 1, 2 s ;
-`status_forcelist` ne réessaie que sur les erreurs de passerelle — jamais
-sur un 401 ou un 404, qui ne changeront pas. Gitea attend `Authorization:
-token <valeur>` (le mot `token`, pas `Bearer`, même si les deux passent
-sur les versions récentes). Le token vient de l'environnement : un token
-dans le code finit dans Git.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `timeout=(3.05, 10)` distingue le délai de **connexion** (3,05 s, un peu
+> plus qu'un multiple de 3 s, le retransmit TCP) et de **lecture** (10 s
+> entre deux octets). `Retry` avec `backoff_factor=0.5` attend 0, 1, 2 s ;
+> `status_forcelist` ne réessaie que sur les erreurs de passerelle — jamais
+> sur un 401 ou un 404, qui ne changeront pas. Gitea attend `Authorization:
+> token <valeur>` (le mot `token`, pas `Bearer`, même si les deux passent
+> sur les versions récentes). Le token vient de l'environnement : un token
+> dans le code finit dans Git.
 
 ---
 
-**E27.15** — *API Proxmox contre `pvesh`.*
+<a id="e27-15"></a>**[E27.15](README.md#e27-15)** — *API Proxmox contre `pvesh`.*
 
 ```python
 #!/usr/bin/env python3
@@ -1149,20 +1197,21 @@ for vm in sorted(r.json()["data"], key=lambda v: v["vmid"]):
 pvesh get /cluster/resources --type vm --output-format json | jq '.[].name'
 ```
 
-::: pourquoi
-Deux différences à noter. **Authentification** : `pvesh` tourne en root sur
-le nœud et n'a besoin de rien ; l'API REST exige un token
-`user@realm!id=uuid` dont les droits (`VM.Audit`) sont **plus étroits** que
-root — c'est ce qu'on veut pour un script d'inventaire. **Format** : `pvesh`
-sort le tableau directement ; l'API l'enveloppe dans `{"data": [...]}`. Le
-certificat de Proxmox est auto-signé : `verify=` vers le CA exporté
-(`/etc/pve/pve-root-ca.pem`) est la bonne réponse, `--insecure` doit rester
-un choix explicite et visible.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux différences à noter. **Authentification** : `pvesh` tourne en root sur
+> le nœud et n'a besoin de rien ; l'API REST exige un token
+> `user@realm!id=uuid` dont les droits (`VM.Audit`) sont **plus étroits** que
+> root — c'est ce qu'on veut pour un script d'inventaire. **Format** : `pvesh`
+> sort le tableau directement ; l'API l'enveloppe dans `{"data": [...]}`. Le
+> certificat de Proxmox est auto-signé : `verify=` vers le CA exporté
+> (`/etc/pve/pve-root-ca.pem`) est la bonne réponse, `--insecure` doit rester
+> un choix explicite et visible.
 
 ---
 
-**E27.16** — *Projet minimal installable.*
+<a id="e27-16"></a>**[E27.16](README.md#e27-16)** — *Projet minimal installable.*
 
 ```text
 monoutil/
@@ -1197,19 +1246,20 @@ cd ~/lab27/monoutil && pip install -e . && cd / && monoutil ops
 cd ~/lab27/monoutil && ruff check . && ruff format --check . && pytest -q
 ```
 
-::: pourquoi
-La disposition `src/` empêche d'importer le paquet par accident depuis le
-répertoire courant : les tests s'exécutent contre la version **installée**,
-comme en production. `pip install -e .` (éditable) pose un lien vers `src/`
-dans le venv : on modifie le code sans réinstaller. `[project.scripts]`
-crée `venv/bin/monoutil`. C'est le squelette de D27, en miniature.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La disposition `src/` empêche d'importer le paquet par accident depuis le
+> répertoire courant : les tests s'exécutent contre la version **installée**,
+> comme en production. `pip install -e .` (éditable) pose un lien vers `src/`
+> dans le venv : on modifie le code sans réinstaller. `[project.scripts]`
+> crée `venv/bin/monoutil`. C'est le squelette de D27, en miniature.
 
 ---
 
 ## 27.6 Labs
 
-### **L27.1** — `logstats.py`
+### <a id="l27-1"></a>**[L27.1](README.md#l27-1)** — `logstats.py`
 
 *Analyse d'un access.log nginx : top IP, codes, latences, en flux.*
 
@@ -1485,44 +1535,46 @@ un indicateur ; (3) le p95 par URL, la sortie JSON et `--since` sont dix
 lignes en Python, une réécriture du pipeline en awk. La mémoire reste
 constante dans les deux cas : c'est le point qu'il fallait vérifier.
 
-::: pourquoi
-**La regex compilée avec des groupes nommés** remplace le comptage de
-colonnes d'awk (`$1`, `$9`, `$NF`) par des noms : `m["code"]`. Elle est
-aussi le **validateur** — une ligne qui ne matche pas est comptée, pas
-plantée, ce qu'aucun `awk '{print $9}'` ne fait.
+> [!NOTE]
+> **Pourquoi**
+>
+> **La regex compilée avec des groupes nommés** remplace le comptage de
+> colonnes d'awk (`$1`, `$9`, `$NF`) par des noms : `m["code"]`. Elle est
+> aussi le **validateur** — une ligne qui ne matche pas est comptée, pas
+> plantée, ce qu'aucun `awk '{print $9}'` ne fait.
+>
+> **La lecture en flux** : `for ligne in flux` fonctionne à l'identique sur
+> un fichier ouvert en texte, un `gzip.open(..., "rt")` et `sys.stdin`. La
+> fonction `analyser()` ne sait pas d'où viennent les lignes : c'est ce qui
+> la rend testable avec un `io.StringIO`.
+>
+> **Le percentile nearest-rank** : on trie une seule fois, à la fin, puis
+> l'index `ceil(p/100 × n) − 1` donne la valeur. Sur 7 200 lignes, l'index 95
+> est 6 840, donc `durees[6839]` = 0,537 — la même valeur que le
+> `int(NR*0.95)` d'awk sur une liste 1-indexée. Le tri est O(n log n) mais ne
+> se fait qu'une fois ; un `heapq` ou un histogramme seraient nécessaires
+> au-delà de quelques dizaines de millions de lignes.
+>
+> **L'accumulateur `dataclass`** avec `Counter` : `most_common(n)` est le
+> `sort | uniq -c | sort -rn | head` ; `field(default_factory=Counter)` évite
+> le piège du mutable partagé entre instances.
+>
+> **`resume()` rend un dict** : le texte et le JSON sont deux rendus de la
+> même donnée. C'est le découpage qui permet `--json` sans dupliquer la
+> logique, et le test sur le dict sans parser une sortie texte.
 
-**La lecture en flux** : `for ligne in flux` fonctionne à l'identique sur
-un fichier ouvert en texte, un `gzip.open(..., "rt")` et `sys.stdin`. La
-fonction `analyser()` ne sait pas d'où viennent les lignes : c'est ce qui
-la rend testable avec un `io.StringIO`.
-
-**Le percentile nearest-rank** : on trie une seule fois, à la fin, puis
-l'index `ceil(p/100 × n) − 1` donne la valeur. Sur 7 200 lignes, l'index 95
-est 6 840, donc `durees[6839]` = 0,537 — la même valeur que le
-`int(NR*0.95)` d'awk sur une liste 1-indexée. Le tri est O(n log n) mais ne
-se fait qu'une fois ; un `heapq` ou un histogramme seraient nécessaires
-au-delà de quelques dizaines de millions de lignes.
-
-**L'accumulateur `dataclass`** avec `Counter` : `most_common(n)` est le
-`sort | uniq -c | sort -rn | head` ; `field(default_factory=Counter)` évite
-le piège du mutable partagé entre instances.
-
-**`resume()` rend un dict** : le texte et le JSON sont deux rendus de la
-même donnée. C'est le découpage qui permet `--json` sans dupliquer la
-logique, et le test sur le dict sans parser une sortie texte.
-:::
-
-::: piege
-`--since` compare un `datetime` aware (celui de la ligne, `%z`) à celui
-passé par l'utilisateur ; s'il est naïf, `astimezone()` sans argument le
-place dans le fuseau du serveur. Sans cela : `TypeError` à la première
-ligne. Autre piège : `errors="replace"` sur un journal — sans lui, un seul
-octet invalide dans 45 Mo arrête l'analyse.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--since` compare un `datetime` aware (celui de la ligne, `%z`) à celui
+> passé par l'utilisateur ; s'il est naïf, `astimezone()` sans argument le
+> place dans le fuseau du serveur. Sans cela : `TypeError` à la première
+> ligne. Autre piège : `errors="replace"` sur un journal — sans lui, un seul
+> octet invalide dans 45 Mo arrête l'analyse.
 
 ---
 
-### **L27.2** — `inventaire.py`
+### <a id="l27-2"></a>**[L27.2](README.md#l27-2)** — `inventaire.py`
 
 *Inventaire Ansible généré depuis l'API Proxmox, avec mode fixture.*
 
@@ -1789,47 +1841,49 @@ $ ansible-inventory -i inv.ini --graph | head -6
   |  |--lab-db
 ```
 
-::: pourquoi
-**Une interface, deux sources.** `Source` est un `Protocol` : toute classe
-qui fournit `ressources()` et `config()` convient, sans héritage. `Fixture`
-lit un JSON, `ApiProxmox` fait les appels HTTP. La logique (`collecter`)
-ne connaît que l'interface : on la teste avec la fixture, et le jour où
-l'API change, seule `ApiProxmox` bouge. C'est le principe de l'injection
-de dépendance, sans framework.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Une interface, deux sources.** `Source` est un `Protocol` : toute classe
+> qui fournit `ressources()` et `config()` convient, sans héritage. `Fixture`
+> lit un JSON, `ApiProxmox` fait les appels HTTP. La logique (`collecter`)
+> ne connaît que l'interface : on la teste avec la fixture, et le jour où
+> l'API change, seule `ApiProxmox` bouge. C'est le principe de l'injection
+> de dépendance, sans framework.
+>
+> **`raise_for_status()` avant `.json()["data"]`** : un token expiré renvoie
+> un 401 avec `{"data": null}` ; sans l'appel, `None` déclencherait un
+> `TypeError` plus loin, ou pire, un inventaire vide accepté. Avec lui, on
+> obtient `HTTPError`, qui hérite de `RequestException`, qui hérite
+> d'`OSError` : une seule clause `except (OSError, ValueError, KeyError)` en bout de chaîne couvre le
+> fichier absent et la connexion refusée (`OSError`), l'erreur HTTP (`RequestException`), le JSON invalide (`ValueError`) et
+> une clé absente de la fixture, chacun avec son message et sans Traceback.
+>
+> **`ipaddress.ip_interface("10.10.10.11/24").ip`** parse et valide en une
+> fois : une valeur `10.10.10.300/24` lève `ValueError`, qu'on journalise. Le
+> `str.partition("=")` sur chaque champ de `ipconfig0` évite une regex.
+>
+> **Les tags Proxmox** sont séparés par `;` et peuvent être absents
+> (`r.get("tags") or ""`) : un `split` sur `None` planterait. Le `tuple` de
+> tags garde l'objet `Machine` hachable (`frozen=True`).
+>
+> **Les imports tardifs** de `requests` et `yaml` dans les fonctions qui les
+> utilisent permettent au mode `--fixture --format ini` de tourner sans
+> aucune dépendance : utile sur une machine sans venv, et rend explicite ce
+> qui dépend de quoi.
 
-**`raise_for_status()` avant `.json()["data"]`** : un token expiré renvoie
-un 401 avec `{"data": null}` ; sans l'appel, `None` déclencherait un
-`TypeError` plus loin, ou pire, un inventaire vide accepté. Avec lui, on
-obtient `HTTPError`, qui hérite de `RequestException`, qui hérite
-d'`OSError` : une seule clause `except (OSError, ValueError, KeyError)` en bout de chaîne couvre le
-fichier absent et la connexion refusée (`OSError`), l'erreur HTTP (`RequestException`), le JSON invalide (`ValueError`) et
-une clé absente de la fixture, chacun avec son message et sans Traceback.
-
-**`ipaddress.ip_interface("10.10.10.11/24").ip`** parse et valide en une
-fois : une valeur `10.10.10.300/24` lève `ValueError`, qu'on journalise. Le
-`str.partition("=")` sur chaque champ de `ipconfig0` évite une regex.
-
-**Les tags Proxmox** sont séparés par `;` et peuvent être absents
-(`r.get("tags") or ""`) : un `split` sur `None` planterait. Le `tuple` de
-tags garde l'objet `Machine` hachable (`frozen=True`).
-
-**Les imports tardifs** de `requests` et `yaml` dans les fonctions qui les
-utilisent permettent au mode `--fixture --format ini` de tourner sans
-aucune dépendance : utile sur une machine sans venv, et rend explicite ce
-qui dépend de quoi.
-:::
-
-::: piege
-`yaml.safe_dump` avec `sort_keys=False` conserve l'ordre d'insertion ; par
-défaut il trie les clés, et `ansible_host` passe après `vmid` — inoffensif
-pour Ansible, déroutant en relecture. Et `yaml.dump` sans `safe_` écrirait
-des tags `!!python/object` pour tout objet non natif : `safe_` dans les
-deux sens, toujours.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `yaml.safe_dump` avec `sort_keys=False` conserve l'ordre d'insertion ; par
+> défaut il trie les clés, et `ansible_host` passe après `vmid` — inoffensif
+> pour Ansible, déroutant en relecture. Et `yaml.dump` sans `safe_` écrirait
+> des tags `!!python/object` pour tout objet non natif : `safe_` dans les
+> deux sens, toujours.
 
 ---
 
-### **L27.3** — `sante.py`
+### <a id="l27-3"></a>**[L27.3](README.md#l27-3)** — `sante.py`
 
 *Sonde multi-services, JSON, code Nagios, écriture atomique, timer.*
 
@@ -2259,55 +2313,57 @@ jq '.statut, .nb' /var/lib/factura/sante.json
 journalctl -t sante -n 5
 ```
 
-::: pourquoi
-**Une fonction par type, un dict de dispatch.** `VERIFS[type_]` remplace
-une chaîne de `if type == "tcp" elif ...` ; ajouter un type, c'est écrire
-une fonction et une entrée. Chaque fonction a la même signature
-`(spec, timeout) -> (code, détail)` et ne lève jamais : elle **rend** un
-code. `executer()` enveloppe l'appel, chronomètre, et convertit un
-`KeyError` (paramètre manquant dans le YAML) en `UNKNOWN`. Un type inconnu
-donne aussi `UNKNOWN` : la sonde ne plante pas parce qu'un collègue a fait
-une faute de frappe dans la configuration.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Une fonction par type, un dict de dispatch.** `VERIFS[type_]` remplace
+> une chaîne de `if type == "tcp" elif ...` ; ajouter un type, c'est écrire
+> une fonction et une entrée. Chaque fonction a la même signature
+> `(spec, timeout) -> (code, détail)` et ne lève jamais : elle **rend** un
+> code. `executer()` enveloppe l'appel, chronomètre, et convertit un
+> `KeyError` (paramètre manquant dans le YAML) en `UNKNOWN`. Un type inconnu
+> donne aussi `UNKNOWN` : la sonde ne plante pas parce qu'un collègue a fait
+> une faute de frappe dans la configuration.
+>
+> **Le pire code gagne.** `max(r.code for r in resultats)` est exactement la
+> convention Nagios : OK < WARNING < CRITICAL < UNKNOWN. Un `--only` qui ne
+> matche rien donne une liste vide, donc `UNKNOWN` — pas un faux OK.
+>
+> **`urllib.error.HTTPError` avant `URLError`** : la première hérite de la
+> seconde. Un 503 est une réponse (on lit `exc.code`), une connexion refusée
+> n'en est pas une.
+>
+> **TLS** : `ssl.create_default_context()` vérifie la chaîne et le nom
+> (`server_hostname=`) ; `getpeercert()` ne rend le dictionnaire que si la
+> vérification a réussi. `cert_time_to_seconds` convertit le `notAfter`
+> (`Sep 18 12:00:00 2027 GMT`) en timestamp ; on le compare à `time.time()`.
+>
+> **`subprocess.run` en liste, avec `timeout`** — et le refus explicite d'une
+> chaîne ou d'une liste contenant autre chose que des chaînes : YAML lit
+> `[true]` comme `[True]` et `subprocess` lèverait un `TypeError` obscur.
+>
+> **`ecrire_atomique`** : `mkstemp` dans le répertoire de la cible, `fsync`,
+> `chmod 644` (car `mkstemp` crée en 600), `os.replace`. Le `except
+> BaseException` qui supprime le temporaire couvre aussi `KeyboardInterrupt`
+> — c'est l'un des rares usages légitimes de `BaseException`.
+>
+> **Le timer** : `SuccessExitStatus=1 2 3`, sinon chaque WARNING met l'unité
+> en `failed` et déclenche les alertes systemd pour rien ; `StandardOutput=
+> null` parce que le JSON va dans le fichier ; `-o` plutôt qu'une redirection
+> shell, qui ne serait pas atomique.
 
-**Le pire code gagne.** `max(r.code for r in resultats)` est exactement la
-convention Nagios : OK < WARNING < CRITICAL < UNKNOWN. Un `--only` qui ne
-matche rien donne une liste vide, donc `UNKNOWN` — pas un faux OK.
-
-**`urllib.error.HTTPError` avant `URLError`** : la première hérite de la
-seconde. Un 503 est une réponse (on lit `exc.code`), une connexion refusée
-n'en est pas une.
-
-**TLS** : `ssl.create_default_context()` vérifie la chaîne et le nom
-(`server_hostname=`) ; `getpeercert()` ne rend le dictionnaire que si la
-vérification a réussi. `cert_time_to_seconds` convertit le `notAfter`
-(`Sep 18 12:00:00 2027 GMT`) en timestamp ; on le compare à `time.time()`.
-
-**`subprocess.run` en liste, avec `timeout`** — et le refus explicite d'une
-chaîne ou d'une liste contenant autre chose que des chaînes : YAML lit
-`[true]` comme `[True]` et `subprocess` lèverait un `TypeError` obscur.
-
-**`ecrire_atomique`** : `mkstemp` dans le répertoire de la cible, `fsync`,
-`chmod 644` (car `mkstemp` crée en 600), `os.replace`. Le `except
-BaseException` qui supprime le temporaire couvre aussi `KeyboardInterrupt`
-— c'est l'un des rares usages légitimes de `BaseException`.
-
-**Le timer** : `SuccessExitStatus=1 2 3`, sinon chaque WARNING met l'unité
-en `failed` et déclenche les alertes systemd pour rien ; `StandardOutput=
-null` parce que le JSON va dans le fichier ; `-o` plutôt qu'une redirection
-shell, qui ne serait pas atomique.
-:::
-
-::: piege
-Le test `test_commande_simulee` vérifie que `subprocess.run` reçoit une
-**liste** et un **timeout** et pas de `shell` : c'est un test de contrat,
-pas de résultat. Si quelqu'un « simplifie » en `shell=True`, le test casse
-avant la revue. Et `caplog`, pas `capsys`, pour lire les messages de
-`logging` sous pytest.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le test `test_commande_simulee` vérifie que `subprocess.run` reçoit une
+> **liste** et un **timeout** et pas de `shell` : c'est un test de contrat,
+> pas de résultat. Si quelqu'un « simplifie » en `shell=True`, le test casse
+> avant la revue. Et `caplog`, pas `capsys`, pour lire les messages de
+> `logging` sous pytest.
 
 ---
 
-### **L27.4** — `rotate_backups.py`
+### <a id="l27-4"></a>**[L27.4](README.md#l27-4)** — `rotate_backups.py`
 
 *Rétention GFS pure et testée, avec `--dry-run`.*
 
@@ -2594,47 +2650,49 @@ $ pytest -q
 10 passed in 0.05s
 ```
 
-::: pourquoi
-**Pure d'abord.** `selection()` ne touche ni disque ni horloge : elle
-reçoit des dates, rend un dict `{date: raison}`. C'est pourquoi les tests
-tiennent en quelques lignes et s'exécutent en 50 ms — et pourquoi le test
-de l'incident (« le 1er du mois précédent est gardé ») est écrit en trois
-lignes.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pure d'abord.** `selection()` ne touche ni disque ni horloge : elle
+> reçoit des dates, rend un dict `{date: raison}`. C'est pourquoi les tests
+> tiennent en quelques lignes et s'exécutent en 50 ms — et pourquoi le test
+> de l'incident (« le 1er du mois précédent est gardé ») est écrit en trois
+> lignes.
+>
+> **Semaine ISO et mois.** `date.isocalendar()` rend `(année, semaine,
+> jour)` : on regroupe par `(année, semaine)` — pas par `semaine` seule,
+> sinon la semaine 1 de 2027 écraserait celle de 2026. Comme la liste est
+> triée, écrire `par_semaine[cle] = d` à chaque tour laisse la **dernière**
+> date de la semaine ; `setdefault` sur les mois garde la **première**. Deux
+> idiomes de dict, deux politiques.
+>
+> **`setdefault(d, raison)`** pour l'union : une date déjà gardée comme
+> quotidienne n'est pas re-étiquetée hebdomadaire ; le compte est juste et le
+> `-v` dit pourquoi chaque fichier survit.
+>
+> **Le piège `[-0:]`** : `dates[-0:]` est toute la liste. Une politique
+> `--daily 0` aurait tout gardé ; `derniers(n, seq)` le neutralise et le test
+> `test_selection_garde_7_quotidiennes` avec `Politique(7, 0, 0)` l'aurait
+> attrapé — c'est d'ailleurs comme ça qu'il a été trouvé en écrivant ce
+> corrigé.
+>
+> **La date dans le nom** : `re.escape(prefixe)` protège un préfixe
+> contenant un point ; `date(int, int, int)` valide (`2026-13-45` lève
+> `ValueError`, journalisé, ignoré). Un `mtime` aurait été modifié par le
+> `cp` de la restauration — c'est la cause de l'incident du contexte.
 
-**Semaine ISO et mois.** `date.isocalendar()` rend `(année, semaine,
-jour)` : on regroupe par `(année, semaine)` — pas par `semaine` seule,
-sinon la semaine 1 de 2027 écraserait celle de 2026. Comme la liste est
-triée, écrire `par_semaine[cle] = d` à chaque tour laisse la **dernière**
-date de la semaine ; `setdefault` sur les mois garde la **première**. Deux
-idiomes de dict, deux politiques.
-
-**`setdefault(d, raison)`** pour l'union : une date déjà gardée comme
-quotidienne n'est pas re-étiquetée hebdomadaire ; le compte est juste et le
-`-v` dit pourquoi chaque fichier survit.
-
-**Le piège `[-0:]`** : `dates[-0:]` est toute la liste. Une politique
-`--daily 0` aurait tout gardé ; `derniers(n, seq)` le neutralise et le test
-`test_selection_garde_7_quotidiennes` avec `Politique(7, 0, 0)` l'aurait
-attrapé — c'est d'ailleurs comme ça qu'il a été trouvé en écrivant ce
-corrigé.
-
-**La date dans le nom** : `re.escape(prefixe)` protège un préfixe
-contenant un point ; `date(int, int, int)` valide (`2026-13-45` lève
-`ValueError`, journalisé, ignoré). Un `mtime` aurait été modifié par le
-`cp` de la restauration — c'est la cause de l'incident du contexte.
-:::
-
-::: piege
-`pytest` ne trouve pas `rotate_backups` sans `pythonpath = .` (ou un
-`conftest.py` vide à la racine, ou la disposition `src/` + `pip install
--e .`). Et un fichier nommé `rotate-backups.py` n'est pas importable : le
-tiret n'est pas valide dans un nom de module. Nommer les fichiers comme des
-modules dès le départ évite un renommage le jour où les tests arrivent.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `pytest` ne trouve pas `rotate_backups` sans `pythonpath = .` (ou un
+> `conftest.py` vide à la racine, ou la disposition `src/` + `pip install
+> -e .`). Et un fichier nommé `rotate-backups.py` n'est pas importable : le
+> tiret n'est pas valide dans un nom de module. Nommer les fichiers comme des
+> modules dès le départ évite un renommage le jour où les tests arrivent.
 
 ---
 
-### **L27.5** — Exporter Prometheus métier
+### <a id="l27-5"></a>**[L27.5](README.md#l27-5)** — Exporter Prometheus métier
 
 *Métriques métier depuis un CSV ou PostgreSQL, format texte, SIGTERM.*
 
@@ -2935,50 +2993,52 @@ INSERT INTO factures (statut, montant) VALUES ('emise', 120.50),
 `dsn = "host=10.10.10.12 dbname=factura user=factura password=..."` dans
 `exporter.toml` (fichier en `0640`, propriétaire du service).
 
-::: pourquoi
-**Pull, pas push.** Prometheus vient chercher les valeurs ; l'exporter
-doit donc **calculer au scrape** (`collecter()` dans `do_GET`) et non
-mettre en cache une valeur calculée au démarrage. C'est ce que vérifie le
-check : on ajoute une ligne au CSV, la valeur change au scrape suivant.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Pull, pas push.** Prometheus vient chercher les valeurs ; l'exporter
+> doit donc **calculer au scrape** (`collecter()` dans `do_GET`) et non
+> mettre en cache une valeur calculée au démarrage. C'est ce que vérifie le
+> check : on ajoute une ligne au CSV, la valeur change au scrape suivant.
+>
+> **Le format texte** est trivial à écrire, et le faire une fois apprend ce
+> que `prometheus_client` génère : une ligne `# HELP`, une `# TYPE`, puis
+> `nom{etiquette="valeur"} nombre`. Les noms suivent la convention
+> `<domaine>_<mesure>_<unité>` : `factura_montant_euros`,
+> `factura_collecte_duree_seconds`. Le `Content-Type: text/plain;
+> version=0.0.4` est celui que Prometheus attend.
+>
+> **Un exporter ne meurt pas parce que sa source est en panne.** Le `except
+> Exception` dans `collecter()` est ici légitime — et commenté : il protège
+> la boucle de service, journalise, et **expose l'échec** comme une métrique
+> (`factura_collecte_ok 0`) sur laquelle on alerte. Un 500 aurait été aussi
+> détectable (`up == 0`), mais aurait perdu les métriques encore valides.
+>
+> **`ThreadingHTTPServer`** sert plusieurs scrapes en parallèle (Prometheus +
+> + un `curl` de diagnostic). **`signal.signal(SIGTERM, ...)`** lève
+> `SystemExit` depuis le gestionnaire : `serve_forever()` s'interrompt, le
+> `finally` ferme le socket, le code est 0 — systemd voit un arrêt propre,
+> pas un `killed`. Sans lui, `SIGTERM` tue le processus sans passer par
+> `finally`.
+>
+> **`tomllib`** est dans la bibliothèque standard depuis 3.11, en lecture
+> seule, et exige un fichier ouvert en **binaire** — le module décode
+> lui-même en UTF-8, comme l'exige la spécification TOML.
 
-**Le format texte** est trivial à écrire, et le faire une fois apprend ce
-que `prometheus_client` génère : une ligne `# HELP`, une `# TYPE`, puis
-`nom{etiquette="valeur"} nombre`. Les noms suivent la convention
-`<domaine>_<mesure>_<unité>` : `factura_montant_euros`,
-`factura_collecte_duree_seconds`. Le `Content-Type: text/plain;
-version=0.0.4` est celui que Prometheus attend.
-
-**Un exporter ne meurt pas parce que sa source est en panne.** Le `except
-Exception` dans `collecter()` est ici légitime — et commenté : il protège
-la boucle de service, journalise, et **expose l'échec** comme une métrique
-(`factura_collecte_ok 0`) sur laquelle on alerte. Un 500 aurait été aussi
-détectable (`up == 0`), mais aurait perdu les métriques encore valides.
-
-**`ThreadingHTTPServer`** sert plusieurs scrapes en parallèle (Prometheus +
-+ un `curl` de diagnostic). **`signal.signal(SIGTERM, ...)`** lève
-`SystemExit` depuis le gestionnaire : `serve_forever()` s'interrompt, le
-`finally` ferme le socket, le code est 0 — systemd voit un arrêt propre,
-pas un `killed`. Sans lui, `SIGTERM` tue le processus sans passer par
-`finally`.
-
-**`tomllib`** est dans la bibliothèque standard depuis 3.11, en lecture
-seule, et exige un fichier ouvert en **binaire** — le module décode
-lui-même en UTF-8, comme l'exige la spécification TOML.
-:::
-
-::: piege
-`DynamicUser=yes` crée un utilisateur éphémère : il ne peut pas lire
-`~/mathieu/lab27/data/factures.csv` si le répertoire est en `0750`. En
-production, les données vont dans `/srv/factura` et le code dans
-`/opt/factura`, avec des droits explicites — le lab tolère un
-`User=mathieu` le temps de vérifier le reste.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `DynamicUser=yes` crée un utilisateur éphémère : il ne peut pas lire
+> `~/mathieu/lab27/data/factures.csv` si le répertoire est en `0750`. En
+> production, les données vont dans `/srv/factura` et le code dans
+> `/opt/factura`, avec des droits explicites — le lab tolère un
+> `User=mathieu` le temps de vérifier le reste.
 
 ---
 
 ## 27.7 Break & Fix
 
-### **BF27.1** — « Ça marche chez moi, pas sous le timer »
+### <a id="bf27-1"></a>**[BF27.1](README.md#bf27-1)** — « Ça marche chez moi, pas sous le timer »
 
 *`export-rapport.py` fonctionne dans le shell, échoue sous
 `export-rapport.timer`.*
@@ -3052,22 +3112,23 @@ sudo systemctl daemon-reload && sudo systemctl start export-rapport.service
 ls ~/lab27/bf1/rapports/ && journalctl -t notifier -n 1
 ```
 
-::: pourquoi
-Un service systemd n'hérite **de rien** de ta session : pas de `PATH`
-enrichi, pas de `LANG`, pas de `VIRTUAL_ENV`, pas de répertoire courant,
-pas de `~/.bashrc`. `HOME`, `USER` et `LOGNAME` sont posés d'après `User=`,
-`PATH` vaut la valeur compilée dans systemd. Tout ce qui « marchait » grâce
-à l'environnement interactif doit devenir explicite : interpréteur en
-chemin absolu, chemins ancrés sur `__file__` ou en configuration,
-exécutables externes en chemin absolu, encodage déclaré. La méthode :
-`journalctl -u`, corriger **une** cause, relancer, jusqu'au succès — chaque
-Traceback pointe la suivante.
-
-`PYTHONUNBUFFERED=1` : sans terminal, stdout est bufferisé ; le `print("OK
-...")` final n'apparaîtrait dans le journal qu'à la sortie, après les
-messages de `notifier`. Pour un script qui tourne des minutes, c'est
-l'impression qu'il est bloqué.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un service systemd n'hérite **de rien** de ta session : pas de `PATH`
+> enrichi, pas de `LANG`, pas de `VIRTUAL_ENV`, pas de répertoire courant,
+> pas de `~/.bashrc`. `HOME`, `USER` et `LOGNAME` sont posés d'après `User=`,
+> `PATH` vaut la valeur compilée dans systemd. Tout ce qui « marchait » grâce
+> à l'environnement interactif doit devenir explicite : interpréteur en
+> chemin absolu, chemins ancrés sur `__file__` ou en configuration,
+> exécutables externes en chemin absolu, encodage déclaré. La méthode :
+> `journalctl -u`, corriger **une** cause, relancer, jusqu'au succès — chaque
+> Traceback pointe la suivante.
+>
+> `PYTHONUNBUFFERED=1` : sans terminal, stdout est bufferisé ; le `print("OK
+> ...")` final n'apparaîtrait dans le journal qu'à la sortie, après les
+> messages de `notifier`. Pour un script qui tourne des minutes, c'est
+> l'impression qu'il est bloqué.
 
 **Prévention** : `systemd-run --uid=mathieu --pty --wait
 /home/mathieu/lab27/venv/bin/python script.py` reproduit l'environnement
@@ -3077,7 +3138,7 @@ que le service voit ».
 
 ---
 
-### **BF27.2** — « L'archive est incomplète et tar râle »
+### <a id="bf27-2"></a>**[BF27.2](README.md#bf27-2)** — « L'archive est incomplète et tar râle »
 
 *`archiver.py` construit une commande `tar` en chaîne, avec `shell=True`.*
 
@@ -3148,16 +3209,17 @@ export;date.log
 rapport final.log
 ```
 
-::: pourquoi
-Sans `shell=True`, `subprocess` appelle `execve` directement avec la liste :
-chaque élément devient un argument, quels que soient les caractères qu'il
-contient — il n'y a **personne** pour interpréter `;`, `$`, `*` ou une
-espace. `--` termine les options de `tar` : un fichier nommé `-x.log` ne
-sera pas lu comme une option. `-C rep` archive des chemins relatifs, ce
-qu'on veut pour restaurer ailleurs. `check=True` transforme le code 2 de
-`tar` en `CalledProcessError`, qu'on convertit en message et en code 1.
-`timeout` protège d'un `tar` bloqué sur un NFS mort.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sans `shell=True`, `subprocess` appelle `execve` directement avec la liste :
+> chaque élément devient un argument, quels que soient les caractères qu'il
+> contient — il n'y a **personne** pour interpréter `;`, `$`, `*` ou une
+> espace. `--` termine les options de `tar` : un fichier nommé `-x.log` ne
+> sera pas lu comme une option. `-C rep` archive des chemins relatifs, ce
+> qu'on veut pour restaurer ailleurs. `check=True` transforme le code 2 de
+> `tar` en `CalledProcessError`, qu'on convertit en message et en code 1.
+> `timeout` protège d'un `tar` bloqué sur un NFS mort.
 
 **Prévention** : `ruff` avec la règle `S602` (`shell=True`) via le jeu
 `flake8-bandit` (`select = ["S"]`) refuse la construction en CI ; un test
@@ -3166,7 +3228,7 @@ exécuté.
 
 ---
 
-### **BF27.3** — « Too many open files »
+### <a id="bf27-3"></a>**[BF27.3](README.md#bf27-3)** — « Too many open files »
 
 *`compte-erreurs.py` ouvre 1 500 fichiers avant d'en lire un.*
 
@@ -3212,20 +3274,21 @@ $ ./compte-erreurs.py logs & sleep 0.1; ls /proc/$!/fd | wc -l ; wait
 1500 fichiers, 1500 erreurs
 ```
 
-::: pourquoi
-Un descripteur est une ressource du **noyau**, pas de Python : le
-ramasse-miettes ne le libère que quand plus rien ne référence l'objet
-fichier. `with` appelle `close()` à la sortie du bloc, quoi qu'il arrive
-(exception comprise). Le nombre de descripteurs reste à 4 (les trois
-standard plus le fichier en cours) : c'est la preuve demandée.
-
-`open(p).read()` sans `with` « marche » en CPython parce que le compteur de
-références tombe à zéro immédiatement et que le destructeur ferme le
-fichier. Mais c'est un détail d'implémentation (PyPy ne le garantit pas),
-une exception entre `open` et `read` laisse le descripteur ouvert jusqu'au
-prochain passage du GC, et `-X dev` le signale comme `ResourceWarning`. En
-revue, c'est une faute.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un descripteur est une ressource du **noyau**, pas de Python : le
+> ramasse-miettes ne le libère que quand plus rien ne référence l'objet
+> fichier. `with` appelle `close()` à la sortie du bloc, quoi qu'il arrive
+> (exception comprise). Le nombre de descripteurs reste à 4 (les trois
+> standard plus le fichier en cours) : c'est la preuve demandée.
+>
+> `open(p).read()` sans `with` « marche » en CPython parce que le compteur de
+> références tombe à zéro immédiatement et que le destructeur ferme le
+> fichier. Mais c'est un détail d'implémentation (PyPy ne le garantit pas),
+> une exception entre `open` et `read` laisse le descripteur ouvert jusqu'au
+> prochain passage du GC, et `-X dev` le signale comme `ResourceWarning`. En
+> revue, c'est une faute.
 
 **Prévention** : `python3 -X dev` dans la CI (il active
 `ResourceWarning`), et la règle `ruff` `SIM115` (« use a context manager
@@ -3233,7 +3296,7 @@ for opening files »).
 
 ---
 
-### **BF27.4** — « La supervision dit OK, le site est mort »
+### <a id="bf27-4"></a>**[BF27.4](README.md#bf27-4)** — « La supervision dit OK, le site est mort »
 
 *`verif-site.py` : `except:` nu, `sys.exit` dans le `try`, faux OK.*
 
@@ -3325,20 +3388,21 @@ def test_main_rend_2_si_un_site_tombe(tmp_path, monkeypatch):
     assert verif_site.main() == 2
 ```
 
-::: pourquoi
-Trois principes violés, trois corrections. **Attraper précisément** :
-`HTTPError` (réponse reçue), `URLError`/`OSError` (pas de réponse) — et
-laisser passer `SystemExit`, `KeyboardInterrupt`, et les bugs. **Une
-fonction rend un résultat, elle ne termine pas le programme** : `sys.exit`
-n'a sa place que dans `main()` (ou plutôt `return code` depuis `main`, et
-`sys.exit(main())` à la fin). C'est ce qui rend `verifier()` testable sans
-attraper `SystemExit` dans les tests. **Un `except` fait quelque chose** :
-ici, journaliser et rendre `False`.
-
-Le test simule `urlopen` avec `monkeypatch` : aucun réseau, aucune attente,
-et la régression « site mort = OK » est impossible à réintroduire sans
-casser la suite.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois principes violés, trois corrections. **Attraper précisément** :
+> `HTTPError` (réponse reçue), `URLError`/`OSError` (pas de réponse) — et
+> laisser passer `SystemExit`, `KeyboardInterrupt`, et les bugs. **Une
+> fonction rend un résultat, elle ne termine pas le programme** : `sys.exit`
+> n'a sa place que dans `main()` (ou plutôt `return code` depuis `main`, et
+> `sys.exit(main())` à la fin). C'est ce qui rend `verifier()` testable sans
+> attraper `SystemExit` dans les tests. **Un `except` fait quelque chose** :
+> ici, journaliser et rendre `False`.
+>
+> Le test simule `urlopen` avec `monkeypatch` : aucun réseau, aucune attente,
+> et la régression « site mort = OK » est impossible à réintroduire sans
+> casser la suite.
 
 **Prévention** : `ruff` règle `E722` (bare except) et `BLE001` (blind
 except) en CI ; en revue, tout `except` sans `log` ni `raise` est refusé.
@@ -3347,7 +3411,7 @@ except) en CI ; en revue, tout `except` sans `log` ni `raise` est refusé.
 
 ## 27.8 Défi du module
 
-**D27 — `sante.sh` réécrit en Python : projet `pilotage`**
+<a id="d27"></a>**[D27](README.md#d27) — `sante.sh` réécrit en Python : projet `pilotage`**
 
 *Même interface que le `sante.sh` du module 16 : Markdown sur stdout,
 diagnostics sur stderr, code 0/1/2 ; paquet installable, tests, timer.*
@@ -3963,36 +4027,44 @@ Ajouter une vérification : une fonction dans `collecte.py` qui accepte le
 texte brut, un test dans `tests/`, une ligne dans `evaluer()` et une section
 dans `rapport()`.
 
-::: pourquoi
-**Ce qui est évalué.** (1) L'interface est **identique** : quelqu'un qui
-avait `sante.sh > rapport.md ; echo $?` dans un cron ne voit aucune
-différence. C'est le contrat d'une réécriture. (2) La **séparation** lecture
-/ décision / rendu : `collecte.py` lit, `evaluer()` décide, `rapport()`
-écrit. Chaque lecteur accepte le texte brut en paramètre — c'est ce qui
-rend les tests possibles sans `/proc`, et c'est le choix de conception le
-plus important du défi. (3) La **dégradation** : `commande()` centralise
-`which`, `timeout`, `check` et le journal ; sur `lab-rhel` sans `sysstat`,
-rien ne plante. (4) Le **packaging** : `pip install` dans un venv dédié
-sous `/opt`, sans dépendance externe (la bibliothèque standard suffit —
-c'est aussi ce qui rend le paquet déployable sur Rocky 9 avec
-`python3.12`). (5) L'**unité** : `SuccessExitStatus=1 2` parce que
-1 et 2 sont des verdicts ; stdout dans un fichier, stderr dans le journal
-avec un `SyslogIdentifier` pour `journalctl -t`.
+> [!NOTE]
+> **Pourquoi**
+>
+> **Ce qui est évalué.** (1) L'interface est **identique** : quelqu'un qui
+> avait `sante.sh > rapport.md ; echo $?` dans un cron ne voit aucune
+> différence. C'est le contrat d'une réécriture. (2) La **séparation** lecture
+> / décision / rendu : `collecte.py` lit, `evaluer()` décide, `rapport()`
+> écrit. Chaque lecteur accepte le texte brut en paramètre — c'est ce qui
+> rend les tests possibles sans `/proc`, et c'est le choix de conception le
+> plus important du défi. (3) La **dégradation** : `commande()` centralise
+> `which`, `timeout`, `check` et le journal ; sur `lab-rhel` sans `sysstat`,
+> rien ne plante. (4) Le **packaging** : `pip install` dans un venv dédié
+> sous `/opt`, sans dépendance externe (la bibliothèque standard suffit —
+> c'est aussi ce qui rend le paquet déployable sur Rocky 9 avec
+> `python3.12`). (5) L'**unité** : `SuccessExitStatus=1 2` parce que
+> 1 et 2 sont des verdicts ; stdout dans un fichier, stderr dans le journal
+> avec un `SyslogIdentifier` pour `journalctl -t`.
+>
+> `/proc/stat` cumule depuis le boot : sans delta, un serveur qui a chargé
+> pendant une heure il y a un mois affiche encore cette charge. `time.sleep`
+> entre les deux lectures est le seul « temps mort » du programme ; `--delai`
+> le rend réglable, et les tests l'évitent en passant les deux textes.
+>
+> `os.statvfs` : `f_bavail` (blocs disponibles pour un non-root) et non
+> `f_bfree` (dont les 5 % réservés à root) — c'est ce que `df` affiche, et
+> c'est ce qui compte pour l'application. `f_favail`/`f_files` donne les
+> inodes : le `/var` « plein à 40 % » du module 16 est ici une ligne.
 
-`/proc/stat` cumule depuis le boot : sans delta, un serveur qui a chargé
-pendant une heure il y a un mois affiche encore cette charge. `time.sleep`
-entre les deux lectures est le seul « temps mort » du programme ; `--delai`
-le rend réglable, et les tests l'évitent en passant les deux textes.
+> [!WARNING]
+> **Piège**
+>
+> `mypy` signale une variable réutilisée avec un autre type (`f` fichier puis
+> `f` système de fichiers) : les annotations trouvent des bugs de relecture
+> avant qu'ils n'en soient. Et `os.cpu_count()` peut rendre `None` dans un
+> conteneur restreint : `or 1` évite une division par zéro dans le ratio.
 
-`os.statvfs` : `f_bavail` (blocs disponibles pour un non-root) et non
-`f_bfree` (dont les 5 % réservés à root) — c'est ce que `df` affiche, et
-c'est ce qui compte pour l'application. `f_favail`/`f_files` donne les
-inodes : le `/var` « plein à 40 % » du module 16 est ici une ligne.
-:::
+<!-- nav:début -->
+---
 
-::: piege
-`mypy` signale une variable réutilisée avec un autre type (`f` fichier puis
-`f` système de fichiers) : les annotations trouvent des bugs de relecture
-avant qu'ils n'en soient. Et `os.cpu_count()` peut rendre `None` dans un
-conteneur restreint : `or 1` évite une division par zéro dans le ratio.
-:::
+[← Module 26](../26-kubernetes-observabilite/corrige.md) · [Énoncé](README.md) · [Projet B →](../../projets/P2-factura-devops/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

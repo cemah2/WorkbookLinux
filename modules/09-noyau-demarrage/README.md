@@ -1,43 +1,71 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 09**  
+[← Module 08](../08-processus-systemd/README.md) · [Corrigé](corrige.md) · [Module 10 →](../10-paquets/README.md)
+
+<details><summary>Scripts du module (12)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M09.sh`](../../scripts/setup/setup_M09.sh) | prépare le module |
+| [`check_M09_01.sh`](../../scripts/check/check_M09_01.sh) | vérification |
+| [`check_M09_02.sh`](../../scripts/check/check_M09_02.sh) | vérification |
+| [`check_M09_03.sh`](../../scripts/check/check_M09_03.sh) | vérification |
+| [`check_M09_04.sh`](../../scripts/check/check_M09_04.sh) | vérification |
+| [`check_M09_05.sh`](../../scripts/check/check_M09_05.sh) | vérification |
+| [`check_M09_06.sh`](../../scripts/check/check_M09_06.sh) | vérification |
+| [`break_M09_01.sh`](../../scripts/break/break_M09_01.sh) | installe une panne |
+| [`break_M09_02.sh`](../../scripts/break/break_M09_02.sh) | installe une panne |
+| [`break_M09_03.sh`](../../scripts/break/break_M09_03.sh) | installe une panne |
+| [`break_M09_04.sh`](../../scripts/break/break_M09_04.sh) | installe une panne |
+| [`break_M09_05.sh`](../../scripts/break/break_M09_05.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 09 — Noyau Linux et démarrage
 
 ## 9.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* expliquer la frontière espace noyau / espace utilisateur, ce qu'est un appel
-  système, comment un programme y entre et en sort, et pourquoi un processus en
-  état `D` « est dans le noyau » ;
-* dérouler un démarrage de bout en bout — firmware, ESP, shim, GRUB2, `vmlinuz`
-  et initramfs, `systemd` — en nommant les fichiers réels de chaque étape sur
-  Ubuntu 24.04 et sur Rocky 9 ;
-* modifier la ligne de commande du noyau proprement (`/etc/default/grub` +
-  `update-grub`, `grubby` sous Rocky), éditer une entrée GRUB au démarrage, et
-  reprendre la main sur une VM dont on a perdu le mot de passe root ;
-* dire à quoi sert l'initramfs, l'inspecter, le régénérer, et savoir dans quels
-  cas c'est obligatoire (LVM, LUKS, pilote de stockage, blacklist) ;
-* gérer les noyaux installés (plusieurs versions, HWE, purge, `/boot` plein),
-  et expliquer Secure Boot et MOK en deux phrases ;
-* charger, paramétrer, blacklister et rendre persistant un module noyau,
-  et lire les dépendances dans `modules.dep` ;
-* exploiter `/proc` et `/sys` sans intermédiaire : `cmdline`, `meminfo`,
-  `interrupts`, `/proc/PID/*`, ordonnanceur E/S, transparent hugepages ;
-* poser un paramètre `sysctl` au bon endroit, connaître l'ordre de précédence
-  des fichiers, et éviter le piège du paramètre qui n'existe pas tant que le
-  module n'est pas chargé ;
-* écrire une règle udev qui nomme un disque ou une interface de façon stable,
-  la tester sans reboot, et brancher un disque à chaud dans une VM Proxmox ;
-* lire le journal du noyau et reconnaître une trace OOM, une erreur E/S, un
-  *soft lockup*, un *hung task* ; activer `kdump` ; utiliser SysRq à bon escient ;
-* mettre en place un serveur de temps de lab avec chrony, expliquer pourquoi
-  l'heure d'une VM dérive et ce qu'un décalage de cinq minutes casse.
-
-Temps estimé : 7 h
-Prérequis : modules 08 (processus, `/proc/PID`, systemd), 10 (paquets) pour la
-gestion des noyaux, 11 (stockage) pour les manipulations de disques.
-`strace` en profondeur et `perf` sont au module 19 ; les partitions, `fstab` et
-le mode `emergency` au module 11 ; le durcissement `sysctl` au module 18.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * expliquer la frontière espace noyau / espace utilisateur, ce qu'est un appel
+>   système, comment un programme y entre et en sort, et pourquoi un processus en
+>   état `D` « est dans le noyau » ;
+> * dérouler un démarrage de bout en bout — firmware, ESP, shim, GRUB2, `vmlinuz`
+>   et initramfs, `systemd` — en nommant les fichiers réels de chaque étape sur
+>   Ubuntu 24.04 et sur Rocky 9 ;
+> * modifier la ligne de commande du noyau proprement (`/etc/default/grub` +
+>   `update-grub`, `grubby` sous Rocky), éditer une entrée GRUB au démarrage, et
+>   reprendre la main sur une VM dont on a perdu le mot de passe root ;
+> * dire à quoi sert l'initramfs, l'inspecter, le régénérer, et savoir dans quels
+>   cas c'est obligatoire (LVM, LUKS, pilote de stockage, blacklist) ;
+> * gérer les noyaux installés (plusieurs versions, HWE, purge, `/boot` plein),
+>   et expliquer Secure Boot et MOK en deux phrases ;
+> * charger, paramétrer, blacklister et rendre persistant un module noyau,
+>   et lire les dépendances dans `modules.dep` ;
+> * exploiter `/proc` et `/sys` sans intermédiaire : `cmdline`, `meminfo`,
+>   `interrupts`, `/proc/PID/*`, ordonnanceur E/S, transparent hugepages ;
+> * poser un paramètre `sysctl` au bon endroit, connaître l'ordre de précédence
+>   des fichiers, et éviter le piège du paramètre qui n'existe pas tant que le
+>   module n'est pas chargé ;
+> * écrire une règle udev qui nomme un disque ou une interface de façon stable,
+>   la tester sans reboot, et brancher un disque à chaud dans une VM Proxmox ;
+> * lire le journal du noyau et reconnaître une trace OOM, une erreur E/S, un
+>   *soft lockup*, un *hung task* ; activer `kdump` ; utiliser SysRq à bon escient ;
+> * mettre en place un serveur de temps de lab avec chrony, expliquer pourquoi
+>   l'heure d'une VM dérive et ce qu'un décalage de cinq minutes casse.
+>
+> **Temps estimé** : 7 h
+>
+> **Prérequis** : modules 08 (processus, `/proc/PID`, systemd), 10 (paquets) pour la
+> gestion des noyaux, 11 (stockage) pour les manipulations de disques.
+> `strace` en profondeur et `perf` sont au module 19 ; les partitions, `fstab` et
+> le mode `emergency` au module 11 ; le durcissement `sysctl` au module 18.
 
 ---
 
@@ -69,12 +97,13 @@ sudo apt install -y strace auditd chrony kmod initramfs-tools efibootmgr \
 L'installation de `linux-crashdump` demande d'activer kdump : réponds **Non**
 pour l'instant, tu l'activeras toi-même en 9.8.
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y strace audit chrony kmod dracut efibootmgr
-sg3_utils kexec-tools bpftrace mokutil grubby`. `ausyscall` vient du paquet
-`audit`, `lsinitrd` du paquet `dracut`, `grubby` est déjà installé sur une
-Rocky standard.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y strace audit chrony kmod dracut efibootmgr
+> sg3_utils kexec-tools bpftrace mokutil grubby`. `ausyscall` vient du paquet
+> `audit`, `lsinitrd` du paquet `dracut`, `grubby` est déjà installé sur une
+> Rocky standard.
 
 Préparation du terrain (idempotent) :
 
@@ -88,13 +117,14 @@ Le script crée `~/lab09/{rapports,conf,udev,bin,reference}` et capture une
 cette référence après chaque lab et chaque Break & Fix — c'est le premier
 réflexe de diagnostic de ce module (`diff`).
 
-::: attention
-Les labs L9.1, L9.2, L9.3 et les Break & Fix BF9.1, BF9.3, BF9.4 touchent
-GRUB, `/boot`, l'initramfs et la configuration réseau au démarrage. Sans
-snapshot, une erreur te coûte une réinstallation. Le port série et
-`qm terminal 9001` sont ta porte de secours quand SSH ne répond plus : teste-les
-dès L9.1, **avant** d'en avoir besoin.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Les labs L9.1, L9.2, L9.3 et les Break & Fix BF9.1, BF9.3, BF9.4 touchent
+> GRUB, `/boot`, l'initramfs et la configuration réseau au démarrage. Sans
+> snapshot, une erreur te coûte une réinstallation. Le port série et
+> `qm terminal 9001` sont ta porte de secours quand SSH ne répond plus : teste-les
+> dès L9.1, **avant** d'en avoir besoin.
 
 ---
 
@@ -111,7 +141,9 @@ dès L9.1, **avant** d'en avoir besoin.
                       matériel (ou l'hyperviseur qui l'imite)
 ```
 
-@fig(noyau-espaces): Espace utilisateur, frontière des appels système, espace noyau et matériel ; `/proc`, `/sys`, `/dev` comme fenêtres, `sysctl` qui écrit dans `/proc/sys`.
+<p align="center"><img src="../../assets/figures/noyau-espaces.svg" alt="Schéma : noyau-espaces"></p>
+
+*Figure — Espace utilisateur, frontière des appels système, espace noyau et matériel ; `/proc`, `/sys`, `/dev` comme fenêtres, `sysctl` qui écrit dans `/proc/sys`.*
 
 Un appel système est la **seule** porte d'entrée normale dans le noyau. La libc
 enveloppe chaque appel (`open()` → `openat`), et parfois l'évite (`printf`
@@ -136,7 +168,9 @@ firmware (BIOS ou UEFI) -> ESP /boot/efi (UEFI) ou MBR+BIOS boot (BIOS)
   -> /sbin/init = systemd -> default.target -> getty / sshd
 ```
 
-@fig(boot-chaine): La chaîne de démarrage du micrologiciel à la connexion, avec le fichier ou la commande qui agit à chaque étape.
+<p align="center"><img src="../../assets/figures/boot-chaine.svg" alt="Schéma : boot-chaine"></p>
+
+*Figure — La chaîne de démarrage du micrologiciel à la connexion, avec le fichier ou la commande qui agit à chaque étape.*
 
 | Élément | Ubuntu 24.04 | Rocky 9 |
 |---|---|---|
@@ -202,12 +236,13 @@ install pcspkr /bin/false   # bloque aussi modprobe explicite
 dummy
 ```
 
-::: rhel
-Rocky : `dnf install kernel` installe le plus récent (limite `installonly_limit=3`
-dans `/etc/dnf/dnf.conf`), `dnf remove --oldinstallonly` purge les anciens,
-`grubby --info=ALL`, `grubby --default-kernel`. `kernel-core` = `vmlinuz` +
-modules vitaux ; `kernel-modules` = les pilotes courants.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Rocky : `dnf install kernel` installe le plus récent (limite `installonly_limit=3`
+> dans `/etc/dnf/dnf.conf`), `dnf remove --oldinstallonly` purge les anciens,
+> `grubby --info=ALL`, `grubby --default-kernel`. `kernel-core` = `vmlinuz` +
+> modules vitaux ; `kernel-modules` = les pilotes courants.
 
 ### /proc, /sys, sysctl
 
@@ -306,7 +341,7 @@ livre `systemd-timesyncd` : installer chrony le remplace.
 
 ## 9.3 Quiz — QCM
 
-**Q9.1** — `strace -c ls /` sur `lab-adm` compte 17 `mmap`, 7 `openat`,
+<a id="q9-1"></a>**[Q9.1](corrige.md#q9-1)** — `strace -c ls /` sur `lab-adm` compte 17 `mmap`, 7 `openat`,
 2 `getdents64` et **un seul** `write`, alors que `ls` affiche 25 noms. Pourquoi
 un seul `write` ?
 
@@ -316,7 +351,7 @@ b) `ls` écrit avec `printf`, fonction de la libc qui **tamponne** en espace
 c) le terminal regroupe les écritures
 d) `getdents64` écrit directement sur la sortie standard
 
-**Q9.2** — `cat /proc/2231/syscall` affiche `0 0x3 0x7f1c2a00 0x2000 ...`.
+<a id="q9-2"></a>**[Q9.2](corrige.md#q9-2)** — `cat /proc/2231/syscall` affiche `0 0x3 0x7f1c2a00 0x2000 ...`.
 Que peut-on en conclure ? **Deux réponses correctes.**
 
 a) le processus exécute l'appel numéro 0, `read`, sur le descripteur 3
@@ -325,7 +360,7 @@ c) `ausyscall 0` confirme le nom de l'appel ; `/proc/2231/fd/3` dit sur quoi
    il lit
 d) il attend un signal `SIGCONT`
 
-**Q9.3** — Un processus est en `D` depuis dix minutes. Quelle affirmation est
+<a id="q9-3"></a>**[Q9.3](corrige.md#q9-3)** — Un processus est en `D` depuis dix minutes. Quelle affirmation est
 juste ?
 
 a) il consomme 100 % d'un cœur en espace noyau
@@ -335,7 +370,7 @@ b) il est bloqué **à l'intérieur** d'un appel système, en attente d'un pilot
 c) `kill -9` le libère, puisque `SIGKILL` n'est pas attrapable
 d) c'est un zombie que son père n'a pas récupéré
 
-**Q9.4** — Sur une VM UEFI, quelle est la chaîne correcte ?
+<a id="q9-4"></a>**[Q9.4](corrige.md#q9-4)** — Sur une VM UEFI, quelle est la chaîne correcte ?
 
 a) firmware → `/boot/grub/grub.cfg` → `vmlinuz` → initramfs → systemd
 b) firmware → ESP (`shimx64.efi` → `grubx64.efi`) → `grub.cfg` → `vmlinuz` +
@@ -343,7 +378,7 @@ b) firmware → ESP (`shimx64.efi` → `grubx64.efi`) → `grub.cfg` → `vmlinu
 c) firmware → MBR → `vmlinuz` → `/etc/default/grub` → systemd
 d) firmware → `systemd-boot` → `initramfs` → GRUB → `vmlinuz`
 
-**Q9.5** — Tu ajoutes `net.ifnames=0` dans `GRUB_CMDLINE_LINUX` de
+<a id="q9-5"></a>**[Q9.5](corrige.md#q9-5)** — Tu ajoutes `net.ifnames=0` dans `GRUB_CMDLINE_LINUX` de
 `/etc/default/grub`, tu redémarres, et `/proc/cmdline` ne contient pas le
 paramètre. Cause la plus probable ?
 
@@ -353,7 +388,7 @@ b) `update-grub` n'a pas été lancé : GRUB lit `/boot/grub/grub.cfg`, pas
 c) il fallait l'écrire dans `GRUB_CMDLINE_LINUX_DEFAULT`
 d) il faut aussi régénérer l'initramfs
 
-**Q9.6** — `/etc/default/grub` contient `GRUB_CMDLINE_LINUX_DEFAULT="quiet"`,
+<a id="q9-6"></a>**[Q9.6](corrige.md#q9-6)** — `/etc/default/grub` contient `GRUB_CMDLINE_LINUX_DEFAULT="quiet"`,
 mais `/proc/cmdline` montre `console=tty1 console=ttyS0` et pas `quiet`, après
 un `update-grub` correct. Où regarder ?
 
@@ -363,7 +398,7 @@ b) `/etc/default/grub.d/*.cfg` : ces fichiers sont lus **après**
 c) le firmware impose la console série
 d) `GRUB_CMDLINE_LINUX_DEFAULT` n'est utilisé qu'en mode recovery
 
-**Q9.7** — Dans quels cas faut-il régénérer l'initramfs ? **Deux réponses
+<a id="q9-7"></a>**[Q9.7](corrige.md#q9-7)** — Dans quels cas faut-il régénérer l'initramfs ? **Deux réponses
 correctes.**
 
 a) après avoir ajouté un fichier `blacklist` dans `/etc/modprobe.d/` qui
@@ -372,7 +407,7 @@ b) après avoir changé `vm.swappiness` dans `/etc/sysctl.d/`
 c) après avoir déplacé `/` sur un volume LVM ou chiffré LUKS
 d) après avoir modifié `/etc/hosts`
 
-**Q9.8** — `apt upgrade` échoue : `update-initramfs: ... No space left on
+<a id="q9-8"></a>**[Q9.8](corrige.md#q9-8)** — `apt upgrade` échoue : `update-initramfs: ... No space left on
 device`, et `df -h /boot` affiche 100 %. Quelle action est **dangereuse** ?
 
 a) `dpkg -l 'linux-image-*' | grep ^ii` puis `apt autoremove --purge`
@@ -381,7 +416,7 @@ b) supprimer les fichiers de `/boot` qui n'appartiennent à aucun paquet
 c) `rm /boot/initrd.img-$(uname -r)` pour faire de la place immédiatement
 d) purger explicitement un vieux `linux-image-6.8.0-31-generic` non courant
 
-**Q9.9** — Sous Rocky 9, tu veux ajouter `console=ttyS0,115200` à tous les
+<a id="q9-9"></a>**[Q9.9](corrige.md#q9-9)** — Sous Rocky 9, tu veux ajouter `console=ttyS0,115200` à tous les
 noyaux installés **et** aux prochains. Que fais-tu ? **Deux réponses
 correctes.**
 
@@ -391,7 +426,7 @@ b) éditer `GRUB_CMDLINE_LINUX` dans `/etc/default/grub`, pour que les noyaux
 c) éditer `/boot/grub2/grub.cfg` à la main
 d) `update-grub`
 
-**Q9.10** — Que fait chaque fichier ?
+<a id="q9-10"></a>**[Q9.10](corrige.md#q9-10)** — Que fait chaque fichier ?
 
 ```ini
 # /etc/modprobe.d/dummy.conf
@@ -407,7 +442,7 @@ b) le premier fixe les paramètres **quand** le module est chargé, par qui que
 c) le second fixe les paramètres, le premier charge
 d) le premier est ignoré sans le second
 
-**Q9.11** — `/etc/modprobe.d/x.conf` contient `blacklist virtio_net`. Quelles
+<a id="q9-11"></a>**[Q9.11](corrige.md#q9-11)** — `/etc/modprobe.d/x.conf` contient `blacklist virtio_net`. Quelles
 affirmations sont vraies ? **Deux réponses correctes.**
 
 a) `modprobe virtio_net` tapé à la main charge quand même le module
@@ -416,7 +451,7 @@ b) le chargement automatique par udev (via l'alias `virtio:d00000001v...`)
 c) le module est supprimé de `/lib/modules`
 d) le noyau refuse le module et écrit `module verification failed`
 
-**Q9.12** — `/etc/sysctl.d/10-factura.conf` contient `vm.swappiness = 10`,
+<a id="q9-12"></a>**[Q9.12](corrige.md#q9-12)** — `/etc/sysctl.d/10-factura.conf` contient `vm.swappiness = 10`,
 `/etc/sysctl.conf` contient `vm.swappiness = 60`. Valeur effective après reboot
 sur Ubuntu 24.04 ?
 
@@ -426,7 +461,7 @@ b) 60 : `/etc/sysctl.d/99-sysctl.conf` est un lien vers `/etc/sysctl.conf`,
 c) 60, parce que `sysctl.conf` est lu en premier et verrouille la valeur
 d) erreur au boot, conflit détecté
 
-**Q9.13** — `sudo sysctl -w net.netfilter.nf_conntrack_max=262144` répond
+<a id="q9-13"></a>**[Q9.13](corrige.md#q9-13)** — `sudo sysctl -w net.netfilter.nf_conntrack_max=262144` répond
 `sysctl: cannot stat /proc/sys/net/netfilter/nf_conntrack_max: No such file or
 directory`. Explication et correctif durable ?
 
@@ -437,7 +472,7 @@ b) le module `nf_conntrack` n'est pas chargé, donc la clé n'existe pas ; il fa
 c) il faut redémarrer pour que `sysctl` voie la clé
 d) `sysctl -w` ne fonctionne qu'en mode `--system`
 
-**Q9.14** — Tu écris `/etc/udev/rules.d/61-cache.rules` avec un `SYMLINK+=`,
+<a id="q9-14"></a>**[Q9.14](corrige.md#q9-14)** — Tu écris `/etc/udev/rules.d/61-cache.rules` avec un `SYMLINK+=`,
 mais `/dev/disk/lab/cache` n'apparaît pas. Le disque est déjà présent.
 Que manque-t-il ?
 
@@ -447,7 +482,7 @@ b) `udevadm control --reload` (les règles sont mises en cache) **puis**
 c) la règle doit être dans `/usr/lib/udev/rules.d`
 d) `SYMLINK=` au lieu de `SYMLINK+=`
 
-**Q9.15** — `dmesg` sur `lab-db` :
+<a id="q9-15"></a>**[Q9.15](corrige.md#q9-15)** — `dmesg` sur `lab-db` :
 
 ```text
 INFO: task jbd2/dm-0-8:312 blocked for more than 120 seconds.
@@ -464,7 +499,7 @@ b) le thread de journal ext4 attend le stockage depuis deux minutes : l'E/S ne
 c) le message conseille de désactiver le détecteur pour résoudre le problème
 d) c'est un OOM déguisé
 
-**Q9.16** — `watchdog: BUG: soft lockup - CPU#1 stuck for 23s!
+<a id="q9-16"></a>**[Q9.16](corrige.md#q9-16)** — `watchdog: BUG: soft lockup - CPU#1 stuck for 23s!
 [postgres:1204]` dans une VM Proxmox, sans autre erreur. Première hypothèse ?
 
 a) bug de PostgreSQL
@@ -473,7 +508,7 @@ b) le vCPU n'a pas été ordonnancé par l'hôte pendant 23 s (hôte saturé,
 c) barrette mémoire défectueuse
 d) l'ordonnanceur E/S est mal réglé
 
-**Q9.17** — `timedatectl` sur `lab-web` : `System clock synchronized: no`,
+<a id="q9-17"></a>**[Q9.17](corrige.md#q9-17)** — `timedatectl` sur `lab-web` : `System clock synchronized: no`,
 `NTP service: inactive`, et `curl https://` échoue avec `certificate is not yet
 valid`. Que fais-tu ? **Deux réponses correctes.**
 
@@ -483,7 +518,7 @@ b) vérifier `chronyc sources` : sans source joignable, chrony ne corrige rien
 c) désactiver la vérification TLS (`curl -k`) sur tous les scripts
 d) `hwclock --hctosys` toutes les minutes en cron
 
-**Q9.18** — Un module DKMS compilé localement refuse de se charger :
+<a id="q9-18"></a>**[Q9.18](corrige.md#q9-18)** — Un module DKMS compilé localement refuse de se charger :
 `modprobe: ERROR: could not insert 'x': Key was rejected by service`.
 Cause ?
 
@@ -498,152 +533,134 @@ d) `kernel.modules_disabled` vaut 1
 
 ## 9.4 Quiz — questions ouvertes
 
-**QO9.1** — *On te demande en entretien* : « Explique-moi ce qui se passe quand
+<a id="qo9-1"></a>**[QO9.1](corrige.md#qo9-1)** — *On te demande en entretien* : « Explique-moi ce qui se passe quand
 un programme appelle `open()`. » Décris la frontière espace utilisateur /
 espace noyau, le rôle de la libc, le changement de mode (et pourquoi ce n'est
 pas un changement de contexte), le retour avec `errno`, et cite un cas où
 un appel « système » ne passe **pas** par le noyau. Termine par ce qu'est un
 processus en `D` dans ce modèle.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO9.2** — Déroule le démarrage d'une VM Ubuntu 24.04 en UEFI depuis
+<a id="qo9-2"></a>**[QO9.2](corrige.md#qo9-2)** — Déroule le démarrage d'une VM Ubuntu 24.04 en UEFI depuis
 l'allumage jusqu'à l'invite `login:`, en nommant à chaque étape **le fichier
 réel** chargé et **qui** le charge. Précise ce que change Secure Boot, ce que
 fait exactement l'initramfs, et à quel moment `systemd` devient PID 1.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO9.3** — *On te demande en entretien* : « Mot de passe root perdu sur une VM,
+<a id="qo9-3"></a>**[QO9.3](corrige.md#qo9-3)** — *On te demande en entretien* : « Mot de passe root perdu sur une VM,
 pas de clé SSH, pas de sauvegarde du mot de passe. Tu fais quoi ? » Donne la
 procédure complète sur Ubuntu **et** sur Rocky (touches GRUB, paramètre ajouté,
 commandes dans le shell obtenu, pourquoi `mount -o remount,rw`, pourquoi
 `/.autorelabel`), puis explique ce que ça prouve sur la sécurité physique
 d'une machine et les deux contre-mesures.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO9.4** — À quoi sert l'initramfs, et pourquoi le noyau ne peut-il pas s'en
+<a id="qo9-4"></a>**[QO9.4](corrige.md#qo9-4)** — À quoi sert l'initramfs, et pourquoi le noyau ne peut-il pas s'en
 passer sur une machine dont `/` est sur LVM ? Explique la différence entre
 `MODULES=most` et `MODULES=dep` (Ubuntu) ou `hostonly` (dracut), le compromis
 taille / portabilité, comment vérifier qu'un pilote y est présent, et les
 quatre situations où il faut le régénérer.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO9.5** — Décris ta méthode pour poser un paramètre `sysctl` en production
+<a id="qo9-5"></a>**[QO9.5](corrige.md#qo9-5)** — Décris ta méthode pour poser un paramètre `sysctl` en production
 sans surprise : test à chaud, persistance, nom et rang du fichier, vérification
 après `sysctl --system` puis après reboot. Explique l'ordre de précédence
 complet et le cas particulier du paramètre qui n'existe qu'une fois un module
 chargé, avec la solution.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO9.6** — Un disque est ajouté à chaud à une VM. Explique la chaîne complète :
+<a id="qo9-6"></a>**[QO9.6](corrige.md#qo9-6)** — Un disque est ajouté à chaud à une VM. Explique la chaîne complète :
 qui détecte le matériel, ce qu'est un *uevent*, ce que fait `udevd`, comment
 sont produits `/dev/sdb` et les liens `/dev/disk/by-*`, et pourquoi `sdb`
 n'est pas un nom stable. Donne la règle udev qui crée un lien stable, et dis
 comment tu la testes **sans** redémarrer.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO9.7** — Pour chacune de ces quatre traces du journal noyau — OOM, erreur E/S,
+<a id="qo9-7"></a>**[QO9.7](corrige.md#qo9-7)** — Pour chacune de ces quatre traces du journal noyau — OOM, erreur E/S,
 *soft lockup*, *hung task* — dis ce qu'elle signifie, quelle couche est en cause,
 quelle commande tu lances ensuite, et ce qui distingue une VM d'une machine
 physique dans l'interprétation. Termine par le rôle de `kdump` et ce qu'il
 faut avoir configuré **avant** l'incident.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO9.8** — Pourquoi l'heure d'une VM dérive-t-elle plus qu'une machine
+<a id="qo9-8"></a>**[QO9.8](corrige.md#qo9-8)** — Pourquoi l'heure d'une VM dérive-t-elle plus qu'une machine
 physique ? Explique horloge matérielle vs horloge système, ce que fait chrony
 (*slew* vs *step*, `makestep`), ce que `timedatectl` te montre, et liste au
 moins cinq choses concrètes qui cassent avec cinq minutes de décalage.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO9.9** — *On te demande en entretien* : « Linux est-il un noyau monolithique
+<a id="qo9-9"></a>**[QO9.9](corrige.md#qo9-9)** — *On te demande en entretien* : « Linux est-il un noyau monolithique
 ? Et c'est quoi eBPF, le live patching, le temps réel ? » Réponds en deux
 minutes chrono : une définition, un exemple concret d'usage ops pour chaque
 notion, et une commande ou un produit qui l'incarne.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 9.5 Exercices guidés ★
 
-**E9.1** — Sur `lab-adm`, compte les appels système d'un `ls -l /etc`, affiche
+<a id="e9-1"></a>**[E9.1](corrige.md#e9-1)** — Sur `lab-adm`, compte les appels système d'un `ls -l /etc`, affiche
 les cinq plus fréquents, et explique pourquoi `readdir` et `printf`
 n'apparaissent pas dans la liste alors que `ls` les utilise. Puis montre, en
 une commande, la liste des **fichiers** que `ls` a réellement ouverts.
 
-**E9.2** — Lance `sleep 300 &`, puis, uniquement à partir de `/proc`, affiche
+<a id="e9-2"></a>**[E9.2](corrige.md#e9-2)** — Lance `sleep 300 &`, puis, uniquement à partir de `/proc`, affiche
 l'appel système dans lequel il est bloqué (numéro **et** nom, traduit par
 `ausyscall`), la fonction noyau où il dort, et son état dans `status`.
 Compare avec un processus qui tourne (`yes > /dev/null &`).
 
-**E9.3** — Affiche la ligne de commande du noyau actuel, puis retrouve d'où vient
+<a id="e9-3"></a>**[E9.3](corrige.md#e9-3)** — Affiche la ligne de commande du noyau actuel, puis retrouve d'où vient
 chaque paramètre : dans `/etc/default/grub`, dans `/etc/default/grub.d/*.cfg`, ou
 dans `/boot/grub/grub.cfg` seulement. Pour chaque paramètre, une ligne
 « paramètre → fichier d'origine → effet ».
 
-**E9.4** — Détermine si `lab-adm` démarre en BIOS ou en UEFI, par deux moyens
+<a id="e9-4"></a>**[E9.4](corrige.md#e9-4)** — Détermine si `lab-adm` démarre en BIOS ou en UEFI, par deux moyens
 indépendants. Si UEFI : liste les entrées du firmware, l'ordre de boot, la
 partition ESP et les fichiers `.efi` qu'elle contient avec leur taille. Si
 BIOS : trouve où GRUB est installé (`grub-probe`, partition `BIOS boot`).
 
-**E9.5** — Liste le contenu de l'initramfs du noyau courant, compte les
+<a id="e9-5"></a>**[E9.5](corrige.md#e9-5)** — Liste le contenu de l'initramfs du noyau courant, compte les
 modules `.ko` qu'il embarque, vérifie que `virtio_scsi`, `virtio_net` et `lvm`
 y sont, et affiche la taille de l'initrd comparée à celle de `vmlinuz`. Puis
 montre le contenu de `/etc/initramfs-tools/initramfs.conf` qui explique cette
 taille.
 
-**E9.6** — Mesure le temps de démarrage de `lab-adm` (firmware, chargeur,
+<a id="e9-6"></a>**[E9.6](corrige.md#e9-6)** — Mesure le temps de démarrage de `lab-adm` (firmware, chargeur,
 noyau, espace utilisateur), les dix unités les plus lentes, la chaîne critique
 jusqu'à `multi-user.target`, et produis `~/lab09/rapports/boot.svg`. Dis quelle
 unité tu attaquerais en premier et pourquoi.
 
-**E9.7** — Inventaire des noyaux : version qui tourne, versions installées
+<a id="e9-7"></a>**[E9.7](corrige.md#e9-7)** — Inventaire des noyaux : version qui tourne, versions installées
 (paquets), fichiers correspondants dans `/boot` avec leur taille, espace libre
 de `/boot`, et entrée GRUB par défaut. Déduis combien de noyaux
 supplémentaires `/boot` peut accueillir.
 
-**E9.8** — Pour le pilote de l'interface `ens18` et celui du disque `sda` :
+<a id="e9-8"></a>**[E9.8](corrige.md#e9-8)** — Pour le pilote de l'interface `ens18` et celui du disque `sda` :
 trouve le nom du module depuis `/sys` (pas depuis `lsmod`), affiche sa
 description, ses dépendances, son signataire, et ses paramètres possibles.
 Liste enfin tous les modules `virtio*` chargés avec leur compteur d'usage.
 
-**E9.9** — Lance `udevadm monitor` dans un terminal ; dans un autre, charge
+<a id="e9-9"></a>**[E9.9](corrige.md#e9-9)** — Lance `udevadm monitor` dans un terminal ; dans un autre, charge
 le module `dummy` avec deux interfaces, prouve la valeur du paramètre par
 `/sys`, affiche les interfaces créées, puis décharge le module. Relève les
 événements `add`/`remove` reçus, côté noyau et côté udev. Montre ensuite ce
 que `modprobe --show-depends` et `modules.dep` disent de `dummy`.
 
-**E9.10** — Depuis `/proc` uniquement : nombre de cœurs, présence du drapeau
+<a id="e9-10"></a>**[E9.10](corrige.md#e9-10)** — Depuis `/proc` uniquement : nombre de cœurs, présence du drapeau
 `hypervisor`, mémoire totale / disponible / *dirty*, interruptions attribuées
 aux périphériques virtio, et pour le processus `sshd` principal : ses
 descripteurs, ses limites, son cgroup, son environnement, son binaire.
 
-**E9.11** — Deux réglages volatils de `/sys`. D'abord l'ordonnanceur E/S de
+<a id="e9-11"></a>**[E9.11](corrige.md#e9-11)** — Deux réglages volatils de `/sys`. D'abord l'ordonnanceur E/S de
 `/dev/sda` : affiche l'actif et les choix possibles, passe-le à `none` à
 chaud, vérifie, reviens à la valeur initiale ; explique pourquoi `none` est
 raisonnable pour un disque virtio sur un SSD hôte et pourquoi le réglage ne
@@ -652,27 +669,27 @@ et `defrag`, passe `enabled` à `never` à chaud, et donne les deux méthodes
 pour rendre ce réglage persistant (l'une par le noyau, l'autre par systemd)
 sans les appliquer.
 
-**E9.12** — Pose `vm.swappiness=10` et `net.core.somaxconn=8192` de façon
+<a id="e9-12"></a>**[E9.12](corrige.md#e9-12)** — Pose `vm.swappiness=10` et `net.core.somaxconn=8192` de façon
 persistante dans un fichier correctement nommé, applique sans reboot, prouve
 les valeurs, puis affiche l'ordre exact dans lequel `sysctl --system` a lu
 les fichiers. Vérifie qu'aucun fichier de rang supérieur ne les écrase.
 
-**E9.13** — Démontre le piège du paramètre absent : tente de lire
+<a id="e9-13"></a>**[E9.13](corrige.md#e9-13)** — Démontre le piège du paramètre absent : tente de lire
 `net.netfilter.nf_conntrack_max` sur une machine sans règle de filtrage,
 charge le module qui le fait apparaître, relis, puis écris la configuration
 qui rend la valeur `131072` persistante **à travers un reboot**.
 
-**E9.14** — Affiche les messages noyau d'avertissement et d'erreur du boot
+<a id="e9-14"></a>**[E9.14](corrige.md#e9-14)** — Affiche les messages noyau d'avertissement et d'erreur du boot
 courant avec horodatage lisible, puis ceux du boot précédent, puis les quatre
 valeurs de `kernel.printk` avec leur sens. Enfin, provoque un vidage de l'état
 mémoire par SysRq et retrouve-le dans `dmesg`.
 
-**E9.15** — Sur `lab-adm` : affiche l'heure système, l'heure matérielle, le
+<a id="e9-15"></a>**[E9.15](corrige.md#e9-15)** — Sur `lab-adm` : affiche l'heure système, l'heure matérielle, le
 fuseau, la source d'horloge du noyau, et l'état de la synchronisation. Calcule
 le décalage entre horloge système et horloge matérielle. Dis quel service NTP
 tourne par défaut sur Ubuntu Server 24.04 et sur Rocky 9.
 
-**E9.16** — Montre les trois niveaux de limite de fichiers ouverts (système,
+<a id="e9-16"></a>**[E9.16](corrige.md#e9-16)** — Montre les trois niveaux de limite de fichiers ouverts (système,
 par processus maximal, par processus effectif) et le nombre actuellement
 alloué. Puis trouve quel processus consomme le plus de *watches* inotify et
 compare à la limite. Explique quelle limite produit « too many open files » dans
@@ -682,15 +699,15 @@ chaque cas.
 
 ## 9.6 Labs ★★
 
-### **L9.1** — Ticket INC-3402 : « Documenter le démarrage de lab-adm et
+### <a id="l9-1"></a>**[L9.1](corrige.md#l9-1)** — Ticket INC-3402 : « Documenter le démarrage de lab-adm et
 ouvrir une console de secours »
 
-::: contexte
-Après un incident où plus personne n'a pu se connecter à une VM en panne
-réseau, l'équipe exige que chaque VM ait une console série exploitable depuis
-Proxmox (`qm terminal`), un menu GRUB visible, et une fiche décrivant sa chaîne
-de démarrage avec les vrais fichiers. `lab-adm` sert de modèle.
-:::
+> **Contexte**
+>
+> Après un incident où plus personne n'a pu se connecter à une VM en panne
+> réseau, l'équipe exige que chaque VM ait une console série exploitable depuis
+> Proxmox (`qm terminal`), un menu GRUB visible, et une fiche décrivant sa chaîne
+> de démarrage avec les vrais fichiers. `lab-adm` sert de modèle.
 
 1. Établis le mode de démarrage (BIOS ou UEFI) et, selon le cas, la partition
    ESP et ses fichiers, ou l'emplacement de GRUB. Note la taille de
@@ -720,35 +737,37 @@ de démarrage avec les vrais fichiers. `lab-adm` sert de modèle.
    noyau commentée, temps de boot, procédure de console de secours en cinq
    lignes, et procédure « mot de passe perdu » en cinq lignes.
 
-::: rhel
-Sur `lab-rhel`, fais la partie console série : `grubby --update-kernel=ALL
---args="console=tty0 console=ttyS0,115200"`, `GRUB_TERMINAL`/`GRUB_SERIAL_COMMAND`
-dans `/etc/default/grub`, puis `grub2-mkconfig -o /boot/grub2/grub.cfg`.
-Regarde ce que `grubby` a modifié dans `/boot/loader/entries/`. Le shell de
-secours s'obtient avec `rd.break` puis `chroot /sysroot`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel`, fais la partie console série : `grubby --update-kernel=ALL
+> --args="console=tty0 console=ttyS0,115200"`, `GRUB_TERMINAL`/`GRUB_SERIAL_COMMAND`
+> dans `/etc/default/grub`, puis `grub2-mkconfig -o /boot/grub2/grub.cfg`.
+> Regarde ce que `grubby` a modifié dans `/boot/loader/entries/`. Le shell de
+> secours s'obtient avec `rd.break` puis `chroot /sysroot`.
 
-::: check
-Critère de succès : `/proc/cmdline` contient `console=ttyS0`, le menu GRUB est
-visible au moins 5 s, `serial-getty@ttyS0.service` est actif, `boot.svg` et
-`demarrage.md` existent.
-
-```bash
-bash check_M09_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `/proc/cmdline` contient `console=ttyS0`, le menu GRUB est
+> visible au moins 5 s, `serial-getty@ttyS0.service` est actif, `boot.svg` et
+> `demarrage.md` existent.
+>
+> ```bash
+> bash check_M09_01.sh
+> ```
 
 ---
 
-### **L9.2** — Passer `lab-adm` au noyau HWE et tenir `/boot` propre
+### <a id="l9-2"></a>**[L9.2](corrige.md#l9-2)** — Passer `lab-adm` au noyau HWE et tenir `/boot` propre
 
-::: contexte
-Un pilote dont l'équipe a besoin n'existe que dans un noyau plus récent que le
-6.8 livré avec Ubuntu 24.04. On te demande de passer `lab-adm` au noyau HWE
-(*Hardware Enablement*), de garder un noyau de repli, et de rédiger la règle
-d'exploitation « combien de noyaux garder, comment purger, que faire si `/boot`
-est plein ». Variante Rocky sur `lab-rhel`.
-:::
+> **Contexte**
+>
+> Un pilote dont l'équipe a besoin n'existe que dans un noyau plus récent que le
+> 6.8 livré avec Ubuntu 24.04. On te demande de passer `lab-adm` au noyau HWE
+> (*Hardware Enablement*), de garder un noyau de repli, et de rédiger la règle
+> d'exploitation « combien de noyaux garder, comment purger, que faire si `/boot`
+> est plein ». Variante Rocky sur `lab-rhel`.
 
 1. Inventaire avant : `uname -r`, paquets `linux-image-*` installés, contenu et
    taille de `/boot`, espace libre, entrée GRUB par défaut. Garde une copie dans
@@ -778,37 +797,39 @@ est plein ». Variante Rocky sur `lab-rhel`.
    `modinfo -F signer virtio_net`), et ce qu'il faudrait faire pour un module
    DKMS.
 
-::: rhel
-Sur `lab-rhel` : `grubby --info=ALL`, `grubby --default-kernel`,
-`dnf list installed 'kernel*'`, `installonly_limit` dans `/etc/dnf/dnf.conf`,
-`dnf install kernel` (ou `dnf check-update kernel` s'il n'y a rien de plus
-récent), `grubby --set-default`, `dnf remove --oldinstallonly`. Explique la
-différence entre `kernel`, `kernel-core` et `kernel-modules`, et vérifie que
-`dnf` refuse de retirer le noyau en cours.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel` : `grubby --info=ALL`, `grubby --default-kernel`,
+> `dnf list installed 'kernel*'`, `installonly_limit` dans `/etc/dnf/dnf.conf`,
+> `dnf install kernel` (ou `dnf check-update kernel` s'il n'y a rien de plus
+> récent), `grubby --set-default`, `dnf remove --oldinstallonly`. Explique la
+> différence entre `kernel`, `kernel-core` et `kernel-modules`, et vérifie que
+> `dnf` refuse de retirer le noyau en cours.
 
-::: check
-Critère de succès : `uname -r` n'est plus un 6.8, le métapaquet HWE est
-installé, au plus deux versions de noyau sont présentes, `/boot` a plus de
-30 % d'espace libre, et le rapport existe.
-
-```bash
-bash check_M09_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `uname -r` n'est plus un 6.8, le métapaquet HWE est
+> installé, au plus deux versions de noyau sont présentes, `/boot` a plus de
+> 30 % d'espace libre, et le rapport existe.
+>
+> ```bash
+> bash check_M09_02.sh
+> ```
 
 ---
 
-### **L9.3** — Modules : une interface de test, un module interdit, un
+### <a id="l9-3"></a>**[L9.3](corrige.md#l9-3)** — Modules : une interface de test, un module interdit, un
 inventaire virtio
 
-::: contexte
-L'équipe supervision veut une interface réseau « factice » persistante sur
-`lab-adm` (deux interfaces `dummy`, adresse fixe, pour tester des sondes sans
-toucher au réseau réel). L'audit demande aussi de bloquer un module inutile
-sur une VM et de documenter les pilotes virtio en jeu. Tout doit survivre à un
-reboot.
-:::
+> **Contexte**
+>
+> L'équipe supervision veut une interface réseau « factice » persistante sur
+> `lab-adm` (deux interfaces `dummy`, adresse fixe, pour tester des sondes sans
+> toucher au réseau réel). L'audit demande aussi de bloquer un module inutile
+> sur une VM et de documenter les pilotes virtio en jeu. Tout doit survivre à un
+> reboot.
 
 1. Inventaire virtio : liste les modules `virtio*` chargés, et pour `ens18` et
    `sda`, remonte du périphérique au pilote via `/sys` (`device/driver`).
@@ -834,33 +855,35 @@ reboot.
    leur contenu, différence `blacklist` / `install /bin/false`, et une note
    sur DKMS (à quoi ça sert, où voir l'état).
 
-::: rhel
-Sur `lab-rhel` : mêmes fichiers `modprobe.d` et `modules-load.d`. L'adresse
-va dans NetworkManager (`nmcli con add type dummy ifname dummy0 con-name
-dummy0 ip4 10.10.99.13/32`). Régénère l'initramfs avec `dracut -f` et vérifie
-avec `lsinitrd | grep modprobe.d`.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel` : mêmes fichiers `modprobe.d` et `modules-load.d`. L'adresse
+> va dans NetworkManager (`nmcli con add type dummy ifname dummy0 con-name
+> dummy0 ip4 10.10.99.13/32`). Régénère l'initramfs avec `dracut -f` et vérifie
+> avec `lsinitrd | grep modprobe.d`.
 
-::: check
-Critère de succès : après reboot, `dummy0` et `dummy1` existent,
-`numdummies` vaut 2, `dummy0` porte `10.10.99.10`, le module choisi est
-interdit dans `/etc/modprobe.d/` et absent de `lsmod`, le rapport existe.
-
-```bash
-bash check_M09_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : après reboot, `dummy0` et `dummy1` existent,
+> `numdummies` vaut 2, `dummy0` porte `10.10.99.10`, le module choisi est
+> interdit dans `/etc/modprobe.d/` et absent de `lsmod`, le rapport existe.
+>
+> ```bash
+> bash check_M09_03.sh
+> ```
 
 ---
 
-### **L9.4** — Un disque à chaud, un nom stable, un ordonnanceur adapté
+### <a id="l9-4"></a>**[L9.4](corrige.md#l9-4)** — Un disque à chaud, un nom stable, un ordonnanceur adapté
 
-::: contexte
-Ticket : « ajouter 1 Go de cache disque à `lab-adm`, sans redémarrer, avec un
-nom de périphérique qui ne change jamais, ordonnanceur E/S `none` sur ce
-disque, et documenter la procédure d'agrandissement ». Tu opères depuis le
-shell Proxmox et depuis `lab-adm`.
-:::
+> **Contexte**
+>
+> Ticket : « ajouter 1 Go de cache disque à `lab-adm`, sans redémarrer, avec un
+> nom de périphérique qui ne change jamais, ordonnanceur E/S `none` sur ce
+> disque, et documenter la procédure d'agrandissement ». Tu opères depuis le
+> shell Proxmox et depuis `lab-adm`.
 
 1. Ouvre un second terminal sur `lab-adm` avec `udevadm monitor -u -k`.
    Depuis Proxmox : `qm set 9001 --scsi1 local-lvm:1`. Observe les événements
@@ -891,25 +914,26 @@ shell Proxmox et depuis `lab-adm`.
    la règle écrite, la procédure hotplug + resize en 6 lignes, et une phrase
    sur `/dev/sdb` vs `by-id`.
 
-::: check
-Critère de succès : `/dev/disk/lab/cache` pointe sur un disque de 2 Go dont
-l'ordonnanceur est `none`, ce disque porte un système de fichiers ext4
-labellisé `cache`, la règle existe, le rapport existe.
-
-```bash
-bash check_M09_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `/dev/disk/lab/cache` pointe sur un disque de 2 Go dont
+> l'ordonnanceur est `none`, ce disque porte un système de fichiers ext4
+> labellisé `cache`, la règle existe, le rapport existe.
+>
+> ```bash
+> bash check_M09_04.sh
+> ```
 
 ---
 
-### **L9.5** — Un serveur de temps pour le lab, et une horloge qui dérive
+### <a id="l9-5"></a>**[L9.5](corrige.md#l9-5)** — Un serveur de temps pour le lab, et une horloge qui dérive
 
-::: contexte
-Les journaux des VM ne sont pas alignés et un certificat interne a été refusé
-« pas encore valide » sur `lab-web`. On te demande un serveur NTP de lab sur
-`lab-adm`, que toutes les VM l'utilisent, et un rapport sur la dérive.
-:::
+> **Contexte**
+>
+> Les journaux des VM ne sont pas alignés et un certificat interne a été refusé
+> « pas encore valide » sur `lab-web`. On te demande un serveur NTP de lab sur
+> `lab-adm`, que toutes les VM l'utilisent, et un rapport sur la dérive.
 
 1. Sur `lab-adm` : relève l'état initial avec `timedatectl` (quel service NTP ?
    synchronisé ?), l'heure matérielle, et le décalage éventuel. Installe
@@ -941,29 +965,31 @@ Les journaux des VM ne sont pas alignés et un certificat interne a été refus�
    avant/après, calcul du *slew*, et liste de ce qu'un décalage de 5 minutes
    casse.
 
-::: check
-Critère de succès : sur `lab-adm`, chrony est actif et écoute en UDP 123,
-`systemd-timesyncd` est inactif, la configuration autorise `10.10.10.0/24`,
-`chronyc tracking` indique `Leap status : Normal`, au moins un client est vu,
-le fuseau est `Europe/Paris`, le rapport existe.
-
-```bash
-bash check_M09_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : sur `lab-adm`, chrony est actif et écoute en UDP 123,
+> `systemd-timesyncd` est inactif, la configuration autorise `10.10.10.0/24`,
+> `chronyc tracking` indique `Leap status : Normal`, au moins un client est vu,
+> le fuseau est `Europe/Paris`, le rapport existe.
+>
+> ```bash
+> bash check_M09_05.sh
+> ```
 
 ---
 
 ## 9.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf09`. Trois pannes (BF9.3,
-BF9.4, BF9.5) te privent de SSH ou de TLS : la console série de L9.1
-(`qm terminal 9001`) est ton seul accès. Le snapshot de secours reste
-`snap-clean`, mais y revenir vaut échec de l'exercice.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf09`. Trois pannes (BF9.3,
+> BF9.4, BF9.5) te privent de SSH ou de TLS : la console série de L9.1
+> (`qm terminal 9001`) est ton seul accès. Le snapshot de secours reste
+> `snap-clean`, mais y revenir vaut échec de l'exercice.
 
-### **BF9.1** — « La mise à jour du noyau échoue et `apt` ne veut plus rien faire »
+### <a id="bf9-1"></a>**[BF9.1](corrige.md#bf9-1)** — « La mise à jour du noyau échoue et `apt` ne veut plus rien faire »
 
 ```bash
 sudo bash break_M09_01.sh
@@ -985,11 +1011,9 @@ paquet de ce qui n'appartient à rien, vérifier que `dpkg` n'a rien laissé à
 moitié configuré, régénérer l'initramfs, et laisser une règle qui empêche la
 récidive.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF9.2** — « Le swappiness revient à 60 à chaque reboot »
+### <a id="bf9-2"></a>**[BF9.2](corrige.md#bf9-2)** — « Le swappiness revient à 60 à chaque reboot »
 
 ```bash
 sudo bash break_M09_02.sh
@@ -1010,11 +1034,9 @@ valeurs ne tiennent pas (il y en a bien trois), corriger sans rien ajouter
 d'exotique, prouver avec `sysctl --system` que la lecture se fait dans le bon
 ordre, et vérifier après reboot.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF9.3** — « Depuis le reboot, la VM n'a plus de réseau »
+### <a id="bf9-3"></a>**[BF9.3](corrige.md#bf9-3)** — « Depuis le reboot, la VM n'a plus de réseau »
 
 ```bash
 sudo bash break_M09_03.sh
@@ -1039,11 +1061,9 @@ bloquait le chargement **automatique** alors qu'elle n'empêche pas un
 `modprobe` à la main, et pourquoi régénérer l'initramfs même si le réseau n'y
 est pas nécessaire.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-### **BF9.4** — « L'interface a changé de nom et Netplan ne trouve plus rien »
+### <a id="bf9-4"></a>**[BF9.4](corrige.md#bf9-4)** — « L'interface a changé de nom et Netplan ne trouve plus rien »
 
 ```bash
 sudo bash break_M09_04.sh
@@ -1065,11 +1085,9 @@ fichier `.link` et Netplan `set-name`), rétablir le réseau **sans reboot**
 d'abord, puis proprement au reboot. Proposer la bonne façon de figer un nom
 d'interface si l'équipe y tient vraiment.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF9.5** — « Tout ce qui est en HTTPS échoue depuis ce matin »
+### <a id="bf9-5"></a>**[BF9.5](corrige.md#bf9-5)** — « Tout ce qui est en HTTPS échoue depuis ce matin »
 
 ```bash
 sudo bash break_M09_05.sh
@@ -1091,24 +1109,22 @@ juste par le service de temps, vérifier TLS et `apt`, expliquer pourquoi
 l'heure matérielle avait aussi dérivé, et laisser une supervision minimale
 (commande ou métrique) qui aurait détecté le problème avant les utilisateurs.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
 ---
 
 ## 9.8 Défi du module ★★★
 
-**D9 — Une base noyau de production pour les VM Factura**
+<a id="d9"></a>**[D9](corrige.md#d9) — Une base noyau de production pour les VM Factura**
 
-::: contexte
-Les VM de l'application Factura (`lab-web`, `lab-db`) vont être clonées à
-partir d'un modèle. On te demande de définir sur `lab-adm` la « base noyau »
-que chaque VM devra embarquer, de la rendre vérifiable par un script, et de
-la documenter. Ansible la déploiera plus tard (module 23) : ce qui compte
-ici, ce sont les bons fichiers aux bons endroits et une justification par
-réglage.
-:::
+> **Contexte**
+>
+> Les VM de l'application Factura (`lab-web`, `lab-db`) vont être clonées à
+> partir d'un modèle. On te demande de définir sur `lab-adm` la « base noyau »
+> que chaque VM devra embarquer, de la rendre vérifiable par un script, et de
+> la documenter. Ansible la déploiera plus tard (module 23) : ce qui compte
+> ici, ce sont les bons fichiers aux bons endroits et une justification par
+> réglage.
 
 Cahier des charges :
 
@@ -1155,11 +1171,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M09_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M09_06.sh
+> ```
 
 ---
 
@@ -1192,3 +1209,9 @@ Pour aller plus loin :
 * Écris trois one-liners `bpftrace` : compter les `openat` par processus,
   afficher les `execve` avec leurs arguments, mesurer la latence des `read`
   sur `sda`. Compare le coût avec `strace` (module 19).
+
+<!-- nav:début -->
+---
+
+[← Module 08](../08-processus-systemd/README.md) · [Corrigé](corrige.md) · [Module 10 →](../10-paquets/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

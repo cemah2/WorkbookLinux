@@ -1,3 +1,11 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie I — Fondamentaux du shell et du système de fichiers › **Module 05** · corrigé  
+[← Module 04](../04-users-groups-sudo/corrige.md) · [Énoncé](README.md) · [Module 06 →](../06-vim-archives/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 05 — Corrigé
 
 Tous les chiffres de ce corrigé ont été obtenus sur le jeu de données produit par
@@ -8,236 +16,256 @@ Si un chiffre diffère, c'est ta commande qui est en cause, pas le hasard.
 
 ## 5.3 Quiz — QCM
 
-**Q5.1 — b)** Le pipeline renvoie 0.
+<a id="q5-1"></a>**[Q5.1](README.md#q5-1) — b)** Le pipeline renvoie 0.
 
-::: pourquoi
-Le code retour d'un pipeline est, par défaut, celui de son **dernier** maillon.
-`grep` renvoie bien 1 (« rien trouvé »), mais `wc -l` s'exécute sans problème,
-affiche `0` et sort en 0. C'est le mécanisme qui fait qu'un script de sauvegarde
-« réussit » toujours. Deux façons de voir la vérité :
+> [!NOTE]
+> **Pourquoi**
+>
+> Le code retour d'un pipeline est, par défaut, celui de son **dernier** maillon.
+> `grep` renvoie bien 1 (« rien trouvé »), mais `wc -l` s'exécute sans problème,
+> affiche `0` et sort en 0. C'est le mécanisme qui fait qu'un script de sauvegarde
+> « réussit » toujours. Deux façons de voir la vérité :
+>
+> ```bash
+> grep 'ERROR' /var/log/app.log | wc -l
+> echo "${PIPESTATUS[@]}"      # -> 1 0
+> set -o pipefail              # le pipeline renvoie alors 1
+> ```
+>
+> `PIPESTATUS` est un tableau volatil : il est écrasé par la commande suivante, donc
+> il faut le lire **immédiatement** après le pipeline.
 
-```bash
-grep 'ERROR' /var/log/app.log | wc -l
-echo "${PIPESTATUS[@]}"      # -> 1 0
-set -o pipefail              # le pipeline renvoie alors 1
-```
+<a id="q5-2"></a>**[Q5.2](README.md#q5-2) — b)** A journalise les deux flux, B seulement stdout.
 
-`PIPESTATUS` est un tableau volatil : il est écrasé par la commande suivante, donc
-il faut le lire **immédiatement** après le pipeline.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le tube est construit avant que bash n'interprète les redirections du dernier
+> maillon. Dans A, `2>&1` est appliqué à `./maj.sh` : son stderr est dupliqué vers
+> son stdout, qui est déjà le tube. Dans B, `2>&1` porte sur `tee` : ça redirige
+> stderr **de tee** vers le terminal, ce qui ne change rien à `maj.sh`, dont les
+> erreurs continuent d'aller à l'écran sans passer par le fichier.
 
-**Q5.2 — b)** A journalise les deux flux, B seulement stdout.
+<a id="q5-3"></a>**[Q5.3](README.md#q5-3) — c)** Quatre lignes : `1 b`, `1 a`, `1 b`, `1 a`.
 
-::: pourquoi
-Le tube est construit avant que bash n'interprète les redirections du dernier
-maillon. Dans A, `2>&1` est appliqué à `./maj.sh` : son stderr est dupliqué vers
-son stdout, qui est déjà le tube. Dans B, `2>&1` porte sur `tee` : ça redirige
-stderr **de tee** vers le terminal, ce qui ne change rien à `maj.sh`, dont les
-erreurs continuent d'aller à l'écran sans passer par le fichier.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `uniq` ne compare que des lignes **adjacentes** : c'est un filtre à une ligne de
+> mémoire, pas un moteur de déduplication globale. Aucune ligne n'est identique à sa
+> voisine ici, donc chaque groupe a un effectif de 1. Avec `sort` devant, on obtient
+> `2 a` et `2 b`. C'est pour ça que le top N s'écrit toujours
+> `… | sort | uniq -c | sort -rn | head`.
 
-**Q5.3 — c)** Quatre lignes : `1 b`, `1 a`, `1 b`, `1 a`.
+<a id="q5-4"></a>**[Q5.4](README.md#q5-4) — b)** `-k9` va du champ 9 à la fin de la ligne.
 
-::: pourquoi
-`uniq` ne compare que des lignes **adjacentes** : c'est un filtre à une ligne de
-mémoire, pas un moteur de déduplication globale. Aucune ligne n'est identique à sa
-voisine ici, donc chaque groupe a un effectif de 1. Avec `sort` devant, on obtient
-`2 a` et `2 b`. C'est pour ça que le top N s'écrit toujours
-`… | sort | uniq -c | sort -rn | head`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-kN` sans borne de fin signifie « de la position N jusqu'à la fin de
+> l'enregistrement ». Sur `serveurs.csv`, `-k9` fabrique donc la clé
+> `francfort,153.60` et compare l'ensemble comme du texte : à site égal, les serveurs
+> sortent classés par coût **lexicographique** (`153.60` avant `168.00`). Avec
+> `-k9,9` la clé est `francfort` seul, et à égalité GNU sort applique sa comparaison
+> de dernier recours sur la ligne entière : le classement se fait alors par hostname.
+> Vérifie :
+>
+> ```bash
+> diff <(sort -t, -k9,9 serveurs.csv) <(sort -t, -k9 serveurs.csv)   # non vide
+> ```
 
-**Q5.4 — b)** `-k9` va du champ 9 à la fin de la ligne.
+> [!WARNING]
+> **Piège**
+>
+> Le second piège de ce fichier est son en-tête, trié avec les données. Avec `-nr`,
+> la ligne `hostname,env,…` vaut 0 et finit en bas, ce qui passe inaperçu — jusqu'au
+> jour où tu tries en ordre croissant. Prends l'habitude de `tail -n +2 fichier`.
 
-::: pourquoi
-`-kN` sans borne de fin signifie « de la position N jusqu'à la fin de
-l'enregistrement ». Sur `serveurs.csv`, `-k9` fabrique donc la clé
-`francfort,153.60` et compare l'ensemble comme du texte : à site égal, les serveurs
-sortent classés par coût **lexicographique** (`153.60` avant `168.00`). Avec
-`-k9,9` la clé est `francfort` seul, et à égalité GNU sort applique sa comparaison
-de dernier recours sur la ligne entière : le classement se fait alors par hostname.
-Vérifie :
+<a id="q5-5"></a>**[Q5.5](README.md#q5-5) — c)** `awk '$1 == "10.10.10.14" { n++ } END { print n+0 }'`.
 
-```bash
-diff <(sort -t, -k9,9 serveurs.csv) <(sort -t, -k9 serveurs.csv)   # non vide
-```
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> C'est la seule forme qui compare le **champ** attendu à une valeur exacte. Les trois
+> autres cherchent une sous-chaîne n'importe où dans la ligne — or une IP peut aussi
+> apparaître dans le referer ou dans l'URL. En prime, dans a) et d) les points ne sont
+> pas échappés : ce sont des méta-caractères qui matchent n'importe quel caractère,
+> donc `10x10y10z14` conviendrait. Sur notre jeu de données les quatre renvoient 1212,
+> et c'est exactement ce qui rend l'erreur dangereuse : elle ne se voit pas.
 
-::: piege
-Le second piège de ce fichier est son en-tête, trié avec les données. Avec `-nr`,
-la ligne `hostname,env,…` vaut 0 et finit en bas, ce qui passe inaperçu — jusqu'au
-jour où tu tries en ordre croissant. Prends l'habitude de `tail -n +2 fichier`.
-:::
+<a id="q5-6"></a>**[Q5.6](README.md#q5-6) — b)** `GET /panier`.
 
-**Q5.5 — c)** `awk '$1 == "10.10.10.14" { n++ } END { print n+0 }'`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-o` n'affiche que la portion de ligne qui correspond au motif, une occurrence par
+> ligne de sortie. Le motif `GET [^ ]*` commence au `G` (le guillemet qui précède n'en
+> fait pas partie) et `[^ ]*` s'arrête au premier espace. C'est la combinaison qui
+> sert à extraire un champ quand la position varie :
+> `grep -oE 'from [0-9.]+'` sur un journal SSH, par exemple.
+>
+> À ne pas confondre avec `-c`, qui compte les **lignes** contenant au moins une
+> correspondance : une ligne portant `ERROR ERROR` compte pour 1. Pour compter les
+> occurrences, c'est `grep -o motif | wc -l`.
 
-::: pourquoi
-C'est la seule forme qui compare le **champ** attendu à une valeur exacte. Les trois
-autres cherchent une sous-chaîne n'importe où dans la ligne — or une IP peut aussi
-apparaître dans le referer ou dans l'URL. En prime, dans a) et d) les points ne sont
-pas échappés : ce sont des méta-caractères qui matchent n'importe quel caractère,
-donc `10x10y10z14` conviendrait. Sur notre jeu de données les quatre renvoient 1212,
-et c'est exactement ce qui rend l'erreur dangereuse : elle ne se voit pas.
-:::
+<a id="q5-7"></a>**[Q5.7](README.md#q5-7) — b)** `sed -i.bak 's/30s/60s/g' shop.conf`.
 
-**Q5.6 — b)** `GET /panier`.
+> [!NOTE]
+> **Pourquoi**
+>
+> `-i` prend son suffixe **collé** (`-i.bak`, jamais `-i .bak` sous GNU sed), et le
+> drapeau `g` est indispensable pour remplacer toutes les occurrences d'une ligne, pas
+> seulement la première. La réponse a) oublie `g`. La c) modifie le fichier de
+> sauvegarde. La d) invente une option inexistante.
 
-::: pourquoi
-`-o` n'affiche que la portion de ligne qui correspond au motif, une occurrence par
-ligne de sortie. Le motif `GET [^ ]*` commence au `G` (le guillemet qui précède n'en
-fait pas partie) et `[^ ]*` s'arrête au premier espace. C'est la combinaison qui
-sert à extraire un champ quand la position varie :
-`grep -oE 'from [0-9.]+'` sur un journal SSH, par exemple.
+> [!WARNING]
+> **Piège**
+>
+> `sed -i` sans suffixe réécrit le fichier **en place et sans filet** : le fichier
+> d'origine n'existe plus, et si ton expression est fausse, tu l'apprends en
+> production. Sur un fichier que tu ne peux pas régénérer, teste toujours sans `-i`
+> d'abord, puis applique avec `-i.bak`.
 
-À ne pas confondre avec `-c`, qui compte les **lignes** contenant au moins une
-correspondance : une ligne portant `ERROR ERROR` compte pour 1. Pour compter les
-occurrences, c'est `grep -o motif | wc -l`.
-:::
-
-**Q5.7 — b)** `sed -i.bak 's/30s/60s/g' shop.conf`.
-
-::: pourquoi
-`-i` prend son suffixe **collé** (`-i.bak`, jamais `-i .bak` sous GNU sed), et le
-drapeau `g` est indispensable pour remplacer toutes les occurrences d'une ligne, pas
-seulement la première. La réponse a) oublie `g`. La c) modifie le fichier de
-sauvegarde. La d) invente une option inexistante.
-:::
-
-::: piege
-`sed -i` sans suffixe réécrit le fichier **en place et sans filet** : le fichier
-d'origine n'existe plus, et si ton expression est fausse, tu l'apprends en
-production. Sur un fichier que tu ne peux pas régénérer, teste toujours sans `-i`
-d'abord, puis applique avec `-i.bak`.
-:::
-
-**Q5.8 — b)** Les lignes entre `server {` et la première `}` en début de ligne,
+<a id="q5-8"></a>**[Q5.8](README.md#q5-8) — b)** Les lignes entre `server {` et la première `}` en début de ligne,
 bornes incluses.
 
-::: pourquoi
-`sed` accepte un adressage `/motif1/,/motif2/` : la plage s'ouvre sur la ligne qui
-correspond à `motif1` et se referme sur la **première** ligne suivante qui
-correspond à `motif2`, les deux incluses. `-n` coupe l'affichage automatique et `p`
-n'imprime que la plage. Si `motif2` n'apparaît jamais, la plage court jusqu'à la fin
-du fichier — c'est le comportement, pas un bug.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `sed` accepte un adressage `/motif1/,/motif2/` : la plage s'ouvre sur la ligne qui
+> correspond à `motif1` et se referme sur la **première** ligne suivante qui
+> correspond à `motif2`, les deux incluses. `-n` coupe l'affichage automatique et `p`
+> n'imprime que la plage. Si `motif2` n'apparaît jamais, la plage court jusqu'à la fin
+> du fichier — c'est le comportement, pas un bug.
 
-**Q5.9 — c)** `4`.
+<a id="q5-9"></a>**[Q5.9](README.md#q5-9) — c)** `4`.
 
-::: pourquoi
-`s` est un tableau associatif indexé par la valeur du premier champ. Les lignes
-`a 1` et `a 3` alimentent la même case : `s["a"] = 1 + 3 = 4`. En awk, un tableau ni
-une variable ne se déclarent : toute case inconnue vaut la chaîne vide, qui vaut 0
-en contexte numérique. C'est ce mécanisme qui rend l'accumulateur par clé aussi
-court à écrire — et c'est la structure la plus utile de tout le module.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `s` est un tableau associatif indexé par la valeur du premier champ. Les lignes
+> `a 1` et `a 3` alimentent la même case : `s["a"] = 1 + 3 = 4`. En awk, un tableau ni
+> une variable ne se déclarent : toute case inconnue vaut la chaîne vide, qui vaut 0
+> en contexte numérique. C'est ce mécanisme qui rend l'accumulateur par clé aussi
+> court à écrire — et c'est la structure la plus utile de tout le module.
 
-**Q5.10 — b)** `NR` vaut 5, `FNR` vaut 2.
+<a id="q5-10"></a>**[Q5.10](README.md#q5-10) — b)** `NR` vaut 5, `FNR` vaut 2.
 
-::: pourquoi
-`NR` compte les enregistrements depuis le début de l'exécution, tous fichiers
-confondus ; `FNR` repart à 1 à chaque nouveau fichier. L'égalité `NR == FNR` n'est
-donc vraie que pendant la lecture du **premier** fichier : c'est le test qui permet
-de charger une table de correspondance avant de traiter les données.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `NR` compte les enregistrements depuis le début de l'exécution, tous fichiers
+> confondus ; `FNR` repart à 1 à chaque nouveau fichier. L'égalité `NR == FNR` n'est
+> donc vraie que pendant la lecture du **premier** fichier : c'est le test qui permet
+> de charger une table de correspondance avant de traiter les données.
 
-**Q5.11 — b)** `awk` ne connaît pas le quoting CSV.
+<a id="q5-11"></a>**[Q5.11](README.md#q5-11) — b)** `awk` ne connaît pas le quoting CSV.
 
-::: pourquoi
-`-F,` découpe sur chaque virgule, sans savoir qu'une virgule entre guillemets fait
-partie de la valeur. Sur `serveurs-piege.csv` :
+> [!NOTE]
+> **Pourquoi**
+>
+> `-F,` découpe sur chaque virgule, sans savoir qu'une virgule entre guillemets fait
+> partie de la valeur. Sur `serveurs-piege.csv` :
+>
+> ```bash
+> awk -F, '{ print $2 }' serveurs-piege.csv
+> proprietaire
+> "Equipe Paiement
+> "Equipe Data"
+> "Equipe Front
+> ```
+>
+> Pour du CSV réellement quoté, il faut un vrai parseur (`python3 -c 'import csv…'`,
+> `mlr --icsv`, `csvcut` du paquet `csvkit`). `awk -F,` reste parfait pour du CSV
+> **que tu génères toi-même** et dont tu garantis qu'aucun champ ne contient de
+> virgule — ce qui est le cas de `serveurs.csv`.
 
-```bash
-awk -F, '{ print $2 }' serveurs-piege.csv
-proprietaire
-"Equipe Paiement
-"Equipe Data"
-"Equipe Front
-```
+<a id="q5-12"></a>**[Q5.12](README.md#q5-12) — b)** `jq -r '.results[] | select(.env=="prod") | .hostname' f.json`.
 
-Pour du CSV réellement quoté, il faut un vrai parseur (`python3 -c 'import csv…'`,
-`mlr --icsv`, `csvcut` du paquet `csvkit`). `awk -F,` reste parfait pour du CSV
-**que tu génères toi-même** et dont tu garantis qu'aucun champ ne contient de
-virgule — ce qui est le cas de `serveurs.csv`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `.results[]` itère sur les éléments du tableau ; sans les crochets (réponse c), on
+> applique `select` à un tableau et non à chaque objet. La réponse d) applique le
+> `select` à une chaîne, qui n'a pas de champ `.env`. `-r` (raw) supprime les
+> guillemets de sortie : indispensable dès que le résultat alimente une autre
+> commande.
 
-**Q5.12 — b)** `jq -r '.results[] | select(.env=="prod") | .hostname' f.json`.
+<a id="q5-13"></a>**[Q5.13](README.md#q5-13) — b)** `file script.sh`.
 
-::: pourquoi
-`.results[]` itère sur les éléments du tableau ; sans les crochets (réponse c), on
-applique `select` à un tableau et non à chaque objet. La réponse d) applique le
-`select` à une chaîne, qui n'a pas de champ `.env`. `-r` (raw) supprime les
-guillemets de sortie : indispensable dès que le résultat alimente une autre
-commande.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `file` répond `Bourne-Again shell script, ASCII text executable, with CRLF line
+> terminators` : le diagnostic tient en une ligne. `bash -x` montre l'erreur mais pas
+> sa cause, `head -1` n'affiche rien de visible (le `\r` est invisible), `stat` ne dit
+> rien du contenu. L'autre commande qui tranche est `cat -A`, qui affiche `^M` en fin
+> de ligne.
 
-**Q5.13 — b)** `file script.sh`.
-
-::: pourquoi
-`file` répond `Bourne-Again shell script, ASCII text executable, with CRLF line
-terminators` : le diagnostic tient en une ligne. `bash -x` montre l'erreur mais pas
-sa cause, `head -1` n'affiche rien de visible (le `\r` est invisible), `stat` ne dit
-rien du contenu. L'autre commande qui tranche est `cat -A`, qui affiche `^M` en fin
-de ligne.
-:::
-
-**Q5.14 — a) et c)** stderr ne traverse pas le tube ; `cmd1 2>&1 | cmd2` l'y fait
+<a id="q5-14"></a>**[Q5.14](README.md#q5-14) — a) et c)** stderr ne traverse pas le tube ; `cmd1 2>&1 | cmd2` l'y fait
 entrer.
 
-::: pourquoi
-Un tube relie le fd 1 de gauche au fd 0 de droite. Le fd 2 reste attaché à sa
-destination d'origine, en général le terminal. Pour capturer les erreurs, il faut
-les dupliquer vers le fd 1 **de la commande de gauche** : `cmd1 2>&1 | cmd2`.
-Dans la réponse d), la redirection porte sur `cmd2` : elle ne change rien à ce que
-`cmd1` envoie dans le tube.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un tube relie le fd 1 de gauche au fd 0 de droite. Le fd 2 reste attaché à sa
+> destination d'origine, en général le terminal. Pour capturer les erreurs, il faut
+> les dupliquer vers le fd 1 **de la commande de gauche** : `cmd1 2>&1 | cmd2`.
+> Dans la réponse d), la redirection porte sur `cmd2` : elle ne change rien à ce que
+> `cmd1` envoie dans le tube.
 
-**Q5.15 — b)** `comm -23 hosts-cmdb.txt hosts-supervision.txt`.
+<a id="q5-15"></a>**[Q5.15](README.md#q5-15) — b)** `comm -23 hosts-cmdb.txt hosts-supervision.txt`.
 
-::: pourquoi
-`comm` produit trois colonnes : ce qui est propre au fichier 1, ce qui est propre au
-fichier 2, ce qui est commun. Les options **suppriment** les colonnes : `-23`
-supprime les colonnes 2 et 3, il ne reste que « propre au fichier 1 ». `-13` donne
-l'inverse, `-12` les communs. Condition absolue : les deux fichiers doivent être
-triés avec le **même** ordre de tri, sinon `comm` produit des résultats faux en
-silence (il se contente d'avertir sur stderr).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `comm` produit trois colonnes : ce qui est propre au fichier 1, ce qui est propre au
+> fichier 2, ce qui est commun. Les options **suppriment** les colonnes : `-23`
+> supprime les colonnes 2 et 3, il ne reste que « propre au fichier 1 ». `-13` donne
+> l'inverse, `-12` les communs. Condition absolue : les deux fichiers doivent être
+> triés avec le **même** ordre de tri, sinon `comm` produit des résultats faux en
+> silence (il se contente d'avertir sur stderr).
 
-**Q5.16 — b) et c)** `-P 4` lance jusqu'à 4 processus en parallèle, et leurs sorties
+<a id="q5-16"></a>**[Q5.16](README.md#q5-16) — b) et c)** `-P 4` lance jusqu'à 4 processus en parallèle, et leurs sorties
 peuvent s'entremêler.
 
-::: pourquoi
-`-n 20` fixe le nombre d'arguments par appel, `-P 4` le nombre d'appels simultanés.
-Les deux se combinent : 4 `gzip` tournent en même temps, chacun sur 20 fichiers.
-L'ordre de traitement n'est plus garanti, et si les commandes écrivent sur stdout,
-les lignes de plusieurs processus peuvent se mélanger. Sur du calcul pur, `-P
-$(nproc)` divise le temps d'exécution par le nombre de cœurs ; sur du disque, ça
-peut au contraire tout ralentir.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-n 20` fixe le nombre d'arguments par appel, `-P 4` le nombre d'appels simultanés.
+> Les deux se combinent : 4 `gzip` tournent en même temps, chacun sur 20 fichiers.
+> L'ordre de traitement n'est plus garanti, et si les commandes écrivent sur stdout,
+> les lignes de plusieurs processus peuvent se mélanger. Sur du calcul pur, `-P
+> $(nproc)` divise le temps d'exécution par le nombre de cœurs ; sur du disque, ça
+> peut au contraire tout ralentir.
 
-**Q5.17 — b)** Avec `<<'EOF'`, rien n'est développé.
+<a id="q5-17"></a>**[Q5.17](README.md#q5-17) — b)** Avec `<<'EOF'`, rien n'est développé.
 
-::: pourquoi
-Quoter le délimiteur (`<<'EOF'`, `<<"EOF"` ou `<<\EOF`) désactive l'expansion des
-variables, des substitutions de commande et de l'arithmétique dans le corps du
-here-doc. C'est ce qu'on veut pour écrire un script, une configuration contenant des
-`$variables` littérales, ou un mot de passe. La suppression des tabulations de tête,
-c'est `<<-`, et ça ne marche qu'avec de vraies tabulations, pas des espaces.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Quoter le délimiteur (`<<'EOF'`, `<<"EOF"` ou `<<\EOF`) désactive l'expansion des
+> variables, des substitutions de commande et de l'arithmétique dans le corps du
+> here-doc. C'est ce qu'on veut pour écrire un script, une configuration contenant des
+> `$variables` littérales, ou un mot de passe. La suppression des tabulations de tête,
+> c'est `<<-`, et ça ne marche qu'avec de vraies tabulations, pas des espaces.
 
-**Q5.18 — b)** `diff <(ssh lab-web dpkg -l) <(ssh lab-db dpkg -l)`.
+<a id="q5-18"></a>**[Q5.18](README.md#q5-18) — b)** `diff <(ssh lab-web dpkg -l) <(ssh lab-db dpkg -l)`.
 
-::: pourquoi
-`diff` attend des **chemins de fichiers**. `$(cmd)` remplace la commande par sa
-sortie, que `diff` interprète alors comme des noms de fichiers : réponse a) exclue.
-`<<<` alimente stdin, dont `diff` n'a qu'un exemplaire : réponse c) exclue. La
-substitution de processus `<(cmd)` crée un descripteur `/dev/fd/63` que `diff`
-ouvre comme un fichier ordinaire. La réponse d) ne donne qu'un seul opérande à `diff`, qui refuse (`missing operand`) : un tube n'est pas un argument, il faudrait écrire explicitement `diff` `-` `<(…)`, où `-` désigne stdin.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `diff` attend des **chemins de fichiers**. `$(cmd)` remplace la commande par sa
+> sortie, que `diff` interprète alors comme des noms de fichiers : réponse a) exclue.
+> `<<<` alimente stdin, dont `diff` n'a qu'un exemplaire : réponse c) exclue. La
+> substitution de processus `<(cmd)` crée un descripteur `/dev/fd/63` que `diff`
+> ouvre comme un fichier ordinaire. La réponse d) ne donne qu'un seul opérande à `diff`, qui refuse (`missing operand`) : un tube n'est pas un argument, il faudrait écrire explicitement `diff` `-` `<(…)`, où `-` désigne stdin.
 
 ---
 
 ## 5.4 Quiz — questions ouvertes
 
-**QO5.1** — *Différence entre `cmd > f 2>&1` et `cmd 2>&1 > f`.*
+<a id="qo5-1"></a>**[QO5.1](README.md#qo5-1)** — *Différence entre `cmd > f 2>&1` et `cmd 2>&1 > f`.*
 
 Bash lit les redirections **de gauche à droite** et les applique dans l'ordre.
 
@@ -250,20 +278,21 @@ cmd > f 2>&1        cmd 2>&1 > f
   résultat : 1 -> f, 2 -> f     résultat : 1 -> f, 2 -> terminal
 ```
 
-::: pourquoi
-`2>&1` ne signifie pas « fusionne 2 et 1 » mais « fais pointer le fd 2 vers la
-destination **actuelle** du fd 1 ». C'est une copie de descripteur (`dup2`) faite au
-moment de la lecture, pas un lien permanent : changer le fd 1 après coup ne change
-pas le fd 2.
+> [!NOTE]
+> **Pourquoi**
+>
+> `2>&1` ne signifie pas « fusionne 2 et 1 » mais « fais pointer le fd 2 vers la
+> destination **actuelle** du fd 1 ». C'est une copie de descripteur (`dup2`) faite au
+> moment de la lecture, pas un lien permanent : changer le fd 1 après coup ne change
+> pas le fd 2.
+>
+> Cas réel où `cmd 2>&1 > f` est exactement ce qu'on veut : un traitement dont la
+> sortie utile est volumineuse et doit aller dans un fichier, pendant que les
+> avertissements doivent rester visibles pour l'opérateur (ou être capturés par un
+> autre pipeline). Exemple : `pg_dump base 2>&1 > dump.sql | mail -s 'erreurs' ops@`
+> envoie le dump dans le fichier et les erreurs dans le tube.
 
-Cas réel où `cmd 2>&1 > f` est exactement ce qu'on veut : un traitement dont la
-sortie utile est volumineuse et doit aller dans un fichier, pendant que les
-avertissements doivent rester visibles pour l'opérateur (ou être capturés par un
-autre pipeline). Exemple : `pg_dump base 2>&1 > dump.sql | mail -s 'erreurs' ops@`
-envoie le dump dans le fichier et les erreurs dans le tube.
-:::
-
-**QO5.2** — *« Notre sauvegarde se termine toujours en succès. »*
+<a id="qo5-2"></a>**[QO5.2](README.md#qo5-2)** — *« Notre sauvegarde se termine toujours en succès. »*
 
 Le pipeline `pg_dump … | gzip > dump.sql.gz` renvoie le code de `gzip`. Si
 `pg_dump` échoue, il écrit une erreur sur stderr et sort en 1, mais `gzip` compresse
@@ -285,14 +314,15 @@ codes=( "${PIPESTATUS[@]}" )
 [ "${codes[0]}" -eq 0 ] || { echo "pg_dump a échoué" >&2; exit 1; }
 ```
 
-::: pourquoi
-La troisième protection, complémentaire, est de vérifier le **résultat** et pas
-seulement le code retour : taille minimale de l'archive, `gzip -t` pour tester
-l'intégrité, et restauration périodique. Un code retour ne prouve pas qu'une
-sauvegarde est restaurable.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La troisième protection, complémentaire, est de vérifier le **résultat** et pas
+> seulement le code retour : taille minimale de l'archive, `gzip -t` pour tester
+> l'intégrité, et restauration périodique. Un code retour ne prouve pas qu'une
+> sauvegarde est restaurable.
 
-**QO5.3** — *Extraire la troisième colonne : `grep`, `sed` ou `awk` ?*
+<a id="qo5-3"></a>**[QO5.3](README.md#qo5-3)** — *Extraire la troisième colonne : `grep`, `sed` ou `awk` ?*
 
 ```bash
 cut -d, -f3 f.csv                  # le plus simple, séparateur fixe
@@ -301,17 +331,18 @@ sed -E 's/^([^,]*,){2}([^,]*).*/\2/' f.csv   # possible, illisible
 grep -oE '^([^,]*,){2}[^,]*' f.csv # extrait 3 colonnes, pas LA 3e
 ```
 
-::: pourquoi
-`grep` n'est pas un extracteur de colonnes : il travaille sur des correspondances,
-pas sur une structure, et il faut se battre pour isoler un champ. `sed` sait le
-faire avec des groupes, mais l'expression devient illisible dès qu'on change de
-numéro de colonne. `awk` a été écrit pour ça : les champs sont une notion native,
-le code reste lisible, et on peut filtrer et calculer dans la même passe. En revue
-de code, j'interdis la version `sed` à groupes multiples : elle est juste, mais
-personne ne saura la modifier dans six mois.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `grep` n'est pas un extracteur de colonnes : il travaille sur des correspondances,
+> pas sur une structure, et il faut se battre pour isoler un champ. `sed` sait le
+> faire avec des groupes, mais l'expression devient illisible dès qu'on change de
+> numéro de colonne. `awk` a été écrit pour ça : les champs sont une notion native,
+> le code reste lisible, et on peut filtrer et calculer dans la même passe. En revue
+> de code, j'interdis la version `sed` à groupes multiples : elle est juste, mais
+> personne ne saura la modifier dans six mois.
 
-**QO5.4** — *Décortiquer `awk '{print $1}' | sort | uniq -c | sort -rn | head -10`.*
+<a id="qo5-4"></a>**[QO5.4](README.md#qo5-4)** — *Décortiquer `awk '{print $1}' | sort | uniq -c | sort -rn | head -10`.*
 
 | Maillon | Rôle |
 |---|---|
@@ -324,29 +355,30 @@ personne ne saura la modifier dans six mois.
 Sans le premier `sort`, `uniq -c` ne voit que des voisins et compte des groupes de
 1 : le résultat ressemble au journal d'origine, avec un `1` devant chaque ligne.
 
-::: pourquoi
-Coût : `sort` doit matérialiser l'ensemble des clés, il déborde sur disque
-(`/tmp`) au-delà de sa mémoire tampon, ce qui écroule les performances sur 40 Go.
-Alternatives : compter directement en mémoire avec un tableau associatif — une
-seule passe, mémoire proportionnelle au nombre d'IP distinctes et non au nombre de
-lignes :
+> [!NOTE]
+> **Pourquoi**
+>
+> Coût : `sort` doit matérialiser l'ensemble des clés, il déborde sur disque
+> (`/tmp`) au-delà de sa mémoire tampon, ce qui écroule les performances sur 40 Go.
+> Alternatives : compter directement en mémoire avec un tableau associatif — une
+> seule passe, mémoire proportionnelle au nombre d'IP distinctes et non au nombre de
+> lignes :
+>
+> ```bash
+> awk '{ n[$1]++ } END { for (k in n) print n[k], k }' access.log \
+>   | sort -rn | head
+> ```
+>
+> Et si le volume l'impose : `LC_ALL=C sort -S 2G --parallel=4`, ou un outil
+> distribué. `LC_ALL=C` seul accélère souvent `sort` et `grep` d'un facteur 2 à 5,
+> parce qu'on sort des comparaisons UTF-8.
+>
+> Dans la même logique, on n'ouvre jamais un pipeline par `cat fichier |` : `grep`,
+> `awk` et `sort` savent ouvrir un fichier. Le `cat` ajoute un processus et un tube,
+> fait perdre à `grep` le nom du fichier dans ses messages, et sur plusieurs
+> gigaoctets recopie inutilement toutes les données en espace utilisateur.
 
-```bash
-awk '{ n[$1]++ } END { for (k in n) print n[k], k }' access.log \
-  | sort -rn | head
-```
-
-Et si le volume l'impose : `LC_ALL=C sort -S 2G --parallel=4`, ou un outil
-distribué. `LC_ALL=C` seul accélère souvent `sort` et `grep` d'un facteur 2 à 5,
-parce qu'on sort des comparaisons UTF-8.
-
-Dans la même logique, on n'ouvre jamais un pipeline par `cat fichier |` : `grep`,
-`awk` et `sort` savent ouvrir un fichier. Le `cat` ajoute un processus et un tube,
-fait perdre à `grep` le nom du fichier dans ses messages, et sur plusieurs
-gigaoctets recopie inutilement toutes les données en espace utilisateur.
-:::
-
-**QO5.5** — *Un `sort -k2 -n` incohérent en production.*
+<a id="qo5-5"></a>**[QO5.5](README.md#qo5-5)** — *Un `sort -k2 -n` incohérent en production.*
 
 1. **La locale.** `LC_ALL` diffère entre ton poste et le serveur : l'ordre de
    collation change, les séparateurs de milliers aussi. Commande qui tranche :
@@ -357,15 +389,16 @@ gigaoctets recopie inutilement toutes les données en espace utilisateur.
 3. **Le séparateur.** Sans `-t`, un champ commence à la transition non-blanc → blanc et **inclut** ses blancs de tête (sauf avec `-b`) ; avec `-t$'\t'`, un fichier dont les colonnes ont été alignées à
    l'espace n'a plus qu'un champ. Commande : `cat -A fichier | head`.
 
-::: pourquoi
-Un quatrième suspect classique : des valeurs non numériques dans la colonne (`N/A`,
-champ vide, `1,5` avec une virgule décimale). `sort -n` les traite comme 0 et les
-regroupe en tête, sans avertissement. `grep -vE '^[0-9.]+$'` sur la colonne les
-débusque. En script, fixe explicitement `LC_ALL=C` : c'est la seule locale
-reproductible.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un quatrième suspect classique : des valeurs non numériques dans la colonne (`N/A`,
+> champ vide, `1,5` avec une virgule décimale). `sort -n` les traite comme 0 et les
+> regroupe en tête, sans avertissement. `grep -vE '^[0-9.]+$'` sur la colonne les
+> débusque. En script, fixe explicitement `LC_ALL=C` : c'est la seule locale
+> reproductible.
 
-**QO5.6** — *`$(cmd)`, `<<<`, `<(cmd)`.*
+<a id="qo5-6"></a>**[QO5.6](README.md#qo5-6)** — *`$(cmd)`, `<<<`, `<(cmd)`.*
 
 | Forme | Ce qu'elle produit | Cas où elle est seule possible |
 |---|---|---|
@@ -373,16 +406,17 @@ reproductible.
 | `<<< "$v"` | un **flux** sur stdin | `read a b <<< "$ligne"` : on nourrit stdin |
 | `<(cmd)` | un **chemin** `/dev/fd/63` | `diff <(a) <(b)` : deux fichiers en même temps |
 
-::: pourquoi
-`$(cmd)` ne convient pas à `diff` : une commande qui attend un nom de fichier
-recevrait le contenu. `<<<` ne convient pas non plus, car une commande n'a qu'un
-stdin. Inversement, `<(cmd)` ne convient pas quand on veut une valeur dans une
-variable. Deux détails qui font la différence en entretien : `$(cmd)` supprime les
-retours à la ligne finaux, et `<<< "$v"` ajoute un `\n` final. `<(…)` est du bash,
-pas du POSIX : sous `dash`, il faut des fichiers temporaires ou des FIFO.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `$(cmd)` ne convient pas à `diff` : une commande qui attend un nom de fichier
+> recevrait le contenu. `<<<` ne convient pas non plus, car une commande n'a qu'un
+> stdin. Inversement, `<(cmd)` ne convient pas quand on veut une valeur dans une
+> variable. Deux détails qui font la différence en entretien : `$(cmd)` supprime les
+> retours à la ligne finaux, et `<<< "$v"` ajoute un `\n` final. `<(…)` est du bash,
+> pas du POSIX : sous `dash`, il faut des fichiers temporaires ou des FIFO.
 
-**QO5.7** — *Pourquoi refuser `grep -o '"version":"[^"]*"'` sur du JSON.*
+<a id="qo5-7"></a>**[QO5.7](README.md#qo5-7)** — *Pourquoi refuser `grep -o '"version":"[^"]*"'` sur du JSON.*
 
 Trois cas concrets qui cassent :
 
@@ -396,16 +430,17 @@ Trois cas concrets qui cassent :
 Proposition : `jq -r '.version'`, ou `jq -r '.results[].agent.version'` si c'est
 imbriqué.
 
-::: pourquoi
-La règle générale : un format structuré se lit avec un outil qui connaît sa
-grammaire. `grep` et `sed` ne voient que des lignes de texte, et tout format qui
-autorise des retours à la ligne libres, des espaces libres et de l'échappement leur
-échappe. Cela vaut pour JSON (`jq`), YAML (`yq`), XML (`xmlstarlet`), CSV quoté
-(`csvkit`, `mlr`). Le jour où l'API change son indentation, le script à `grep`
-tombe en panne sans erreur : il renvoie du vide, et le vide se propage.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La règle générale : un format structuré se lit avec un outil qui connaît sa
+> grammaire. `grep` et `sed` ne voient que des lignes de texte, et tout format qui
+> autorise des retours à la ligne libres, des espaces libres et de l'échappement leur
+> échappe. Cela vaut pour JSON (`jq`), YAML (`yq`), XML (`xmlstarlet`), CSV quoté
+> (`csvkit`, `mlr`). Le jour où l'API change son indentation, le script à `grep`
+> tombe en panne sans erreur : il renvoie du vide, et le vide se propage.
 
-**QO5.8** — *Démarche pour « pourquoi le site était lent hier entre 14 h et 16 h ».*
+<a id="qo5-8"></a>**[QO5.8](README.md#qo5-8)** — *Démarche pour « pourquoi le site était lent hier entre 14 h et 16 h ».*
 
 ```bash
 cd ~/lab05
@@ -432,17 +467,18 @@ awk '{ o[substr($4, 14, 2)] += $10 }
              printf "%s %.1f Mio\n", h, o[h]/1048576 }' access.log | sort
 ```
 
-::: pourquoi
-Chaque étape répond à une question et élimine une hypothèse : (1) charge, (2)
-périmètre, (3) latence, (4) erreurs, (5) abus d'un client, (6) bande passante.
-L'ordre compte : on cherche d'abord à savoir si le problème vient de la demande
-(plus de trafic) ou de l'offre (même trafic, temps de réponse dégradé). Le
-`$request_time` est la donnée décisive — sans lui, un `access.log` ne dit rien sur
-la performance, et c'est pourquoi on l'ajoute au `log_format` de nginx avant d'en
-avoir besoin.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque étape répond à une question et élimine une hypothèse : (1) charge, (2)
+> périmètre, (3) latence, (4) erreurs, (5) abus d'un client, (6) bande passante.
+> L'ordre compte : on cherche d'abord à savoir si le problème vient de la demande
+> (plus de trafic) ou de l'offre (même trafic, temps de réponse dégradé). Le
+> `$request_time` est la donnée décisive — sans lui, un `access.log` ne dit rien sur
+> la performance, et c'est pourquoi on l'ajoute au `log_format` de nginx avant d'en
+> avoir besoin.
 
-**QO5.9** — *Le mécanisme de `awk 'NR==FNR { … ; next } { … }'`.*
+<a id="qo5-9"></a>**[QO5.9](README.md#qo5-9)** — *Le mécanisme de `awk 'NR==FNR { … ; next } { … }'`.*
 
 `NR` compte toutes les lignes lues, `FNR` repart à 1 par fichier : l'égalité n'est
 vraie que pour le premier fichier. On y charge une table en mémoire, puis on traite
@@ -453,18 +489,19 @@ awk -F, 'NR == FNR { dc[$1] = $2; next }
          { print $1, dc[$9] }' sites.csv serveurs.csv
 ```
 
-::: pourquoi
-`next` est indispensable : sans lui, les lignes du premier fichier tomberaient aussi
-dans le second bloc (qui n'a pas de motif, donc s'applique à toutes les lignes) et
-produiraient des sorties parasites. `next` passe immédiatement à l'enregistrement
-suivant, comme un `continue` de boucle.
+> [!NOTE]
+> **Pourquoi**
+>
+> `next` est indispensable : sans lui, les lignes du premier fichier tomberaient aussi
+> dans le second bloc (qui n'a pas de motif, donc s'applique à toutes les lignes) et
+> produiraient des sorties parasites. `next` passe immédiatement à l'enregistrement
+> suivant, comme un `continue` de boucle.
+>
+> Si le premier fichier est **vide**, `NR == FNR` reste vraie pendant **toute** la lecture du second (aucune ligne n'a été lue avant) : c'est lui qui est chargé comme table, `next` saute chacune de ses lignes, et le programme ne produit rien, silencieusement. Parade : tester `FILENAME == ARGV[1]` au lieu de `NR == FNR`,
+> ou vérifier la taille du fichier avant (`[ -s sites.csv ] || exit 1`). Autre piège : si les deux fichiers sont le
+> **même** fichier, `NR == FNR` reste vraie tout du long.
 
-Si le premier fichier est **vide**, `NR == FNR` reste vraie pendant **toute** la lecture du second (aucune ligne n'a été lue avant) : c'est lui qui est chargé comme table, `next` saute chacune de ses lignes, et le programme ne produit rien, silencieusement. Parade : tester `FILENAME == ARGV[1]` au lieu de `NR == FNR`,
-ou vérifier la taille du fichier avant (`[ -s sites.csv ] || exit 1`). Autre piège : si les deux fichiers sont le
-**même** fichier, `NR == FNR` reste vraie tout du long.
-:::
-
-**QO5.10** — *Cinq causes de panne d'un CSV venu d'un tableur.*
+<a id="qo5-10"></a>**[QO5.10](README.md#qo5-10)** — *Cinq causes de panne d'un CSV venu d'un tableur.*
 
 | Cause | Diagnostic | Correctif |
 |---|---|---|
@@ -474,39 +511,41 @@ ou vérifier la taille du fichier avant (`[ -s sites.csv ] || exit 1`). Autre pi
 | Séparateur `;` | `head -1 f.csv` | `awk -F';'` ou `tr ';' ','` |
 | Champs quotés à virgules | `grep '"' f.csv` | parseur CSV réel, pas `awk -F,` |
 
-::: pourquoi
-Les trois premières causes sont invisibles à l'œil nu : `cat` affiche exactement la
-même chose avant et après correction. C'est ce qui les rend coûteuses en temps. Le
-réflexe à acquérir est de commencer toute analyse d'un fichier reçu par
-`file fichier` puis `head -3 fichier | cat -A`. Deux commandes, cinq secondes, et
-la moitié des incidents de ce type disparaît. En sortie, impose la règle inverse :
-tout ce que tu produis est en UTF-8 sans BOM, en LF, et documenté.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois premières causes sont invisibles à l'œil nu : `cat` affiche exactement la
+> même chose avant et après correction. C'est ce qui les rend coûteuses en temps. Le
+> réflexe à acquérir est de commencer toute analyse d'un fichier reçu par
+> `file fichier` puis `head -3 fichier | cat -A`. Deux commandes, cinq secondes, et
+> la moitié des incidents de ce type disparaît. En sortie, impose la règle inverse :
+> tout ce que tu produis est en UTF-8 sans BOM, en LF, et documenté.
 
 ---
 
 ## 5.5 Exercices guidés
 
-**E5.1** — *15 dernières lignes puis suivi ; pourquoi `-f` perd le fichier après
+<a id="e5-1"></a>**[E5.1](README.md#e5-1)** — *15 dernières lignes puis suivi ; pourquoi `-f` perd le fichier après
 rotation.*
 
 ```bash
 tail -n 15 -F ~/lab05/access.log
 ```
 
-::: pourquoi
-`tail -f` suit un **descripteur de fichier**. Quand logrotate renomme
-`access.log` en `access.log.1` et crée un nouveau `access.log`, le descripteur
-ouvert continue de pointer sur l'ancien inode : `tail` reste branché sur un fichier
-que plus personne n'alimente, sans le moindre message. `-F` (équivalent de
-`--follow=name --retry`) suit le **nom** : il détecte que le fichier a été remplacé,
-rouvre le nouveau et affiche `tail: 'access.log' has been replaced`. Sur un serveur,
-c'est toujours `-F` qu'on veut. À combiner avec `grep --line-buffered` pour filtrer
-en direct sans subir la bufferisation :
-`tail -F access.log | grep --line-buffered ' 500 '`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `tail -f` suit un **descripteur de fichier**. Quand logrotate renomme
+> `access.log` en `access.log.1` et crée un nouveau `access.log`, le descripteur
+> ouvert continue de pointer sur l'ancien inode : `tail` reste branché sur un fichier
+> que plus personne n'alimente, sans le moindre message. `-F` (équivalent de
+> `--follow=name --retry`) suit le **nom** : il détecte que le fichier a été remplacé,
+> rouvre le nouveau et affiche `tail: 'access.log' has been replaced`. Sur un serveur,
+> c'est toujours `-F` qu'on veut. À combiner avec `grep --line-buffered` pour filtrer
+> en direct sans subir la bufferisation :
+> `tail -F access.log | grep --line-buffered ' 500 '`.
 
-**E5.2** — *Répartition des codes HTTP.*
+<a id="e5-2"></a>**[E5.2](README.md#e5-2)** — *Répartition des codes HTTP.*
 
 ```bash
 awk '{ print $9 }' access.log | sort | uniq -c | sort -rn
@@ -524,14 +563,15 @@ awk '{ print $9 }' access.log | sort | uniq -c | sort -rn
      15 503
 ```
 
-::: pourquoi
-Le triptyque `sort | uniq -c | sort -rn` est la structure de base de toute analyse
-de log. Le premier `sort` regroupe, `uniq -c` compte, le second `sort -rn` classe.
-Version en une seule passe, sans le double tri, utile sur les gros fichiers :
-`awk '{ n[$9]++ } END { for (k in n) print n[k], k }' access.log | sort -rn`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le triptyque `sort | uniq -c | sort -rn` est la structure de base de toute analyse
+> de log. Le premier `sort` regroupe, `uniq -c` compte, le second `sort -rn` classe.
+> Version en une seule passe, sans le double tri, utile sur les gros fichiers :
+> `awk '{ n[$9]++ } END { for (k in n) print n[k], k }' access.log | sort -rn`.
 
-**E5.3** — *Top 10 des IP, hors sonde et hors scanner.*
+<a id="e5-3"></a>**[E5.3](README.md#e5-3)** — *Top 10 des IP, hors sonde et hors scanner.*
 
 ```bash
 grep -vE '^(10\.10\.10\.14|203\.0\.113\.242) ' access.log \
@@ -551,22 +591,24 @@ grep -vE '^(10\.10\.10\.14|203\.0\.113\.242) ' access.log \
     323 203.0.113.19
 ```
 
-::: pourquoi
-L'ancre `^` et l'espace final ne sont pas décoratifs : sans eux, on exclurait aussi
-les lignes où ces adresses apparaissent dans le referer ou l'URL. Les points sont
-échappés pour qu'ils ne matchent pas n'importe quel caractère. Variante sans `grep`,
-en une passe :
-`awk '$1 != "10.10.10.14" && $1 != "203.0.113.242" { n[$1]++ } END { … }'`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ancre `^` et l'espace final ne sont pas décoratifs : sans eux, on exclurait aussi
+> les lignes où ces adresses apparaissent dans le referer ou l'URL. Les points sont
+> échappés pour qu'ils ne matchent pas n'importe quel caractère. Variante sans `grep`,
+> en une passe :
+> `awk '$1 != "10.10.10.14" && $1 != "203.0.113.242" { n[$1]++ } END { … }'`.
 
-::: piege
-Filtrer les sondes de monitoring **avant** de calculer des moyennes est
-indispensable : ici `/health` représente 991 requêtes à 2 ms. Les laisser dans le
-calcul tire le temps de réponse moyen global vers le bas (0,25 s au lieu de 0,29 s ; 0,40 s si l'on écarte aussi les assets statiques) et te fait conclure que
-« tout va bien » pendant que les vrais clients attendent.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Filtrer les sondes de monitoring **avant** de calculer des moyennes est
+> indispensable : ici `/health` représente 991 requêtes à 2 ms. Les laisser dans le
+> calcul tire le temps de réponse moyen global vers le bas (0,25 s au lieu de 0,29 s ; 0,40 s si l'on écarte aussi les assets statiques) et te fait conclure que
+> « tout va bien » pendant que les vrais clients attendent.
 
-**E5.4** — *URL distinctes en 404, et top 5.*
+<a id="e5-4"></a>**[E5.4](README.md#e5-4)** — *URL distinctes en 404, et top 5.*
 
 ```bash
 awk '$9 == 404 { print $7 }' access.log | sort -u | wc -l        # -> 91
@@ -581,15 +623,16 @@ awk '$9 == 404 { print $7 }' access.log | sort | uniq -c | sort -rn | head -5
      35 /admin/config.php
 ```
 
-::: pourquoi
-`sort -u` dédoublonne sans compter, `sort | uniq -c` compte. Les 91 URL distinctes
-se répartissent entre six chemins d'attaque très demandés et une longue traîne de
-`/produit/<id>` inexistants. Un top 5 de 404 dominé par `/phpmyadmin/index.php` et `/.git/config`
-sur un site qui n'est ni WordPress ni PHP, c'est la signature d'un scanner
-automatique : ce n'est pas un problème applicatif, c'est du bruit de fond d'internet.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `sort -u` dédoublonne sans compter, `sort | uniq -c` compte. Les 91 URL distinctes
+> se répartissent entre six chemins d'attaque très demandés et une longue traîne de
+> `/produit/<id>` inexistants. Un top 5 de 404 dominé par `/phpmyadmin/index.php` et `/.git/config`
+> sur un site qui n'est ni WordPress ni PHP, c'est la signature d'un scanner
+> automatique : ce n'est pas un problème applicatif, c'est du bruit de fond d'internet.
 
-**E5.5** — *Comptes humains de `passwd.exemple` et comptage par shell.*
+<a id="e5-5"></a>**[E5.5](README.md#e5-5)** — *Comptes humains de `passwd.exemple` et comptage par shell.*
 
 ```bash
 awk -F: '$3 >= 1000 && $3 < 60000 { printf "%-18s %5d %s\n", $1, $3, $7 }' \
@@ -613,16 +656,17 @@ appmail             1602 /bin/false
       1 /bin/sh
 ```
 
-::: pourquoi
-La borne haute (`< 60000`) exclut `nobody` (65534), qui a un UID « humain » par
-accident historique. `printf` dans awk permet d'aligner sans dépendre de `column`.
-Le tri `-k2,2n` porte sur la seule colonne UID : sans la borne de fin, la clé
-inclurait le shell et l'ordre changerait à UID égal. Pour un audit réel, la question
-utile n'est pas « qui est humain » mais « qui peut ouvrir un shell » :
-`awk -F: '$7 ~ /sh$/' passwd.exemple`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La borne haute (`< 60000`) exclut `nobody` (65534), qui a un UID « humain » par
+> accident historique. `printf` dans awk permet d'aligner sans dépendre de `column`.
+> Le tri `-k2,2n` porte sur la seule colonne UID : sans la borne de fin, la clé
+> inclurait le shell et l'ordre changerait à UID égal. Pour un audit réel, la question
+> utile n'est pas « qui est humain » mais « qui peut ouvrir un shell » :
+> `awk -F: '$7 ~ /sh$/' passwd.exemple`.
 
-**E5.6** — *Tris sur `serveurs.csv`.*
+<a id="e5-6"></a>**[E5.6](README.md#e5-6)** — *Tris sur `serveurs.csv`.*
 
 ```bash
 sort -t, -k10,10nr serveurs.csv | head -5 | cut -d, -f1,10
@@ -643,32 +687,34 @@ cache-dev-41,dev,331.20
 api-dev-46,dev,328.00
 ```
 
-::: pourquoi
-Deux clés successives : `-k2,2` trie d'abord par environnement en ordre
-alphabétique (dev, preprod, prod), puis `-k10,10nr` départage à environnement égal
-par coût numérique décroissant. Les options de type (`n`, `r`) se collent à la clé
-concernée : écrites globalement (`sort -nr -k2,2 -k10,10`), elles s'appliqueraient
-aux deux clés et le tri par environnement deviendrait numérique — donc nul, puisque
-`dev` vaut 0. Le `tail -n +2` écarte l'en-tête.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux clés successives : `-k2,2` trie d'abord par environnement en ordre
+> alphabétique (dev, preprod, prod), puis `-k10,10nr` départage à environnement égal
+> par coût numérique décroissant. Les options de type (`n`, `r`) se collent à la clé
+> concernée : écrites globalement (`sort -nr -k2,2 -k10,10`), elles s'appliqueraient
+> aux deux clés et le tri par environnement deviendrait numérique — donc nul, puisque
+> `dev` vaut 0. Le `tail -n +2` écarte l'en-tête.
 
-**E5.7** — *Extraire les IP sans `awk` ni `cut`.*
+<a id="e5-7"></a>**[E5.7](README.md#e5-7)** — *Extraire les IP sans `awk` ni `cut`.*
 
 ```bash
 grep -oE '^([0-9]{1,3}\.){3}[0-9]{1,3}' access.log | sort -u | wc -l    # -> 17
 grep -oE '^([0-9]{1,3}\.){3}[0-9]{1,3}' access.log | wc -l         # -> 7200
 ```
 
-::: pourquoi
-`-o` n'affiche que la partie correspondante, `-E` active les regex étendues, ce qui
-permet le groupe répété `([0-9]{1,3}\.){3}`. L'ancre `^` garantit qu'on prend l'IP
-cliente en début de ligne et pas une adresse quelconque ailleurs. Le second compte
-(7200 = nombre de lignes) sert de contrôle : si `grep -o` renvoie moins de lignes
-que le fichier n'en contient, c'est que des lignes ne correspondent pas au format
-attendu, et il faut comprendre pourquoi avant d'aller plus loin.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-o` n'affiche que la partie correspondante, `-E` active les regex étendues, ce qui
+> permet le groupe répété `([0-9]{1,3}\.){3}`. L'ancre `^` garantit qu'on prend l'IP
+> cliente en début de ligne et pas une adresse quelconque ailleurs. Le second compte
+> (7200 = nombre de lignes) sert de contrôle : si `grep -o` renvoie moins de lignes
+> que le fichier n'en contient, c'est que des lignes ne correspondent pas au format
+> attendu, et il faut comprendre pourquoi avant d'aller plus loin.
 
-**E5.8** — *Requêtes API de plus de 2 secondes, et la plus lente.*
+<a id="e5-8"></a>**[E5.8](README.md#e5-8)** — *Requêtes API de plus de 2 secondes, et la plus lente.*
 
 ```bash
 awk '$7 ~ /^\/api\// && $NF > 2' access.log | wc -l          # -> 181
@@ -680,16 +726,17 @@ awk '{ printf "%s %s %s\n", $NF, substr($4, 2), $7 }' access.log \
 9.683 14/Sep/2026:17:21:04 /api/v1/cart/items
 ```
 
-::: pourquoi
-`$NF` désigne le dernier champ, ce qui évite de compter les colonnes du format
-combined — et surtout de se tromper quand un user-agent contient des espaces (il en
-contient toujours). La comparaison `$NF > 2` force le contexte numérique. Le tri
-final se fait sur `$NF` placé en tête de ligne, parce que `sort -rn` compare le
-début de la ligne : c'est le réflexe « mets la clé devant » qui évite de jongler
-avec `-k`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `$NF` désigne le dernier champ, ce qui évite de compter les colonnes du format
+> combined — et surtout de se tromper quand un user-agent contient des espaces (il en
+> contient toujours). La comparaison `$NF > 2` force le contexte numérique. Le tri
+> final se fait sur `$NF` placé en tête de ligne, parce que `sort -rn` compare le
+> début de la ligne : c'est le réflexe « mets la clé devant » qui évite de jongler
+> avec `-k`.
 
-**E5.9** — *Erreurs et exceptions de `app.log`.*
+<a id="e5-9"></a>**[E5.9](README.md#e5-9)** — *Erreurs et exceptions de `app.log`.*
 
 ```bash
 grep -cE '^2026-09-18 [0-9:.]+ ERROR ' app.log                # -> 145
@@ -703,17 +750,18 @@ grep -oE '^[a-z][a-zA-Z.]*(Exception|Error)' app.log | sort | uniq -c | sort -rn
      13 java.lang.OutOfMemoryError
 ```
 
-::: pourquoi
-L'ancre `^` est essentielle : sans elle, `grep -c ERROR` compterait aussi les lignes
-de pile qui mentionnent une classe `ErrorHandler`, et le motif d'exception
-attraperait les `at …Exception…` des piles d'appel. Ici les lignes d'exception
-commencent en colonne 1 par un nom de paquet en minuscules, les piles par une
-tabulation, les événements par une date : trois familles, trois ancres. C'est la
-méthode générale pour un journal multi-lignes — identifier la grammaire avant de
-filtrer.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ancre `^` est essentielle : sans elle, `grep -c ERROR` compterait aussi les lignes
+> de pile qui mentionnent une classe `ErrorHandler`, et le motif d'exception
+> attraperait les `at …Exception…` des piles d'appel. Ici les lignes d'exception
+> commencent en colonne 1 par un nom de paquet en minuscules, les piles par une
+> tabulation, les événements par une date : trois familles, trois ancres. C'est la
+> méthode générale pour un journal multi-lignes — identifier la grammaire avant de
+> filtrer.
 
-**E5.10** — *Pile de la première `OutOfMemoryError`.*
+<a id="e5-10"></a>**[E5.10](README.md#e5-10)** — *Pile de la première `OutOfMemoryError`.*
 
 ```bash
 grep -m1 -B1 -A10 'OutOfMemoryError' app.log
@@ -730,17 +778,18 @@ java.lang.OutOfMemoryError: Java heap space
 	...
 ```
 
-::: pourquoi
-`-m1` arrête `grep` à la première correspondance (utile sur un fichier énorme),
-`-B1` donne la ligne de journal qui précède — celle qui porte l'horodatage et le
-thread — et `-A10` les dix suivantes. Ajoute `-n` pour avoir les numéros de ligne et
-pouvoir y revenir avec `sed -n '509,520p'`. Attention : `-A10` est un nombre
-arbitraire ; les piles de ce journal font de 4 à 8 cadres, plus un éventuel
-`Caused by:`. Quand la longueur varie, `grep -A` ne suffit plus, il faut raisonner
-par plage (voir L5.3).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `-m1` arrête `grep` à la première correspondance (utile sur un fichier énorme),
+> `-B1` donne la ligne de journal qui précède — celle qui porte l'horodatage et le
+> thread — et `-A10` les dix suivantes. Ajoute `-n` pour avoir les numéros de ligne et
+> pouvoir y revenir avec `sed -n '509,520p'`. Attention : `-A10` est un nombre
+> arbitraire ; les piles de ce journal font de 4 à 8 cadres, plus un éventuel
+> `Caused by:`. Quand la longueur varie, `grep -A` ne suffit plus, il faut raisonner
+> par plage (voir L5.3).
 
-**E5.11** — *Normaliser les URL et top 10.*
+<a id="e5-11"></a>**[E5.11](README.md#e5-11)** — *Normaliser les URL et top 10.*
 
 ```bash
 awk '{ print $7 }' access.log \
@@ -761,23 +810,25 @@ awk '{ print $7 }' access.log \
     273 /static/js/app.js
 ```
 
-::: pourquoi
-Sans normalisation, `/api/v1/orders/12937` et `/api/v1/orders/10974` sont deux
-endpoints différents : le top est noyé sous des milliers d'URL vues une fois, et
-aucune moyenne de temps de réponse n'a de sens. Deux substitutions suffisent :
-la première coupe tout ce qui suit le `?` (les paramètres), la seconde remplace un
-segment final entièrement numérique par `:id`. Le séparateur `#` évite d'échapper
-les `/`. `sed -E` active les regex étendues, donc `+` sans antislash.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sans normalisation, `/api/v1/orders/12937` et `/api/v1/orders/10974` sont deux
+> endpoints différents : le top est noyé sous des milliers d'URL vues une fois, et
+> aucune moyenne de temps de réponse n'a de sens. Deux substitutions suffisent :
+> la première coupe tout ce qui suit le `?` (les paramètres), la seconde remplace un
+> segment final entièrement numérique par `:id`. Le séparateur `#` évite d'échapper
+> les `/`. `sed -E` active les regex étendues, donc `+` sans antislash.
 
-::: piege
-`s/\?.*//` doit venir **avant** `s#/[0-9]+$#…#` : appliquée d'abord, la seconde ne
-verrait jamais de segment numérique en fin de ligne puisque la chaîne de requête
-occupe la fin. L'ordre des expressions `sed` est l'ordre d'application, ligne par
-ligne.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `s/\?.*//` doit venir **avant** `s#/[0-9]+$#…#` : appliquée d'abord, la seconde ne
+> verrait jamais de segment numérique en fin de ligne puisque la chaîne de requête
+> occupe la fin. L'ordre des expressions `sed` est l'ordre d'application, ligne par
+> ligne.
 
-**E5.12** — *Bloc `location /static/` et suppression des lignes vides.*
+<a id="e5-12"></a>**[E5.12](README.md#e5-12)** — *Bloc `location /static/` et suppression des lignes vides.*
 
 ```bash
 sed -n '/location \/static\//,/^    }/p' conf/shop.conf
@@ -791,16 +842,17 @@ sed '/^$/d' conf/shop.conf
     }
 ```
 
-::: pourquoi
-La plage `/motif1/,/motif2/` s'ouvre sur la première ligne correspondante et se
-ferme sur la première correspondance suivante de `motif2`. Le motif de fin est ancré
-sur l'indentation (`^    }`) pour ne pas se refermer sur l'accolade d'un bloc
-imbriqué. `-n` supprime l'affichage automatique, `p` imprime la plage. Le fichier
-passe de 21 à 17 lignes après suppression des lignes vides. Pour enlever aussi les
-commentaires : `sed -E '/^\s*#/d; /^$/d'`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La plage `/motif1/,/motif2/` s'ouvre sur la première ligne correspondante et se
+> ferme sur la première correspondance suivante de `motif2`. Le motif de fin est ancré
+> sur l'indentation (`^    }`) pour ne pas se refermer sur l'accolade d'un bloc
+> imbriqué. `-n` supprime l'affichage automatique, `p` imprime la plage. Le fichier
+> passe de 21 à 17 lignes après suppression des lignes vides. Pour enlever aussi les
+> commentaires : `sed -E '/^\s*#/d; /^$/d'`.
 
-**E5.13** — *Chiffre d'affaires par région.*
+<a id="e5-13"></a>**[E5.13](README.md#e5-13)** — *Chiffre d'affaires par région.*
 
 ```bash
 awk -F, 'NR > 1 { total += $6 } END { printf "%.2f\n", total }' commandes.csv
@@ -821,18 +873,19 @@ ouest      70    279687.13   3995.53
 nord       46    184896.45   4019.49
 ```
 
-::: pourquoi
-Deux tableaux associatifs indexés par la même clé : un pour la somme, un pour
-l'effectif ; la moyenne se calcule en `END`. `NR > 1` saute l'en-tête. Le `sort`
-final est indispensable : `for (k in tableau)` parcourt les clés dans un ordre
-**non spécifié**, qui diffère entre mawk et gawk et peut même changer d'une version
-à l'autre. Toute sortie d'un `for (k in …)` destinée à être lue ou comparée doit
-passer par `sort`. Lecture des chiffres : l'Île-de-France fait le plus gros volume,
-mais l'Est a le meilleur panier moyen (5455 EUR) — deux conclusions opposées selon
-la colonne qu'on regarde.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux tableaux associatifs indexés par la même clé : un pour la somme, un pour
+> l'effectif ; la moyenne se calcule en `END`. `NR > 1` saute l'en-tête. Le `sort`
+> final est indispensable : `for (k in tableau)` parcourt les clés dans un ordre
+> **non spécifié**, qui diffère entre mawk et gawk et peut même changer d'une version
+> à l'autre. Toute sortie d'un `for (k in …)` destinée à être lue ou comparée doit
+> passer par `sort`. Lecture des chiffres : l'Île-de-France fait le plus gros volume,
+> mais l'Est a le meilleur panier moyen (5455 EUR) — deux conclusions opposées selon
+> la colonne qu'on regarde.
 
-**E5.14** — *Jointure `serveurs.csv` × `sites.csv`.*
+<a id="e5-14"></a>**[E5.14](README.md#e5-14)** — *Jointure `serveurs.csv` × `sites.csv`.*
 
 ```bash
 awk -F, 'NR == FNR { dc[$1] = $2; next } FNR > 1 { print $1, $9, dc[$9] }' \
@@ -847,16 +900,17 @@ api-pro-04 paris DC-PAR-3
 api-pro-05 paris DC-PAR-3
 ```
 
-::: pourquoi
-`NR == FNR` n'est vrai que pendant la lecture du premier fichier : on y construit la
-table `dc[site] = datacenter`, puis `next` empêche ces lignes de tomber dans le bloc
-suivant. Le second bloc s'applique au second fichier, où `FNR > 1` saute l'en-tête.
-L'alternative `join` impose de trier les deux fichiers sur la clé et de les
-réordonner (`join -t, -1 9 -2 1`), ce qui casse l'ordre d'origine : dès qu'il y a
-plus de deux colonnes ou un en-tête, `awk` est plus simple et plus sûr.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `NR == FNR` n'est vrai que pendant la lecture du premier fichier : on y construit la
+> table `dc[site] = datacenter`, puis `next` empêche ces lignes de tomber dans le bloc
+> suivant. Le second bloc s'applique au second fichier, où `FNR > 1` saute l'en-tête.
+> L'alternative `join` impose de trier les deux fichiers sur la clé et de les
+> réordonner (`join -t, -1 9 -2 1`), ce qui casse l'ordre d'origine : dès qu'il y a
+> plus de deux colonnes ou un en-tête, `awk` est plus simple et plus sûr.
 
-**E5.15** — *`jq` et `yq`.*
+<a id="e5-15"></a>**[E5.15](README.md#e5-15)** — *`jq` et `yq`.*
 
 ```bash
 jq -r '.results[] | select(.metriques.disque_pct > 85)
@@ -876,18 +930,19 @@ proxy-pro-39 10.20.4.70 90
 proxy-dev-48 10.20.1.198 86
 ```
 
-::: pourquoi
-`.results[]` déroule le tableau, `select(condition)` laisse passer les objets qui
-satisfont la condition, `"\(expression)"` interpole dans une chaîne, et `-r` sort le
-texte sans guillemets. Les crochets englobants `[ … ]` recollectent le flux d'objets
-en tableau JSON : sans eux, `jq` produirait une suite d'objets indépendants, ce qui
-n'est pas un document JSON valide. `yq` de Debian/Ubuntu est un **wrapper autour de
-jq** : la syntaxe des filtres est celle de `jq`, seule la lecture du format change.
-Le `yq` écrit en Go (mikefarah), qu'on installe parfois à la main, a une syntaxe
-différente : vérifie toujours avec `yq --version` sur quelle implémentation tu es.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `.results[]` déroule le tableau, `select(condition)` laisse passer les objets qui
+> satisfont la condition, `"\(expression)"` interpole dans une chaîne, et `-r` sort le
+> texte sans guillemets. Les crochets englobants `[ … ]` recollectent le flux d'objets
+> en tableau JSON : sans eux, `jq` produirait une suite d'objets indépendants, ce qui
+> n'est pas un document JSON valide. `yq` de Debian/Ubuntu est un **wrapper autour de
+> jq** : la syntaxe des filtres est celle de `jq`, seule la lecture du format change.
+> Le `yq` écrit en Go (mikefarah), qu'on installe parfois à la main, a une syntaxe
+> différente : vérifie toujours avec `yq --version` sur quelle implémentation tu es.
 
-**E5.16** — *Pipeline qui échoue quand le motif est absent.*
+<a id="e5-16"></a>**[E5.16](README.md#e5-16)** — *Pipeline qui échoue quand le motif est absent.*
 
 ```bash
 set -o pipefail
@@ -912,26 +967,28 @@ echo "maillons : ${PIPESTATUS[*]} / pipeline : $?"
 maillons : 1 0 / pipeline : 1
 ```
 
-::: pourquoi
-Sans `pipefail`, le code du pipeline est celui de `tee`, toujours 0 : l'échec de
-`grep` est invisible. Avec `pipefail`, bash renvoie le code du dernier maillon non
-nul, ici celui de `grep`. `PIPESTATUS` donne le détail maillon par maillon et se
-lit **immédiatement** après le pipeline : la commande suivante l'écrase. Noter que
-`${PIPESTATUS[*]}` et `$?` peuvent figurer dans le même `echo`, parce que bash
-développe tous les arguments avant d'exécuter la commande.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Sans `pipefail`, le code du pipeline est celui de `tee`, toujours 0 : l'échec de
+> `grep` est invisible. Avec `pipefail`, bash renvoie le code du dernier maillon non
+> nul, ici celui de `grep`. `PIPESTATUS` donne le détail maillon par maillon et se
+> lit **immédiatement** après le pipeline : la commande suivante l'écrase. Noter que
+> `${PIPESTATUS[*]}` et `$?` peuvent figurer dans le même `echo`, parce que bash
+> développe tous les arguments avant d'exécuter la commande.
 
-::: piege
-`set -e` ne protège pas d'un pipeline : seul le dernier maillon est pris en compte
-pour décider de l'arrêt. `set -euo pipefail` en tête de script est la formule
-complète, et c'est exactement ce qui manquait dans BF5.1.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `set -e` ne protège pas d'un pipeline : seul le dernier maillon est pris en compte
+> pour décider de l'arrêt. `set -euo pipefail` en tête de script est la formule
+> complète, et c'est exactement ce qui manquait dans BF5.1.
 
 ---
 
 ## 5.6 Labs
 
-### L5.1 — INC-4412, analyse de `access.log`
+### <a id="l5-1"></a>[L5.1](README.md#l5-1) — INC-4412, analyse de `access.log`
 
 *Produire un rapport chiffré à partir du seul journal d'accès.*
 
@@ -1053,31 +1110,33 @@ exec 3>&-
 bash check_M05_01.sh
 ```
 
-::: pourquoi
-`exec 3> fichier` ouvre le fichier **une seule fois** et garde le descripteur
-ouvert : chaque `>&3` écrit à la suite sans rouvrir ni tronquer, contrairement à une
-série de `>>` qui ouvre et ferme le fichier à chaque ligne. `exec 3>&-` referme
-proprement. Le regroupement `{ … } >&3` applique la redirection à tout le bloc.
+> [!NOTE]
+> **Pourquoi**
+>
+> `exec 3> fichier` ouvre le fichier **une seule fois** et garde le descripteur
+> ouvert : chaque `>&3` écrit à la suite sans rouvrir ni tronquer, contrairement à une
+> série de `>>` qui ouvre et ferme le fichier à chaque ligne. `exec 3>&-` referme
+> proprement. Le regroupement `{ … } >&3` applique la redirection à tout le bloc.
+>
+> Conclusion à écrire, appuyée sur les chiffres : `/api/v1/reports/export` est lent
+> (3,908 s de moyenne sur 122 appels, contre 0,176 s pour `/catalogue`), les 102
+> erreurs 5xx sont **toutes** sur `/api`, et le pic de trafic est à 18 h. Aucun
+> argument ne justifie une montée en charge : ce n'est pas le volume qui pose
+> problème (1670 requêtes par jour), c'est un endpoint synchrone qui mobilise un
+> worker pendant quatre secondes.
 
-Conclusion à écrire, appuyée sur les chiffres : `/api/v1/reports/export` est lent
-(3,908 s de moyenne sur 122 appels, contre 0,176 s pour `/catalogue`), les 102
-erreurs 5xx sont **toutes** sur `/api`, et le pic de trafic est à 18 h. Aucun
-argument ne justifie une montée en charge : ce n'est pas le volume qui pose
-problème (1670 requêtes par jour), c'est un endpoint synchrone qui mobilise un
-worker pendant quatre secondes.
-:::
-
-::: piege
-Deux fautes classiques dans ce lab. Ne pas normaliser les URL : les moyennes de
-temps de réponse sont alors calculées sur des échantillons de 1 et le classement
-n'a aucun sens. Et calculer un temps de réponse moyen **global** en incluant
-`/health` (991 requêtes à 2 ms) et les assets statiques : la moyenne tombe à 0,25 s (contre 0,40 s sans eux)
-et tu conclus que tout va bien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux fautes classiques dans ce lab. Ne pas normaliser les URL : les moyennes de
+> temps de réponse sont alors calculées sur des échantillons de 1 et le classement
+> n'a aucun sens. Et calculer un temps de réponse moyen **global** en incluant
+> `/health` (991 requêtes à 2 ms) et les assets statiques : la moyenne tombe à 0,25 s (contre 0,40 s sans eux)
+> et tu conclus que tout va bien.
 
 ---
 
-### L5.2 — Réconcilier la CMDB, l'API et la supervision
+### <a id="l5-2"></a>[L5.2](README.md#l5-2) — Réconcilier la CMDB, l'API et la supervision
 
 *Comparer trois sources et produire un inventaire consolidé.*
 
@@ -1161,33 +1220,35 @@ preprod       2224.00
 prod          7174.40
 ```
 
-::: pourquoi
-Le compteur `f`, incrémenté à chaque `FNR == 1`, identifie le fichier en cours de
-lecture. C'est la généralisation de `NR == FNR` à plus de deux entrées, et c'est
-portable — contrairement à `ARGIND`, qui n'existe que dans gawk. Les trois premiers
-fichiers alimentent des tables, le quatrième produit la sortie.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le compteur `f`, incrémenté à chaque `FNR == 1`, identifie le fichier en cours de
+> lecture. C'est la généralisation de `NR == FNR` à plus de deux entrées, et c'est
+> portable — contrairement à `ARGIND`, qui n'existe que dans gawk. Les trois premiers
+> fichiers alimentent des tables, le quatrième produit la sortie.
+>
+> La substitution de processus `<(jq …)` fait passer une commande pour un fichier :
+> `awk` l'ouvre comme les autres et `FNR` y fonctionne normalement. Aucun fichier
+> temporaire, donc rien à nettoyer et pas de course entre deux exécutions.
+>
+> Le chiffre qui fait bouger les choses n'est pas « 8 hôtes non supervisés » mais
+> « 1872,00 EUR par mois de machines dont personne ne sait si elles tournent », dont
+> `db-pro-33` et `worker-pro-24` en production. Convertis toujours un écart technique
+> en euros ou en risque avant de l'envoyer à un décideur.
 
-La substitution de processus `<(jq …)` fait passer une commande pour un fichier :
-`awk` l'ouvre comme les autres et `FNR` y fonctionne normalement. Aucun fichier
-temporaire, donc rien à nettoyer et pas de course entre deux exécutions.
-
-Le chiffre qui fait bouger les choses n'est pas « 8 hôtes non supervisés » mais
-« 1872,00 EUR par mois de machines dont personne ne sait si elles tournent », dont
-`db-pro-33` et `worker-pro-24` en production. Convertis toujours un écart technique
-en euros ou en risque avant de l'envoyer à un décideur.
-:::
-
-::: piege
-`comm` exige deux fichiers triés **avec le même ordre**. Si l'un a été trié en
-`fr_FR.UTF-8` et l'autre en `C`, les résultats sont faux sans erreur visible. En
-script : `LC_ALL=C sort` partout. Et `grep -Ff liste fichier` n'est pas équivalent à
-`comm` : il cherche des sous-chaînes, donc `web-pro-5` matcherait `web-pro-50`.
-Pour ce lab, `-x` (ligne entière) ou `-w` protège.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `comm` exige deux fichiers triés **avec le même ordre**. Si l'un a été trié en
+> `fr_FR.UTF-8` et l'autre en `C`, les résultats sont faux sans erreur visible. En
+> script : `LC_ALL=C sort` partout. Et `grep -Ff liste fichier` n'est pas équivalent à
+> `comm` : il cherche des sous-chaînes, donc `web-pro-5` matcherait `web-pro-50`.
+> Pour ce lab, `-x` (ligne entière) ou `-w` protège.
 
 ---
 
-### L5.3 — Autopsie d'un journal multi-lignes
+### <a id="l5-3"></a>[L5.3](README.md#l5-3) — Autopsie d'un journal multi-lignes
 
 *Séparer les événements des piles d'appel et produire des chiffres exacts.*
 
@@ -1274,34 +1335,36 @@ grep -oE 'code=[0-9]+' app.log | sort | uniq -c | sort -rn
       1 code=53
 ```
 
-::: pourquoi
-Le cœur du lab est l'étape 6. `grep -A` ne convient pas : le nombre de cadres varie
-de 4 à 8 et un `-A8` couperait certaines piles tout en débordant sur l'événement
-suivant pour d'autres. L'automate `awk` suit la **structure** du journal :
+> [!NOTE]
+> **Pourquoi**
+>
+> Le cœur du lab est l'étape 6. `grep -A` ne convient pas : le nombre de cadres varie
+> de 4 à 8 et un `-A8` couperait certaines piles tout en débordant sur l'événement
+> suivant pour d'autres. L'automate `awk` suit la **structure** du journal :
+>
+> * `prev` mémorise en permanence la dernière ligne d'événement vue ;
+> * quand une ligne contient `OutOfMemoryError`, on imprime `prev` puis la ligne, et
+>   on lève le drapeau `oom` ;
+> * tant que `oom` est levé, toute ligne commençant par une tabulation (un cadre de
+>   pile) est imprimée ;
+> * la première ligne qui ne commence pas par une tabulation abaisse le drapeau et
+>   redevient le nouveau `prev`.
+>
+> C'est le patron général pour tout format multi-lignes : identifier ce qui ouvre un
+> enregistrement, ce qui le continue, ce qui le ferme. Il s'applique tel quel aux
+> traces Python, aux blocs `systemd`, aux réponses SMTP multi-lignes.
 
-* `prev` mémorise en permanence la dernière ligne d'événement vue ;
-* quand une ligne contient `OutOfMemoryError`, on imprime `prev` puis la ligne, et
-  on lève le drapeau `oom` ;
-* tant que `oom` est levé, toute ligne commençant par une tabulation (un cadre de
-  pile) est imprimée ;
-* la première ligne qui ne commence pas par une tabulation abaisse le drapeau et
-  redevient le nouveau `prev`.
-
-C'est le patron général pour tout format multi-lignes : identifier ce qui ouvre un
-enregistrement, ce qui le continue, ce qui le ferme. Il s'applique tel quel aux
-traces Python, aux blocs `systemd`, aux réponses SMTP multi-lignes.
-:::
-
-::: piege
-`wc -l app.log` ne répond pas à « combien d'erreurs » : 2847 lignes pour 1400
-événements et 145 erreurs. Donner 2847 au développeur, c'est se décrédibiliser en
-une phrase. De même, `grep -c Exception` compterait aussi les cadres de pile qui
-citent une classe d'exception : il faut ancrer sur `^`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `wc -l app.log` ne répond pas à « combien d'erreurs » : 2847 lignes pour 1400
+> événements et 145 erreurs. Donner 2847 au développeur, c'est se décrédibiliser en
+> une phrase. De même, `grep -c Exception` compterait aussi les cadres de pile qui
+> citent une classe d'exception : il faut ancrer sur `^`.
 
 ---
 
-### L5.4 — Le livrable venu de Windows
+### <a id="l5-4"></a>[L5.4](README.md#l5-4) — Le livrable venu de Windows
 
 *Diagnostiquer trois fichiers malades, puis comparer deux configurations.*
 
@@ -1366,29 +1429,30 @@ La proposition ajoute l'écoute TLS et les certificats, passe
 `client_max_body_size` de 8m à 32m, ajoute `X-Forwarded-Proto`, double le
 `proxy_read_timeout` (30s → 60s) et allonge le cache des assets (7d → 30d).
 
-::: pourquoi
-Les trois pathologies sont invisibles avec `cat` : le `\r` ne s'affiche pas, un
-octet latin-1 isolé donne un caractère de remplacement selon le terminal, et le BOM
-est un préfixe de trois octets que rien n'affiche. D'où le réflexe `file` puis
-`cat -A`.
-
-Mécanisme du CRLF : bash lit la ligne `set -euo pipefail\r` et considère `pipefail\r`
-comme le nom de l'option. Toute variable affectée depuis un tel fichier porte un
-`\r` final, ce qui casse silencieusement toutes les comparaisons (voir BF5.2).
-
-Mécanisme du BOM : `EF BB BF` est un caractère (U+FEFF) placé avant le premier `h`
-de `hostname`. L'ancre `^` de `grep` est donc suivie de ce caractère invisible, et
-`^hostname` ne correspond plus. Même effet avec `awk '$1 == "hostname"'`, ou avec
-un `#!/bin/bash` précédé d'un BOM : le noyau ne reconnaît plus le shebang.
-
-`diff -u` renvoie **1** quand les fichiers diffèrent : sous `set -e`, un
-`diff -u a b > f` interrompt le script alors que tout va bien. C'est une des rares
-commandes où un code non nul n'est pas une erreur.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois pathologies sont invisibles avec `cat` : le `\r` ne s'affiche pas, un
+> octet latin-1 isolé donne un caractère de remplacement selon le terminal, et le BOM
+> est un préfixe de trois octets que rien n'affiche. D'où le réflexe `file` puis
+> `cat -A`.
+>
+> Mécanisme du CRLF : bash lit la ligne `set -euo pipefail\r` et considère `pipefail\r`
+> comme le nom de l'option. Toute variable affectée depuis un tel fichier porte un
+> `\r` final, ce qui casse silencieusement toutes les comparaisons (voir BF5.2).
+>
+> Mécanisme du BOM : `EF BB BF` est un caractère (U+FEFF) placé avant le premier `h`
+> de `hostname`. L'ancre `^` de `grep` est donc suivie de ce caractère invisible, et
+> `^hostname` ne correspond plus. Même effet avec `awk '$1 == "hostname"'`, ou avec
+> un `#!/bin/bash` précédé d'un BOM : le noyau ne reconnaît plus le shebang.
+>
+> `diff -u` renvoie **1** quand les fichiers diffèrent : sous `set -e`, un
+> `diff -u a b > f` interrompt le script alors que tout va bien. C'est une des rares
+> commandes où un code non nul n'est pas une erreur.
 
 ---
 
-### L5.5 — Brute force SSH
+### <a id="l5-5"></a>[L5.5](README.md#l5-5) — Brute force SSH
 
 *Chiffrer l'attaque, produire une liste de bannissement consommable.*
 
@@ -1473,38 +1537,40 @@ sudo ufw deny from 185.220.101.7 to any port 22
 ...
 ```
 
-::: pourquoi
-Le point qui fait la différence est le motif d'extraction du compte. Le journal
-mélange deux formulations :
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point qui fait la différence est le motif d'extraction du compte. Le journal
+> mélange deux formulations :
+>
+> ```text
+> Failed password for root from 45.155.205.14 port 41537 ssh2
+> Failed password for invalid user admin from 185.220.101.7 port 52218 ssh2
+> ```
+>
+> Un `awk '{ print $6 }'` donnerait `root` dans un cas et `user` dans l'autre : le
+> compte `invalid` devient le plus attaqué et le rapport est faux. Le groupe optionnel
+> `(invalid user )?` de l'expression `sed` absorbe la variante, et `\2` capture le
+> nom réel dans les deux cas.
+>
+> Deuxième point : le `awk '$1 >= 50 { print $2 }'` final applique le seuil **et**
+> supprime le compteur, en conservant l'ordre produit par `sort -rn`. Le fichier est
+> donc directement consommable par une boucle ou par `xargs` — c'est la différence
+> entre un rapport et un livrable.
 
-```text
-Failed password for root from 45.155.205.14 port 41537 ssh2
-Failed password for invalid user admin from 185.220.101.7 port 52218 ssh2
-```
-
-Un `awk '{ print $6 }'` donnerait `root` dans un cas et `user` dans l'autre : le
-compte `invalid` devient le plus attaqué et le rapport est faux. Le groupe optionnel
-`(invalid user )?` de l'expression `sed` absorbe la variante, et `\2` capture le
-nom réel dans les deux cas.
-
-Deuxième point : le `awk '$1 >= 50 { print $2 }'` final applique le seuil **et**
-supprime le compteur, en conservant l'ordre produit par `sort -rn`. Le fichier est
-donc directement consommable par une boucle ou par `xargs` — c'est la différence
-entre un rapport et un livrable.
-:::
-
-::: piege
-`grep -oE '[0-9]+(\.[0-9]+){3}'` sans le `from ` capturerait aussi l'adresse du
-serveur si elle figurait sur la ligne, et le numéro de port n'étant pas une IP, il
-passerait à travers. Toujours ancrer l'extraction sur le mot-clé qui donne le sens
-(`from`), pas seulement sur la forme de la donnée.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `grep -oE '[0-9]+(\.[0-9]+){3}'` sans le `from ` capturerait aussi l'adresse du
+> serveur si elle figurait sur la ligne, et le numéro de port n'étant pas une IP, il
+> passerait à travers. Toujours ancrer l'extraction sur le mot-clé qui donne le sens
+> (`from`), pas seulement sur la forme de la donnée.
 
 ---
 
 ## 5.7 Break & Fix
 
-### BF5.1 — Rapport vide, code retour 0
+### <a id="bf5-1"></a>[BF5.1](README.md#bf5-1) — Rapport vide, code retour 0
 
 **Diagnostic**
 
@@ -1563,28 +1629,30 @@ Preuve que l'alerte fonctionne désormais :
 bash ~/lab05/bin/rapport-quotidien.sh 01/Jan/2026 ; echo "code : $?"   # -> 1
 ```
 
-::: pourquoi
-La ligne de bash qui aurait évité trois jours de silence est `set -o pipefail`.
-Sans elle, `set -e` est inopérant sur un pipeline : bash n'examine que le code du
-dernier maillon, et `sort -rn` réussit toujours, même avec une entrée vide.
+> [!NOTE]
+> **Pourquoi**
+>
+> La ligne de bash qui aurait évité trois jours de silence est `set -o pipefail`.
+> Sans elle, `set -e` est inopérant sur un pipeline : bash n'examine que le code du
+> dernier maillon, et `sort -rn` réussit toujours, même avec une entrée vide.
+>
+> Le crochet du motif (`grep -F "[$JOUR"`) n'est pas cosmétique : il ancre la
+> recherche sur le champ date du format combined. Sans lui, la chaîne `18/Sep/2026`
+> pourrait aussi apparaître dans une URL ou un referer.
+>
+> Prévention : un rapport quotidien doit contrôler son propre résultat. Une garde
+> explicite vaut mieux qu'un code retour subtil :
+> `[ "$(wc -l < "$OUT")" -gt 1 ] || { echo "rapport vide" >&2; exit 1; }`.
 
-Le crochet du motif (`grep -F "[$JOUR"`) n'est pas cosmétique : il ancre la
-recherche sur le champ date du format combined. Sans lui, la chaîne `18/Sep/2026`
-pourrait aussi apparaître dans une URL ou un referer.
+> [!WARNING]
+> **Piège**
+>
+> La tentation est de corriger seulement le motif : le rapport redevient correct et
+> l'incident est « résolu ». Mais le jour où la source change de nom, le script
+> retombera silencieusement dans le même trou. On corrige la panne **et** le
+> mécanisme qui l'a rendue invisible.
 
-Prévention : un rapport quotidien doit contrôler son propre résultat. Une garde
-explicite vaut mieux qu'un code retour subtil :
-`[ "$(wc -l < "$OUT")" -gt 1 ] || { echo "rapport vide" >&2; exit 1; }`.
-:::
-
-::: piege
-La tentation est de corriger seulement le motif : le rapport redevient correct et
-l'incident est « résolu ». Mais le jour où la source change de nom, le script
-retombera silencieusement dans le même trou. On corrige la panne **et** le
-mécanisme qui l'a rendue invisible.
-:::
-
-### BF5.2 — La cible existe, le script la refuse
+### <a id="bf5-2"></a>[BF5.2](README.md#bf5-2) — La cible existe, le script la refuse
 
 **Diagnostic**
 
@@ -1616,23 +1684,24 @@ sed -i 's/\r$//' ~/lab05/conf/livraison.env     # ou dos2unix
 bash ~/lab05/bin/livrer.sh      # -> livraison de 2.7.1 vers /srv/factura
 ```
 
-::: pourquoi
-Le `\r` explique aussi l'affichage mutilé, et c'est le meilleur indice : le
-terminal interprète le retour chariot comme « reviens en colonne 1 ». Le message
-`cible inconnue : [/srv/factura\r]` s'affiche donc entièrement, puis le `]` final
-écrase le premier caractère — d'où `]ible inconnue : [`. Chaque fois qu'une sortie
-semble tronquée ou écrasée par la fin d'elle-même, pense `\r`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le `\r` explique aussi l'affichage mutilé, et c'est le meilleur indice : le
+> terminal interprète le retour chariot comme « reviens en colonne 1 ». Le message
+> `cible inconnue : [/srv/factura\r]` s'affiche donc entièrement, puis le `]` final
+> écrase le premier caractère — d'où `]ible inconnue : [`. Chaque fois qu'une sortie
+> semble tronquée ou écrasée par la fin d'elle-même, pense `\r`.
+>
+> La commande qui montre le problème en une seconde : `cat -A fichier` (ou
+> `file fichier`). `cat` seul ne montre rien, puisqu'il envoie les octets tels quels
+> au terminal, qui exécute le retour chariot au lieu de l'afficher.
+>
+> Prévention : un contrôle en CI (`file conf/*.env | grep -q CRLF && exit 1`), un
+> `.gitattributes` avec `* text=auto eol=lf`, et le réflexe de sourcer les fichiers de
+> configuration après normalisation.
 
-La commande qui montre le problème en une seconde : `cat -A fichier` (ou
-`file fichier`). `cat` seul ne montre rien, puisqu'il envoie les octets tels quels
-au terminal, qui exécute le retour chariot au lieu de l'afficher.
-
-Prévention : un contrôle en CI (`file conf/*.env | grep -q CRLF && exit 1`), un
-`.gitattributes` avec `* text=auto eol=lf`, et le réflexe de sourcer les fichiers de
-configuration après normalisation.
-:::
-
-### BF5.3 — La même IP à deux rangs différents
+### <a id="bf5-3"></a>[BF5.3](README.md#bf5-3) — La même IP à deux rangs différents
 
 **Diagnostic**
 
@@ -1685,27 +1754,28 @@ tr -d '\r' < ~/lab05/access-agrege.log \
 Chiffres identiques à ceux du fichier d'origine, et somme des compteurs égale aux
 7200 lignes.
 
-::: pourquoi
-`uniq` a parfaitement fait son travail : `10.10.10.14`, `\t10.10.10.14` et la chaîne
-vide **sont** trois chaînes différentes. Le défaut est en amont, dans l'extraction.
-
-`cut -d' '` prend le délimiteur au pied de la lettre : un seul caractère, pas de
-regroupement des blancs consécutifs, pas de tabulation. `awk` sans `-F` utilise le
-séparateur par défaut, qui est « une suite quelconque de blancs (espaces et
-tabulations), les blancs de tête étant ignorés » : il absorbe les trois cas d'un
-coup. C'est la raison principale de préférer `awk '{ print $1 }'` à
-`cut -d' ' -f1` sur des données dont tu ne maîtrises pas la mise en forme.
-
-Le `tr -d '\r'` ne change rien au premier champ, mais il normalise le dernier :
-c'est la bonne habitude — on nettoie l'entrée **une fois**, en tête de pipeline,
-plutôt que de rustiner symptôme par symptôme.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `uniq` a parfaitement fait son travail : `10.10.10.14`, `\t10.10.10.14` et la chaîne
+> vide **sont** trois chaînes différentes. Le défaut est en amont, dans l'extraction.
+>
+> `cut -d' '` prend le délimiteur au pied de la lettre : un seul caractère, pas de
+> regroupement des blancs consécutifs, pas de tabulation. `awk` sans `-F` utilise le
+> séparateur par défaut, qui est « une suite quelconque de blancs (espaces et
+> tabulations), les blancs de tête étant ignorés » : il absorbe les trois cas d'un
+> coup. C'est la raison principale de préférer `awk '{ print $1 }'` à
+> `cut -d' ' -f1` sur des données dont tu ne maîtrises pas la mise en forme.
+>
+> Le `tr -d '\r'` ne change rien au premier champ, mais il normalise le dernier :
+> c'est la bonne habitude — on nettoie l'entrée **une fois**, en tête de pipeline,
+> plutôt que de rustiner symptôme par symptôme.
 
 ---
 
 ## 5.8 Défi du module
 
-**D5 — Rapport d'exploitation hebdomadaire**
+<a id="d5"></a>**[D5](README.md#d5) — Rapport d'exploitation hebdomadaire**
 
 Les deux livrables attendus sont `rapports/hebdo-2026-S38.md` et
 `rapports/hebdo-pipelines.sh`. Voici le second, qui produit tous les chiffres du
@@ -1803,31 +1873,33 @@ Et les trois actions, chacune adossée à un chiffre :
 * superviser les 8 hôtes hors radar avant l'audit — 1872,00 EUR par mois, dont deux
   machines de production.
 
-::: pourquoi
-Trois points font la différence entre un rapport qui sert et un rapport qu'on
-archive.
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois points font la différence entre un rapport qui sert et un rapport qu'on
+> archive.
+>
+> **Les chiffres sont reproductibles.** Livrer les pipelines avec le rapport permet à
+> n'importe qui de refaire le calcul la semaine suivante, et de contester une valeur
+> en montrant la commande. C'est la version « exploitation » de la reproductibilité.
+>
+> **Chaque action est adossée à un chiffre du rapport.** « L'API est lente » n'engage
+> personne ; « 3,908 s de moyenne sur 122 appels, 22 fois les pages HTML » donne un
+> ordre de grandeur, un volume et un point de comparaison, donc une décision possible.
+>
+> **Aucun fichier temporaire.** `<(comm -23 …)` fournit la liste des hôtes non
+> supervisés directement à `grep -wF` (`-w` : pas de sous-chaîne), sans passer par `/tmp`. Un fichier temporaire
+> oublié, c'est une exécution concurrente qui se marche dessus et un rapport faux une
+> fois sur dix — le pire des cas, parce qu'il est crédible.
 
-**Les chiffres sont reproductibles.** Livrer les pipelines avec le rapport permet à
-n'importe qui de refaire le calcul la semaine suivante, et de contester une valeur
-en montrant la commande. C'est la version « exploitation » de la reproductibilité.
-
-**Chaque action est adossée à un chiffre du rapport.** « L'API est lente » n'engage
-personne ; « 3,908 s de moyenne sur 122 appels, 22 fois les pages HTML » donne un
-ordre de grandeur, un volume et un point de comparaison, donc une décision possible.
-
-**Aucun fichier temporaire.** `<(comm -23 …)` fournit la liste des hôtes non
-supervisés directement à `grep -wF` (`-w` : pas de sous-chaîne), sans passer par `/tmp`. Un fichier temporaire
-oublié, c'est une exécution concurrente qui se marche dessus et un rapport faux une
-fois sur dix — le pire des cas, parce qu'il est crédible.
-:::
-
-::: piege
-Deux pièges attendent dans ce défi. Le premier est `for (k in tableau)` sans `sort`
-derrière : l'ordre des endpoints changera entre mawk et gawk, et ton tableau
-Markdown ne sera pas reproductible. Le second est le calcul des pourcentages en
-arithmétique shell : `$(( 102 * 100 / 7200 ))` vaut **1**, pas 1.4 — bash ne fait
-que de l'entier. Tout ratio se calcule dans `awk` avec `printf "%.1f"`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux pièges attendent dans ce défi. Le premier est `for (k in tableau)` sans `sort`
+> derrière : l'ordre des endpoints changera entre mawk et gawk, et ton tableau
+> Markdown ne sera pas reproductible. Le second est le calcul des pourcentages en
+> arithmétique shell : `$(( 102 * 100 / 7200 ))` vaut **1**, pas 1.4 — bash ne fait
+> que de l'entier. Tout ratio se calcule dans `awk` avec `printf "%.1f"`.
 
 ---
 
@@ -1912,3 +1984,9 @@ bash check_M05_01.sh && bash check_M05_02.sh && bash check_M05_03.sh \
 Si un contrôle échoue, son message indique la piste, jamais la commande. Et si tes
 données ont été abîmées par un `sed -i` malheureux, `bash setup_M05.sh` les régénère
 à l'identique : c'est l'intérêt d'un générateur déterministe.
+
+<!-- nav:début -->
+---
+
+[← Module 04](../04-users-groups-sudo/corrige.md) · [Énoncé](README.md) · [Module 06 →](../06-vim-archives/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

@@ -1,586 +1,638 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 22** · corrigé  
+[← Module 21](../21-git/corrige.md) · [Énoncé](README.md) · [Module 23 →](../23-ansible/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 22 — Corrigé
 
 ## 22.3 Quiz — QCM
 
-**Q22.1** — *Relancer à l'identique `docker run -d --name web -p 8080:80
+<a id="q22-1"></a>**[Q22.1](README.md#q22-1)** — *Relancer à l'identique `docker run -d --name web -p 8080:80
 nginx:1.28-alpine` alors que `web` tourne déjà.*
 
 **Réponse : b)** conflit de nom, le premier conteneur continue.
 
-::: pourquoi
-`docker run` enchaîne deux appels au démon : `create` puis `start`. Le nom
-est vérifié à la **création** : le démon tient une table nom → ID et refuse
-tout doublon, quel que soit l'état du conteneur homonyme (même `Exited`). Le
-message exact est :
+> [!NOTE]
+> **Pourquoi**
+>
+> `docker run` enchaîne deux appels au démon : `create` puis `start`. Le nom
+> est vérifié à la **création** : le démon tient une table nom → ID et refuse
+> tout doublon, quel que soit l'état du conteneur homonyme (même `Exited`). Le
+> message exact est :
+>
+> ```text
+> docker: Error response from daemon: Conflict. The container name "/web" is
+> already in use by container "3f2a…". You have to remove (or rename) that
+> container to be able to reuse that name.
+> ```
+>
+> Le port n'est vérifié qu'au **démarrage**, quand le démon tente le `bind()`
+> et pose ses règles `iptables`. Ici on n'y arrive jamais. Si le collègue avait
+> utilisé un autre nom, il aurait obtenu `Bind for 0.0.0.0:8080 failed: port is
+> already allocated`, et le conteneur existerait en état `Created`, à nettoyer.
 
-```text
-docker: Error response from daemon: Conflict. The container name "/web" is
-already in use by container "3f2a…". You have to remove (or rename) that
-container to be able to reuse that name.
-```
-
-Le port n'est vérifié qu'au **démarrage**, quand le démon tente le `bind()`
-et pose ses règles `iptables`. Ici on n'y arrive jamais. Si le collègue avait
-utilisé un autre nom, il aurait obtenu `Bind for 0.0.0.0:8080 failed: port is
-already allocated`, et le conteneur existerait en état `Created`, à nettoyer.
-:::
-
-::: piege
-La réponse c) décrit le comportement de `docker compose up`, qui **recrée**
-un conteneur dont la définition a changé. Avec `docker run` seul, rien n'est
-jamais remplacé : c'est `docker rm -f web` puis `run`, ou `docker rename`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> La réponse c) décrit le comportement de `docker compose up`, qui **recrée**
+> un conteneur dont la définition a changé. Avec `docker run` seul, rien n'est
+> jamais remplacé : c'est `docker rm -f web` puis `run`, ou `docker rename`.
 
 ---
 
-**Q22.2** — *`docker stop` met 10 s et le code de sortie vaut 137 avec
+<a id="q22-2"></a>**[Q22.2](README.md#q22-2)** — *`docker stop` met 10 s et le code de sortie vaut 137 avec
 `CMD python3 app.py`.*
 
 **Réponse : b)** forme shell, `/bin/sh -c` est PID 1 et ne relaie pas le signal.
 
-::: pourquoi
-`CMD python3 app.py` sans crochets est la **forme shell** : Docker l'exécute
-comme `/bin/sh -c "python3 app.py"`. Le processus PID 1 du conteneur est donc
-`sh`, et Python est son fils. `docker stop` envoie `SIGTERM` **au PID 1
-uniquement**. Deux règles du noyau se combinent :
+> [!NOTE]
+> **Pourquoi**
+>
+> `CMD python3 app.py` sans crochets est la **forme shell** : Docker l'exécute
+> comme `/bin/sh -c "python3 app.py"`. Le processus PID 1 du conteneur est donc
+> `sh`, et Python est son fils. `docker stop` envoie `SIGTERM` **au PID 1
+> uniquement**. Deux règles du noyau se combinent :
+>
+> * un processus PID 1 (de son namespace) ne reçoit un signal que s'il a
+>   explicitement installé un handler : sans handler, `SIGTERM` est ignoré, et
+>   même `SIGKILL` venu de l'intérieur du namespace l'est ;
+> * `sh -c` en attente d'un fils ne propage aucun signal à ce fils.
+>
+> Résultat : rien ne se passe pendant `--time` (10 s par défaut), puis Docker
+> envoie `SIGKILL` depuis l'hôte, ce qui tue `sh` ; ses fils sont tués avec le
+> namespace. Code de sortie 128 + 9 = **137**. L'application n'a jamais vu le
+> signal qu'elle sait pourtant traiter.
+>
+> La forme exec `CMD ["python3", "app.py"]` fait de Python le PID 1 ; il a
+> installé un handler `SIGTERM` (c'est le cas de `factura-api`), s'arrête
+> proprement en quelques millisecondes et sort en `0`.
 
-* un processus PID 1 (de son namespace) ne reçoit un signal que s'il a
-  explicitement installé un handler : sans handler, `SIGTERM` est ignoré, et
-  même `SIGKILL` venu de l'intérieur du namespace l'est ;
-* `sh -c` en attente d'un fils ne propage aucun signal à ce fils.
-
-Résultat : rien ne se passe pendant `--time` (10 s par défaut), puis Docker
-envoie `SIGKILL` depuis l'hôte, ce qui tue `sh` ; ses fils sont tués avec le
-namespace. Code de sortie 128 + 9 = **137**. L'application n'a jamais vu le
-signal qu'elle sait pourtant traiter.
-
-La forme exec `CMD ["python3", "app.py"]` fait de Python le PID 1 ; il a
-installé un handler `SIGTERM` (c'est le cas de `factura-api`), s'arrête
-proprement en quelques millisecondes et sort en `0`.
-:::
-
-::: piege
-`sh -c` avec une **seule** commande simple est parfois optimisé par `dash` ou
-`bash` en `exec` implicite, ce qui masque le problème sur le poste du
-développeur… et le fait réapparaître dès qu'on ajoute un `&&` ou un `echo`
-avant. Ne compte jamais sur cette optimisation : forme exec, toujours.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `sh -c` avec une **seule** commande simple est parfois optimisé par `dash` ou
+> `bash` en `exec` implicite, ce qui masque le problème sur le poste du
+> développeur… et le fait réapparaître dès qu'on ajoute un `&&` ou un `echo`
+> avant. Ne compte jamais sur cette optimisation : forme exec, toujours.
 
 ---
 
-**Q22.3** — *`Restarting (0) 2 seconds ago` avec `--restart always` (deux
+<a id="q22-3"></a>**[Q22.3](README.md#q22-3)** — *`Restarting (0) 2 seconds ago` avec `--restart always` (deux
 réponses).*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-`Restarting (N)` affiche entre parenthèses le **code de sortie** de la
-dernière exécution. `0` signifie que le processus principal s'est terminé
-**normalement** : ce n'est pas un plantage, c'est un programme qui a fini son
-travail. Le cas typique est un script de démarrage qui lance le vrai service
-avec `&` puis atteint sa dernière ligne ; PID 1 sort, le conteneur est
-terminé, et la politique `always` le relance. Docker applique un délai
-croissant (100 ms, 200 ms, 400 ms…), d'où l'état `Restarting` visible.
+> [!NOTE]
+> **Pourquoi**
+>
+> `Restarting (N)` affiche entre parenthèses le **code de sortie** de la
+> dernière exécution. `0` signifie que le processus principal s'est terminé
+> **normalement** : ce n'est pas un plantage, c'est un programme qui a fini son
+> travail. Le cas typique est un script de démarrage qui lance le vrai service
+> avec `&` puis atteint sa dernière ligne ; PID 1 sort, le conteneur est
+> terminé, et la politique `always` le relance. Docker applique un délai
+> croissant (100 ms, 200 ms, 400 ms…), d'où l'état `Restarting` visible.
+>
+> `docker logs` conserve la sortie de **toutes** les exécutions du conteneur
+> (c'est le même fichier `*-json.log` tant que le conteneur n'est pas
+> supprimé), et `docker inspect --format '{{.RestartCount}}'` compte les
+> relances. Ce sont les deux premières commandes à taper.
 
-`docker logs` conserve la sortie de **toutes** les exécutions du conteneur
-(c'est le même fichier `*-json.log` tant que le conteneur n'est pas
-supprimé), et `docker inspect --format '{{.RestartCount}}'` compte les
-relances. Ce sont les deux premières commandes à taper.
-:::
-
-::: piege
-b) est faux : un healthcheck en échec passe le conteneur en `unhealthy` mais
-Docker Engine **ne redémarre jamais** sur ce critère (Compose non plus, sauf
-outil externe comme `autoheal` ; Kubernetes, lui, le fait avec les probes).
-c) est faux : un OOM donne `Restarting (137)`, pas `(0)`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> b) est faux : un healthcheck en échec passe le conteneur en `unhealthy` mais
+> Docker Engine **ne redémarre jamais** sur ce critère (Compose non plus, sauf
+> outil externe comme `autoheal` ; Kubernetes, lui, le fait avec les probes).
+> c) est faux : un OOM donne `Restarting (137)`, pas `(0)`.
 
 ---
 
-**Q22.4** — *`ufw deny 8080/tcp` n'empêche pas l'accès à un port publié par
+<a id="q22-4"></a>**[Q22.4](README.md#q22-4)** — *`ufw deny 8080/tcp` n'empêche pas l'accès à un port publié par
 Docker.*
 
 **Réponse : b)**
 
-::: pourquoi
-Un paquet destiné à `10.10.10.14:8080` traverse `PREROUTING` (table `nat`),
-où la chaîne `DOCKER` contient une règle `DNAT --to 172.17.0.2:80`. Sa
-destination n'est plus l'hôte : il ne passe pas par `INPUT` mais par
-`FORWARD`. Là, Docker a inséré en tête ses chaînes (`DOCKER-USER`, puis
-`DOCKER-FORWARD` ou `DOCKER` selon la version) qui **acceptent** le trafic
-vers le conteneur avant que les chaînes d'`ufw` (`ufw-before-forward`,
-`ufw-user-forward`) ne soient consultées. `ufw` gère `INPUT` : il ne voit
-jamais ce paquet.
+> [!NOTE]
+> **Pourquoi**
+>
+> Un paquet destiné à `10.10.10.14:8080` traverse `PREROUTING` (table `nat`),
+> où la chaîne `DOCKER` contient une règle `DNAT --to 172.17.0.2:80`. Sa
+> destination n'est plus l'hôte : il ne passe pas par `INPUT` mais par
+> `FORWARD`. Là, Docker a inséré en tête ses chaînes (`DOCKER-USER`, puis
+> `DOCKER-FORWARD` ou `DOCKER` selon la version) qui **acceptent** le trafic
+> vers le conteneur avant que les chaînes d'`ufw` (`ufw-before-forward`,
+> `ufw-user-forward`) ne soient consultées. `ufw` gère `INPUT` : il ne voit
+> jamais ce paquet.
+>
+> La seule chaîne que Docker crée, place en premier et **ne touche jamais**
+> est `DOCKER-USER` : c'est là qu'on filtre, avec `-i ens18` pour ne viser que
+> le trafic entrant par l'interface externe.
 
-La seule chaîne que Docker crée, place en premier et **ne touche jamais**
-est `DOCKER-USER` : c'est là qu'on filtre, avec `-i ens18` pour ne viser que
-le trafic entrant par l'interface externe.
-:::
-
-::: piege
-c) contient un grain de vérité déformé : `docker-proxy` existe, mais ne sert
-que le trafic vers `127.0.0.1` (et IPv6 sans NAT) ; le trafic externe passe par
-le noyau. Et « redémarrer ufw » (d) aggrave les choses : `ufw reload` peut
-effacer les règles Docker, qu'il faudra régénérer par `systemctl restart
-docker`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) contient un grain de vérité déformé : `docker-proxy` existe, mais ne sert
+> que le trafic vers `127.0.0.1` (et IPv6 sans NAT) ; le trafic externe passe par
+> le noyau. Et « redémarrer ufw » (d) aggrave les choses : `ufw reload` peut
+> effacer les règles Docker, qu'il faudra régénérer par `systemctl restart
+> docker`.
 
 ---
 
-**Q22.5** — *`pip install` rejoué à chaque modification de `app.py`.*
+<a id="q22-5"></a>**[Q22.5](README.md#q22-5)** — *`pip install` rejoué à chaque modification de `app.py`.*
 
 **Réponse : b)** copier `requirements.txt` seul, installer, puis copier le
 reste.
 
-::: pourquoi
-Le cache de BuildKit fonctionne couche par couche, dans l'ordre du
-Dockerfile. Pour `COPY`, la clé de cache est le **contenu** (somme de
-contrôle) des fichiers copiés ; pour `RUN`, c'est la chaîne de commande
-**et** l'état de la couche parente. Dès qu'une instruction sort du cache,
-**toutes les suivantes** sont rejouées, sans exception.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le cache de BuildKit fonctionne couche par couche, dans l'ordre du
+> Dockerfile. Pour `COPY`, la clé de cache est le **contenu** (somme de
+> contrôle) des fichiers copiés ; pour `RUN`, c'est la chaîne de commande
+> **et** l'état de la couche parente. Dès qu'une instruction sort du cache,
+> **toutes les suivantes** sont rejouées, sans exception.
+>
+> `COPY . .` en tête change dès qu'un octet du contexte change, donc à chaque
+> sauvegarde du code, et entraîne le `pip install`. En copiant d'abord
+> `requirements.txt` seul, la couche `pip install` ne dépend que de ce fichier
+> et reste en cache tant que les dépendances ne bougent pas. Le code, copié en
+> dernier, n'invalide que sa propre couche.
 
-`COPY . .` en tête change dès qu'un octet du contexte change, donc à chaque
-sauvegarde du code, et entraîne le `pip install`. En copiant d'abord
-`requirements.txt` seul, la couche `pip install` ne dépend que de ce fichier
-et reste en cache tant que les dépendances ne bougent pas. Le code, copié en
-dernier, n'invalide que sa propre couche.
-:::
-
-::: piege
-a) `--no-cache` est l'inverse de ce qu'on veut. d) `ADD` a le même
-comportement de cache que `COPY`, avec en plus deux pièges : il décompresse
-les archives et télécharge les URL (sans cache, d'ailleurs). Un `.dockerignore`
-complète la correction : sans lui, `.git/` et les données font partie du
-contexte et invalident le cache pour rien.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) `--no-cache` est l'inverse de ce qu'on veut. d) `ADD` a le même
+> comportement de cache que `COPY`, avec en plus deux pièges : il décompresse
+> les archives et télécharge les URL (sans cache, d'ailleurs). Un `.dockerignore`
+> complète la correction : sans lui, `.git/` et les données font partie du
+> contexte et invalident le cache pour rien.
 
 ---
 
-**Q22.6** — *`ARG` contre `ENV`.*
+<a id="q22-6"></a>**[Q22.6](README.md#q22-6)** — *`ARG` contre `ENV`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`ARG` déclare une variable **de build**, valorisée par `--build-arg` ou par
-sa valeur par défaut, visible par les instructions `RUN`, `COPY`, `FROM` qui
-suivent, et absente de l'image finale. `ENV` écrit une paire clé/valeur dans
-la configuration de l'image (`docker inspect --format '{{.Config.Env}}'`), et
-chaque processus lancé dans le conteneur en hérite. Le motif courant
-`ARG VERSION` + `ENV APP_VERSION=$VERSION` fait passer une valeur de build en
-variable d'exécution.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `ARG` déclare une variable **de build**, valorisée par `--build-arg` ou par
+> sa valeur par défaut, visible par les instructions `RUN`, `COPY`, `FROM` qui
+> suivent, et absente de l'image finale. `ENV` écrit une paire clé/valeur dans
+> la configuration de l'image (`docker inspect --format '{{.Config.Env}}'`), et
+> chaque processus lancé dans le conteneur en hérite. Le motif courant
+> `ARG VERSION` + `ENV APP_VERSION=$VERSION` fait passer une valeur de build en
+> variable d'exécution.
 
-::: piege
-d) est dangereux parce qu'il est cru : `ARG` **n'est pas secret**. Sa valeur
-apparaît dans `docker history` de la couche qui l'utilise. Pour un jeton
-nécessaire au build, il faut `RUN --mount=type=secret,id=token …` avec
-`--secret id=token,src=…` : le fichier est monté le temps du `RUN` et ne
-laisse aucune trace dans l'image.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) est dangereux parce qu'il est cru : `ARG` **n'est pas secret**. Sa valeur
+> apparaît dans `docker history` de la couche qui l'utilise. Pour un jeton
+> nécessaire au build, il faut `RUN --mount=type=secret,id=token …` avec
+> `--secret id=token,src=…` : le fichier est monté le temps du `RUN` et ne
+> laisse aucune trace dans l'image.
 
 ---
 
-**Q22.7** — *`getent hosts redis` ne renvoie rien sur le bridge par défaut.*
+<a id="q22-7"></a>**[Q22.7](README.md#q22-7)** — *`getent hosts redis` ne renvoie rien sur le bridge par défaut.*
 
 **Réponse : b)**
 
-::: pourquoi
-Le réseau `bridge` par défaut (`docker0`) est un héritage : les conteneurs y
-reçoivent le `/etc/resolv.conf` de l'hôte et aucun service de noms. Les
-réseaux **utilisateur** (`docker network create`) activent le serveur DNS
-intégré du démon, exposé en `127.0.0.11` dans chaque conteneur : il résout les
-noms et les alias des conteneurs du même réseau, puis relaie le reste vers
-les DNS de l'hôte. La connectivité IP existe dans les deux cas (d est faux),
-c'est la résolution qui manque.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le réseau `bridge` par défaut (`docker0`) est un héritage : les conteneurs y
+> reçoivent le `/etc/resolv.conf` de l'hôte et aucun service de noms. Les
+> réseaux **utilisateur** (`docker network create`) activent le serveur DNS
+> intégré du démon, exposé en `127.0.0.11` dans chaque conteneur : il résout les
+> noms et les alias des conteneurs du même réseau, puis relaie le reste vers
+> les DNS de l'hôte. La connectivité IP existe dans les deux cas (d est faux),
+> c'est la résolution qui manque.
 
-::: piege
-a) `--link` fonctionne encore sur le bridge par défaut mais est **déprécié**
-depuis des années : il écrit dans `/etc/hosts` du conteneur, ne survit pas à
-une recréation de la cible et est unidirectionnel. c) confond publication
-(vers l'hôte) et communication inter-conteneurs : deux conteneurs d'un même
-réseau se joignent sur tous les ports sans `-p`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) `--link` fonctionne encore sur le bridge par défaut mais est **déprécié**
+> depuis des années : il écrit dans `/etc/hosts` du conteneur, ne survit pas à
+> une recréation de la cible et est unidirectionnel. c) confond publication
+> (vers l'hôte) et communication inter-conteneurs : deux conteneurs d'un même
+> réseau se joignent sur tous les ports sans `-p`.
 
 ---
 
-**Q22.8** — *Copie du contenu de l'image dans le montage au premier
+<a id="q22-8"></a>**[Q22.8](README.md#q22-8)** — *Copie du contenu de l'image dans le montage au premier
 démarrage.*
 
 **Réponse : b)** uniquement avec un volume nommé **vide**.
 
-::: pourquoi
-Quand un volume nommé est monté sur un chemin de l'image qui contient déjà
-des fichiers, et que ce volume est **vide**, Docker y copie le contenu du
-chemin (fichiers, propriétaires, droits). C'est ce qui permet à une image
-`postgres` ou `nginx` de peupler un volume neuf. Un bind mount ne déclenche
-jamais cette copie : le répertoire hôte masque le contenu de l'image, tel
-quel, avec ses droits à lui. Un volume non vide n'est pas touché non plus.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Quand un volume nommé est monté sur un chemin de l'image qui contient déjà
+> des fichiers, et que ce volume est **vide**, Docker y copie le contenu du
+> chemin (fichiers, propriétaires, droits). C'est ce qui permet à une image
+> `postgres` ou `nginx` de peupler un volume neuf. Un bind mount ne déclenche
+> jamais cette copie : le répertoire hôte masque le contenu de l'image, tel
+> quel, avec ses droits à lui. Un volume non vide n'est pas touché non plus.
 
-::: piege
-C'est ce mécanisme qui rend le volume nommé « magique » côté droits : le
-répertoire copié garde le `chown app:app` fait dans le Dockerfile. Avec un
-bind mount, l'UID du répertoire est celui de l'hôte, d'où les
-`Permission denied` de QO22.7. L'option `--mount … ,volume-nocopy` désactive
-la copie.
-:::
+> [!WARNING]
+> **Piège**
+>
+> C'est ce mécanisme qui rend le volume nommé « magique » côté droits : le
+> répertoire copié garde le `chown app:app` fait dans le Dockerfile. Avec un
+> bind mount, l'UID du répertoire est celui de l'hôte, d'où les
+> `Permission denied` de QO22.7. L'option `--mount … ,volume-nocopy` désactive
+> la copie.
 
 ---
 
-**Q22.9** — *`Exited (137)` après `/fuite` avec `--memory 64m`.*
+<a id="q22-9"></a>**[Q22.9](README.md#q22-9)** — *`Exited (137)` après `/fuite` avec `--memory 64m`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`137` signifie seulement « tué par `SIGKILL` » : `docker kill`, un `stop`
-expiré ou l'OOM killer produisent le même code. Ce qui tranche, c'est le champ
-`State.OOMKilled` que le démon positionne quand le cgroup du conteneur signale
-un `oom_kill`, et la trace noyau `Memory cgroup out of memory: Killed process
-… (python3)` dans `journalctl -k`. Le fichier `memory.events` du cgroup
-(`oom_kill 1`) le confirme aussi.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `137` signifie seulement « tué par `SIGKILL` » : `docker kill`, un `stop`
+> expiré ou l'OOM killer produisent le même code. Ce qui tranche, c'est le champ
+> `State.OOMKilled` que le démon positionne quand le cgroup du conteneur signale
+> un `oom_kill`, et la trace noyau `Memory cgroup out of memory: Killed process
+> … (python3)` dans `journalctl -k`. Le fichier `memory.events` du cgroup
+> (`oom_kill 1`) le confirme aussi.
 
-::: piege
-`--memory 64m` seul autorise autant de **swap** en plus (`--memory-swap`
-vaut le double par défaut si l'hôte a du swap, ce qui est le cas d'une
-Ubuntu Server avec `/swap.img`) : l'allocation de 100 Mo peut passer en
-ralentissant tout. Pour un test franc : `--memory 64m --memory-swap 64m`.
-a) est faux : `Killed` est écrit par le **shell** parent, il n'y en a pas ici.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--memory 64m` seul autorise autant de **swap** en plus (`--memory-swap`
+> vaut le double par défaut si l'hôte a du swap, ce qui est le cas d'une
+> Ubuntu Server avec `/swap.img`) : l'allocation de 100 Mo peut passer en
+> ralentissant tout. Pour un test franc : `--memory 64m --memory-swap 64m`.
+> a) est faux : `Killed` est écrit par le **shell** parent, il n'y en a pas ici.
 
 ---
 
-**Q22.10** — *`docker run -d nginx` le lendemain d'un `docker pull nginx`.*
+<a id="q22-10"></a>**[Q22.10](README.md#q22-10)** — *`docker run -d nginx` le lendemain d'un `docker pull nginx`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`docker run` ne contacte le registre que si l'image (`nginx:latest`) est
-absente localement, ou avec `--pull always`. Et `latest` n'est qu'un tag : une
-étiquette mobile que le mainteneur déplace quand il le veut. Rien ne garantit
-qu'elle désigne la version la plus récente, ni qu'elle désigne demain la même
-chose qu'aujourd'hui. Seul le digest (`nginx@sha256:…`) identifie un contenu ;
-`docker images --digests` le montre, et `docker inspect --format
-'{{.RepoDigests}}'` aussi.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `docker run` ne contacte le registre que si l'image (`nginx:latest`) est
+> absente localement, ou avec `--pull always`. Et `latest` n'est qu'un tag : une
+> étiquette mobile que le mainteneur déplace quand il le veut. Rien ne garantit
+> qu'elle désigne la version la plus récente, ni qu'elle désigne demain la même
+> chose qu'aujourd'hui. Seul le digest (`nginx@sha256:…`) identifie un contenu ;
+> `docker images --digests` le montre, et `docker inspect --format
+> '{{.RepoDigests}}'` aussi.
 
-::: piege
-En production, on épingle un tag précis (`nginx:1.28.0-alpine`) ou un
-digest, et on met à jour **volontairement**. `docker compose pull` puis
-`up -d` recrée les conteneurs dont l'image a changé — mais avec `latest`, on
-ne saura pas dire ce qui tournait avant.
-:::
+> [!WARNING]
+> **Piège**
+>
+> En production, on épingle un tag précis (`nginx:1.28.0-alpine`) ou un
+> digest, et on met à jour **volontairement**. `docker compose pull` puis
+> `up -d` recrée les conteneurs dont l'image a changé — mais avec `latest`, on
+> ne saura pas dire ce qui tournait avant.
 
 ---
 
-**Q22.11** — *Monter `docker.sock` dans un conteneur (deux réponses).*
+<a id="q22-11"></a>**[Q22.11](README.md#q22-11)** — *Monter `docker.sock` dans un conteneur (deux réponses).*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Le socket est l'API du démon, qui tourne en root. Qui peut lui parler peut
-créer un conteneur `--privileged` avec `/` de l'hôte monté, et y faire
-`chroot` : root sur `lab-ops`, sans mot de passe ni trace `sudo`. C'est
-exactement le pouvoir du groupe `docker` (le socket est `root:docker` en
-`0660`). L'utilisateur du conteneur n'y change rien (a) : c'est le démon qui
-exécute, pas le conteneur. Et Docker ne refuse rien (d) : un bind mount est un
-bind mount.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le socket est l'API du démon, qui tourne en root. Qui peut lui parler peut
+> créer un conteneur `--privileged` avec `/` de l'hôte monté, et y faire
+> `chroot` : root sur `lab-ops`, sans mot de passe ni trace `sudo`. C'est
+> exactement le pouvoir du groupe `docker` (le socket est `root:docker` en
+> `0660`). L'utilisateur du conteneur n'y change rien (a) : c'est le démon qui
+> exécute, pas le conteneur. Et Docker ne refuse rien (d) : un bind mount est un
+> bind mount.
 
-::: piege
-Si un pipeline a vraiment besoin de construire des images, les alternatives
-sont : un runner **dédié** et jetable, `docker-socket-proxy` qui filtre l'API,
-BuildKit en mode rootless, ou Kaniko/Buildah sans démon. Et surtout : le
-socket monté doit apparaître dans l'audit de sécurité comme « accès root ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> Si un pipeline a vraiment besoin de construire des images, les alternatives
+> sont : un runner **dédié** et jetable, `docker-socket-proxy` qui filtre l'API,
+> BuildKit en mode rootless, ou Kaniko/Buildah sans démon. Et surtout : le
+> socket monté doit apparaître dans l'audit de sécurité comme « accès root ».
 
 ---
 
-**Q22.12** — *`depends_on: [db]` et `connection refused` au premier `up`.*
+<a id="q22-12"></a>**[Q22.12](README.md#q22-12)** — *`depends_on: [db]` et `connection refused` au premier `up`.*
 
 **Réponse : a)**
 
-::: pourquoi
-La forme courte de `depends_on` équivaut à `condition: service_started` :
-Compose attend que le **conteneur** `db` soit démarré, c'est-à-dire que son
-PID 1 existe. PostgreSQL met ensuite deux à cinq secondes à initialiser le
-répertoire de données et à écouter. `app` démarre dans cette fenêtre et
-échoue. La forme longue avec `condition: service_healthy` bloque le
-démarrage d'`app` jusqu'à ce que le `healthcheck` de `db` soit vert
-(`pg_isready`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La forme courte de `depends_on` équivaut à `condition: service_started` :
+> Compose attend que le **conteneur** `db` soit démarré, c'est-à-dire que son
+> PID 1 existe. PostgreSQL met ensuite deux à cinq secondes à initialiser le
+> répertoire de données et à écouter. `app` démarre dans cette fenêtre et
+> échoue. La forme longue avec `condition: service_healthy` bloque le
+> démarrage d'`app` jusqu'à ce que le `healthcheck` de `db` soit vert
+> (`pg_isready`).
 
-::: piege
-Même avec `service_healthy`, `db` peut redémarrer plus tard : l'application
-doit **retenter** ses connexions. `depends_on` règle le démarrage initial,
-pas la vie de la pile ; `restart: unless-stopped` sur `app` couvre le reste,
-et depuis Compose 2.17, `depends_on: db: {condition: service_healthy,
-restart: true}` redémarre `app` quand `db` est recréé.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Même avec `service_healthy`, `db` peut redémarrer plus tard : l'application
+> doit **retenter** ses connexions. `depends_on` règle le démarrage initial,
+> pas la vie de la pile ; `restart: unless-stopped` sur `app` couvre le reste,
+> et depuis Compose 2.17, `depends_on: db: {condition: service_healthy,
+> restart: true}` redémarre `app` quand `db` est recréé.
 
 ---
 
-**Q22.13** — *`.env` ne peuple pas l'environnement de `db`.*
+<a id="q22-13"></a>**[Q22.13](README.md#q22-13)** — *`.env` ne peuple pas l'environnement de `db`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Compose lit `.env` (dans le répertoire du projet) pour **interpoler**
-`${VAR}` dans le fichier Compose lui-même : `image: postgres:${PG_VERSION}`.
-Le conteneur, lui, ne reçoit que ce que `environment:` ou `env_file:`
-déclarent sur son service. Les deux fichiers ont la même syntaxe, d'où la
-confusion. `docker compose config` montre le résultat de l'interpolation et
-l'environnement effectif de chaque service.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Compose lit `.env` (dans le répertoire du projet) pour **interpoler**
+> `${VAR}` dans le fichier Compose lui-même : `image: postgres:${PG_VERSION}`.
+> Le conteneur, lui, ne reçoit que ce que `environment:` ou `env_file:`
+> déclarent sur son service. Les deux fichiers ont la même syntaxe, d'où la
+> confusion. `docker compose config` montre le résultat de l'interpolation et
+> l'environnement effectif de chaque service.
 
-::: piege
-`env_file: .env` fait passer **tout** le fichier dans le conteneur, y compris
-les variables qui ne le concernent pas. Pour un mot de passe, aucune des deux
-méthodes n'est bonne : `docker inspect` affiche `Config.Env` en clair. C'est le
-rôle de `secrets:`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `env_file: .env` fait passer **tout** le fichier dans le conteneur, y compris
+> les variables qui ne le concernent pas. Pour un mot de passe, aucune des deux
+> méthodes n'est bonne : `docker inspect` affiche `Config.Env` en clair. C'est le
+> rôle de `secrets:`.
 
 ---
 
-**Q22.14** — *`exec: "sh": executable file not found` (deux réponses).*
+<a id="q22-14"></a>**[Q22.14](README.md#q22-14)** — *`exec: "sh": executable file not found` (deux réponses).*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-L'image est *distroless* ou `scratch` : pas de shell, c'est voulu. Deux
-techniques d'inspection sans modifier l'image :
+> [!NOTE]
+> **Pourquoi**
+>
+> L'image est *distroless* ou `scratch` : pas de shell, c'est voulu. Deux
+> techniques d'inspection sans modifier l'image :
+>
+> * lancer un conteneur outillé qui **partage les namespaces** de la cible :
+>   `--pid container:app` (voir ses processus, lire `/proc/1/root/…`) et
+>   `--network container:app` (ses ports, `ss`, `curl localhost`). 
+>   Docker Desktop (4.27+) propose `docker debug`, qui fait la même chose ;
+> * `nsenter` depuis l'hôte, avec le PID vu par l'hôte : `-n` seul entre dans
+>   le réseau du conteneur en gardant les binaires de l'hôte (`ss`, `curl`, `tcpdump`). Ajouter `-m` ferait voir le système de
+>   fichiers du conteneur, mais les binaires utilisés seraient alors ceux… du conteneur,
+>   donc `sh` manquerait aussi (`nsenter` : `failed to execute /bin/bash`) : pour les fichiers, on lit
+>   `/proc/PID/root/` depuis l'hôte.
 
-* lancer un conteneur outillé qui **partage les namespaces** de la cible :
-  `--pid container:app` (voir ses processus, lire `/proc/1/root/…`) et
-  `--network container:app` (ses ports, `ss`, `curl localhost`). 
-  Docker Desktop (4.27+) propose `docker debug`, qui fait la même chose ;
-* `nsenter` depuis l'hôte, avec le PID vu par l'hôte : `-n` seul entre dans
-  le réseau du conteneur en gardant les binaires de l'hôte (`ss`, `curl`, `tcpdump`). Ajouter `-m` ferait voir le système de
-  fichiers du conteneur, mais les binaires utilisés seraient alors ceux… du conteneur,
-  donc `sh` manquerait aussi (`nsenter` : `failed to execute /bin/bash`) : pour les fichiers, on lit
-  `/proc/PID/root/` depuis l'hôte.
-:::
-
-::: piege
-b) est une non-réponse : remettre un shell en production élargit la surface
-d'attaque pour un besoin de débogage occasionnel. d) `--shell` n'existe pas.
-:::
+> [!WARNING]
+> **Piège**
+>
+> b) est une non-réponse : remettre un shell en production élargit la surface
+> d'attaque pour un besoin de débogage occasionnel. d) `--shell` n'existe pas.
 
 ---
 
-**Q22.15** — *`*-json.log` de 9 Go et `max-size` ajouté après coup (deux
+<a id="q22-15"></a>**[Q22.15](README.md#q22-15)** — *`*-json.log` de 9 Go et `max-size` ajouté après coup (deux
 réponses).*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Les options de journalisation sont **figées à la création** du conteneur
-(`docker inspect --format '{{json .HostConfig.LogConfig}}'`). `daemon.json`
-ne fixe que la valeur par défaut des conteneurs futurs. Il faut donc recréer
-le conteneur. En attendant, `truncate -s 0` sur le fichier libère l'espace
-immédiatement : le démon garde le fichier ouvert en mode ajout, le tronquer
-ne casse rien (contrairement à `rm`, qui laisserait l'inode occupé tant que
-le démon l'a ouvert).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les options de journalisation sont **figées à la création** du conteneur
+> (`docker inspect --format '{{json .HostConfig.LogConfig}}'`). `daemon.json`
+> ne fixe que la valeur par défaut des conteneurs futurs. Il faut donc recréer
+> le conteneur. En attendant, `truncate -s 0` sur le fichier libère l'espace
+> immédiatement : le démon garde le fichier ouvert en mode ajout, le tronquer
+> ne casse rien (contrairement à `rm`, qui laisserait l'inode occupé tant que
+> le démon l'a ouvert).
 
-::: piege
-d) est faux : `json-file` tourne très bien avec `max-size`/`max-file`. Mais
-il faut savoir qu'après rotation, `docker logs` ne voit que les fichiers
-conservés. Pour une rétention longue, `journald` (`journalctl
-CONTAINER_NAME=web`) ou un collecteur (module 16) sont plus adaptés.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) est faux : `json-file` tourne très bien avec `max-size`/`max-file`. Mais
+> il faut savoir qu'après rotation, `docker logs` ne voit que les fichiers
+> conservés. Pour une rétention longue, `journald` (`journalctl
+> CONTAINER_NAME=web`) ou un collecteur (module 16) sont plus adaptés.
 
 ---
 
-**Q22.16** — *`-p 127.0.0.1:8080:80` vu depuis `lab-adm`.*
+<a id="q22-16"></a>**[Q22.16](README.md#q22-16)** — *`-p 127.0.0.1:8080:80` vu depuis `lab-adm`.*
 
 **Réponse : b)**
 
-::: pourquoi
-La syntaxe `-p [IP:]hôte:conteneur` fixe l'adresse d'écoute côté hôte. Avec
-`127.0.0.1`, la règle DNAT ne s'applique qu'aux paquets destinés à la boucle
-locale et `docker-proxy` n'écoute que sur `lo`. Depuis le réseau, rien
-n'écoute sur `10.10.10.14:8080` : `Connection refused` immédiat, pas de
-timeout. C'est le motif standard « service derrière un reverse proxy local » :
-nginx sur l'hôte parle à `127.0.0.1:8080`, le monde parle à nginx.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La syntaxe `-p [IP:]hôte:conteneur` fixe l'adresse d'écoute côté hôte. Avec
+> `127.0.0.1`, la règle DNAT ne s'applique qu'aux paquets destinés à la boucle
+> locale et `docker-proxy` n'écoute que sur `lo`. Depuis le réseau, rien
+> n'écoute sur `10.10.10.14:8080` : `Connection refused` immédiat, pas de
+> timeout. C'est le motif standard « service derrière un reverse proxy local » :
+> nginx sur l'hôte parle à `127.0.0.1:8080`, le monde parle à nginx.
 
-::: piege
-Sans IP, `-p 8080:80` publie sur `0.0.0.0` **et** `[::]` : toutes les
-interfaces, IPv6 compris. Beaucoup de « fuites » de bases de données viennent
-d'un `-p 5432:5432` qu'on croyait local.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sans IP, `-p 8080:80` publie sur `0.0.0.0` **et** `[::]` : toutes les
+> interfaces, IPv6 compris. Beaucoup de « fuites » de bases de données viennent
+> d'un `-p 5432:5432` qu'on croyait local.
 
 ---
 
-**Q22.17** — *`chown: Operation not permitted` avec `--cap-drop ALL`.*
+<a id="q22-17"></a>**[Q22.17](README.md#q22-17)** — *`chown: Operation not permitted` avec `--cap-drop ALL`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`chown` sur un fichier dont on n'est pas propriétaire est contrôlé par
-`CAP_CHOWN`. Un conteneur Docker root possède par défaut 14 capabilities dont
-`CHOWN`, `DAC_OVERRIDE`, `SETUID`, `NET_BIND_SERVICE`… `--cap-drop ALL` les
-retire toutes : même en UID 0, le processus n'est plus qu'un utilisateur
-ordinaire pour ce type d'opération. Ici en plus `--user 10001` : le point
-d'entrée d'une image (souvent un `chown -R` de `/data`) est pensé pour root.
-Solution : préparer les droits dans l'image (`RUN chown`), ou sur l'hôte, ou
-`--cap-add CHOWN` si on tient à l'`ENTRYPOINT` d'origine.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `chown` sur un fichier dont on n'est pas propriétaire est contrôlé par
+> `CAP_CHOWN`. Un conteneur Docker root possède par défaut 14 capabilities dont
+> `CHOWN`, `DAC_OVERRIDE`, `SETUID`, `NET_BIND_SERVICE`… `--cap-drop ALL` les
+> retire toutes : même en UID 0, le processus n'est plus qu'un utilisateur
+> ordinaire pour ce type d'opération. Ici en plus `--user 10001` : le point
+> d'entrée d'une image (souvent un `chown -R` de `/data`) est pensé pour root.
+> Solution : préparer les droits dans l'image (`RUN chown`), ou sur l'hôte, ou
+> `--cap-add CHOWN` si on tient à l'`ENTRYPOINT` d'origine.
 
-::: piege
-`--privileged` (c) donne **tout** : toutes les capabilities, tous les
-périphériques, pas de seccomp ni d'AppArmor. C'est la réponse « ça marche »
-qui annule tout l'intérêt du conteneur. Vérifie ce qu'il te faut vraiment
-avec `capsh --print` ou `getpcaps PID`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--privileged` (c) donne **tout** : toutes les capabilities, tous les
+> périphériques, pas de seccomp ni d'AppArmor. C'est la réponse « ça marche »
+> qui annule tout l'intérêt du conteneur. Vérifie ce qu'il te faut vraiment
+> avec `capsh --print` ou `getpcaps PID`.
 
 ---
 
-**Q22.18** — *`docker rmi` refuse : un conteneur arrêté utilise l'image.*
+<a id="q22-18"></a>**[Q22.18](README.md#q22-18)** — *`docker rmi` refuse : un conteneur arrêté utilise l'image.*
 
 **Réponse : b)**
 
-::: pourquoi
-Un conteneur, même `Exited`, est un objet complet : sa couche d'écriture
-repose sur les couches de l'image, et le démon garde la référence. `docker
-rmi -f` ne fait que **détacher le tag** : les couches restent, l'image devient
-`<none>:<none>` (une *dangling image*) et l'espace n'est pas libéré. L'ordre
-correct est `docker rm` du conteneur, puis `docker rmi`. `docker ps -a
---filter ancestor=factura-api:1.0` liste les conteneurs concernés.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un conteneur, même `Exited`, est un objet complet : sa couche d'écriture
+> repose sur les couches de l'image, et le démon garde la référence. `docker
+> rmi -f` ne fait que **détacher le tag** : les couches restent, l'image devient
+> `<none>:<none>` (une *dangling image*) et l'espace n'est pas libéré. L'ordre
+> correct est `docker rm` du conteneur, puis `docker rmi`. `docker ps -a
+> --filter ancestor=factura-api:1.0` liste les conteneurs concernés.
 
-::: piege
-c) `docker system prune -a --volumes` supprime **tous** les conteneurs
-arrêtés, toutes les images non utilisées par un conteneur en cours, tous les
-réseaux inutilisés et tous les volumes anonymes : sur un serveur, c'est
-potentiellement des données perdues. On ne le lance jamais « immédiatement ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> c) `docker system prune -a --volumes` supprime **tous** les conteneurs
+> arrêtés, toutes les images non utilisées par un conteneur en cours, tous les
+> réseaux inutilisés et tous les volumes anonymes : sur un serveur, c'est
+> potentiellement des données perdues. On ne le lance jamais « immédiatement ».
 
 ---
 
-**Q22.19** — *Aucun `runc` en vie, le père du conteneur est un shim (deux
+<a id="q22-19"></a>**[Q22.19](README.md#q22-19)** — *Aucun `runc` en vie, le père du conteneur est un shim (deux
 réponses).*
 
 **Réponse : b) et c)**
 
-::: pourquoi
-`runc` est un **exécuteur**, pas un démon : `runc create` prépare
-namespaces, cgroup et montages, `runc start` fait l'`execve()` du processus,
-et `runc` se termine. Ce qui reste en face du conteneur est
-`containerd-shim-runc-v2`, un petit processus par conteneur qui garde les
-descripteurs stdio, reçoit le code de sortie et le transmet à `containerd`.
-Le shim est démarré par `containerd` puis **ré-adopté par PID 1** : ni
-`dockerd` ni `containerd` ne sont ses ancêtres. C'est ce découplage qui
-permet `"live-restore": true` dans `daemon.json` — `systemctl restart docker`
-laisse tourner les conteneurs, `dockerd` se reconnecte aux shims au retour.
+> [!NOTE]
+> **Pourquoi**
+>
+> `runc` est un **exécuteur**, pas un démon : `runc create` prépare
+> namespaces, cgroup et montages, `runc start` fait l'`execve()` du processus,
+> et `runc` se termine. Ce qui reste en face du conteneur est
+> `containerd-shim-runc-v2`, un petit processus par conteneur qui garde les
+> descripteurs stdio, reçoit le code de sortie et le transmet à `containerd`.
+> Le shim est démarré par `containerd` puis **ré-adopté par PID 1** : ni
+> `dockerd` ni `containerd` ne sont ses ancêtres. C'est ce découplage qui
+> permet `"live-restore": true` dans `daemon.json` — `systemctl restart docker`
+> laisse tourner les conteneurs, `dockerd` se reconnecte aux shims au retour.
+>
+> ```bash
+> PID=$(docker inspect web --format '{{.State.Pid}}')
+> ps -o pid,ppid,args -p "$PID" -p "$(ps -o ppid= -p "$PID")"
+> #  PID  PPID COMMAND
+> # 5098     1 /usr/bin/containerd-shim-runc-v2 -namespace moby -id 3f2a…
+> # 5120  5098 nginx: master process nginx -g daemon off;
+> ```
 
-```bash
-PID=$(docker inspect web --format '{{.State.Pid}}')
-ps -o pid,ppid,args -p "$PID" -p "$(ps -o ppid= -p "$PID")"
-#  PID  PPID COMMAND
-# 5098     1 /usr/bin/containerd-shim-runc-v2 -namespace moby -id 3f2a…
-# 5120  5098 nginx: master process nginx -g daemon off;
-```
-:::
-
-::: piege
-d) était vrai avec Docker 1.10 et avant, quand `dockerd` était le père direct
-de chaque conteneur : un redémarrage du démon tuait tout. Sans
-`live-restore`, c'est encore le comportement **par défaut** : `dockerd`
-arrête proprement ses conteneurs à l'arrêt du service, non parce qu'il en
-est le père, mais parce qu'il le demande à `containerd`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> d) était vrai avec Docker 1.10 et avant, quand `dockerd` était le père direct
+> de chaque conteneur : un redémarrage du démon tuait tout. Sans
+> `live-restore`, c'est encore le comportement **par défaut** : `dockerd`
+> arrête proprement ses conteneurs à l'arrêt du service, non parce qu'il en
+> est le père, mais parce qu'il le demande à `containerd`.
 
 ---
 
-**Q22.20** — *« Nos images `docker build` ne marchent plus sur Kubernetes. »*
+<a id="q22-20"></a>**[Q22.20](README.md#q22-20)** — *« Nos images `docker build` ne marchent plus sur Kubernetes. »*
 
 **Réponse : b)**
 
-::: pourquoi
-Le kubelet n'a jamais lancé de conteneurs lui-même : il parle en gRPC à un
-runtime via la **CRI**. Docker n'implémentant pas cette interface, Kubernetes
-maintenait un adaptateur, `dockershim`, retiré en 1.24 (2022). Les nœuds
-utilisent désormais `containerd` (ou CRI-O) directement — et `containerd`
-est **déjà** ce que `dockerd` utilisait en dessous. Une image produite par
-`docker build` est une image **OCI** : manifeste, config, couches ; elle est
-tirée par `containerd` exactement comme avant. Ce qui change pour l'admin :
-sur un nœud, `docker ps` ne montre rien, `crictl ps` montre les conteneurs,
-et `crictl pods` les *sandboxes* que Docker ne connaissait pas.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le kubelet n'a jamais lancé de conteneurs lui-même : il parle en gRPC à un
+> runtime via la **CRI**. Docker n'implémentant pas cette interface, Kubernetes
+> maintenait un adaptateur, `dockershim`, retiré en 1.24 (2022). Les nœuds
+> utilisent désormais `containerd` (ou CRI-O) directement — et `containerd`
+> est **déjà** ce que `dockerd` utilisait en dessous. Une image produite par
+> `docker build` est une image **OCI** : manifeste, config, couches ; elle est
+> tirée par `containerd` exactement comme avant. Ce qui change pour l'admin :
+> sur un nœud, `docker ps` ne montre rien, `crictl ps` montre les conteneurs,
+> et `crictl pods` les *sandboxes* que Docker ne connaissait pas.
 
-::: piege
-Ce qui a réellement cassé pour certaines équipes : les pipelines qui
-montaient `docker.sock` sur un nœud pour construire des images (« Docker
-dans Docker »). Sans démon Docker, ils sont passés à `buildah`, `kaniko` ou
-BuildKit — pas parce que les images étaient incompatibles, mais parce que
-l'outil de **construction** avait disparu du nœud.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ce qui a réellement cassé pour certaines équipes : les pipelines qui
+> montaient `docker.sock` sur un nœud pour construire des images (« Docker
+> dans Docker »). Sans démon Docker, ils sont passés à `buildah`, `kaniko` ou
+> BuildKit — pas parce que les images étaient incompatibles, mais parce que
+> l'outil de **construction** avait disparu du nœud.
 
 ---
 
-**Q22.21** — *`docker update --memory 32m` sous l'usage courant.*
+<a id="q22-21"></a>**[Q22.21](README.md#q22-21)** — *`docker update --memory 32m` sous l'usage courant.*
 
 **Réponse : b)**
 
-::: pourquoi
-`docker update` écrit directement dans les fichiers du cgroup du conteneur
-(`/sys/fs/cgroup/system.slice/docker-<id>.scope/memory.max`). En cgroups v2,
-abaisser `memory.max` sous l'usage courant est accepté : le noyau lance
-immédiatement une récupération (cache de pages, puis swap si autorisé), et
-s'il ne parvient pas à passer sous la limite, l'OOM killer **du cgroup**
-frappe — ce qui se lit dans `memory.events` (`oom_kill 1`), `docker inspect`
-(`OOMKilled: true`, code 137) et `journalctl -k` (`Memory cgroup out of
-memory`). Ici sans swap et avec 50 Mo anonymes, la mort est immédiate.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `docker update` écrit directement dans les fichiers du cgroup du conteneur
+> (`/sys/fs/cgroup/system.slice/docker-<id>.scope/memory.max`). En cgroups v2,
+> abaisser `memory.max` sous l'usage courant est accepté : le noyau lance
+> immédiatement une récupération (cache de pages, puis swap si autorisé), et
+> s'il ne parvient pas à passer sous la limite, l'OOM killer **du cgroup**
+> frappe — ce qui se lit dans `memory.events` (`oom_kill 1`), `docker inspect`
+> (`OOMKilled: true`, code 137) et `journalctl -k` (`Memory cgroup out of
+> memory`). Ici sans swap et avec 50 Mo anonymes, la mort est immédiate.
 
-::: piege
-a) décrit cgroups **v1**, où l'écriture dans `memory.limit_in_bytes` sous
-l'usage renvoyait `EBUSY` : Docker affichait alors `Cannot update
-container… memory limit`. Sur Ubuntu 24.04 (v2 uniquement), la commande
-réussit et le conteneur meurt : teste toujours une baisse de limite sur un
-conteneur dont tu as lu `memory.current` avant.
-:::
+> [!WARNING]
+> **Piège**
+>
+> a) décrit cgroups **v1**, où l'écriture dans `memory.limit_in_bytes` sous
+> l'usage renvoyait `EBUSY` : Docker affichait alors `Cannot update
+> container… memory limit`. Sur Ubuntu 24.04 (v2 uniquement), la commande
+> réussit et le conteneur meurt : teste toujours une baisse de limite sur un
+> conteneur dont tu as lu `memory.current` avant.
 
 ---
 
-**Q22.22** — *Contenu de l'`UpperDir` après modification et suppression
+<a id="q22-22"></a>**[Q22.22](README.md#q22-22)** — *Contenu de l'`UpperDir` après modification et suppression
 (deux réponses).*
 
 **Réponse : a) et b)**
 
-::: pourquoi
-Overlayfs travaille au **fichier**, pas au bloc : au premier `open()` en
-écriture d'un fichier qui vit dans une couche basse, il le copie entièrement
-dans `upperdir` (*copy-up*), puis toutes les écritures vont dans la copie.
-Une couche d'image est ainsi strictement immuable, ce qui la rend partageable
-entre conteneurs. Une suppression ne peut pas « retirer » un fichier d'une
-couche en lecture seule : overlayfs crée à la place un *whiteout*, un
-périphérique caractère `0,0` du même nom dans `upperdir`, que la vue
-fusionnée interprète comme « masqué ». `docker diff` le montre en `D`.
+> [!NOTE]
+> **Pourquoi**
+>
+> Overlayfs travaille au **fichier**, pas au bloc : au premier `open()` en
+> écriture d'un fichier qui vit dans une couche basse, il le copie entièrement
+> dans `upperdir` (*copy-up*), puis toutes les écritures vont dans la copie.
+> Une couche d'image est ainsi strictement immuable, ce qui la rend partageable
+> entre conteneurs. Une suppression ne peut pas « retirer » un fichier d'une
+> couche en lecture seule : overlayfs crée à la place un *whiteout*, un
+> périphérique caractère `0,0` du même nom dans `upperdir`, que la vue
+> fusionnée interprète comme « masqué ». `docker diff` le montre en `D`.
+>
+> ```bash
+> U=$(docker inspect web --format '{{.GraphDriver.Data.UpperDir}}')
+> sudo ls -l $U/etc/nginx/conf.d/
+> # c--------- 1 root root 0, 0 … default.conf
+> ```
 
-```bash
-U=$(docker inspect web --format '{{.GraphDriver.Data.UpperDir}}')
-sudo ls -l $U/etc/nginx/conf.d/
-# c--------- 1 root root 0, 0 … default.conf
-```
-:::
-
-::: piege
-Conséquence de a) : une base de données qui écrit dans un fichier de 2 Go
-copié depuis l'image (c'est le cas d'une image livrée « avec ses données »)
-paie un copy-up de 2 Go au premier octet écrit, puis chaque `fsync` traverse
-overlayfs. C'est pour ça que Q22.8 insiste : les données vont dans un
-**volume**, monté par-dessus l'overlay, jamais dans la couche du conteneur.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Conséquence de a) : une base de données qui écrit dans un fichier de 2 Go
+> copié depuis l'image (c'est le cas d'une image livrée « avec ses données »)
+> paie un copy-up de 2 Go au premier octet écrit, puis chaque `fsync` traverse
+> overlayfs. C'est pour ça que Q22.8 insiste : les données vont dans un
+> **volume**, monté par-dessus l'overlay, jamais dans la couche du conteneur.
 
 ---
 
 ## 22.4 Quiz — questions ouvertes
 
-**QO22.1** — *Conteneur contre machine virtuelle, sans citer Docker.*
+<a id="qo22-1"></a>**[QO22.1](README.md#qo22-1)** — *Conteneur contre machine virtuelle, sans citer Docker.*
 
 **Réponse attendue**
 
@@ -612,18 +664,19 @@ Trois conséquences :
    n'a pas les protections d'un vrai `init` : un shell ou une application mal
    écrite ignore `SIGTERM` et laisse des zombies.
 
-::: pourquoi
-La question sert à vérifier qu'on ne récite pas « c'est plus léger ». La
-clé est de nommer **ce qui isole** (namespaces), **ce qui limite** (cgroups)
-et **ce qui reste partagé** (le noyau) : tout le reste en découle. Un bon
-candidat ajoute que la frontière est poreuse par conception (`docker.sock`,
-`--privileged`, `--pid host`) et que Kubernetes n'y change rien : c'est le
-même noyau.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question sert à vérifier qu'on ne récite pas « c'est plus léger ». La
+> clé est de nommer **ce qui isole** (namespaces), **ce qui limite** (cgroups)
+> et **ce qui reste partagé** (le noyau) : tout le reste en découle. Un bon
+> candidat ajoute que la frontière est poreuse par conception (`docker.sock`,
+> `--privileged`, `--pid host`) et que Kubernetes n'y change rien : c'est le
+> même noyau.
 
 ---
 
-**QO22.2** — *`ENTRYPOINT` ou `CMD`, forme exec ou shell, PID 1, `--init`.*
+<a id="qo22-2"></a>**[QO22.2](README.md#qo22-2)** — *`ENTRYPOINT` ou `CMD`, forme exec ou shell, PID 1, `--init`.*
 
 **Réponse attendue**
 
@@ -646,27 +699,29 @@ même noyau.
   (appelle `wait()` pour les orphelins réadoptés). Il rend un programme non
   prévu pour être PID 1 exploitable sans le modifier.
 
-::: pourquoi
-Le PID 1 d'un namespace a deux propriétés noyau : les signaux sans handler
-sont ignorés (pour qu'un `init` ne meure pas par accident), et il adopte les
-orphelins du namespace. Un serveur applicatif n'est pas écrit pour ça. Il y a
-trois solutions propres : forme exec avec une application qui gère
-`SIGTERM`, `exec` en fin de script shell (le shell se remplace par
-l'application, qui devient PID 1), ou `--init`. La combinaison
-`ENTRYPOINT ["tini", "--"]` + `CMD` est ce que font beaucoup d'images
-officielles.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le PID 1 d'un namespace a deux propriétés noyau : les signaux sans handler
+> sont ignorés (pour qu'un `init` ne meure pas par accident), et il adopte les
+> orphelins du namespace. Un serveur applicatif n'est pas écrit pour ça. Il y a
+> trois solutions propres : forme exec avec une application qui gère
+> `SIGTERM`, `exec` en fin de script shell (le shell se remplace par
+> l'application, qui devient PID 1), ou `--init`. La combinaison
+> `ENTRYPOINT ["tini", "--"]` + `CMD` est ce que font beaucoup d'images
+> officielles.
 
-::: piege
-`docker inspect --format '{{.Config.Entrypoint}} {{.Config.Cmd}}'` montre
-la forme réellement enregistrée : `[/bin/sh -c python3 app.py]` trahit une
-forme shell. Et `docker top conteneur` montre qui est PID 1 : si c'est `sh`,
-tu as ta réponse avant même de chronométrer.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `docker inspect --format '{{.Config.Entrypoint}} {{.Config.Cmd}}'` montre
+> la forme réellement enregistrée : `[/bin/sh -c python3 app.py]` trahit une
+> forme shell. Et `docker top conteneur` montre qui est PID 1 : si c'est `sh`,
+> tu as ta réponse avant même de chronométrer.
 
 ---
 
-**QO22.3** — *Le cache de build.*
+<a id="qo22-3"></a>**[QO22.3](README.md#qo22-3)** — *Le cache de build.*
 
 **Réponse attendue**
 
@@ -691,26 +746,28 @@ tu as ta réponse avant même de chronométrer.
   `docker build --progress=plain` montre `CACHED` ou le temps de chaque étape.
   `dive` (outil tiers) permet de voir les fichiers par couche.
 
-::: pourquoi
-Comprendre le cache, c'est comprendre qu'une image est **immuable et
-additive** : supprimer un fichier dans une couche ultérieure ne réduit pas la
-taille, le fichier existe toujours dans la couche précédente. D'où la règle
-« installer et nettoyer dans le même `RUN` », et le multi-stage qui est la
-seule façon de ne pas embarquer ce qui a servi à construire.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Comprendre le cache, c'est comprendre qu'une image est **immuable et
+> additive** : supprimer un fichier dans une couche ultérieure ne réduit pas la
+> taille, le fichier existe toujours dans la couche précédente. D'où la règle
+> « installer et nettoyer dans le même `RUN` », et le multi-stage qui est la
+> seule façon de ne pas embarquer ce qui a servi à construire.
 
-::: piege
-Le cache peut être **trop** fidèle : `RUN apt-get update && apt-get install
--y curl` reste en cache indéfiniment, avec des paquets vieux de six mois.
-`docker build --no-cache` ou `--pull` (pour rafraîchir la base) fait partie
-du pipeline de nuit, pas du cycle de dev. Et le contexte de build inclut
-tout le répertoire : sans `.dockerignore`, `.git` de 300 Mo est envoyé au
-démon à chaque build.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le cache peut être **trop** fidèle : `RUN apt-get update && apt-get install
+> -y curl` reste en cache indéfiniment, avec des paquets vieux de six mois.
+> `docker build --no-cache` ou `--pull` (pour rafraîchir la base) fait partie
+> du pipeline de nuit, pas du cycle de dev. Et le contexte de build inclut
+> tout le répertoire : sans `.dockerignore`, `.git` de 300 Mo est envoyé au
+> démon à chaque build.
 
 ---
 
-**QO22.4** — *Méthode de diagnostic d'un conteneur qui ne démarre pas.*
+<a id="qo22-4"></a>**[QO22.4](README.md#qo22-4)** — *Méthode de diagnostic d'un conteneur qui ne démarre pas.*
 
 **Réponse attendue**
 
@@ -735,18 +792,19 @@ binaire absent de l'image) ; `137` `SIGKILL` (OOM, `docker kill`, `stop`
 expiré) ; `139` `SIGSEGV`, plantage natif ; `143` `SIGTERM` reçu et non géré,
 arrêt demandé.
 
-::: pourquoi
-L'ordre compte : on regarde **l'état** avant les journaux (un conteneur
-`Created` n'a pas de journaux), et la **configuration effective** avant de
-relire le Dockerfile ou le Compose, parce que l'image en cache, un override
-ou une variable `.env` peuvent différer de ce qu'on croit avoir écrit.
-`docker events --since 10m` complète en montrant qui a fait quoi (`die`,
-`oom`, `kill`, `start`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre compte : on regarde **l'état** avant les journaux (un conteneur
+> `Created` n'a pas de journaux), et la **configuration effective** avant de
+> relire le Dockerfile ou le Compose, parce que l'image en cache, un override
+> ou une variable `.env` peuvent différer de ce qu'on croit avoir écrit.
+> `docker events --since 10m` complète en montrant qui a fait quoi (`die`,
+> `oom`, `kill`, `start`).
 
 ---
 
-**QO22.5** — *Trajet d'un paquet vers `-p 8080:80`, `docker-proxy`, `ufw`.*
+<a id="qo22-5"></a>**[QO22.5](README.md#qo22-5)** — *Trajet d'un paquet vers `-p 8080:80`, `docker-proxy`, `ufw`.*
 
 **Réponse attendue**
 
@@ -783,25 +841,27 @@ Restreindre correctement :
   interfaces ; ou ne rien publier et joindre le conteneur par le réseau
   utilisateur depuis le proxy conteneurisé.
 
-::: pourquoi
-Le point à retenir : **publier un port, c'est écrire des règles NAT dans le
-noyau**, pas « ouvrir un port » au sens d'un service. Le pare-feu d'hôte
-raisonne en `INPUT` ; Docker travaille en `FORWARD` et passe avant. C'est
-documenté noir sur blanc par Docker (« Docker and ufw ») et c'est la cause
-de nombreuses bases de données exposées à Internet.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point à retenir : **publier un port, c'est écrire des règles NAT dans le
+> noyau**, pas « ouvrir un port » au sens d'un service. Le pare-feu d'hôte
+> raisonne en `INPUT` ; Docker travaille en `FORWARD` et passe avant. C'est
+> documenté noir sur blanc par Docker (« Docker and ufw ») et c'est la cause
+> de nombreuses bases de données exposées à Internet.
 
-::: piege
-`ufw route deny` semble prometteur mais reste après les règles Docker.
-Désactiver `"iptables": false` dans `daemon.json` casse la publication de
-ports et le NAT sortant : ce n'est pas une option. Et `DOCKER-USER` doit
-laisser passer le trafic **établi** si tu y mets un `DROP` large : ajoute
-d'abord `-m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `ufw route deny` semble prometteur mais reste après les règles Docker.
+> Désactiver `"iptables": false` dans `daemon.json` casse la publication de
+> ports et le NAT sortant : ce n'est pas une option. Et `DOCKER-USER` doit
+> laisser passer le trafic **établi** si tu y mets un `DROP` large : ajoute
+> d'abord `-m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`.
 
 ---
 
-**QO22.6** — *Le groupe `docker` est root ; rootless ; cinq options de
+<a id="qo22-6"></a>**[QO22.6](README.md#qo22-6)** — *Le groupe `docker` est root ; rootless ; cinq options de
 durcissement.*
 
 **Réponse attendue**
@@ -841,17 +901,18 @@ Cinq options de `docker run` :
 Autres : `--network none`, `--security-opt seccomp=profil.json`, ne jamais
 monter `docker.sock`, ni `--privileged`, ni `--pid host`.
 
-::: pourquoi
-L'entretien vérifie qu'on distingue **l'isolation du conteneur** (options de
-`run`) et **le contrôle d'accès au démon** (groupe, socket, rootless). Les
-deux sont indépendants : un conteneur parfaitement durci ne protège pas
-contre un développeur qui a le socket. Le rootless répond au second problème,
-les options au premier.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'entretien vérifie qu'on distingue **l'isolation du conteneur** (options de
+> `run`) et **le contrôle d'accès au démon** (groupe, socket, rootless). Les
+> deux sont indépendants : un conteneur parfaitement durci ne protège pas
+> contre un développeur qui a le socket. Le rootless répond au second problème,
+> les options au premier.
 
 ---
 
-**QO22.7** — *`Permission denied` sur un bind mount de `~/projet/data`.*
+<a id="qo22-7"></a>**[QO22.7](README.md#qo22-7)** — *`Permission denied` sur un bind mount de `~/projet/data`.*
 
 **Réponse attendue**
 
@@ -880,16 +941,17 @@ sur celui du développeur ; en rootless, l'UID 10001 du conteneur devient
 `100000+10000` sur l'hôte — le problème change de forme mais ne disparaît
 pas ; sous SELinux (Rocky), ajouter `:Z` sinon c'est le label qui bloque.
 
-::: pourquoi
-La question teste la compréhension que **l'identité est numérique et
-traverse la frontière** du conteneur sans traduction (hors user namespace).
-C'est la même règle que NFS et que les partages entre machines : les noms sont
-locaux, les nombres sont globaux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question teste la compréhension que **l'identité est numérique et
+> traverse la frontière** du conteneur sans traduction (hors user namespace).
+> C'est la même règle que NFS et que les partages entre machines : les noms sont
+> locaux, les nombres sont globaux.
 
 ---
 
-**QO22.8** — *`down` contre `stop`, `-v`, mise à jour d'un seul service,
+<a id="qo22-8"></a>**[QO22.8](README.md#qo22-8)** — *`down` contre `stop`, `-v`, mise à jour d'un seul service,
 démarrage au boot.*
 
 **Réponse attendue**
@@ -915,26 +977,28 @@ démarrage au boot.*
   Pas d'unité systemd à écrire ; `docker compose stop` marque les conteneurs
   comme arrêtés manuellement, ils ne reviendront pas avant un `start`.
 
-::: pourquoi
-La distinction `stop`/`down` est celle entre **processus** et **objets** :
-un conteneur arrêté est encore un objet avec sa couche d'écriture, ses
-journaux, son IP. `down` repart d'une feuille blanche, sauf ce qui est
-explicitement persistant (volumes nommés). `-v` est la commande la plus
-destructrice de Compose : elle mérite un snapshot ou une sauvegarde avant.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La distinction `stop`/`down` est celle entre **processus** et **objets** :
+> un conteneur arrêté est encore un objet avec sa couche d'écriture, ses
+> journaux, son IP. `down` repart d'une feuille blanche, sauf ce qui est
+> explicitement persistant (volumes nommés). `-v` est la commande la plus
+> destructrice de Compose : elle mérite un snapshot ou une sauvegarde avant.
 
-::: piege
-`always` et `unless-stopped` respectent tous deux un `docker stop` tant que
-le démon tourne. La différence apparaît au **redémarrage du démon** (ou de
-la machine) : `always` relance tout, y compris un conteneur qu'on avait
-volontairement arrêté ; `unless-stopped` mémorise l'arrêt manuel et ne le
-relance pas. C'est la seule différence entre les deux, et c'est pour ça
-qu'`unless-stopped` est le choix par défaut d'un exploitant.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `always` et `unless-stopped` respectent tous deux un `docker stop` tant que
+> le démon tourne. La différence apparaît au **redémarrage du démon** (ou de
+> la machine) : `always` relance tout, y compris un conteneur qu'on avait
+> volontairement arrêté ; `unless-stopped` mémorise l'arrêt manuel et ne le
+> relance pas. C'est la seule différence entre les deux, et c'est pour ça
+> qu'`unless-stopped` est le choix par défaut d'un exploitant.
 
 ---
 
-**QO22.9** — *41 CVE dont 3 `CRITICAL` dans `libssl3` et 1 `HIGH` en
+<a id="qo22-9"></a>**[QO22.9](README.md#qo22-9)** — *41 CVE dont 3 `CRITICAL` dans `libssl3` et 1 `HIGH` en
 Python.*
 
 **Réponse attendue**
@@ -963,17 +1027,18 @@ compenser (durcissement, isolation, surveillance), pas l'oublier. On le garde
 pour la porte du pipeline (`--exit-code 1`), et on lance un scan complet
 hebdomadaire sans lui.
 
-::: pourquoi
-Un scanner produit une **liste**, pas une décision. La démarche de l'exploitant
-est de transformer la liste en trois tas : rebuild maintenant, accepté avec
-justification écrite et date, à surveiller. Et de rescanner régulièrement les
-images **déjà en production** : une image qui était propre au build ne le
-reste pas (`trivy image` sur le registre, en tâche planifiée).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un scanner produit une **liste**, pas une décision. La démarche de l'exploitant
+> est de transformer la liste en trois tas : rebuild maintenant, accepté avec
+> justification écrite et date, à surveiller. Et de rescanner régulièrement les
+> images **déjà en production** : une image qui était propre au build ne le
+> reste pas (`trivy image` sur le registre, en tâche planifiée).
 
 ---
 
-**QO22.10** — *De `docker run nginx` au processus `nginx` : la chaîne
+<a id="qo22-10"></a>**[QO22.10](README.md#qo22-10)** — *De `docker run nginx` au processus `nginx` : la chaîne
 complète.*
 
 **Réponse attendue**
@@ -1020,19 +1085,20 @@ serveur CRI, que `containerd` en est un, et que les images sont OCI : Docker
 n'apportait qu'une couche d'adaptation (`dockershim`) et un démon de plus à
 maintenir. Les images `docker build` continuent de tourner telles quelles.
 
-::: pourquoi
-Comprendre la chaîne, c'est savoir **où regarder** : image absente ou
-registre → `dockerd` (`journalctl -u docker`) ; conteneur qui ne se crée pas
-(`OCI runtime create failed`) → `runc` et le `config.json` ; conteneur
-« zombie » que `docker ps` voit mais qui ne répond plus → le shim (`ps -ef |
-grep shim`) ; nœud Kubernetes → `crictl`, pas `docker`. Et savoir ce qui
-survit à quoi : les conteneurs survivent à `dockerd` (avec `live-restore`),
-pas à `containerd` sans configuration, jamais au noyau.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Comprendre la chaîne, c'est savoir **où regarder** : image absente ou
+> registre → `dockerd` (`journalctl -u docker`) ; conteneur qui ne se crée pas
+> (`OCI runtime create failed`) → `runc` et le `config.json` ; conteneur
+> « zombie » que `docker ps` voit mais qui ne répond plus → le shim (`ps -ef |
+> grep shim`) ; nœud Kubernetes → `crictl`, pas `docker`. Et savoir ce qui
+> survit à quoi : les conteneurs survivent à `dockerd` (avec `live-restore`),
+> pas à `containerd` sans configuration, jamais au noyau.
 
 ---
 
-**QO22.11** — *Défense en profondeur d'un conteneur, couche par couche.*
+<a id="qo22-11"></a>**[QO22.11](README.md#qo22-11)** — *Défense en profondeur d'un conteneur, couche par couche.*
 
 **Réponse attendue**
 
@@ -1066,22 +1132,23 @@ l'hôte cessent d'être lisibles par le conteneur, `--pid host` et
 vérifient « suis-je UID 0 sur un fichier root » cassent. Le mode
 **rootless** (QO22.6) apporte le même bénéfice de façon plus radicale.
 
-::: pourquoi
-Chaque couche compense les angles morts de la précédente : les namespaces
-cachent, mais un root avec toutes ses capabilities peut en sortir ; les
-capabilities limitent, mais des syscalls dangereux restent accessibles sans
-capability (d'où seccomp) ; seccomp filtre des numéros d'appels, pas des
-chemins (d'où AppArmor) ; et si malgré tout un processus s'échappe, le user
-namespace fait qu'il est l'UID 100000, propriétaire de rien. La règle
-d'exploitation : on part de tout activé, et on ouvre **une** porte à la
-fois, documentée (`cap_add:` dans Compose), jamais `--privileged`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque couche compense les angles morts de la précédente : les namespaces
+> cachent, mais un root avec toutes ses capabilities peut en sortir ; les
+> capabilities limitent, mais des syscalls dangereux restent accessibles sans
+> capability (d'où seccomp) ; seccomp filtre des numéros d'appels, pas des
+> chemins (d'où AppArmor) ; et si malgré tout un processus s'échappe, le user
+> namespace fait qu'il est l'UID 100000, propriétaire de rien. La règle
+> d'exploitation : on part de tout activé, et on ouvre **une** porte à la
+> fois, documentée (`cap_add:` dans Compose), jamais `--privileged`.
 
 ---
 
 ## 22.5 Exercices guidés
 
-**E22.1** — *Un shell PID 1 avec son propre hostname, sans Docker.*
+<a id="e22-1"></a>**[E22.1](README.md#e22-1)** — *Un shell PID 1 avec son propre hostname, sans Docker.*
 
 ```bash
 sudo unshare --pid --fork --mount-proc --uts bash
@@ -1115,30 +1182,32 @@ hostname conteneur-test      # accepté
 touch /etc/preuve            # Permission denied : root de pacotille
 ```
 
-::: pourquoi
-Créer un namespace PID, UTS ou réseau exige `CAP_SYS_ADMIN`. Le namespace
-**user** est l'exception : n'importe qui peut en créer un, et à l'intérieur
-il détient toutes les capabilities… sur les ressources de ce namespace
-uniquement. `--map-root-user` projette ton UID 1000 sur l'UID 0 du namespace
-(via `/proc/PID/uid_map`). C'est exactement le mécanisme de Docker rootless
-et de Podman. `--fork` est nécessaire avec `--pid` parce que le processus qui
-appelle `unshare` reste dans l'ancien namespace PID : seul son **fils** est
-dans le nouveau. `--mount-proc` remonte `/proc` dans un namespace de
-montage privé, sinon `ps` lirait le `/proc` de l'hôte.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Créer un namespace PID, UTS ou réseau exige `CAP_SYS_ADMIN`. Le namespace
+> **user** est l'exception : n'importe qui peut en créer un, et à l'intérieur
+> il détient toutes les capabilities… sur les ressources de ce namespace
+> uniquement. `--map-root-user` projette ton UID 1000 sur l'UID 0 du namespace
+> (via `/proc/PID/uid_map`). C'est exactement le mécanisme de Docker rootless
+> et de Podman. `--fork` est nécessaire avec `--pid` parce que le processus qui
+> appelle `unshare` reste dans l'ancien namespace PID : seul son **fils** est
+> dans le nouveau. `--mount-proc` remonte `/proc` dans un namespace de
+> montage privé, sinon `ps` lirait le `/proc` de l'hôte.
 
-::: piege
-Sur Ubuntu 24.04, `kernel.apparmor_restrict_unprivileged_userns=1`
-interdit les user namespaces aux programmes non confinés ; `unshare` a un
-profil AppArmor qui l'autorise, mais un script maison obtiendra
-`unshare: unshare failed: Operation not permitted`. C'est une mesure de
-sécurité délibérée : la majorité des exploits noyau récents commencent par un
-user namespace.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Sur Ubuntu 24.04, `kernel.apparmor_restrict_unprivileged_userns=1`
+> interdit les user namespaces aux programmes non confinés ; `unshare` a un
+> profil AppArmor qui l'autorise, mais un script maison obtiendra
+> `unshare: unshare failed: Operation not permitted`. C'est une mesure de
+> sécurité délibérée : la majorité des exploits noyau récents commencent par un
+> user namespace.
 
 ---
 
-**E22.2** — *64 Mo de mémoire sans swap, sans Docker.*
+<a id="e22-2"></a>**[E22.2](README.md#e22-2)** — *64 Mo de mémoire sans swap, sans Docker.*
 
 ```bash
 sudo mkdir /sys/fs/cgroup/lab22
@@ -1164,21 +1233,22 @@ sudo systemd-run --scope -p MemoryMax=64M -p MemorySwapMax=0 \
 # Killed
 ```
 
-::: pourquoi
-Un cgroup v2 est un répertoire : le créer active les contrôleurs hérités
-du parent (`cgroup.subtree_control` de la racine contient `memory`), écrire
-un PID dans `cgroup.procs` y déplace le processus **et ses futurs fils**,
-d'où le `sh -c` qui s'inscrit puis fait `exec`. `memory.max` est une limite
-dure : au-delà, le noyau réclame, puis déclenche l'OOM killer **du cgroup**
-(pas celui de la machine), ce que `memory.events` compte dans `oom_kill`.
-Sans `memory.swap.max=0`, le cgroup aurait pu déborder dans `/swap.img` et
-ne jamais être tué. Docker fait exactement ceci avec `--memory` et
-`--memory-swap`, dans `system.slice/docker-<id>.scope`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un cgroup v2 est un répertoire : le créer active les contrôleurs hérités
+> du parent (`cgroup.subtree_control` de la racine contient `memory`), écrire
+> un PID dans `cgroup.procs` y déplace le processus **et ses futurs fils**,
+> d'où le `sh -c` qui s'inscrit puis fait `exec`. `memory.max` est une limite
+> dure : au-delà, le noyau réclame, puis déclenche l'OOM killer **du cgroup**
+> (pas celui de la machine), ce que `memory.events` compte dans `oom_kill`.
+> Sans `memory.swap.max=0`, le cgroup aurait pu déborder dans `/swap.img` et
+> ne jamais être tué. Docker fait exactement ceci avec `--memory` et
+> `--memory-swap`, dans `system.slice/docker-<id>.scope`.
 
 ---
 
-**E22.3** — *Le processus `nginx` du conteneur `web` vu de l'hôte.*
+<a id="e22-3"></a>**[E22.3](README.md#e22-3)** — *Le processus `nginx` du conteneur `web` vu de l'hôte.*
 
 ```bash
 PID=$(docker inspect web --format '{{.State.Pid}}')
@@ -1203,21 +1273,22 @@ sudo lsns -t net
 # 4026532571 net       3  5120 root nginx: master process nginx -g daemon off;
 ```
 
-::: pourquoi
-Le PID `5120` n'existe que pour l'hôte : dans le conteneur, ce même
-processus est le PID 1. `State.Pid` est la passerelle entre les deux mondes,
-et `nsenter` permet d'exécuter **un binaire de l'hôte** (`ss`, `tcpdump`,
-`strace`) dans les namespaces du conteneur, sans que l'image ait besoin de le
-contenir. `-n` seul suffit pour le réseau ; `-m` ferait aussi basculer sur le
-système de fichiers du conteneur, où `ss` n'existe peut-être pas. Le PPID
-`5098` est le *shim* de containerd (`containerd-shim-runc-v2`) : c'est lui,
-et non `dockerd`, qui est le père du conteneur — c'est pourquoi un
-redémarrage du démon Docker ne tue pas les conteneurs (`live-restore`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le PID `5120` n'existe que pour l'hôte : dans le conteneur, ce même
+> processus est le PID 1. `State.Pid` est la passerelle entre les deux mondes,
+> et `nsenter` permet d'exécuter **un binaire de l'hôte** (`ss`, `tcpdump`,
+> `strace`) dans les namespaces du conteneur, sans que l'image ait besoin de le
+> contenir. `-n` seul suffit pour le réseau ; `-m` ferait aussi basculer sur le
+> système de fichiers du conteneur, où `ss` n'existe peut-être pas. Le PPID
+> `5098` est le *shim* de containerd (`containerd-shim-runc-v2`) : c'est lui,
+> et non `dockerd`, qui est le père du conteneur — c'est pourquoi un
+> redémarrage du démon Docker ne tue pas les conteneurs (`live-restore`).
 
 ---
 
-**E22.4** — *Capabilities du PID 1 de `web`, avec et sans `--cap-drop`.*
+<a id="e22-4"></a>**[E22.4](README.md#e22-4)** — *Capabilities du PID 1 de `web`, avec et sans `--cap-drop`.*
 
 ```bash
 PID=$(docker inspect web --format '{{.State.Pid}}')
@@ -1246,29 +1317,31 @@ grep CapEff /proc/$(docker inspect web-min --format '{{.State.Pid}}')/status
 
 `CAP_NET_BIND_SERVICE` est celle qui autorise l'écoute sur un port < 1024.
 
-::: pourquoi
-Root dans un conteneur n'est pas root : Docker ne lui laisse que 14
-capabilities sur 41, encodées dans le masque `a80425fb`. Sans
-`NET_BIND_SERVICE`, même l'UID 0 ne peut pas ouvrir le port 80. L'image
-`nginx` officielle a besoin en plus de `SETUID`/`SETGID` parce que le maître
-tourne en root et lance ses workers sous l'utilisateur `nginx` — l'image
-`nginxinc/nginx-unprivileged` (port 8080, UID 101) n'a besoin de rien. La
-démarche pour toute image : `--cap-drop ALL`, lire les journaux, ajouter une
-à une les capabilities réclamées, et documenter le résultat dans le Compose
-(`cap_add:`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Root dans un conteneur n'est pas root : Docker ne lui laisse que 14
+> capabilities sur 41, encodées dans le masque `a80425fb`. Sans
+> `NET_BIND_SERVICE`, même l'UID 0 ne peut pas ouvrir le port 80. L'image
+> `nginx` officielle a besoin en plus de `SETUID`/`SETGID` parce que le maître
+> tourne en root et lance ses workers sous l'utilisateur `nginx` — l'image
+> `nginxinc/nginx-unprivileged` (port 8080, UID 101) n'a besoin de rien. La
+> démarche pour toute image : `--cap-drop ALL`, lire les journaux, ajouter une
+> à une les capabilities réclamées, et documenter le résultat dans le Compose
+> (`cap_add:`).
 
-::: piege
-`--user 10001` sans `--cap-drop` laisse un processus non-root **sans**
-capabilities effectives (elles ne survivent pas au changement d'UID sauf
-`--cap-add` explicite plus fichiers `setcap`), mais le bounding set reste
-celui de Docker : un binaire `setuid root` dans l'image les récupérerait.
-D'où `no-new-privileges` en complément.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--user 10001` sans `--cap-drop` laisse un processus non-root **sans**
+> capabilities effectives (elles ne survivent pas au changement d'UID sauf
+> `--cap-add` explicite plus fichiers `setcap`), mais le bounding set reste
+> celui de Docker : un binaire `setuid root` dans l'image les récupérerait.
+> D'où `no-new-privileges` en complément.
 
 ---
 
-**E22.5** — *Digest, couches et taille de `nginx:1.28-alpine`.*
+<a id="e22-5"></a>**[E22.5](README.md#e22-5)** — *Digest, couches et taille de `nginx:1.28-alpine`.*
 
 ```bash
 docker pull nginx:1.28-alpine
@@ -1293,21 +1366,22 @@ docker images --digests nginx
 # nginx       <none>        sha256:5f4a…   2a9f…      52.1MB
 ```
 
-::: pourquoi
-Trois identifiants coexistent : le **tag** (mobile), le **digest** du
-manifeste (`RepoDigests`, ce que le registre garantit), et l'**ID d'image**
-(hash de la configuration locale). Tirer par digest ne télécharge rien parce
-que le démon compare les digests de chaque couche avec ceux déjà présents ;
-la seconde ligne de `docker images` est la même image, référencée sans tag.
-Les lignes `<missing>` de `history` ne sont pas une erreur : les couches
-intermédiaires ont été construites ailleurs et seuls leurs contenus ont été
-tirés, pas les images intermédiaires. Les instructions à `0B` (`CMD`, `ENV`,
-`EXPOSE`) ne créent pas de couche de fichiers, seulement des métadonnées.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Trois identifiants coexistent : le **tag** (mobile), le **digest** du
+> manifeste (`RepoDigests`, ce que le registre garantit), et l'**ID d'image**
+> (hash de la configuration locale). Tirer par digest ne télécharge rien parce
+> que le démon compare les digests de chaque couche avec ceux déjà présents ;
+> la seconde ligne de `docker images` est la même image, référencée sans tag.
+> Les lignes `<missing>` de `history` ne sont pas une erreur : les couches
+> intermédiaires ont été construites ailleurs et seuls leurs contenus ont été
+> tirés, pas les images intermédiaires. Les instructions à `0B` (`CMD`, `ENV`,
+> `EXPOSE`) ne créent pas de couche de fichiers, seulement des métadonnées.
 
 ---
 
-**E22.6** — *Trois limites vues de l'intérieur et de l'extérieur.*
+<a id="e22-6"></a>**[E22.6](README.md#e22-6)** — *Trois limites vues de l'intérieur et de l'extérieur.*
 
 ```bash
 docker run --rm -it --name limite --memory 64m --memory-swap 64m \
@@ -1326,19 +1400,20 @@ ID=$(docker inspect limite --format '{{.Id}}')
 cat /sys/fs/cgroup/system.slice/docker-$ID.scope/{memory.max,cpu.max,pids.max}
 ```
 
-::: pourquoi
-Le conteneur voit **son** cgroup à la racine de `/sys/fs/cgroup` : Docker
-monte le sous-arbre correspondant (namespace cgroup). `cpu.max` = `quota
-période` : 50 000 μs par période de 100 000 μs, soit un demi-cœur, réparti
-comme le noyau veut sur les deux vCPU. `--cpus` est une limite de bande
-(CFS quota) ; `--cpu-shares` serait une pondération relative, qui ne limite
-rien quand la machine est inoccupée. `--memory-swap` égal à `--memory`
-signifie « zéro swap » ; par défaut il vaut le double.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le conteneur voit **son** cgroup à la racine de `/sys/fs/cgroup` : Docker
+> monte le sous-arbre correspondant (namespace cgroup). `cpu.max` = `quota
+> période` : 50 000 μs par période de 100 000 μs, soit un demi-cœur, réparti
+> comme le noyau veut sur les deux vCPU. `--cpus` est une limite de bande
+> (CFS quota) ; `--cpu-shares` serait une pondération relative, qui ne limite
+> rien quand la machine est inoccupée. `--memory-swap` égal à `--memory`
+> signifie « zéro swap » ; par défaut il vaut le double.
 
 ---
 
-**E22.7** — *Chronométrer `docker stop` et produire 139 et 1.*
+<a id="e22-7"></a>**[E22.7](README.md#e22-7)** — *Chronométrer `docker stop` et produire 139 et 1.*
 
 ```bash
 docker run -d --name dort1 alpine:3.20 sleep 3600
@@ -1369,27 +1444,29 @@ docker inspect un --format '{{.State.ExitCode}}'           # 1
 docker rm dort1 dort2 dort3 seg un
 ```
 
-::: pourquoi
-Le code de sortie d'un conteneur est celui de son PID 1 : `128 + numéro du
-signal` s'il est tué. Il faut `--init` pour le `139` volontaire : sans lui,
-`sh` serait PID 1 et **ignorerait aussi** le `SIGSEGV` qu'il s'envoie (la
-règle du PID 1 vaut pour tous les signaux sans handler envoyés depuis le
-namespace, sauf `SIGKILL`/`SIGSTOP` depuis l'extérieur). Un vrai plantage
-(déréférencement d'un pointeur nul) est délivré quand même, car c'est une
-exception synchrone forcée par le noyau, pas un `kill()`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le code de sortie d'un conteneur est celui de son PID 1 : `128 + numéro du
+> signal` s'il est tué. Il faut `--init` pour le `139` volontaire : sans lui,
+> `sh` serait PID 1 et **ignorerait aussi** le `SIGSEGV` qu'il s'envoie (la
+> règle du PID 1 vaut pour tous les signaux sans handler envoyés depuis le
+> namespace, sauf `SIGKILL`/`SIGSTOP` depuis l'extérieur). Un vrai plantage
+> (déréférencement d'un pointeur nul) est délivré quand même, car c'est une
+> exception synchrone forcée par le noyau, pas un `kill()`.
 
-::: piege
-`docker stop -t 30` allonge le délai, `docker kill` le supprime : aucun des
-deux ne règle le problème d'un PID 1 sourd. Sur `docker compose stop`, le
-délai s'appelle `stop_grace_period`. Et un `STOPSIGNAL SIGQUIT` dans le
-Dockerfile (nginx) change le signal envoyé par `stop` : à lire dans
-`docker inspect --format '{{.Config.StopSignal}}'`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `docker stop -t 30` allonge le délai, `docker kill` le supprime : aucun des
+> deux ne règle le problème d'un PID 1 sourd. Sur `docker compose stop`, le
+> délai s'appelle `stop_grace_period`. Et un `STOPSIGNAL SIGQUIT` dans le
+> Dockerfile (nginx) change le signal envoyé par `stop` : à lire dans
+> `docker inspect --format '{{.Config.StopSignal}}'`.
 
 ---
 
-**E22.8** — *`inspect` avec `--format`, journaux horodatés, `docker cp`.*
+<a id="e22-8"></a>**[E22.8](README.md#e22-8)** — *`inspect` avec `--format`, journaux horodatés, `docker cp`.*
 
 ```bash
 docker inspect web --format \
@@ -1403,20 +1480,21 @@ docker logs -t --since 5m --tail 20 web
 docker cp web:/etc/nginx/conf.d/default.conf ~/lab22/rapports/
 ```
 
-::: pourquoi
-`--format` prend un template Go appliqué à l'objet JSON d'`inspect` : `range`
-itère, `index` accède à une clé ou un rang, `json` sérialise une sous-partie
-(`{{json .State.Health}}`), `join` concatène. C'est plus robuste que `jq`
-dans un script parce que la sortie est vide plutôt qu'erronée si le champ
-manque. `docker logs -t` préfixe chaque ligne de l'horodatage **du démon**,
-utile quand l'application n'horodate pas. `docker cp` fonctionne sur un
-conteneur arrêté et sans shell dans l'image : il lit la couche d'écriture
-via le démon.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `--format` prend un template Go appliqué à l'objet JSON d'`inspect` : `range`
+> itère, `index` accède à une clé ou un rang, `json` sérialise une sous-partie
+> (`{{json .State.Health}}`), `join` concatène. C'est plus robuste que `jq`
+> dans un script parce que la sortie est vide plutôt qu'erronée si le champ
+> manque. `docker logs -t` préfixe chaque ligne de l'horodatage **du démon**,
+> utile quand l'application n'horodate pas. `docker cp` fonctionne sur un
+> conteneur arrêté et sans shell dans l'image : il lit la couche d'écriture
+> via le démon.
 
 ---
 
-**E22.9** — *`ENTRYPOINT` + `CMD` en trois lignes.*
+<a id="e22-9"></a>**[E22.9](README.md#e22-9)** — *`ENTRYPOINT` + `CMD` en trois lignes.*
 
 `~/lab22/bin/entrypoint-test/Dockerfile` :
 
@@ -1451,19 +1529,20 @@ docker inspect ep-shell --format '{{.Config.Entrypoint}}'
 docker run --rm -it --entrypoint sh ep-test
 ```
 
-::: pourquoi
-Avec un `ENTRYPOINT` en forme shell, la commande finale est
-`/bin/sh -c "echo bonjour" monde` : le `sh -c` ne lit que son premier
-argument, les suivants deviennent `$0`, `$1`… du script, jamais utilisés.
-`CMD` et les arguments de `docker run` sont donc **silencieusement
-ignorés**. C'est le second défaut de la forme shell, après le PID 1.
-`--entrypoint` ne prend qu'un mot : les arguments vont après l'image
-(`--entrypoint sh ep-test -c 'ls /'`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Avec un `ENTRYPOINT` en forme shell, la commande finale est
+> `/bin/sh -c "echo bonjour" monde` : le `sh -c` ne lit que son premier
+> argument, les suivants deviennent `$0`, `$1`… du script, jamais utilisés.
+> `CMD` et les arguments de `docker run` sont donc **silencieusement
+> ignorés**. C'est le second défaut de la forme shell, après le PID 1.
+> `--entrypoint` ne prend qu'un mot : les arguments vont après l'image
+> (`--entrypoint sh ep-test -c 'ls /'`).
 
 ---
 
-**E22.10** — *`ARG` fuit dans `docker history`.*
+<a id="e22-10"></a>**[E22.10](README.md#e22-10)** — *`ARG` fuit dans `docker history`.*
 
 ```dockerfile
 FROM alpine:3.20
@@ -1485,20 +1564,21 @@ docker history --no-trunc --format '{{.CreatedBy}}' arg-test | head -3
 # ARG VERSION=dev
 ```
 
-::: pourquoi
-Chaque couche enregistre l'instruction qui l'a produite **avec les
-arguments de build en vigueur** (`|1 VERSION=1.2`) : c'est ce qui permet au
-cache de distinguer deux builds avec des `--build-arg` différents. Donc tout
-`ARG` utilisé par un `RUN` est lisible par quiconque a l'image, même sans
-`ENV`. On ne passe jamais de jeton, mot de passe ou clé privée en
-`--build-arg` : `RUN --mount=type=secret,id=pip,dst=/etc/pip.conf …` avec
-`docker build - -secret id=pip,src=$HOME/.config/pip/pip.conf` monte le
-fichier le temps de l'instruction, sans trace dans les couches ni l'historique.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque couche enregistre l'instruction qui l'a produite **avec les
+> arguments de build en vigueur** (`|1 VERSION=1.2`) : c'est ce qui permet au
+> cache de distinguer deux builds avec des `--build-arg` différents. Donc tout
+> `ARG` utilisé par un `RUN` est lisible par quiconque a l'image, même sans
+> `ENV`. On ne passe jamais de jeton, mot de passe ou clé privée en
+> `--build-arg` : `RUN --mount=type=secret,id=pip,dst=/etc/pip.conf …` avec
+> `docker build - -secret id=pip,src=$HOME/.config/pip/pip.conf` monte le
+> fichier le temps de l'instruction, sans trace dans les couches ni l'historique.
 
 ---
 
-**E22.11** — *Cache invalidé par un `COPY . .` trop tôt.*
+<a id="e22-11"></a>**[E22.11](README.md#e22-11)** — *Cache invalidé par un `COPY . .` trop tôt.*
 
 Version « Q22.5 » de `~/lab22/api/Dockerfile` :
 
@@ -1542,18 +1622,19 @@ time docker build --progress=plain -t factura-api:cache-test . 2>&1 \
 # #9 [5/5] COPY . .                          (seule étape rejouée : ~1 s)
 ```
 
-::: pourquoi
-Voir Q22.5 : le cache est un préfixe. Tout ce qui précède la première
-instruction invalidée est réutilisé, tout ce qui suit est rejoué. On classe
-donc les instructions de la plus stable à la plus volatile : image de base,
-paquets système, dépendances applicatives, code, configuration. La
-différence de temps (25 s contre 1 s) se multiplie par le nombre de builds
-par jour dans un pipeline.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Voir Q22.5 : le cache est un préfixe. Tout ce qui précède la première
+> instruction invalidée est réutilisé, tout ce qui suit est rejoué. On classe
+> donc les instructions de la plus stable à la plus volatile : image de base,
+> paquets système, dépendances applicatives, code, configuration. La
+> différence de temps (25 s contre 1 s) se multiplie par le nombre de builds
+> par jour dans un pipeline.
 
 ---
 
-**E22.12** — *Volume : persistance, sauvegarde, restauration.*
+<a id="e22-12"></a>**[E22.12](README.md#e22-12)** — *Volume : persistance, sauvegarde, restauration.*
 
 ```bash
 docker volume create factura-data
@@ -1574,20 +1655,21 @@ docker run --rm -v factura-data-copie:/to -v ~/lab22/rapports:/from:ro \
 docker run --rm -v factura-data-copie:/data alpine:3.20 cat /data/test.txt
 ```
 
-::: pourquoi
-Un volume nommé est un répertoire géré par le démon sous
-`/var/lib/docker/volumes/`, accessible seulement par root : la façon
-propre d'y lire et d'y écrire est un conteneur utilitaire qui le monte. La
-sauvegarde s'exécute avec ton UID pour que l'archive t'appartienne ; la
-restauration se fait en root parce que `_data` du volume neuf appartient à
-root. `-C /from .` archive les chemins relatifs, ce qui permet de restaurer
-n'importe où. Pour une base de données, on n'archive pas les fichiers à chaud :
-on utilise l'outil du moteur (`pg_dump`) ou on arrête le conteneur avant.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un volume nommé est un répertoire géré par le démon sous
+> `/var/lib/docker/volumes/`, accessible seulement par root : la façon
+> propre d'y lire et d'y écrire est un conteneur utilitaire qui le monte. La
+> sauvegarde s'exécute avec ton UID pour que l'archive t'appartienne ; la
+> restauration se fait en root parce que `_data` du volume neuf appartient à
+> root. `-C /from .` archive les chemins relatifs, ce qui permet de restaurer
+> n'importe où. Pour une base de données, on n'archive pas les fichiers à chaud :
+> on utilise l'outil du moteur (`pg_dump`) ou on arrête le conteneur avant.
 
 ---
 
-**E22.13** — *Bind mount et UID 10001.*
+<a id="e22-13"></a>**[E22.13](README.md#e22-13)** — *Bind mount et UID 10001.*
 
 ```bash
 docker run --rm --user 10001:10001 -v /srv/factura-docker/data:/data \
@@ -1605,19 +1687,20 @@ ls -l /srv/factura-docker/data/test
 `ls -l` affiche le nombre parce qu'aucune entrée de `/etc/passwd` de
 **l'hôte** ne porte l'UID 10001 : le nom `app` n'existe que dans l'image.
 
-::: pourquoi
-Le bind mount ne traduit rien : le noyau compare l'UID du processus (10001)
-aux bits de droits du répertoire hôte (`root:root 0755`). Seul le
-propriétaire peut y créer un fichier. `chown` au bon UID est la correction
-la plus restrictive ; `chgrp` + `g+w` ou une ACL `setfacl -m u:10001:rwx`
-sont les alternatives quand le répertoire doit rester à son propriétaire.
-`chmod 777` donne le droit à tout le monde sur l'hôte, y compris à un
-service compromis.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le bind mount ne traduit rien : le noyau compare l'UID du processus (10001)
+> aux bits de droits du répertoire hôte (`root:root 0755`). Seul le
+> propriétaire peut y créer un fichier. `chown` au bon UID est la correction
+> la plus restrictive ; `chgrp` + `g+w` ou une ACL `setfacl -m u:10001:rwx`
+> sont les alternatives quand le répertoire doit rester à son propriétaire.
+> `chmod 777` donne le droit à tout le monde sur l'hôte, y compris à un
+> service compromis.
 
 ---
 
-**E22.14** — *DNS des réseaux utilisateur et règles NAT.*
+<a id="e22-14"></a>**[E22.14](README.md#e22-14)** — *DNS des réseaux utilisateur et règles NAT.*
 
 ```bash
 docker network create factura-net
@@ -1642,20 +1725,21 @@ docker port web
 # 80/tcp -> [::]:8080
 ```
 
-::: pourquoi
-`127.0.0.11` est le résolveur intégré du démon, injecté dans chaque
-conteneur d'un réseau utilisateur ; il connaît les noms de conteneurs, les
-alias (`--network-alias`) et les noms de services Compose, et transmet le
-reste aux DNS de l'hôte. Le bridge par défaut en est privé pour des raisons
-de compatibilité historique. Côté NAT, la règle `DNAT` de la chaîne `DOCKER`
-est la matérialisation de `-p 8080:80` ; `! -i docker0` évite de re-NATer le
-trafic qui vient déjà du bridge. La seconde ligne de `docker port` rappelle
-que la publication vaut aussi en IPv6.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `127.0.0.11` est le résolveur intégré du démon, injecté dans chaque
+> conteneur d'un réseau utilisateur ; il connaît les noms de conteneurs, les
+> alias (`--network-alias`) et les noms de services Compose, et transmet le
+> reste aux DNS de l'hôte. Le bridge par défaut en est privé pour des raisons
+> de compatibilité historique. Côté NAT, la règle `DNAT` de la chaîne `DOCKER`
+> est la matérialisation de `-p 8080:80` ; `! -i docker0` évite de re-NATer le
+> trafic qui vient déjà du bridge. La seconde ligne de `docker port` rappelle
+> que la publication vaut aussi en IPv6.
 
 ---
 
-**E22.15** — *Rotation des journaux pour un seul conteneur.*
+<a id="e22-15"></a>**[E22.15](README.md#e22-15)** — *Rotation des journaux pour un seul conteneur.*
 
 ```bash
 docker run -d --name bavard --log-opt max-size=1m --log-opt max-file=2 \
@@ -1680,19 +1764,20 @@ Pour tous les conteneurs futurs, dans `/etc/docker/daemon.json` :
 }
 ```
 
-::: pourquoi
-Le driver `json-file` écrit chaque ligne de stdout/stderr en JSON
-(horodatage, flux, contenu) dans un fichier par conteneur. Sans `max-size`,
-le fichier grossit sans limite — c'est la première cause de disque plein sur
-un hôte Docker. La rotation garde `max-file` fichiers de `max-size` au plus ;
-`docker logs` ne lit que ce qui reste. L'option est figée à la création du
-conteneur (Q22.15). Une application qui journalise beaucoup gagne à envoyer
-vers `journald` ou un collecteur plutôt qu'à remplir des fichiers JSON.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le driver `json-file` écrit chaque ligne de stdout/stderr en JSON
+> (horodatage, flux, contenu) dans un fichier par conteneur. Sans `max-size`,
+> le fichier grossit sans limite — c'est la première cause de disque plein sur
+> un hôte Docker. La rotation garde `max-file` fichiers de `max-size` au plus ;
+> `docker logs` ne lit que ce qui reste. L'option est figée à la création du
+> conteneur (Q22.15). Une application qui journalise beaucoup gagne à envoyer
+> vers `journald` ou un collecteur plutôt qu'à remplir des fichiers JSON.
 
 ---
 
-**E22.16** — *`docker events` et `docker system df`.*
+<a id="e22-16"></a>**[E22.16](README.md#e22-16)** — *`docker events` et `docker system df`.*
 
 Terminal 2 : `docker events --format '{{.Time}} {{.Type}} {{.Action}} {{.Actor.Attributes.name}}'`.
 
@@ -1734,20 +1819,21 @@ docker system df -v | sed -n '/Images space usage/,/Containers space/p'
   utilisé par aucun conteneur (les volumes non montés, les images sans
   conteneur, tout le cache de build).
 
-::: pourquoi
-`docker events` est le journal d'audit du démon : chaque action y passe avec
-son auteur (`Actor`), en temps réel ou avec `--since`/`--until`. C'est
-l'outil pour répondre à « qui a redémarré ce conteneur à 3 h du matin » (en
-croisant avec `journalctl -u docker`). `docker system df` est le `df` de
-Docker : il distingue ce qui est **utilisé** de ce qui est **récupérable**,
-et c'est lui qu'on lit avant tout `prune`. Le cache de build (BuildKit) est
-souvent le poste le plus gros et le plus sûr à purger (`docker builder
-prune`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `docker events` est le journal d'audit du démon : chaque action y passe avec
+> son auteur (`Actor`), en temps réel ou avec `--since`/`--until`. C'est
+> l'outil pour répondre à « qui a redémarré ce conteneur à 3 h du matin » (en
+> croisant avec `journalctl -u docker`). `docker system df` est le `df` de
+> Docker : il distingue ce qui est **utilisé** de ce qui est **récupérable**,
+> et c'est lui qu'on lit avant tout `prune`. Le cache de build (BuildKit) est
+> souvent le poste le plus gros et le plus sûr à purger (`docker builder
+> prune`).
 
 ---
 
-**E22.17** — *La chaîne `dockerd` → `containerd` → shim → processus, `ctr`
+<a id="e22-17"></a>**[E22.17](README.md#e22-17)** — *La chaîne `dockerd` → `containerd` → shim → processus, `ctr`
 et `crictl`.*
 
 ```bash
@@ -1807,29 +1893,31 @@ sur `lab-ops` verrait un nœud **vide**, tirerait ses propres images dans
 `k8s.io` et ignorerait totalement `web` — Docker et Kubernetes peuvent
 cohabiter sur le même `containerd` sans se voir.
 
-::: pourquoi
-La sortie de `pstree -sp` est la démonstration en une ligne : le conteneur
-descend de `systemd` par le shim, pas de `dockerd`. `ctr` est le client
-« nu » de `containerd` : pas de réseau, pas de volumes, pas de `-p`, mais
-c'est le seul qui montre ce que `containerd` sait réellement (et il sert
-quand `dockerd` est mort : `ctr -n moby tasks kill <id>`). Le paquet
-`containerd.io` de Docker désactive le plugin `cri` parce que Docker n'en a
-pas besoin et que l'activer par défaut ferait de chaque hôte Docker un nœud
-Kubernetes potentiel. Le réactiver est la première étape de tout guide
-« installer Kubernetes avec containerd ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La sortie de `pstree -sp` est la démonstration en une ligne : le conteneur
+> descend de `systemd` par le shim, pas de `dockerd`. `ctr` est le client
+> « nu » de `containerd` : pas de réseau, pas de volumes, pas de `-p`, mais
+> c'est le seul qui montre ce que `containerd` sait réellement (et il sert
+> quand `dockerd` est mort : `ctr -n moby tasks kill <id>`). Le paquet
+> `containerd.io` de Docker désactive le plugin `cri` parce que Docker n'en a
+> pas besoin et que l'activer par défaut ferait de chaque hôte Docker un nœud
+> Kubernetes potentiel. Le réactiver est la première étape de tout guide
+> « installer Kubernetes avec containerd ».
 
-::: piege
-`systemctl restart containerd` sans `live-restore` côté Docker : les
-conteneurs restent en vie (les shims ne dépendent pas de `containerd`), mais
-`dockerd` peut perdre la connexion quelques secondes — `docker ps` répond
-`Cannot connect` puis revient. Sur une machine de production, on planifie
-ce redémarrage comme celui du démon Docker.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `systemctl restart containerd` sans `live-restore` côté Docker : les
+> conteneurs restent en vie (les shims ne dépendent pas de `containerd`), mais
+> `dockerd` peut perdre la connexion quelques secondes — `docker ps` répond
+> `Cannot connect` puis revient. Sur une machine de production, on planifie
+> ce redémarrage comme celui du démon Docker.
 
 ---
 
-**E22.18** — *Inspecter, copier et déballer une image sans le démon.*
+<a id="e22-18"></a>**[E22.18](README.md#e22-18)** — *Inspecter, copier et déballer une image sans le démon.*
 
 ```bash
 skopeo inspect docker://docker.io/library/nginx:1.28-alpine \
@@ -1895,29 +1983,31 @@ couches suivantes ne réécrivent presque rien. Sur l'image de Kevin (L22.2),
 le même outil montrerait `secret.txt` ajouté puis supprimé — présent quand
 même dans une couche.
 
-::: pourquoi
-`skopeo` ne parle **que** la spéc distribution et la spéc image : il n'a
-besoin ni de root, ni de démon, ni de stockage local. C'est l'outil des
-pipelines pour promouvoir une image d'un registre à l'autre (`skopeo copy
-docker://… docker://…`) sans la tirer sur le disque, pour vérifier un digest
-avant déploiement, ou pour archiver (`docker-archive:`, `oci-archive:`). Le
-digest d'index contre digest de manifeste est le piège classique des
-politiques d'admission : on épingle l'un, l'outil compare l'autre.
-`skopeo copy --all` conserve l'index complet et ses digests.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `skopeo` ne parle **que** la spéc distribution et la spéc image : il n'a
+> besoin ni de root, ni de démon, ni de stockage local. C'est l'outil des
+> pipelines pour promouvoir une image d'un registre à l'autre (`skopeo copy
+> docker://… docker://…`) sans la tirer sur le disque, pour vérifier un digest
+> avant déploiement, ou pour archiver (`docker-archive:`, `oci-archive:`). Le
+> digest d'index contre digest de manifeste est le piège classique des
+> politiques d'admission : on épingle l'un, l'outil compare l'autre.
+> `skopeo copy --all` conserve l'index complet et ses digests.
 
-::: piege
-`skopeo inspect docker://nginx:1.28-alpine` sans `docker.io/library/` échoue
-sur certaines versions (`unqualified-search registries`) : `skopeo` suit la
-politique de Podman (`/etc/containers/registries.conf`), pas celle de Docker.
-Toujours qualifier le nom. Et `umoci unpack` sans `sudo` produit un rootfs
-aux droits faux (`--rootless` les projette sur ton UID) : inutilisable pour
-`runc` en root.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `skopeo inspect docker://nginx:1.28-alpine` sans `docker.io/library/` échoue
+> sur certaines versions (`unqualified-search registries`) : `skopeo` suit la
+> politique de Podman (`/etc/containers/registries.conf`), pas celle de Docker.
+> Toujours qualifier le nom. Et `umoci unpack` sans `sudo` produit un rootfs
+> aux droits faux (`--rootless` les projette sur ton UID) : inutilisable pour
+> `runc` en root.
 
 ---
 
-**E22.19** — *Overlayfs : couches, copy-up, whiteout.*
+<a id="e22-19"></a>**[E22.19](README.md#e22-19)** — *Overlayfs : couches, copy-up, whiteout.*
 
 ```bash
 docker inspect web --format '{{json .GraphDriver.Data}}' | jq
@@ -1960,30 +2050,32 @@ que **chaque** fichier de données touché est d'abord copié en entier dans
 `UpperDir` (copy-up), puis parce que cette couche disparaît avec
 `docker rm` : les données vivent exactement aussi longtemps que le conteneur.
 
-::: pourquoi
-Overlayfs empile des répertoires : `lowerdir` (plusieurs, séparés par `:`,
-le premier listé est le plus haut), `upperdir` (le seul en écriture) et
-`workdir` (espace de travail interne, même système de fichiers que
-`upperdir`). La vue fusionnée `merged` est ce que le conteneur voit comme
-`/`. Les couches d'image sont partagées par tous les conteneurs de la même
-image : dix `nginx` occupent une seule fois les 40 Mo de couches, plus dix
-petits `diff`. La couche `-init` contient les fichiers que Docker injecte
-(`/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf`), montés ensuite par
-bind par-dessus. `docker diff` n'est rien d'autre qu'un parcours
-d'`UpperDir` : `A` ajouté, `C` modifié, `D` whiteout.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Overlayfs empile des répertoires : `lowerdir` (plusieurs, séparés par `:`,
+> le premier listé est le plus haut), `upperdir` (le seul en écriture) et
+> `workdir` (espace de travail interne, même système de fichiers que
+> `upperdir`). La vue fusionnée `merged` est ce que le conteneur voit comme
+> `/`. Les couches d'image sont partagées par tous les conteneurs de la même
+> image : dix `nginx` occupent une seule fois les 40 Mo de couches, plus dix
+> petits `diff`. La couche `-init` contient les fichiers que Docker injecte
+> (`/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf`), montés ensuite par
+> bind par-dessus. `docker diff` n'est rien d'autre qu'un parcours
+> d'`UpperDir` : `A` ajouté, `C` modifié, `D` whiteout.
 
-::: piege
-`UpperDir` est aussi le fichier qui grossit quand une application écrit dans
-`/var/log` ou `/tmp` **dans** le conteneur sans volume ni tmpfs : c'est la
-cause n° 2 de `/var/lib/docker` plein (BF22.4 est la n° 1, les journaux
-json). `docker ps -s` affiche la taille de la couche d'écriture de chaque
-conteneur (`SIZE`) contre la taille virtuelle.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `UpperDir` est aussi le fichier qui grossit quand une application écrit dans
+> `/var/log` ou `/tmp` **dans** le conteneur sans volume ni tmpfs : c'est la
+> cause n° 2 de `/var/lib/docker` plein (BF22.4 est la n° 1, les journaux
+> json). `docker ps -s` affiche la taille de la couche d'écriture de chaque
+> conteneur (`SIZE`) contre la taille virtuelle.
 
 ---
 
-**E22.20** — *cgroups v2 d'un conteneur : lecture, `docker update`, OOM.*
+<a id="e22-20"></a>**[E22.20](README.md#e22-20)** — *cgroups v2 d'un conteneur : lecture, `docker update`, OOM.*
 
 ```bash
 docker run -d --name elastique --memory 64m --memory-swap 64m --cpus 0.5 \
@@ -2046,31 +2138,33 @@ seccomp, aux ports ni aux montages : tout cela impose une recréation.
 On peut écrire à la main `echo "8:0 wbps=1048576" | sudo tee $C/io.max`,
 mais Docker ne le saura pas et un `docker restart` remettra 2 Mo/s.
 
-::: pourquoi
-Docker ne « surveille » pas les ressources : il **écrit des fichiers** dans
-un cgroup et le noyau fait le reste. `docker update` est donc instantané et
-sans redémarrage — c'est `write()` dans `memory.max`. `cpu.max` exprime un
-quota par période (`50000 100000` = 50 ms par 100 ms = un demi-cœur, quelle
-que soit la répartition sur les vCPU) ; `cpu.stat` du même répertoire compte
-`nr_throttled` quand le quota bride réellement. `io.max` s'exprime par
-périphérique `major:minor` (`8:0` = `/dev/sda`) et ne s'applique qu'aux E/S
-qui atteignent ce périphérique — pas au cache de pages, d'où l'impression
-que « la limite ne marche pas » sur des écritures bufferisées. `max 2314`
-dans `memory.events` compte les fois où le cgroup a **touché** sa limite et
-récupéré des pages sans tuer : c'est l'avertissement avant l'`oom_kill`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Docker ne « surveille » pas les ressources : il **écrit des fichiers** dans
+> un cgroup et le noyau fait le reste. `docker update` est donc instantané et
+> sans redémarrage — c'est `write()` dans `memory.max`. `cpu.max` exprime un
+> quota par période (`50000 100000` = 50 ms par 100 ms = un demi-cœur, quelle
+> que soit la répartition sur les vCPU) ; `cpu.stat` du même répertoire compte
+> `nr_throttled` quand le quota bride réellement. `io.max` s'exprime par
+> périphérique `major:minor` (`8:0` = `/dev/sda`) et ne s'applique qu'aux E/S
+> qui atteignent ce périphérique — pas au cache de pages, d'où l'impression
+> que « la limite ne marche pas » sur des écritures bufferisées. `max 2314`
+> dans `memory.events` compte les fois où le cgroup a **touché** sa limite et
+> récupéré des pages sans tuer : c'est l'avertissement avant l'`oom_kill`.
 
-::: piege
-`--memory 128m` sans `--memory-swap` autorise **autant de swap que de
-mémoire** (`memory.swap.max` = 128 Mo) : le conteneur ne meurt pas, il
-rame, et le symptôme est une latence, pas un 137. Toujours poser les deux.
-Et `docker update --memory 32m` sur ce conteneur : l'API à 50 Mo est tuée
-tout de suite (Q22.21).
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--memory 128m` sans `--memory-swap` autorise **autant de swap que de
+> mémoire** (`memory.swap.max` = 128 Mo) : le conteneur ne meurt pas, il
+> rame, et le symptôme est une latence, pas un 137. Toujours poser les deux.
+> Et `docker update --memory 32m` sur ce conteneur : l'API à 50 Mo est tuée
+> tout de suite (Q22.21).
 
 ---
 
-**E22.21** — *Capabilities, seccomp, AppArmor : trois verrous, trois refus.*
+<a id="e22-21"></a>**[E22.21](README.md#e22-21)** — *Capabilities, seccomp, AppArmor : trois verrous, trois refus.*
 
 ```bash
 printf 'FROM alpine:3.20\nRUN apk add --no-cache libcap\n' \
@@ -2146,35 +2240,37 @@ docker run --rm --cap-drop ALL --cap-add NET_BIND_SERVICE \
 # NoNewPrivs:     1
 ```
 
-::: pourquoi
-Les trois refus produisent le même `EPERM`, et c'est tout le problème : le
-message ne dit jamais **qui** a refusé. La méthode : lire `CapEff`
-(capabilities), `Seccomp` (2 = filtré) et `/proc/1/attr/current` (profil
-AppArmor) du conteneur, puis regarder `journalctl -k` — AppArmor journalise
-ses refus (`apparmor="DENIED"`), seccomp non (sauf profil avec
-`SCMP_ACT_LOG`), les capabilities jamais. Le profil seccomp par défaut est
-conditionnel : `mount`, `unshare`, `reboot`, `swapon`… sont autorisés **si**
-la capability correspondante est dans le bounding set ; c'est pourquoi
-`--cap-add SYS_ADMIN` fait apparaître le verrou AppArmor derrière seccomp.
-`no-new-privileges` ferme la dernière porte : sans lui, un binaire `setuid`
-de l'image (`su`, `sudo`, `ping` avec `setcap`) peut récupérer ce que le
-bounding set autorise encore.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois refus produisent le même `EPERM`, et c'est tout le problème : le
+> message ne dit jamais **qui** a refusé. La méthode : lire `CapEff`
+> (capabilities), `Seccomp` (2 = filtré) et `/proc/1/attr/current` (profil
+> AppArmor) du conteneur, puis regarder `journalctl -k` — AppArmor journalise
+> ses refus (`apparmor="DENIED"`), seccomp non (sauf profil avec
+> `SCMP_ACT_LOG`), les capabilities jamais. Le profil seccomp par défaut est
+> conditionnel : `mount`, `unshare`, `reboot`, `swapon`… sont autorisés **si**
+> la capability correspondante est dans le bounding set ; c'est pourquoi
+> `--cap-add SYS_ADMIN` fait apparaître le verrou AppArmor derrière seccomp.
+> `no-new-privileges` ferme la dernière porte : sans lui, un binaire `setuid`
+> de l'image (`su`, `sudo`, `ping` avec `setcap`) peut récupérer ce que le
+> bounding set autorise encore.
 
-::: piege
-`--privileged` désactive **les trois** d'un coup et ouvre `/dev` : c'est
-la « solution » qu'on trouve dans les issues GitHub à chaque `EPERM`. Avant
-d'y céder, la démarche ci-dessus prend deux minutes et donne l'option
-précise (`--cap-add`, ou un profil seccomp/AppArmor personnalisé via
-`--security-opt seccomp=mon-profil.json`). Et le mode rootless (L22.1,
-étape 7) change tout : là, même `--privileged` ne donne pas root sur l'hôte.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--privileged` désactive **les trois** d'un coup et ouvre `/dev` : c'est
+> la « solution » qu'on trouve dans les issues GitHub à chaque `EPERM`. Avant
+> d'y céder, la démarche ci-dessus prend deux minutes et donne l'option
+> précise (`--cap-add`, ou un profil seccomp/AppArmor personnalisé via
+> `--security-opt seccomp=mon-profil.json`). Et le mode rootless (L22.1,
+> étape 7) change tout : là, même `--privileged` ne donne pas root sur l'hôte.
 
 ---
 
 ## 22.6 Labs
 
-### **L22.1** — *Installer Docker Engine proprement sur `lab-ops`.*
+### <a id="l22-1"></a>**[L22.1](README.md#l22-1)** — *Installer Docker Engine proprement sur `lab-ops`.*
 
 **1. État des lieux**
 
@@ -2308,37 +2404,40 @@ privilégié (sauf `sudo sysctl net.ipv4.ip_unprivileged_port_start=0`). Ses
 données sont dans `~/.local/share/docker`, et `/etc/subuid` contient une ligne
 `kevin:<début>:65536` (typiquement `165536`, `100000` étant déjà attribué à `mathieu`) : la plage d'UID que ses conteneurs utilisent.
 
-::: rhel
-Sur `lab-rhel`, `podman run -d -p 8080:80 docker.io/library/nginx:1.28-alpine`
-fonctionne sans démon ni groupe : `ps -o user,pid,args -C conmon` montre le
-superviseur du conteneur sous ton propre compte. Deux différences visibles :
-le nom d'image doit être complet (`docker.io/library/…`, ou configuré dans
-`/etc/containers/registries.conf`) et il n'y a pas de `dockerd` dans
-`ps` — chaque conteneur est un fils de `conmon`, lui-même fils de ton shell
-(ou de systemd si tu génères une unité avec `podman generate systemd`).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sur `lab-rhel`, `podman run -d -p 8080:80 docker.io/library/nginx:1.28-alpine`
+> fonctionne sans démon ni groupe : `ps -o user,pid,args -C conmon` montre le
+> superviseur du conteneur sous ton propre compte. Deux différences visibles :
+> le nom d'image doit être complet (`docker.io/library/…`, ou configuré dans
+> `/etc/containers/registries.conf`) et il n'y a pas de `dockerd` dans
+> `ps` — chaque conteneur est un fils de `conmon`, lui-même fils de ton shell
+> (ou de systemd si tu génères une unité avec `podman generate systemd`).
 
-::: pourquoi
-Le dépôt officiel donne des versions récentes et cohérentes (Engine,
-containerd, buildx, Compose v2) ; `docker.io` d'Ubuntu retarde de plusieurs
-versions et le snap isole le démon d'une façon qui casse les bind mounts hors
-de `/home`. `daemon.json` est lu **au démarrage** du démon : une erreur de
-syntaxe empêche Docker de démarrer, d'où la validation par `jq` avant le
-`restart`. La rotation des journaux est réglée dès l'installation parce
-qu'elle ne s'applique qu'aux conteneurs créés après (Q22.15).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le dépôt officiel donne des versions récentes et cohérentes (Engine,
+> containerd, buildx, Compose v2) ; `docker.io` d'Ubuntu retarde de plusieurs
+> versions et le snap isole le démon d'une façon qui casse les bind mounts hors
+> de `/home`. `daemon.json` est lu **au démarrage** du démon : une erreur de
+> syntaxe empêche Docker de démarrer, d'où la validation par `jq` avant le
+> `restart`. La rotation des journaux est réglée dès l'installation parce
+> qu'elle ne s'applique qu'aux conteneurs créés après (Q22.15).
 
-::: piege
-`usermod -aG` ne prend effet qu'à la **prochaine session** : le `docker info`
-qui échoue avec `permission denied while trying to connect to the Docker
-daemon socket` juste après est normal. `newgrp docker` dépanne dans le shell
-courant. Et il faut le `-a` : `usermod -G docker mathieu` retirerait le
-compte de tous ses autres groupes, `sudo` compris.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `usermod -aG` ne prend effet qu'à la **prochaine session** : le `docker info`
+> qui échoue avec `permission denied while trying to connect to the Docker
+> daemon socket` juste après est normal. `newgrp docker` dépanne dans le shell
+> courant. Et il faut le `-a` : `usermod -G docker mathieu` retirerait le
+> compte de tous ses autres groupes, `sudo` compris.
 
 ---
 
-### **L22.2** — *Du Dockerfile de Kevin à une image livrable.*
+### <a id="l22-2"></a>**[L22.2](README.md#l22-2)** — *Du Dockerfile de Kevin à une image livrable.*
 
 **1. Mesures sur l'image de Kevin**
 
@@ -2481,30 +2580,32 @@ docker run --rm factura-api:1.0 curl --version
 # exec: "curl": executable file not found in $PATH   (attendu)
 ```
 
-::: pourquoi
-La cible par défaut d'un build multi-stage est le **dernier** étage du
-fichier : c'est pourquoi `runtime` est un étage vide placé en dernier,
-dérivé de `base`, et `debug` est intercalé. `--prefix=/install` puis
-`COPY --from=builder /install /usr/local` ne rapporte que les paquets
-installés, sans le cache pip ni les éventuels compilateurs. `mkdir /data &&
-chown app:app` prépare le point de montage : un volume nommé vide héritera
-de ce propriétaire (Q22.8). Retirer `pip` de l'image finale enlève 10 Mo et
-un outil qui n'a rien à faire en production. `PYTHONDONTWRITEBYTECODE`
-permet le `--read-only` sans que Python cherche à écrire des `.pyc`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La cible par défaut d'un build multi-stage est le **dernier** étage du
+> fichier : c'est pourquoi `runtime` est un étage vide placé en dernier,
+> dérivé de `base`, et `debug` est intercalé. `--prefix=/install` puis
+> `COPY --from=builder /install /usr/local` ne rapporte que les paquets
+> installés, sans le cache pip ni les éventuels compilateurs. `mkdir /data &&
+> chown app:app` prépare le point de montage : un volume nommé vide héritera
+> de ce propriétaire (Q22.8). Retirer `pip` de l'image finale enlève 10 Mo et
+> un outil qui n'a rien à faire en production. `PYTHONDONTWRITEBYTECODE`
+> permet le `--read-only` sans que Python cherche à écrire des `.pyc`.
 
-::: piege
-`useradd -r` sans `-u` choisirait un UID système libre (< 1000), différent
-d'une machine à l'autre : les bind mounts deviendraient imprévisibles. On
-fixe **toujours** l'UID. Et `USER app` doit venir **après** tout ce qui
-requiert root (`groupadd`, `chown`, `apt-get`) mais **avant** `ENTRYPOINT`,
-sinon le processus démarre en root. `COPY --chown` est nécessaire parce que
-`COPY` copie en root par défaut, quel que soit le `USER` courant.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `useradd -r` sans `-u` choisirait un UID système libre (< 1000), différent
+> d'une machine à l'autre : les bind mounts deviendraient imprévisibles. On
+> fixe **toujours** l'UID. Et `USER app` doit venir **après** tout ce qui
+> requiert root (`groupadd`, `chown`, `apt-get`) mais **avant** `ENTRYPOINT`,
+> sinon le processus démarre en root. `COPY --chown` est nécessaire parce que
+> `COPY` copie en root par défaut, quel que soit le `USER` courant.
 
 ---
 
-### **L22.3** — *Données, UID et réseau : faire tourner l'API pour de vrai.*
+### <a id="l22-3"></a>**[L22.3](README.md#l22-3)** — *Données, UID et réseau : faire tourner l'API pour de vrai.*
 
 **1. Volume nommé**
 
@@ -2642,28 +2743,30 @@ Restauration :
 Règle iptables persistée dans /etc/iptables/rules.v4 (iptables-persistent).
 ```
 
-::: pourquoi
-Ce lab enchaîne les quatre questions qu'un exploitant se pose pour un
-conteneur : **où sont les données** (volume géré, ou chemin hôte qu'on
-maîtrise), **qui écrit** (UID numérique, sans traduction), **qui parle à
-qui** (réseau utilisateur avec DNS, ports non publiés pour ce qui reste
-interne), **qui entre** (publication + `DOCKER-USER`). Le durcissement de
-l'étape 4 ne casse rien parce que l'application a été conçue pour : elle
-n'écrit que dans `/data`, lit sa configuration dans l'environnement, et
-n'a besoin d'aucune capability sur un port > 1024.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ce lab enchaîne les quatre questions qu'un exploitant se pose pour un
+> conteneur : **où sont les données** (volume géré, ou chemin hôte qu'on
+> maîtrise), **qui écrit** (UID numérique, sans traduction), **qui parle à
+> qui** (réseau utilisateur avec DNS, ports non publiés pour ce qui reste
+> interne), **qui entre** (publication + `DOCKER-USER`). Le durcissement de
+> l'étape 4 ne casse rien parce que l'application a été conçue pour : elle
+> n'écrit que dans `/data`, lit sa configuration dans l'environnement, et
+> n'a besoin d'aucune capability sur un port > 1024.
 
-::: piege
-`--memory` sans `--memory-swap` laisse le conteneur déborder dans le swap
-de l'hôte (Q22.9). `--read-only` sans `--tmpfs /tmp` casse beaucoup de
-programmes qui écrivent des fichiers temporaires. Et un `docker rm -f` du
-conteneur `cache` sans volume perd les compteurs : c'est voulu ici (cache),
-ce ne l'est pas pour une base.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--memory` sans `--memory-swap` laisse le conteneur déborder dans le swap
+> de l'hôte (Q22.9). `--read-only` sans `--tmpfs /tmp` casse beaucoup de
+> programmes qui écrivent des fichiers temporaires. Et un `docker rm -f` du
+> conteneur `cache` sans volume perd les compteurs : c'est voulu ici (cache),
+> ce ne l'est pas pour une base.
 
 ---
 
-### **L22.4** — *La pile complète en Compose.*
+### <a id="l22-4"></a>**[L22.4](README.md#l22-4)** — *La pile complète en Compose.*
 
 Arborescence de `~/lab22/compose/` :
 
@@ -2896,32 +2999,34 @@ réseau ; `down -v` supprime aussi `pg-data` et `app-data` (données perdues) ;
 la pile est revenue parce que `docker.service` est activé et que chaque
 service porte `restart: unless-stopped`.
 
-::: pourquoi
-Les briques qui font qu'un `up` « marche du premier coup » : les
-**healthchecks** (le service dit lui-même quand il est prêt), `depends_on`
-avec `condition: service_healthy` (Compose attend ce signal), le **DNS du
-réseau de projet** (`db`, `cache`, `app` sont des noms), et les **secrets**
-montés en fichiers (l'image `postgres` sait lire `*_FILE`, l'application
-aussi). Le fichier de secret est en `0444` dans un répertoire `0700` : sur
-l'hôte, seul `mathieu` y accède ; dans les conteneurs, seul le fichier est
-monté, lisible par l'UID 70 de `db` et l'UID 10001 d'`app`. Le `!reset` du
-fichier prod retire la clé `build:` héritée, sans quoi un `up` sur une
-machine où l'image manque **construirait** au lieu de tirer du registre.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les briques qui font qu'un `up` « marche du premier coup » : les
+> **healthchecks** (le service dit lui-même quand il est prêt), `depends_on`
+> avec `condition: service_healthy` (Compose attend ce signal), le **DNS du
+> réseau de projet** (`db`, `cache`, `app` sont des noms), et les **secrets**
+> montés en fichiers (l'image `postgres` sait lire `*_FILE`, l'application
+> aussi). Le fichier de secret est en `0444` dans un répertoire `0700` : sur
+> l'hôte, seul `mathieu` y accède ; dans les conteneurs, seul le fichier est
+> monté, lisible par l'UID 70 de `db` et l'UID 10001 d'`app`. Le `!reset` du
+> fichier prod retire la clé `build:` héritée, sans quoi un `up` sur une
+> machine où l'image manque **construirait** au lieu de tirer du registre.
 
-::: piege
-`pg_isready` sans `-h 127.0.0.1` passe par le socket Unix et répond « prêt »
-pendant la phase d'initialisation, où PostgreSQL tourne un instant sans
-TCP : `app` démarrerait trop tôt. `mem_limit` est la syntaxe Compose v2 hors
-Swarm ; `deploy.resources.limits.memory` fonctionne aussi depuis Compose
-2.20. Et `docker compose down` sur le fichier prod sans `-f` identique
-laisse des conteneurs orphelins : toujours les mêmes `-f` pour `up` et
-`down`, ou `COMPOSE_FILE=compose.yaml:compose.prod.yaml` dans `.env`.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `pg_isready` sans `-h 127.0.0.1` passe par le socket Unix et répond « prêt »
+> pendant la phase d'initialisation, où PostgreSQL tourne un instant sans
+> TCP : `app` démarrerait trop tôt. `mem_limit` est la syntaxe Compose v2 hors
+> Swarm ; `deploy.resources.limits.memory` fonctionne aussi depuis Compose
+> 2.20. Et `docker compose down` sur le fichier prod sans `-f` identique
+> laisse des conteneurs orphelins : toujours les mêmes `-f` pour `up` et
+> `down`, ou `COMPOSE_FILE=compose.yaml:compose.prod.yaml` dans `.env`.
 
 ---
 
-### **L22.5** — *Un registre privé sur `lab-ops`.*
+### <a id="l22-5"></a>**[L22.5](README.md#l22-5)** — *Un registre privé sur `lab-ops`.*
 
 **1. En clair**
 
@@ -3042,30 +3147,32 @@ journalisation, scan des images poussées, rétention (`garbage-collect`
 planifié), et un vrai serveur d'identités (jeton, `REGISTRY_AUTH=token`)
 au-delà de quelques comptes.
 
-::: pourquoi
-Un registre est un serveur HTTP qui stocke des *blobs* adressés par
-digest et des manifestes ; `push` envoie les couches manquantes, `pull` les
-récupère. Le client Docker impose TLS par défaut parce que l'image est du
-code exécuté en root sur tes machines : un registre en clair, c'est du code
-non authentifié. Le répertoire `/etc/docker/certs.d/<hôte:port>/` permet de
-faire confiance à une AC **pour ce registre seulement**, sans toucher au
-magasin système, ce qui limite la portée d'un certificat autosigné. La
-suppression par l'API ne retire que le manifeste ; les blobs restent jusqu'au
-`garbage-collect`, qui doit tourner registre arrêté ou en lecture seule
-(`REGISTRY_STORAGE_MAINTENANCE_READONLY_ENABLED=true`) pour ne pas
-corrompre un push concurrent.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un registre est un serveur HTTP qui stocke des *blobs* adressés par
+> digest et des manifestes ; `push` envoie les couches manquantes, `pull` les
+> récupère. Le client Docker impose TLS par défaut parce que l'image est du
+> code exécuté en root sur tes machines : un registre en clair, c'est du code
+> non authentifié. Le répertoire `/etc/docker/certs.d/<hôte:port>/` permet de
+> faire confiance à une AC **pour ce registre seulement**, sans toucher au
+> magasin système, ce qui limite la portée d'un certificat autosigné. La
+> suppression par l'API ne retire que le manifeste ; les blobs restent jusqu'au
+> `garbage-collect`, qui doit tourner registre arrêté ou en lecture seule
+> (`REGISTRY_STORAGE_MAINTENANCE_READONLY_ENABLED=true`) pour ne pas
+> corrompre un push concurrent.
 
-::: piege
-Le SAN est obligatoire : un certificat avec seulement `CN=` est refusé par
-Docker et Podman (`x509: certificate relies on legacy Common Name field`).
-Et `htpasswd` doit être en **bcrypt** (`-B`) : le registre ignore les
-entrées MD5/SHA et répond `401` sans explication.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le SAN est obligatoire : un certificat avec seulement `CN=` est refusé par
+> Docker et Podman (`x509: certificate relies on legacy Common Name field`).
+> Et `htpasswd` doit être en **bcrypt** (`-B`) : le registre ignore les
+> entrées MD5/SHA et répond `401` sans explication.
 
 ---
 
-### **L22.6** — *Reconstruire Docker à la main : namespaces, cgroups,
+### <a id="l22-6"></a>**[L22.6](README.md#l22-6)** — *Reconstruire Docker à la main : namespaces, cgroups,
 overlayfs, runc.*
 
 **1. Le rootfs**
@@ -3224,32 +3331,34 @@ fait un `pivot_root` sur un overlay) **plus** six namespaces, un cgroup
 avec limites, un bounding set réduit, un filtre seccomp et un profil LSM —
 et l'étape 4 montre que `runc` seul, sans Docker, suffit à faire tout ça.
 
-::: pourquoi
-Docker n'a rien inventé : namespaces (2002-2013), cgroups (2008), overlayfs
-(2014) et capabilities (1999) sont des primitives du noyau, et `runc` est
-la bibliothèque `libcontainer` de Docker devenue exécutable autonome quand
-Docker l'a donnée à l'OCI (2015). Ce que Docker ajoute, et qui justifie
-qu'on l'installe : la distribution des images, le réseau, les volumes, la
-supervision (redémarrage, journaux, événements), l'API et les valeurs par
-défaut sûres (14 capabilities, seccomp, AppArmor). Le tableau de l'étape 6
-est la liste exacte de ce qu'on « achète ».
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Docker n'a rien inventé : namespaces (2002-2013), cgroups (2008), overlayfs
+> (2014) et capabilities (1999) sont des primitives du noyau, et `runc` est
+> la bibliothèque `libcontainer` de Docker devenue exécutable autonome quand
+> Docker l'a donnée à l'OCI (2015). Ce que Docker ajoute, et qui justifie
+> qu'on l'installe : la distribution des images, le réseau, les volumes, la
+> supervision (redémarrage, journaux, événements), l'API et les valeurs par
+> défaut sûres (14 capabilities, seccomp, AppArmor). Le tableau de l'étape 6
+> est la liste exacte de ce qu'on « achète ».
 
-::: piege
-Deux erreurs classiques dans ce lab. `runc run` en état `stopped` après
-`exit` bloque le nom : `sudo runc delete manuel` (ou `runc run --rm`
-n'existe pas ; c'est `runc delete --force`). Et le cgroup `/factura-manuel`
-n'est pas supprimé si le conteneur a été tué brutalement : `sudo rmdir
-/sys/fs/cgroup/factura-manuel` une fois vide. Enfin, ne jamais faire
-`rm -rf merged` tant que l'overlay est monté : `sudo umount
-~/lab22/manuel/merged` d'abord.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Deux erreurs classiques dans ce lab. `runc run` en état `stopped` après
+> `exit` bloque le nom : `sudo runc delete manuel` (ou `runc run --rm`
+> n'existe pas ; c'est `runc delete --force`). Et le cgroup `/factura-manuel`
+> n'est pas supprimé si le conteneur a été tué brutalement : `sudo rmdir
+> /sys/fs/cgroup/factura-manuel` une fois vide. Enfin, ne jamais faire
+> `rm -rf merged` tant que l'overlay est monté : `sudo umount
+> ~/lab22/manuel/merged` d'abord.
 
 ---
 
 ## 22.7 Break & Fix
 
-### **BF22.1** — *L'API legacy redémarre toute seule et met 10 s à s'arrêter.*
+### <a id="bf22-1"></a>**[BF22.1](README.md#bf22-1)** — *L'API legacy redémarre toute seule et met 10 s à s'arrêter.*
 
 **Démarche de diagnostic**
 
@@ -3327,27 +3436,29 @@ Deux autres façons sans réécrire le script :
 un `HEALTHCHECK` plutôt qu'une boucle maison ; `--init` quand on ne maîtrise
 pas le programme.
 
-::: pourquoi
-`Restarting (0)` est le point d'entrée : un code 0 en boucle n'est jamais un
-crash, c'est un processus principal qui **finit** son travail. Le second
-indice est le temps d'arrêt de 10 s, signature d'un PID 1 sourd. Les deux
-symptômes n'ont qu'une cause parce que dans un conteneur, la vie du
-processus principal **est** la vie du conteneur : pas de superviseur, pas de
-« service en arrière-plan ». Tout ce que fait `&` dans un script PID 1,
-c'est créer un orphelin condamné.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `Restarting (0)` est le point d'entrée : un code 0 en boucle n'est jamais un
+> crash, c'est un processus principal qui **finit** son travail. Le second
+> indice est le temps d'arrêt de 10 s, signature d'un PID 1 sourd. Les deux
+> symptômes n'ont qu'une cause parce que dans un conteneur, la vie du
+> processus principal **est** la vie du conteneur : pas de superviseur, pas de
+> « service en arrière-plan ». Tout ce que fait `&` dans un script PID 1,
+> c'est créer un orphelin condamné.
 
-::: piege
-`--restart no` supprime le symptôme visible et laisse une API qui meurt
-toutes les 30 secondes. `docker kill` comme procédure d'arrêt masque le
-137 et interdit tout arrêt propre (connexions coupées, fichiers non
-vidés). Enfin, `--init` seul **ne suffit pas** ici : tini relaierait bien
-`SIGTERM`, mais le script sortirait toujours en 0 au bout de 30 s.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--restart no` supprime le symptôme visible et laisse une API qui meurt
+> toutes les 30 secondes. `docker kill` comme procédure d'arrêt masque le
+> 137 et interdit tout arrêt propre (connexions coupées, fichiers non
+> vidés). Enfin, `--init` seul **ne suffit pas** ici : tini relaierait bien
+> `SIGTERM`, mais le script sortirait toujours en 0 au bout de 30 s.
 
 ---
 
-### **BF22.2** — */visites renvoie une erreur 500 depuis la migration.*
+### <a id="bf22-2"></a>**[BF22.2](README.md#bf22-2)** — */visites renvoie une erreur 500 depuis la migration.*
 
 **Démarche de diagnostic**
 
@@ -3390,26 +3501,28 @@ préparer les répertoires hôte dans le script de déploiement (`install -d
 -o 10001 -g root -m 0750 …`) ; préférer un volume nommé quand rien n'oblige
 à un chemin hôte.
 
-::: pourquoi
-Un volume nommé n'aurait pas eu ce problème parce qu'à sa création Docker
-y copie le contenu de `/data` de l'image **avec son propriétaire** — et si
-le répertoire n'existe pas dans l'image, il le crée en root, mais un `chown
-app:app /data` dans le Dockerfile règle ce cas une fois pour toutes, sur
-toutes les machines. Le bind mount, lui, dépend de l'hôte, donc de chaque
-machine, donc de chaque migration.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un volume nommé n'aurait pas eu ce problème parce qu'à sa création Docker
+> y copie le contenu de `/data` de l'image **avec son propriétaire** — et si
+> le répertoire n'existe pas dans l'image, il le crée en root, mais un `chown
+> app:app /data` dans le Dockerfile règle ce cas une fois pour toutes, sur
+> toutes les machines. Le bind mount, lui, dépend de l'hôte, donc de chaque
+> machine, donc de chaque migration.
 
-::: piege
-`chmod 777` marche et c'est le réflexe interdit : tout processus de l'hôte,
-tout autre conteneur avec le même bind mount, peut alors écrire et lire les
-données. `--privileged` ne change rien aux droits POSIX. Et lancer le
-conteneur en root déplace le problème : les fichiers créés appartiendront à
-root, et un compromis de l'application donne root sur le montage.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `chmod 777` marche et c'est le réflexe interdit : tout processus de l'hôte,
+> tout autre conteneur avec le même bind mount, peut alors écrire et lire les
+> données. `--privileged` ne change rien aux droits POSIX. Et lancer le
+> conteneur en root déplace le problème : les fichiers créés appartiendront à
+> root, et un compromis de l'application donne root sur le montage.
 
 ---
 
-### **BF22.3** — *Le port est publié mais personne n'y accède.*
+### <a id="bf22-3"></a>**[BF22.3](README.md#bf22-3)** — *Le port est publié mais personne n'y accède.*
 
 **Démarche de diagnostic**
 
@@ -3458,27 +3571,29 @@ commentaire `-m comment --comment "ticket-1234"` ; revue des règles à chaque
 incident réseau (`iptables -S DOCKER-USER` fait partie des cinq commandes du
 runbook).
 
-::: pourquoi
-La distinction `INPUT`/`FORWARD` est tout le sujet. Un port publié est un
-**NAT** : pour le noyau, l'hôte n'est pas la destination, il route. Les
-outils qui raisonnent « service local » (`ufw status`, `ss -tlnp`, `curl
-localhost`) répondent tous « c'est ouvert » et ont raison de leur point de
-vue. Seul le chemin `PREROUTING → FORWARD → DOCKER-USER` explique ce que
-voit un client distant. `iptables -L -nv` avec ses compteurs de paquets est
-la preuve : la règle `DROP` compte exactement les tentatives de `lab-adm`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La distinction `INPUT`/`FORWARD` est tout le sujet. Un port publié est un
+> **NAT** : pour le noyau, l'hôte n'est pas la destination, il route. Les
+> outils qui raisonnent « service local » (`ufw status`, `ss -tlnp`, `curl
+> localhost`) répondent tous « c'est ouvert » et ont raison de leur point de
+> vue. Seul le chemin `PREROUTING → FORWARD → DOCKER-USER` explique ce que
+> voit un client distant. `iptables -L -nv` avec ses compteurs de paquets est
+> la preuve : la règle `DROP` compte exactement les tentatives de `lab-adm`.
 
-::: piege
-`iptables -F` viderait aussi les chaînes de Docker : plus aucune
-publication de port ne fonctionnerait jusqu'à un `systemctl restart docker`
-— et l'interdit de l'énoncé est là pour ça. Redémarrer Docker aurait fait
-disparaître le symptôme (la règle n'est pas persistée) sans qu'on comprenne
-rien, et elle serait revenue au prochain « `iptables` de l'ancien collègue ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> `iptables -F` viderait aussi les chaînes de Docker : plus aucune
+> publication de port ne fonctionnerait jusqu'à un `systemctl restart docker`
+> — et l'interdit de l'énoncé est là pour ça. Redémarrer Docker aurait fait
+> disparaître le symptôme (la règle n'est pas persistée) sans qu'on comprenne
+> rien, et elle serait revenue au prochain « `iptables` de l'ancien collègue ».
 
 ---
 
-### **BF22.4** — *Plus rien ne se lance : no space left on device.*
+### <a id="bf22-4"></a>**[BF22.4](README.md#bf22-4)** — *Plus rien ne se lance : no space left on device.*
 
 **Démarche de diagnostic**
 
@@ -3531,27 +3646,29 @@ docker run --rm alpine:3.20 true          # fonctionne à nouveau
   `docker system df` dans le check hebdomadaire, rotation `json-file`
   globale (déjà en place ici : ce n'étaient pas les journaux).
 
-::: pourquoi
-La couche d'écriture d'un conteneur est un répertoire overlay2 sous
-`/var/lib/docker/overlay2/<id>/diff` : `du` sur les emplacements habituels
-ne la voit pas, et `docker images` ne la compte pas (elle n'appartient à
-aucune image). Il faut les outils Docker (`system df`, `ps -s`) pour la
-mesurer. Supprimer le fichier depuis le conteneur ou détruire le conteneur
-libère l'espace immédiatement ; supprimer un fichier directement sous
-`/var/lib/docker` désynchronise le démon et peut corrompre le stockage.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La couche d'écriture d'un conteneur est un répertoire overlay2 sous
+> `/var/lib/docker/overlay2/<id>/diff` : `du` sur les emplacements habituels
+> ne la voit pas, et `docker images` ne la compte pas (elle n'appartient à
+> aucune image). Il faut les outils Docker (`system df`, `ps -s`) pour la
+> mesurer. Supprimer le fichier depuis le conteneur ou détruire le conteneur
+> libère l'espace immédiatement ; supprimer un fichier directement sous
+> `/var/lib/docker` désynchronise le démon et peut corrompre le stockage.
 
-::: piege
-`docker system prune -a` aurait libéré des images et le cache de build,
-peut-être assez pour repartir quelques heures, sans toucher au conteneur
-**actif** qui remplit le disque : le symptôme serait revenu, avec en prime
-des images de production à retélécharger. Le `prune` n'est pas un outil de
-diagnostic, c'est un nettoyage qu'on fait quand on sait ce qu'on supprime.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `docker system prune -a` aurait libéré des images et le cache de build,
+> peut-être assez pour repartir quelques heures, sans toucher au conteneur
+> **actif** qui remplit le disque : le symptôme serait revenu, avec en prime
+> des images de production à retélécharger. Le `prune` n'est pas un outil de
+> diagnostic, c'est un nettoyage qu'on fait quand on sait ce qu'on supprime.
 
 ---
 
-### **BF22.5** — *L'API ne trouve plus Redis.*
+### <a id="bf22-5"></a>**[BF22.5](README.md#bf22-5)** — *L'API ne trouve plus Redis.*
 
 **Démarche de diagnostic**
 
@@ -3598,27 +3715,29 @@ puis `--network factura-net` sur les deux `run` (ou un `compose.yaml`, qui
 crée un réseau de projet d'office). Optionnellement, `docker network
 disconnect bridge factura-app` pour ne pas rester sur deux réseaux.
 
-::: pourquoi
-Le bridge par défaut date d'avant le DNS intégré : Docker y a gardé le
-comportement historique (`/etc/hosts` statique, `--link` déprécié) pour ne
-rien casser. Tout réseau créé par l'utilisateur active le résolveur
-`127.0.0.11`, qui répond pour les conteneurs **du même réseau**. Le
-diagnostic tient en une commande : `cat /etc/resolv.conf` dans le conteneur.
-`10.10.10.1` = bridge par défaut, `127.0.0.11` = réseau utilisateur.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le bridge par défaut date d'avant le DNS intégré : Docker y a gardé le
+> comportement historique (`/etc/hosts` statique, `--link` déprécié) pour ne
+> rien casser. Tout réseau créé par l'utilisateur active le résolveur
+> `127.0.0.11`, qui répond pour les conteneurs **du même réseau**. Le
+> diagnostic tient en une commande : `cat /etc/resolv.conf` dans le conteneur.
+> `10.10.10.1` = bridge par défaut, `127.0.0.11` = réseau utilisateur.
 
-::: piege
-`--link factura-cache:factura-cache` aurait fonctionné et c'est pour ça
-qu'il est interdit : déprécié, unidirectionnel, et cassé dès que la cible
-est recréée (nouvelle IP, `/etc/hosts` obsolète). L'IP en dur dans
-`REDIS_URL` tient jusqu'au prochain redémarrage de la machine, où l'ordre
-de démarrage change les adresses. Et éditer `/etc/hosts` du conteneur ne
-survit pas à un `docker restart` — le fichier est régénéré.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `--link factura-cache:factura-cache` aurait fonctionné et c'est pour ça
+> qu'il est interdit : déprécié, unidirectionnel, et cassé dès que la cible
+> est recréée (nouvelle IP, `/etc/hosts` obsolète). L'IP en dur dans
+> `REDIS_URL` tient jusqu'au prochain redémarrage de la machine, où l'ordre
+> de démarrage change les adresses. Et éditer `/etc/hosts` du conteneur ne
+> survit pas à un `docker restart` — le fichier est régénéré.
 
 ---
 
-### **BF22.6** — *Le traitement par lots n'avance plus, `docker exec`
+### <a id="bf22-6"></a>**[BF22.6](README.md#bf22-6)** — *Le traitement par lots n'avance plus, `docker exec`
 impossible.*
 
 **Démarche de diagnostic**
@@ -3680,33 +3799,35 @@ for i in $(seq 1 30); do cat $C/pids.current; sleep 1; done | sort -n | tail -1
 `container_processes` et `container_spec_...`, module 26) ; et jamais
 `--pids-limit 0` (illimité) : la limite protège l'hôte d'une fork bomb.
 
-::: pourquoi
-`pids.max` est la protection la plus simple et la plus efficace contre une
-fork bomb ou une fuite de processus : le noyau refuse `fork()` au-delà du
-compte, sans tuer personne, et l'hôte ne s'en aperçoit même pas. Le revers
-est un conteneur dans lequel **on ne peut plus entrer** — `docker exec`
-consomme un PID du même cgroup. Les seuls outils qui restent sont ceux de
-l'hôte : `docker top`, `docker stats`, `/sys/fs/cgroup`, `nsenter` (qui,
-lui, n'entre pas dans le cgroup : `nsenter -t PID -p -m` fonctionne quand
-`exec` échoue). Docker ne pose aucune limite de PID par défaut (`pids.max` =
-`max`) ; Kubernetes permet d' en poser une par pod (`podPidsLimit` du kubelet, illimitée par défaut elle aussi).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `pids.max` est la protection la plus simple et la plus efficace contre une
+> fork bomb ou une fuite de processus : le noyau refuse `fork()` au-delà du
+> compte, sans tuer personne, et l'hôte ne s'en aperçoit même pas. Le revers
+> est un conteneur dans lequel **on ne peut plus entrer** — `docker exec`
+> consomme un PID du même cgroup. Les seuls outils qui restent sont ceux de
+> l'hôte : `docker top`, `docker stats`, `/sys/fs/cgroup`, `nsenter` (qui,
+> lui, n'entre pas dans le cgroup : `nsenter -t PID -p -m` fonctionne quand
+> `exec` échoue). Docker ne pose aucune limite de PID par défaut (`pids.max` =
+> `max`) ; Kubernetes permet d' en poser une par pod (`podPidsLimit` du kubelet, illimitée par défaut elle aussi).
 
-::: piege
-`docker restart` aurait « résolu » le symptôme pour dix minutes (les
-ouvriers repartent de zéro) et effacé `pids.events`. Et la tentation de
-mettre `--pids-limit 0` retire la protection : la bonne réponse est une
-valeur mesurée. Attention enfin au `docker update` sur un conteneur lancé
-par Compose : au prochain `docker compose up`, la valeur du fichier
-(`pids_limit:`) reprend le dessus — le correctif à chaud doit être reporté
-dans le fichier.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `docker restart` aurait « résolu » le symptôme pour dix minutes (les
+> ouvriers repartent de zéro) et effacé `pids.events`. Et la tentation de
+> mettre `--pids-limit 0` retire la protection : la bonne réponse est une
+> valeur mesurée. Attention enfin au `docker update` sur un conteneur lancé
+> par Compose : au prochain `docker compose up`, la valeur du fichier
+> (`pids_limit:`) reprend le dessus — le correctif à chaud doit être reporté
+> dans le fichier.
 
 ---
 
 ## 22.8 Défi du module
 
-**D22** — *Conteneuriser et livrer `factura-api` 2.0.*
+<a id="d22"></a>**[D22](README.md#d22)** — *Conteneuriser et livrer `factura-api` 2.0.*
 
 **1. L'image** : le Dockerfile est celui du corrigé de L22.2 (multi-stage,
 `base`/`debug`/`runtime`, UID 10001, `HEALTHCHECK`, labels, `ARG
@@ -3868,26 +3989,34 @@ cause (volume dédié, rotation, --storage-opt).
 **5. La preuve** : sortie de `livrer.sh 2.0` puis `2.1`, et retour à 2.0
 exécuté, collés dans le runbook.
 
-::: pourquoi
-La chaîne du défi est celle d'un pipeline de livraison (module 25), écrite
-à la main pour en comprendre chaque maillon : **construire** de façon
-reproductible (version en argument, base épinglée, `--pull`), **refuser**
-avant de livrer (scan bloquant, taille, non-root — lus dans l'image, pas
-dans le Dockerfile, parce que c'est l'image qui part en production),
-**publier** dans un registre dont on connaît le digest, **déployer** depuis
-ce registre avec attente de santé, **vérifier** de l'extérieur, et
-**journaliser** avec le digest pour pouvoir dire, plus tard, exactement ce
-qui tournait. Le rollback est trivial parce que la 2.0 existe encore dans le
-registre et que le seul paramètre est `APP_VERSION`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La chaîne du défi est celle d'un pipeline de livraison (module 25), écrite
+> à la main pour en comprendre chaque maillon : **construire** de façon
+> reproductible (version en argument, base épinglée, `--pull`), **refuser**
+> avant de livrer (scan bloquant, taille, non-root — lus dans l'image, pas
+> dans le Dockerfile, parce que c'est l'image qui part en production),
+> **publier** dans un registre dont on connaît le digest, **déployer** depuis
+> ce registre avec attente de santé, **vérifier** de l'extérieur, et
+> **journaliser** avec le digest pour pouvoir dire, plus tard, exactement ce
+> qui tournait. Le rollback est trivial parce que la 2.0 existe encore dans le
+> registre et que le seul paramètre est `APP_VERSION`.
 
-::: piege
-`trivy --exit-code 1` sans `--ignore-unfixed` bloque la livraison sur des
-CVE que personne ne peut corriger : le pipeline devient rouge en permanence
-et on finit par le désactiver. L'inverse (ignorer tout) est pire. Le
-compromis du script — bloquer sur `CRITICAL` corrigeable, journaliser le
-reste — est un point de départ, à durcir avec `HIGH` quand les images sont
-propres. Deuxième piège : `up -d` sans `--pull always` réutilise l'image
-locale taguée `2.0` même si le registre en a une autre ; le tag n'est pas
-une garantie, le digest oui.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `trivy --exit-code 1` sans `--ignore-unfixed` bloque la livraison sur des
+> CVE que personne ne peut corriger : le pipeline devient rouge en permanence
+> et on finit par le désactiver. L'inverse (ignorer tout) est pire. Le
+> compromis du script — bloquer sur `CRITICAL` corrigeable, journaliser le
+> reste — est un point de départ, à durcir avec `HIGH` quand les images sont
+> propres. Deuxième piège : `up -d` sans `--pull always` réutilise l'image
+> locale taguée `2.0` même si le registre en a une autre ; le tag n'est pas
+> une garantie, le digest oui.
+
+<!-- nav:début -->
+---
+
+[← Module 21](../21-git/corrige.md) · [Énoncé](README.md) · [Module 23 →](../23-ansible/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

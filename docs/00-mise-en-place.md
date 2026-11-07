@@ -1,3 +1,7 @@
+<!-- nav:début -->
+[Accueil](../README.md) · **Chapitre 0 — Mise en place** · [Parcours](parcours.md) · [Annexes](annexes.md) · [Mémo](memo.md)
+<!-- nav:fin -->
+
 # Chapitre 0 — Mise en place du laboratoire
 
 Ce chapitre ne t'apprend pas Linux. Il te donne un laboratoire reproductible,
@@ -12,15 +16,20 @@ ces IP et ce snapshot `snap-clean`.
 
 ### Les livrables
 
-| Livrable | Contenu | Quand l'ouvrir |
-|---|---|---|
-| PDF **énoncés** | quiz, exercices, labs, break & fix, défis | pendant le travail |
-| PDF **corrigés** | réponses + blocs *pourquoi* / *piège* | après avoir cherché |
-| **Mémo** | antisèches des `X.2 Rappel express` réunies | en permanence |
-| **Scripts** | `setup/`, `check/`, `break/`, `lab/`, `projects/` | sur les VM |
+Tout vit dans un dépôt Git, [`cemah2/WorkbookLinux`](https://github.com/cemah2/WorkbookLinux),
+lisible directement sur GitHub et décliné en PDF :
 
-Le PDF des corrigés n'est pas une correction scolaire : c'est là que se
-trouve l'explication du mécanisme. Lis-le même quand tu as juste.
+| Livrable | Sur GitHub | En PDF | Quand l'ouvrir |
+|---|---|---|---|
+| **Énoncés** | `modules/NN-sujet/README.md` | volume 1, avec zones de réponse | pendant le travail |
+| **Corrigés** | `modules/NN-sujet/corrige.md` | volume 2 | après avoir cherché |
+| **Mémo** | `docs/memo.md` | volume 3 + livret A5 | en permanence |
+| **Scripts** | `scripts/` : `setup/`, `check/`, `break/`, `lab/`, `projects/` | — | sur les VM |
+
+Les PDF se téléchargent dans les *Releases* du dépôt ou se construisent en
+une commande (§0.9). Le corrigé n'est pas une correction scolaire : c'est là
+que se trouve l'explication du mécanisme (encadrés **Pourquoi** et
+**Piège**). Lis-le même quand tu as juste.
 
 ### Les trois niveaux
 
@@ -38,14 +47,16 @@ trouve l'explication du mécanisme. Lis-le même quand tu as juste.
 Avant d'ouvrir un corrigé : **20 minutes de recherche réelle**. `man`,
 `--help`, `/usr/share/doc`, la documentation officielle, un test dans un
 répertoire jetable. Pas une vidéo, pas une IA qui te donne la commande.
-Au bout de 20 minutes, tu ouvres le corrigé, tu lis le bloc *pourquoi*, tu
+Au bout de 20 minutes, tu ouvres le corrigé, tu lis l'encadré **Pourquoi**, tu
 refermes, et tu **refais l'exercice sans regarder**. Si tu n'y arrives
 toujours pas, note-le dans ton carnet (§0.7) : c'est ça qu'il faudra
 réviser, pas ce que tu as réussi.
 
 ### Les identifiants
 
-Chaque item porte un identifiant unique, le même dans les deux PDF :
+Chaque item porte un identifiant unique, le même dans l'énoncé et dans le
+corrigé. Sur GitHub, il est cliquable : dans l'énoncé il mène au corrigé de
+l'item, dans le corrigé il ramène à l'énoncé.
 
 | Format | Exemple | Type |
 |---|---|---|
@@ -125,29 +136,32 @@ SUSE se déduisent de ces deux-là en quelques minutes.
 
 ## 0.3 Le laboratoire Proxmox
 
-::: astuce
-**Déploiement automatique.** Tout ce chapitre tient en une commande.
-Depuis ton poste, copie les scripts et le zip sur le nœud, puis lance
-l'orchestrateur en root :
-
-```bash
-scp -r scripts/lab workbook-scripts.zip root@192.168.1.50:/root/
-ssh root@192.168.1.50 'bash /root/lab/lab-deploy.sh'   # 20 à 30 min
-```
-
-Il crée `vmbr1` + NAT + `dnsmasq`, les deux templates cloud-init (images
-vérifiées par SHA256), clone et démarre les 7 VM, passe `bootstrap-lab.sh`
-partout, dépose les scripts dans `~/workbook/` sur `lab-adm`, installe
-Gitea sur `lab-git`, pose `snap-clean` et termine par `lab-doctor.sh`.
-Chaque phase détecte ce qui est déjà fait : en cas de coupure, relance
-avec `- -from <phase>` (`--help` liste les phases, `--dry-run` montre ce
-qui serait fait). Journal dans `/var/log/lab-deploy.log`. La suite de ce
-chapitre décrit pas à pas ce que le script fait, pour comprendre.
-:::
+> [!TIP]
+> **Astuce**
+>
+> **Déploiement automatique.** Tout ce chapitre tient en une commande.
+> Sur le nœud, en root, clone le dépôt et lance l'orchestrateur :
+>
+> ```bash
+> ssh root@192.168.1.50
+> git clone https://github.com/cemah2/WorkbookLinux.git /root/workbook
+> bash /root/workbook/scripts/lab/lab-deploy.sh      # 20 à 30 min
+> ```
+>
+> Il crée `vmbr1` + NAT + `dnsmasq`, les deux templates cloud-init (images
+> vérifiées par SHA256), clone et démarre les 7 VM, passe `bootstrap-lab.sh`
+> partout, dépose les scripts dans `~/workbook/` sur `lab-adm`, installe
+> Gitea sur `lab-git`, pose `snap-clean` et termine par `lab-doctor.sh`.
+> Chaque phase détecte ce qui est déjà fait : en cas de coupure, relance
+> avec `- -from <phase>` (`--help` liste les phases, `--dry-run` montre ce
+> qui serait fait). Journal dans `/var/log/lab-deploy.log`. La suite de ce
+> chapitre décrit pas à pas ce que le script fait, pour comprendre.
 
 ### Topologie
 
-@fig(lab-topologie): Le laboratoire : sept VM sur le bridge isolé `vmbr1`, NAT vers ton LAN par `vmbr0`, accès depuis ton poste via le bastion `lab-adm`.
+<p align="center"><img src="../assets/figures/lab-topologie.svg" alt="Schéma : lab-topologie"></p>
+
+*Figure — Le laboratoire : sept VM sur le bridge isolé `vmbr1`, NAT vers ton LAN par `vmbr0`, accès depuis ton poste via le bastion `lab-adm`.*
 
 | VM | VMID / IP | Ressources | Rôle |
 |---|---|---|---|
@@ -270,12 +284,13 @@ ip -br addr show vmbr1           # vmbr1  UP  10.10.10.1/24
 /root/lab/lab-nat.sh status
 ```
 
-::: attention
-Si le pare-feu Proxmox est activé au niveau *Datacenter* (`Datacenter →
-Firewall → Options`), il filtre aussi le trafic transitant par le nœud.
-Soit tu le laisses désactivé pour le lab, soit tu ajoutes une règle d'entrée
-`tcp/2222` et tu vérifies que le *FORWARD* n'est pas bloqué.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Si le pare-feu Proxmox est activé au niveau *Datacenter* (`Datacenter →
+> Firewall → Options`), il filtre aussi le trafic transitant par le nœud.
+> Soit tu le laisses désactivé pour le lab, soit tu ajoutes une règle d'entrée
+> `tcp/2222` et tu vérifies que le *FORWARD* n'est pas bloqué.
 
 ### DNS du lab : `dnsmasq` sur le nœud
 
@@ -361,13 +376,14 @@ Le script le lit dans `qm config 9000` au lieu de le deviner. Le port série
 `qm terminal 9001` même quand le réseau est cassé : tu en auras besoin au
 module 12.
 
-::: astuce
-Les images cloud n'embarquent pas `qemu-guest-agent`. Si `libguestfs-tools`
-est installé sur le nœud (`apt-get install -y libguestfs-tools`),
-`make-templates.sh` l'injecte dans l'image avec `virt-customize`. Sinon
-`bootstrap-lab.sh` l'installe au premier démarrage : ça marche aussi, mais
-`lab-status.sh` affichera `agent=no` jusque-là.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Les images cloud n'embarquent pas `qemu-guest-agent`. Si `libguestfs-tools`
+> est installé sur le nœud (`apt-get install -y libguestfs-tools`),
+> `make-templates.sh` l'injecte dans l'image avec `virt-customize`. Sinon
+> `bootstrap-lab.sh` l'installe au premier démarrage : ça marche aussi, mais
+> `lab-status.sh` affichera `agent=no` jusque-là.
 
 Lance la construction :
 
@@ -584,25 +600,42 @@ Sans route statique, les entrées `10.10.10.x` ne servent qu'aux modules web
 sert dès le §0.8 : c'est le nom que ton navigateur et tes `git clone`
 utiliseront.
 
-### Copier les scripts du workbook sur les VM
+### Récupérer le workbook sur les VM
 
-Le workbook est livré avec `workbook.zip` (les dossiers `scripts/` et
-`src/`); `make zip-scripts` (§0.9) produit l'équivalent réduit aux scripts, `workbook-scripts.zip`. L'un ou l'autre doit finir dans `~/workbook/` sur **chaque** VM. Le script
-`bootstrap-lab.sh` s'en charge s'il trouve `~/workbook.zip` ou `~/workbook-scripts.zip` ; il suffit donc
-d'envoyer le zip et le script lui-même :
+Les énoncés appellent les scripts par leur chemin sur les VM :
+`~/workbook/scripts/...`. Le plus simple est de **cloner le dépôt** dans
+`~/workbook` sur chaque VM (elles sortent sur Internet par le NAT du nœud) :
 
 ```bash
-# depuis ton poste, dans le dossier du workbook
+git clone https://github.com/cemah2/WorkbookLinux.git ~/workbook
+ls ~/workbook/scripts
+# break  check  lab  projects  README.md  setup
+```
+
+`bootstrap-lab.sh` (§0.5) le fait pour toi s'il ne trouve pas d'archive :
+il suffit de lui envoyer le script lui-même. Pour récupérer plus tard une
+correction du workbook : `git -C ~/workbook pull`.
+
+```bash
+# depuis ton poste, dans ton clone du dépôt
 for h in lab-adm lab-web lab-db lab-rhel lab-ops lab-git lab-virt; do
-  scp workbook.zip scripts/lab/bootstrap-lab.sh "$h:~/"
+  scp scripts/lab/bootstrap-lab.sh "$h:~/"
 done
 ```
 
 Sous Windows, `scp` est fourni avec OpenSSH ; en PowerShell la boucle
-s'écrit `foreach ($h in 'lab-adm','lab-web','lab-db','lab-rhel','lab-ops', 'lab-git','lab-virt') { scp workbook.zip scripts/lab/bootstrap-lab.sh "${h}:~/" }`.
+s'écrit `foreach ($h in 'lab-adm','lab-web','lab-db','lab-rhel','lab-ops','lab-git','lab-virt') { scp scripts/lab/bootstrap-lab.sh "${h}:~/" }`.
 La première connexion à chaque VM te demande d'accepter sa clé d'hôte :
 compare-la avec `qm terminal <vmid>` si tu veux être rigoureux (module
 14), réponds `yes` sinon.
+
+> [!NOTE]
+> **Note**
+>
+> Sans accès Internet depuis les VM, fabrique une archive des scripts sur
+> ton poste (`git archive -o workbook-scripts.zip HEAD scripts`), copie-la
+> dans le répertoire personnel de chaque VM avec `bootstrap-lab.sh` :
+> le script la déballe dans `~/workbook/` au lieu de cloner.
 
 Plus tard, quand tu modifieras tes propres scripts, `rsync` vers `lab-adm`
 suffira : `rsync -av scripts/ lab-adm:~/workbook/scripts/`.
@@ -657,7 +690,11 @@ net-tools dnsutils rsync unzip shellcheck`, plus `qemu-guest-agent` et
 `chrony`), écrit les sept entrées du lab dans `/etc/hosts` (et empêche
 cloudinit de les écraser au reboot), règle le fuseau sur `Europe/Paris`,
 active un historique bash horodaté, pose un motd qui rappelle le rôle de la
-machine, et déballe `~/workbook.zip` dans `~/workbook/`. Sous Rocky il
+machine, et place le workbook dans `~/workbook/` : il déballe
+`~/workbook.zip` ou `~/workbook-scripts.zip` s'il en trouve un, sinon il
+clone le dépôt GitHub (variable `WORKBOOK_REPO` pour en choisir un autre,
+ton fork par exemple), ou le met à jour par `git pull` s'il est déjà
+cloné. Sous Rocky il
 active EPEL pour `htop` et `ShellCheck`, et remplace `dnsutils` par
 `bind-utils`.
 
@@ -713,13 +750,14 @@ Un `check` qui échoue avant d'avoir travaillé, c'est normal. S'il plante
 avec une erreur bash au lieu d'un `[FAIL]`, c'est que le bootstrap a raté
 quelque chose (souvent `jq` ou `shellcheck` absent) : relance-le.
 
-::: check
-Le lab est prêt quand : `lab-status.sh` et `lab-doctor.sh` ne signalent
-aucun problème, chaque VM résout `lab-ops` par `/etc/hosts`, sort sur
-internet, a l'heure de Paris, et porte un snapshot `snap-clean`. Note la date dans ton carnet :
-c'est le jour 0. Reste le serveur Git (§0.8) : installe-le **avant** de
-poser `snap-clean` sur `lab-git`, pour que le rollback ne le supprime pas.
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Le lab est prêt quand : `lab-status.sh` et `lab-doctor.sh` ne signalent
+> aucun problème, chaque VM résout `lab-ops` par `/etc/hosts`, sort sur
+> internet, a l'heure de Paris, et porte un snapshot `snap-clean`. Note la date dans ton carnet :
+> c'est le jour 0. Reste le serveur Git (§0.8) : installe-le **avant** de
+> poser `snap-clean` sur `lab-git`, pour que le rollback ne le supprime pas.
 
 ---
 
@@ -1009,10 +1047,10 @@ Puis, sur **chaque** VM existante, relance `sudo bash ~/bootstrap-lab.sh`
 (la nouvelle version écrit sept entrées dans `/etc/hosts`) ou ajoute la
 ligne `10.10.10.15  lab-git.lab.local  lab-git` toi-même. Ajoute aussi le
 bloc `Host lab-git` dans le `~/.ssh/config` de tes postes (§0.4) et
-l'entrée dans leur fichier `hosts`. Enfin, envoie le zip et bootstrape :
+l'entrée dans leur fichier `hosts`. Enfin, envoie le script et bootstrape :
 
 ```bash
-scp workbook.zip scripts/lab/bootstrap-lab.sh lab-git:~/
+scp scripts/lab/bootstrap-lab.sh lab-git:~/
 ssh -t lab-git 'sudo bash ~/bootstrap-lab.sh'
 ssh lab-git 'hostname; free -m | head -2; df -h / | tail -1'
 # lab-git
@@ -1237,14 +1275,15 @@ par l'interface. Sur un LAN domestique ce n'est pas paranoïaque, c'est le
 réflexe : une forge ouverte à l'inscription est un serveur de dépôts
 gratuit pour le premier venu (ou le premier objet connecté compromis).
 
-::: attention
-Si l'écran d'installation n'apparaît pas et que tu tombes directement sur
-la page d'accueil, c'est qu'un `app.ini` avec `INSTALL_LOCK = true` existe
-déjà (installation précédente, snapshot restauré). Le compte admin se crée
-alors en ligne de commande :
-`sudo -u git gitea admin user create --admin --username mathieu
---password '...' --email mathieu@lab.local --config /etc/gitea/app.ini`.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Si l'écran d'installation n'apparaît pas et que tu tombes directement sur
+> la page d'accueil, c'est qu'un `app.ini` avec `INSTALL_LOCK = true` existe
+> déjà (installation précédente, snapshot restauré). Le compte admin se crée
+> alors en ligne de commande :
+> `sudo -u git gitea admin user create --admin --username mathieu
+> --password '...' --email mathieu@lab.local --config /etc/gitea/app.ini`.
 
 ### Ta clé SSH, l'organisation et le dépôt
 
@@ -1306,12 +1345,13 @@ même `C:\Users\<toi>\.ssh\config` (si Git for Windows utilise son propre
 ssh, force `git config --global core.sshCommand "C:/Windows/System32/
 OpenSSH/ssh.exe"` pour qu'il prenne celui de Windows, agent compris).
 
-::: check
-`ssh -T git@lab-git` répond « Hi there, mathieu! » depuis `lab-adm` **et**
-depuis ton poste ; `sudo -u git gitea doctor check --all --config
-/etc/gitea/app.ini` sur `lab-git` ne signale aucune erreur ; `systemctl
-is-enabled gitea` répond `enabled`.
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> `ssh -T git@lab-git` répond « Hi there, mathieu! » depuis `lab-adm` **et**
+> depuis ton poste ; `sudo -u git gitea doctor check --all --config
+> /etc/gitea/app.ini` sur `lab-git` ne signale aucune erreur ; `systemctl
+> is-enabled gitea` répond `enabled`.
 
 ### Sauvegarder et restaurer
 
@@ -1482,98 +1522,98 @@ cliquer sur « accepter le risque ».
 disque, les hooks, les clés, les droits. Lance-le après chaque
 restauration et chaque mise à jour.
 
-::: astuce
-Pose le snapshot `snap-clean` de `lab-git` **après** tout ça
-(`qm snapshot 9006 snap-clean`), et sache que sur cette VM tu ne feras
-jamais `qm rollback` : elle n'est pas un terrain de jeu, c'est ton
-serveur. Les labs destructeurs se font sur les six autres.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pose le snapshot `snap-clean` de `lab-git` **après** tout ça
+> (`qm snapshot 9006 snap-clean`), et sache que sur cette VM tu ne feras
+> jamais `qm rollback` : elle n'est pas un terrain de jeu, c'est ton
+> serveur. Les labs destructeurs se font sur les six autres.
 
 ---
 
 ## 0.9 Versionner le workbook lui-même
 
-Le workbook n'est pas seulement trois PDF : c'est un dépôt Git. Les
-sources Markdown, les scripts, la chaîne de construction et, surtout,
-**tes réponses** vivent dans un seul dépôt, poussé sur `lab-git`. Cette
-section le met en place en une demi-heure ; le reste du workbook consiste
-à le remplir.
+Le workbook n'est pas seulement un ensemble de pages : c'est un dépôt Git.
+Les énoncés, les corrigés, les scripts, la chaîne PDF et, surtout,
+**tes réponses** vivent dans un seul dépôt. Cette section le met en place
+en une demi-heure ; le reste du workbook consiste à le remplir.
 
-### Le dépôt fourni : `workbook-repo.zip`
+### Ton fork du dépôt
 
-À côté des PDF, tu as reçu `workbook-repo.zip`. Il contient un dépôt Git
-**déjà initialisé**, avec un premier commit :
-
-```text
-linux-devops-workbook/
-├── .git/                    l'historique (1 commit : import initial)
-├── .gitea/workflows/
-│   └── build-pdf.yaml       reconstruit les PDF à chaque push (module 25)
-├── .gitignore               build/, *.pdf, secrets…
-├── README.md                présentation, structure, comment builder
-├── CONTRIBUTING.md          règles de commit et de rangement
-├── CONVENTIONS.md           la charte de rédaction des modules
-├── Makefile                 make pdf | memo | check-ids | clean | zip-scripts
-├── build.py                 Markdown -> LaTeX -> PDF (pandoc + XeLaTeX)
-├── src/                     LES SOURCES : ne pas modifier
-│   ├── 00-mise-en-place.md, 99-annexes.md, memo.md
-│   ├── labs/MXX-slug.md     énoncés
-│   └── solutions/MXX-slug.md corrigés
-├── scripts/                 setup/ check/ break/ lab/ lib/ projects/
-├── tex/  fonts/             template LaTeX, filtre pandoc, polices embarquées
-└── reponses/                TON TRAVAIL : un fichier par lab
-    ├── README.md            comment ranger
-    └── M07/L7.2.md          un exemple
-```
-
-Déballe-le sur ton **poste** (pas sur une VM : c'est ton éditeur et ton
+Le dépôt de référence est
+[`cemah2/WorkbookLinux`](https://github.com/cemah2/WorkbookLinux). Tu
+travailles dans **ta copie** : sur GitHub, bouton *Fork*, puis clone ton
+fork sur ton **poste** (pas sur une VM : c'est ton éditeur et ton
 navigateur qui vont s'en servir, et VS Code l'ouvrira comme un projet) :
 
 ```bash
 mkdir -p ~/projets && cd ~/projets
-unzip -q ~/Téléchargements/workbook-repo.zip     # crée linux-devops-workbook/
-cd linux-devops-workbook
-git log --oneline
-# 3f2a9c1 chore: import initial du workbook Linux & DevOps
-git status
-# On branch main
-# nothing to commit, working tree clean
+git clone git@github.com:<toi>/WorkbookLinux.git
+cd WorkbookLinux
+git remote add upstream https://github.com/cemah2/WorkbookLinux.git
+git remote -v
+# origin    git@github.com:<toi>/WorkbookLinux.git (fetch)
+# origin    git@github.com:<toi>/WorkbookLinux.git (push)
+# upstream  https://github.com/cemah2/WorkbookLinux.git (fetch)
+# upstream  https://github.com/cemah2/WorkbookLinux.git (push)
 ```
 
-Sous Windows, même chose dans PowerShell (`Expand-Archive` ou clic
-droit), puis Git for Windows ou WSL. Si tu préfères repartir de zéro,
-l'équivalent manuel est trois commandes : `git init -b main`, `git add
--A`, `git commit -m "chore: import initial du workbook Linux & DevOps"`.
+L'arborescence :
 
-### Premier push vers `lab-git`
+```text
+WorkbookLinux/
+├── README.md                présentation, parcours, laboratoire
+├── modules/NN-sujet/        README.md (énoncé) + corrige.md (corrigé)
+├── projets/PX-sujet/        les trois projets fil rouge
+├── docs/                    ce chapitre, parcours, annexes, mémo
+├── scripts/                 setup/ check/ break/ lab/ projects/
+├── assets/figures/          schémas SVG
+├── tools/                   navigation, contrôles, chaîne PDF (tools/pdf/)
+├── reponses/                TON TRAVAIL : un fichier par lab
+│   ├── README.md            comment ranger
+│   └── M07/L7.2.md          le modèle
+├── CONVENTIONS.md           la charte de rédaction des modules
+├── CONTRIBUTING.md          signaler une erreur, proposer une correction
+└── Makefile                 make check | lint | nav | pdf
+```
 
-Le dépôt `workbook/linux-devops-workbook` créé au §0.8 est vide : on lui
-donne cet historique.
+Pour récupérer les corrections publiées dans le dépôt de référence :
 
 ```bash
-git config user.name  "Mathieu"
-git config user.email "mathieu.teule@outlook.com"     # local au dépôt
-git remote add origin git@lab-git:workbook/linux-devops-workbook.git
-git push -u origin main
-# Enumerating objects: 118, done.
-# ...
-# To lab-git:workbook/linux-devops-workbook.git
-#  * [new branch]      main -> main
-# branch 'main' set up to track 'origin/main'.
+git fetch upstream
+git merge upstream/main          # sans conflit tant que tu n'écris que dans reponses/
+git push
 ```
 
-Recharge la page du dépôt dans Gitea : le README s'affiche, l'arborescence
-est là, l'onglet *Actions* montre un workflow en attente (normal, voir
-plus bas). `-u` mémorise `origin/main` comme branche suivie : ensuite,
-`git push` et `git pull` sans argument suffisent.
+> [!TIP]
+> **Astuce**
+>
+> Le `user.email` de ce dépôt est **local** (`git config user.email ...`
+> sans `--global`) : ce dépôt est public, tu y mets l'adresse que tu veux
+> voir sur GitHub (ou l'adresse `noreply` que GitHub te fournit). Le
+> `--global` du §0.7 (`mathieu@exemple.invalid`) reste pour les dépôts de
+> lab.
 
-::: astuce
-Le `user.email` est **local** (`git config` sans `--global`) : ce dépôt
-finira en public, tu y mets l'adresse que tu veux voir sur GitHub. Le
-`--global` du §0.7 (`mathieu@exemple.invalid`) reste pour les dépôts de
-lab. Gitea associe les commits à ton compte si l'adresse est déclarée
-dans *Paramètres → Compte → Adresses e-mail*.
-:::
+### Le miroir sur `lab-git`
+
+Ton Gitea du §0.8 sert aux modules 21 et 25 (pull requests, CI) : donne-lui
+aussi ce dépôt. Le dépôt `workbook/linux-devops-workbook` créé au §0.8 est
+vide ; ajoute-le comme second remote et pousse :
+
+```bash
+git remote add lab git@lab-git:workbook/linux-devops-workbook.git
+git push -u lab main
+# To lab-git:workbook/linux-devops-workbook.git
+#  * [new branch]      main -> main
+```
+
+Recharge la page du dépôt dans Gitea : le README s'affiche, l'onglet
+*Actions* montre le workflow `.gitea/workflows/build-pdf.yaml` en attente
+(normal, voir plus bas). Ensuite, `git push` (vers GitHub) et
+`git push lab` (vers le lab) suffisent ; une seule commande pour les deux :
+`git remote set-url --add --push origin git@lab-git:workbook/linux-devops-workbook.git`
+après avoir réajouté l'URL GitHub en `--push`.
 
 ### Convention de rangement
 
@@ -1581,11 +1621,11 @@ Trois zones, trois règles, à ne jamais mélanger :
 
 | Zone | Contenu | Qui écrit |
 |---|---|---|
-| `src/`, `tex/`, `build.py` | les énoncés, corrigés, mémo, chaîne PDF | le workbook (toi seulement pour une coquille) |
+| `modules/`, `projets/`, `docs/`, `tools/` | énoncés, corrigés, mémo, chaîne PDF | le workbook (toi seulement pour une coquille, en PR) |
 | `scripts/` | setup, check, break, lab, projets | le workbook + **tes** scripts de défi dans `scripts/mes/` |
 | `reponses/MXX/` | un fichier Markdown par lab, tes scripts, tes rapports | **toi**, et personne d'autre |
 
-**Tes réponses vont dans `reponses/MXX/`, jamais dans `src/`.** Un
+**Tes réponses vont dans `reponses/MXX/`, jamais dans `modules/`.** Un
 fichier par lab, nommé par l'identifiant : `reponses/M07/L7.2.md`,
 `reponses/M11/BF11.1.md`, `reponses/M18/D18.md`, et un `E7.md` pour les
 exercices guidés d'un module (ils sont trop courts pour un fichier
@@ -1613,9 +1653,9 @@ rotate.sh`) **et**, s'ils ont vocation à resservir, dans `scripts/mes/`.
 Le carnet de bord du §0.7 (`~/carnet/` sur `lab-adm`) peut rester où il
 est ou rejoindre `reponses/carnet/` : à toi de voir, mais un seul endroit.
 
-Pourquoi cette séparation ? Parce qu'un `git diff --stat src/` doit
-toujours être vide (si le workbook sort une correction, tu la récupères
-sans conflit) et parce qu'un recruteur qui ouvre `reponses/` voit ton
+Pourquoi cette séparation ? Parce qu'un `git diff --stat upstream/main --
+modules projets docs` doit toujours être vide (quand le workbook publie une
+correction, tu la récupères sans conflit) et parce qu'un recruteur qui ouvre `reponses/` voit ton
 travail, pas des énoncés copiés.
 
 ### Ce qui n'est jamais commité
@@ -1623,13 +1663,11 @@ travail, pas des énoncés copiés.
 Le `.gitignore` fourni :
 
 ```gitignore
-# généré par build.py : PDF, .tex, .aux, .log
+# produits de la chaîne PDF (tools/pdf/build.py)
 build/
 *.pdf
 *.aux
 *.log
-*.toc
-*.out
 __pycache__/
 .venv/
 # mots de passe, jetons, clés de lab : JAMAIS dans l'historique
@@ -1639,7 +1677,7 @@ reponses/**/secrets*
 Les PDF sont des **artefacts** : reproductibles depuis les sources en une
 commande, lourds (plusieurs Mo par version) et illisibles en `diff`. Les
 commiter fait grossir le dépôt à chaque page corrigée ; c'est pour ça que
-`build/` est ignoré et que la CI les publie ailleurs. Les secrets : tout
+`build/` est ignoré et que la CI les publie dans les *Releases*. Les secrets : tout
 fichier de `reponses/` dont le nom commence par `secrets` est ignoré,
 pour que tu aies un endroit où noter un mot de passe de lab sans risquer
 de le pousser. Un secret commité puis retiré est toujours dans
@@ -1654,7 +1692,7 @@ Deux stratégies raisonnables :
   ta progression jour par jour. C'est la recommandation pour les modules
   01 à 19.
 * **Une branche par module** (`m21-git`, `m22-docker`), fusionnée par
-  *pull request* dans Gitea à la fin du module : tu t'entraînes au *review*
+  *pull request* (dans Gitea ou GitHub) à la fin du module : tu t'entraînes au *review*
   et aux PR, et tu peux « fermer » un module proprement. C'est la
   recommandation à partir du module 21, qui introduit précisément ce
   workflow — avant, ce serait du cérémonial sans contenu.
@@ -1689,141 +1727,90 @@ ajouter un hook qui refuse les messages hors format.
 
 ### Régénérer les PDF
 
-La chaîne est Markdown → pandoc (avec le filtre `tex/divs.lua` pour les
-encadrés) → XeLaTeX. Les polices (Source Sans 3, JetBrains Mono, Font Awesome) sont livrées dans `fonts/` : rien à installer de ce côté. Sur ton poste Ubuntu 24.04 ou dans WSL :
+La chaîne relit le Markdown du dépôt (`tools/pdf/gfm2pandoc.py` le convertit
+en Markdown pandoc : encadrés, schémas, zones de réponse), puis pandoc
+(filtre `tools/pdf/tex/divs.lua`) → XeLaTeX. Les polices (Source Sans 3,
+JetBrains Mono, Font Awesome) sont livrées dans `tools/pdf/fonts/`. Sur ton
+poste Ubuntu 24.04 ou dans WSL :
 
 ```bash
 sudo apt update
 sudo apt install -y pandoc texlive-xetex texlive-latex-extra \
-  texlive-fonts-recommended python3 python3-pypdf
-python3 build.py              # les 3 volumes + le livret A5, ~4 min
-# Workbook-Linux-DevOps-3-Memo.pdf: 102 pages, 0 overfull hbox
-# Workbook-Linux-DevOps-3-Memo-livret-A5.pdf: 26 faces A4 (104 pages A5)
-# Workbook-Linux-DevOps-1-Enonces.pdf: 492 pages, 9 overfull hbox
-# Workbook-Linux-DevOps-2-Corriges.pdf: 888 pages, 16 overfull hbox
-python3 build.py memo         # un seul volume
+  texlive-fonts-recommended texlive-pictures python3 python3-pypdf
+make pdf                  # les 3 volumes + le livret A5, ~5 min
+# Workbook-Linux-DevOps-3-Memo.pdf: 103 pages, 0 overfull hbox
+# Workbook-Linux-DevOps-1-Enonces.pdf: 779 pages, 9 overfull hbox
+make memo                 # un seul volume (ou make labs, make solutions)
 ls build/*.pdf
 ```
 
-Ou avec le `Makefile` : `make pdf` (les trois), `make memo`, `make
-check-ids` (vérifie que chaque identifiant d'énoncé a son corrigé, via
-`scripts/lib/check_ids.py`), `make clean` (vide `build/`), `make
-zip-scripts` (produit `build/workbook-scripts.zip` à copier sur les VM,
-§0.4). `texlive-latex-extra` pèse 1 Go avec ses recommandations : c'est
-le prix de `tcolorbox`, `titlesec` et `fvextra` ; `python3-pypdf` ne sert qu'au livret A5 du mémo. Les « overfull hbox »
-sont des lignes de code qui dépassent la marge ; s'il y en a plus d'une
-dizaine, une source contient une ligne de plus de 80 colonnes.
+Les autres cibles : `make check` (identifiants énoncé ↔ corrigé, liens,
+schémas, scripts cités), `make lint` (`bash -n`, `shellcheck`,
+`py_compile`), `make nav` (navigation et tables du parcours), `make figures`
+(schémas TikZ → SVG). `texlive-latex-extra` pèse 1 Go avec ses
+recommandations : c'est le prix de `tcolorbox`, `titlesec` et `fvextra` ;
+`python3-pypdf` ne sert qu'au livret A5 du mémo. Les « overfull hbox » sont
+des lignes de code qui dépassent la marge ; s'il y en a plus d'une dizaine,
+une source contient une ligne de plus de 80 colonnes.
 
-### La CI : `.gitea/workflows/build-pdf.yaml`
+### La CI : GitHub Actions, puis Gitea Actions
 
-Le dépôt contient un workflow Gitea Actions qui reconstruit les trois PDF
-à chaque push sur `main` et les publie en **artefact** téléchargeable
-depuis l'onglet *Actions* :
+Sur GitHub, deux workflows tournent sans rien installer :
 
-```yaml
-name: build-pdf
-on:
-  push:
-    branches: [main]
-    paths: ["src/**", "tex/**", "fonts/**", "build.py", ".gitea/workflows/**"]
-  workflow_dispatch:
+* `.github/workflows/ci.yml`, à chaque push et pull request : cohérence du
+  dépôt (`tools/check_repo.py`), navigation à jour, lecture de chaque
+  fichier par pandoc, `bash -n`, `shellcheck`, `py_compile` ;
+* `.github/workflows/pdf.yml`, sur une étiquette `v*` (ou à la demande) :
+  construit les PDF et les publie dans une *Release*.
 
-jobs:
-  pdf:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Dépendances (pandoc, XeLaTeX, pypdf)
-        run: |
-          apt-get update -q
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
-            pandoc texlive-xetex texlive-latex-extra \
-            texlive-fonts-recommended python3 python3-pypdf
-      - name: Identifiants énoncés / corrigés
-        run: python3 scripts/lib/check_ids.py
-      - name: Construction des PDF
-        run: python3 build.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: workbook-pdf
-          path: build/Workbook-Linux-DevOps-*.pdf
-          retention-days: 30
-```
+Le miroir `lab-git` porte son propre workflow,
+`.gitea/workflows/build-pdf.yaml`, qui reconstruit les PDF à chaque push
+sur `main`. Il **ne tournera pas avant le module 25** : Gitea Actions a
+besoin d'un *runner* (`act_runner`) enregistré sur cette instance, et c'est
+exactement ce que le module 25 installe sur `lab-ops`. Jusque-là, les runs
+restent en attente (*waiting*) dans l'onglet *Actions*, sans conséquence.
+Quand le runner du module 25 existe, enregistre-le une seconde fois sur
+`http://lab-git.lab.local:3000/`, et le prochain push sur `main` produira
+les PDF en 6 à 8 minutes — le temps d'installer TeX Live dans le
+conteneur ; le module 25 montre comment construire une image `runner` qui
+l'embarque déjà.
 
-Il **ne tournera pas avant le module 25** : Gitea Actions a besoin d'un
-*runner* (`act_runner`) enregistré sur cette instance, et c'est
-exactement ce que le module 25 installe sur `lab-ops`. Jusque-là, les
-runs restent en attente (*waiting*) dans l'onglet *Actions*, sans
-conséquence. Tu peux aussi désactiver Actions sur le dépôt (*Paramètres →
-Unités*) et le réactiver plus tard. Quand le runner du module 25 existe,
-enregistre-le une seconde fois sur `http://lab-git.lab.local:3000/` (un
-`act_runner` peut servir plusieurs instances, ou tu en lances un second),
-et le prochain push sur `main` produira les PDF en 6 à 8 minutes — le
-temps d'installer TeX Live dans le conteneur ; le module 25 montre comment
-construire une image `runner` qui l'embarque déjà.
+> [!CAUTION]
+> **Attention**
+>
+> Le `paths:` du workflow Gitea évite de reconstruire 1 500 pages quand tu ne
+> pousses qu'une réponse dans `reponses/`. Les jobs tournent en root dans le
+> conteneur du runner, d'où `apt-get` sans `sudo`.
 
-::: attention
-Le `paths:` évite de reconstruire 1 400 pages quand tu ne pousses qu'une
-réponse dans `reponses/`. Les jobs tournent en root dans le conteneur du
-runner, d'où `apt-get` sans `sudo`.
-:::
+### Un dépôt public
 
-### Le rendre public : miroir GitHub
+Ton fork est public : c'est ton portfolio (annexe C). Avant chaque push,
+relis `reponses/` avec l'œil d'un inconnu : pas de mot de passe, pas d'IP
+publique, pas de nom de client ni d'employeur, pas de capture d'écran d'un
+vrai système. Le workbook est sous licence CC BY-NC-SA 4.0 (scripts sous
+MIT) : tu peux le garder public dans ton fork, corrigés compris ; tes
+réponses t'appartiennent.
 
-Ton Gitea n'est visible que de ton LAN. Pour le portfolio (annexe C), le
-dépôt doit être lisible depuis l'extérieur, et le moyen le plus simple est
-un **push mirror** : Gitea pousse lui-même chaque commit vers un dépôt
-GitHub, qui n'est qu'une copie en lecture. Tu continues à travailler
-contre `lab-git` ; GitHub suit.
+Un jeton GitHub dans les paramètres de Gitea (si tu configures un miroir
+*push* depuis `lab-git`) est un secret **stocké chiffré par `SECRET_KEY`
+dans la base** : c'est une raison de plus pour que `app.ini` soit en `640`
+et le dump de sauvegarde hors de portée.
 
-1. Sur GitHub : nouveau dépôt **vide** `linux-devops-workbook` (public,
-   sans README). Puis *Settings → Developer settings → Personal access
-   tokens → Fine-grained*, jeton limité à ce dépôt, permission *Contents:
-   Read and write*, durée 90 jours.
-2. Dans Gitea : dépôt → *Paramètres → Dépôt → Paramètres du miroir →
-   Ajouter un miroir de push*. URL
-   `https://github.com/<toi>/linux-devops-workbook.git`, nom
-   d'utilisateur ton login GitHub, mot de passe le jeton, intervalle
-   `8h`, et coche **Synchroniser lors du push**.
-3. *Synchroniser maintenant*, puis vérifie sur GitHub.
+### Le README de ton fork
 
-Avant de rendre quoi que ce soit public, relis `reponses/` avec l'œil
-d'un inconnu : pas de mot de passe, pas d'IP publique, pas de nom de
-client ni d'employeur, pas de capture d'écran d'un vrai système. Les
-corrigés (`src/solutions/`) sont sous licence « usage personnel » du
-workbook : si tu rends le dépôt public, **retire-les** du miroir en les
-excluant (branche `public` sans `src/solutions/`, poussée à la place de
-`main`) ou en gardant le dépôt GitHub privé et en n'ouvrant que le lien à
-un recruteur. Le README fourni prévoit les deux cas.
+Le `README.md` présente le workbook. Dans ton fork, ajoute en tête une
+section à toi : qui tu es, depuis quand tu suis le parcours, où en sont tes
+réponses. Complète-la à chaque jalon du planning (§0.1) : une ligne
+« Étape 4 : module 07 terminé, D7 dans `reponses/M07/D7/` ». En une
+vingtaine de semaines, elle devient la table des matières de ton
+portfolio, sans effort supplémentaire.
 
-Un jeton GitHub dans les paramètres de Gitea est un secret **stocké
-chiffré par `SECRET_KEY` dans la base** : c'est une raison de plus pour
-que `app.ini` soit en `640` et le dump de sauvegarde hors de portée. Le
-même mécanisme existe vers GitLab ou Codeberg.
-
-### Le README
-
-Le `README.md` livré fait le travail en une page : ce qu'est le dépôt, la
-topologie du lab (le tableau du §0.3), comment construire les PDF, où sont
-les réponses, la licence. Personnalise deux choses dès maintenant, et
-commite-les :
-
-```bash
-sed -i 's/^Auteur : .*/Auteur : Mathieu — démarré le 2026-09-21/' README.md
-git add README.md
-git commit -m "docs(readme): auteur et date de démarrage"
-git push
-```
-
-Et complète-le à chaque jalon du planning (§0.1) : une ligne « Étape 4 :
-module 07 terminé, D7 dans `reponses/M07/D7/` ». En une vingtaine de semaines, ce
-README devient la table des matières de ton portfolio, sans effort
-supplémentaire.
-
-::: check
-`git remote -v` montre `origin git@lab-git:workbook/linux-devops-workbook.git`
-; `git status` est propre après `python3 build.py` (les PDF sont ignorés) ;
-`reponses/M07/L7.2.md` existe et `src/` n'a aucune modification ; le
-dépôt est visible dans Gitea avec son README ; ton premier vrai commit
-`feat(M01): ...` arrivera à la fin de la première séance du module 01.
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> `git remote -v` montre `origin` (ton fork), `upstream` (le dépôt de
+> référence) et `lab` (le miroir Gitea) ; `git status` est propre après
+> `make pdf` (les PDF sont ignorés) ; `reponses/M07/L7.2.md` existe et
+> `git diff upstream/main -- modules` est vide ; le dépôt est visible dans
+> Gitea avec son README ; ton premier vrai commit `feat(M01): ...`
+> arrivera à la fin de la première séance du module 01.

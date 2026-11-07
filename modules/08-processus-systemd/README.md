@@ -1,51 +1,79 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 08**  
+[← Module 07](../07-bash-scripting/README.md) · [Corrigé](corrige.md) · [Module 09 →](../09-noyau-demarrage/README.md)
+
+<details><summary>Scripts du module (12)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M08.sh`](../../scripts/setup/setup_M08.sh) | prépare le module |
+| [`check_M08_01.sh`](../../scripts/check/check_M08_01.sh) | vérification |
+| [`check_M08_02.sh`](../../scripts/check/check_M08_02.sh) | vérification |
+| [`check_M08_03.sh`](../../scripts/check/check_M08_03.sh) | vérification |
+| [`check_M08_04.sh`](../../scripts/check/check_M08_04.sh) | vérification |
+| [`check_M08_05.sh`](../../scripts/check/check_M08_05.sh) | vérification |
+| [`check_M08_06.sh`](../../scripts/check/check_M08_06.sh) | vérification |
+| [`check_M08_07.sh`](../../scripts/check/check_M08_07.sh) | vérification |
+| [`break_M08_01.sh`](../../scripts/break/break_M08_01.sh) | installe une panne |
+| [`break_M08_02.sh`](../../scripts/break/break_M08_02.sh) | installe une panne |
+| [`break_M08_03.sh`](../../scripts/break/break_M08_03.sh) | installe une panne |
+| [`break_M08_04.sh`](../../scripts/break/break_M08_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 08 — Processus, signaux et systemd
 
 ## 8.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* décrire le cycle de vie d'un processus (`fork`/`exec`, PID/PPID, sortie et
-  récupération), reconnaître un orphelin, un zombie, un processus en `D`, et
-  dire dans chaque cas ce qu'il faut faire — y compris « rien » ;
-* extraire d'un système en production la bonne information avec `ps -o`,
-  `pstree`, `top`, `htop` et `/proc/PID`, et lire chaque colonne sans
-  approximation (`VSZ` contre `RSS`, `PR`/`NI`, `wa`, `st`) ;
-* arbitrer des ressources : `nice`/`renice`, `ionice`, et poser une limite
-  réelle avec cgroups v2 via une unité systemd ;
-* lire l'arbre des cgroups v2 (`systemd-cgls`, `systemd-cgtop`,
-  `/sys/fs/cgroup/<slice>/memory.current`, `cpu.stat`, `pids.current`,
-  `memory.events`), confiner une commande à la volée avec `systemd-run
-  --scope -p MemoryMax= -p CPUQuota=`, et regrouper des services dans un
-  slice dont l'OOM killer ne touche que le contenu ;
-* cibler des processus sans erreur : `pgrep -f`/`-u`/`-a`/`-x`, `pkill` plutôt
-  que `killall`, `top` interactif (`P`, `M`, `1`, `c`, `k`, `u`), `ps` trié
-  par `%cpu`, `%mem` ou `etimes`, `/proc/PID/status` (`VmRSS` contre
-  `VmSize`, `Threads`, `State`), et distinguer la consommation d'un processus
-  de celle de ses threads (`ps -L`, `top -H`) ;
-* choisir le bon signal, expliquer ce que fait un service correctement écrit à
-  la réception d'un `SIGTERM`, et justifier pourquoi un `kill -9` est un aveu
-  d'échec ;
-* maîtriser les jobs du shell (`&`, `Ctrl-Z`, `bg`, `fg`, `disown`, `nohup`,
-  `setsid`), expliquer pourquoi un processus meurt à la fermeture du SSH, et
-  lancer une opération longue qui survit — par `tmux` ou par `systemd-run` ;
-* diagnostiquer une limite de descripteurs (`ulimit -n`, `/proc/PID/limits`) et
-  savoir pourquoi `limits.conf` ne s'applique pas à un service ;
-* prouver qu'un OOM killer est passé et régler `oom_score_adj` / `MemoryMax` ;
-* écrire, activer et durcir une unité `.service` de zéro : bon `Type=`,
-  `Restart=`, `EnvironmentFile=`, `User=`, isolation (`ProtectSystem`,
-  `NoNewPrivileges`, `DynamicUser`…), et mesurer le résultat avec
-  `systemd-analyze security` ;
-* modifier une unité fournie par un paquet **sans y toucher**, par drop-in, et
-  énoncer la règle de précédence entre `/usr/lib` et `/etc` ;
-* dérouler une méthode de diagnostic complète sur un service qui refuse de
-  démarrer, et lire un `systemctl status` ligne par ligne.
-
-Temps estimé : 7 h
-Prérequis : modules 01 (shell, redirections), 03 (permissions, comptes de
-service). Les journaux sont vus en profondeur au module 16 : ici, `journalctl`
-sert uniquement à lire une erreur.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * décrire le cycle de vie d'un processus (`fork`/`exec`, PID/PPID, sortie et
+>   récupération), reconnaître un orphelin, un zombie, un processus en `D`, et
+>   dire dans chaque cas ce qu'il faut faire — y compris « rien » ;
+> * extraire d'un système en production la bonne information avec `ps -o`,
+>   `pstree`, `top`, `htop` et `/proc/PID`, et lire chaque colonne sans
+>   approximation (`VSZ` contre `RSS`, `PR`/`NI`, `wa`, `st`) ;
+> * arbitrer des ressources : `nice`/`renice`, `ionice`, et poser une limite
+>   réelle avec cgroups v2 via une unité systemd ;
+> * lire l'arbre des cgroups v2 (`systemd-cgls`, `systemd-cgtop`,
+>   `/sys/fs/cgroup/<slice>/memory.current`, `cpu.stat`, `pids.current`,
+>   `memory.events`), confiner une commande à la volée avec `systemd-run
+>   --scope -p MemoryMax= -p CPUQuota=`, et regrouper des services dans un
+>   slice dont l'OOM killer ne touche que le contenu ;
+> * cibler des processus sans erreur : `pgrep -f`/`-u`/`-a`/`-x`, `pkill` plutôt
+>   que `killall`, `top` interactif (`P`, `M`, `1`, `c`, `k`, `u`), `ps` trié
+>   par `%cpu`, `%mem` ou `etimes`, `/proc/PID/status` (`VmRSS` contre
+>   `VmSize`, `Threads`, `State`), et distinguer la consommation d'un processus
+>   de celle de ses threads (`ps -L`, `top -H`) ;
+> * choisir le bon signal, expliquer ce que fait un service correctement écrit à
+>   la réception d'un `SIGTERM`, et justifier pourquoi un `kill -9` est un aveu
+>   d'échec ;
+> * maîtriser les jobs du shell (`&`, `Ctrl-Z`, `bg`, `fg`, `disown`, `nohup`,
+>   `setsid`), expliquer pourquoi un processus meurt à la fermeture du SSH, et
+>   lancer une opération longue qui survit — par `tmux` ou par `systemd-run` ;
+> * diagnostiquer une limite de descripteurs (`ulimit -n`, `/proc/PID/limits`) et
+>   savoir pourquoi `limits.conf` ne s'applique pas à un service ;
+> * prouver qu'un OOM killer est passé et régler `oom_score_adj` / `MemoryMax` ;
+> * écrire, activer et durcir une unité `.service` de zéro : bon `Type=`,
+>   `Restart=`, `EnvironmentFile=`, `User=`, isolation (`ProtectSystem`,
+>   `NoNewPrivileges`, `DynamicUser`…), et mesurer le résultat avec
+>   `systemd-analyze security` ;
+> * modifier une unité fournie par un paquet **sans y toucher**, par drop-in, et
+>   énoncer la règle de précédence entre `/usr/lib` et `/etc` ;
+> * dérouler une méthode de diagnostic complète sur un service qui refuse de
+>   démarrer, et lire un `systemctl status` ligne par ligne.
+>
+> **Temps estimé** : 7 h
+>
+> **Prérequis** : modules 01 (shell, redirections), 03 (permissions, comptes de
+> service). Les journaux sont vus en profondeur au module 16 : ici, `journalctl`
+> sert uniquement à lire une erreur.
 
 ---
 
@@ -71,13 +99,14 @@ sudo apt install -y htop tmux psmisc procps lsof python3 curl \
 `psmisc` fournit `pstree`, `killall` et `fuser` ; `procps` fournit `ps`, `top`,
 `pgrep`/`pkill`, `sysctl` ; `iproute2` fournit `ss`.
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y htop tmux psmisc procps-ng lsof python3
-curl sysstat iproute`. Attention à deux écarts qui reviennent dans le module :
-`systemd-oomd` n'y est pas activé par défaut ( sur Ubuntu 24.04, il l'est), et `systemd-analyze security`
-y affiche des scores légèrement différents parce que SELinux est comptabilisé
-(module 18).
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y htop tmux psmisc procps-ng lsof python3
+> curl sysstat iproute`. Attention à deux écarts qui reviennent dans le module :
+> `systemd-oomd` n'y est pas activé par défaut ( sur Ubuntu 24.04, il l'est), et `systemd-analyze security`
+> y affiche des scores légèrement différents parce que SELinux est comptabilisé
+> (module 18).
 
 Préparation du terrain (idempotent, à relancer sans crainte) :
 
@@ -101,12 +130,13 @@ RAM), `factura-zombie.py` (fabrique un `Z`), et le fichier d'environnement
 
 Le script **ne crée aucune unité systemd** : les écrire est le travail du module.
 
-::: attention
-Les labs de la partie B écrivent dans `/etc/systemd/system/`, activent des
-services au démarrage et masquent des unités. Prends le snapshot. Le Break & Fix
-BF8.3 laisse la machine dans un état où un service refuse de démarrer tant que
-tu n'as pas trouvé pourquoi.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Les labs de la partie B écrivent dans `/etc/systemd/system/`, activent des
+> services au démarrage et masquent des unités. Prends le snapshot. Le Break & Fix
+> BF8.3 laisse la machine dans un état où un service refuse de démarrer tant que
+> tu n'as pas trouvé pourquoi.
 
 ---
 
@@ -126,7 +156,9 @@ père --fork()--> fils (copie)  --execve()--> autre programme
        si le père meurt avant : ORPHELIN --> ré-adopté par PID 1
 ```
 
-@fig(proc-cycle): Cycle de vie d'un processus : fork, exec, exit, zombie tant que le père n'a pas fait `wait()`, orphelin ré-adopté par PID 1.
+<p align="center"><img src="../../assets/figures/proc-cycle.svg" alt="Schéma : proc-cycle"></p>
+
+*Figure — Cycle de vie d'un processus : fork, exec, exit, zombie tant que le père n'a pas fait `wait()`, orphelin ré-adopté par PID 1.*
 
 | État `ps` | Signification | Ce qu'on en fait |
 |---|---|---|
@@ -251,7 +283,9 @@ Ubuntu 24.04 et Rocky 9 sont en v2 pur (`stat -fc %T /sys/fs/cgroup` →
 └── machine.slice/           VM et conteneurs
 ```
 
-@fig(cgroups-arbre): Hiérarchie cgroup v2 : un répertoire par unité, un plafond commun par slice.
+<p align="center"><img src="../../assets/figures/cgroups-arbre.svg" alt="Schéma : cgroups-arbre"></p>
+
+*Figure — Hiérarchie cgroup v2 : un répertoire par unité, un plafond commun par slice.*
 
 ```bash
 systemd-cgls                                  # l'arbre, avec les PID
@@ -317,7 +351,9 @@ systemd-analyze blame ; systemd-analyze critical-chain
 `Requires=` sans `After=` lance les deux **en parallèle** : c'est la panne la
 plus fréquente des unités maison.
 
-@fig(systemd-cibles): Graphe de dépendances autour de `multi-user.target` : `Wants=` en pointillé, `Requires=`/`After=` en trait plein.
+<p align="center"><img src="../../assets/figures/systemd-cibles.svg" alt="Schéma : systemd-cibles"></p>
+
+*Figure — Graphe de dépendances autour de `multi-user.target` : `Wants=` en pointillé, `Requires=`/`After=` en trait plein.*
 
 | `Type=` | systemd considère le service démarré… |
 |---|---|
@@ -336,7 +372,7 @@ Codes de sortie systemd les plus utiles (`systemctl status`) :
 
 ## 8.3 Quiz — QCM
 
-**Q8.1** — `ps aux` affiche sur `lab-web` :
+<a id="q8-1"></a>**[Q8.1](corrige.md#q8-1)** — `ps aux` affiche sur `lab-web` :
 
 ```text
 USER   PID %CPU %MEM    VSZ   RSS TTY  STAT START TIME COMMAND
@@ -350,7 +386,7 @@ b) `kill -CONT 2411`
 c) faire en sorte que le père de 2411 appelle `wait()`, ou tuer ce père
 d) `echo 3 > /proc/sys/vm/drop_caches`
 
-**Q8.2** — Un processus de sauvegarde est en état `D` depuis 20 minutes sur un
+<a id="q8-2"></a>**[Q8.2](corrige.md#q8-2)** — Un processus de sauvegarde est en état `D` depuis 20 minutes sur un
 montage NFS injoignable. **Deux réponses correctes.**
 
 a) `kill -9` ne le tuera pas tant que l'appel système n'est pas revenu
@@ -358,7 +394,7 @@ b) il compte dans la charge moyenne (`load average`) affichée par `uptime`
 c) `renice -n 19` le débloquera en libérant du CPU
 d) c'est un zombie : son père ne l'a pas récupéré
 
-**Q8.3** — Tu lances `./migration.sh &` dans une session SSH, puis tu fermes
+<a id="q8-3"></a>**[Q8.3](corrige.md#q8-3)** — Tu lances `./migration.sh &` dans une session SSH, puis tu fermes
 la fenêtre du terminal. Que se passe-t-il par défaut sur Ubuntu 24.04 ?
 
 a) rien, un job en arrière-plan est déjà détaché du terminal
@@ -367,7 +403,7 @@ b) le pseudo-terminal est fermé, `SIGHUP` part vers le chef de session, bash le
 c) le script est ré-adopté par systemd et continue
 d) le script passe en état `T` et reprendra à la prochaine connexion
 
-**Q8.4** — Parmi ces commandes, lesquelles permettent au script de survivre à la
+<a id="q8-4"></a>**[Q8.4](corrige.md#q8-4)** — Parmi ces commandes, lesquelles permettent au script de survivre à la
 fermeture du SSH ? **Trois réponses correctes.**
 
 a) `nohup ./migration.sh &`
@@ -375,7 +411,7 @@ b) `./migration.sh & disown -h %1`
 c) `systemd-run --unit=migration /chemin/migration.sh`
 d) `renice -n -5 -p $!`
 
-**Q8.5** — Une unité maison contient :
+<a id="q8-5"></a>**[Q8.5](corrige.md#q8-5)** — Une unité maison contient :
 
 ```ini
 [Service]
@@ -391,7 +427,7 @@ b) la commande **rend la main sans erreur**, et le service passe en `failed`
 c) systemd refuse de charger l'unité au `daemon-reload`
 d) le service reste en `activating` pendant 90 s puis échoue en timeout
 
-**Q8.6** — Même unité, mais `Type=exec` au lieu de `Type=simple`. Qu'est-ce qui
+<a id="q8-6"></a>**[Q8.6](corrige.md#q8-6)** — Même unité, mais `Type=exec` au lieu de `Type=simple`. Qu'est-ce qui
 change ?
 
 a) rien, `exec` est un alias de `simple`
@@ -399,7 +435,7 @@ b) `systemctl start` échoue tout de suite en rapportant l'erreur `203/EXEC`
 c) systemd attend la sortie du processus avant de rendre la main
 d) systemd exige en plus un `PIDFile=`
 
-**Q8.7** — `factura-legacy.sh` se détache lui-même en tâche de fond et son
+<a id="q8-7"></a>**[Q8.7](corrige.md#q8-7)** — `factura-legacy.sh` se détache lui-même en tâche de fond et son
 processus initial sort en 0. L'unité déclare `Type=simple`. Symptôme ?
 
 a) le service part en timeout au bout de 90 s
@@ -408,7 +444,7 @@ b) systemd voit le processus principal sortir aussitôt, considère le service
 c) tout fonctionne, `Type=` n'a d'incidence que sur les journaux
 d) `systemctl status` affiche `active (exited)` et le démon tourne
 
-**Q8.8** — Le service `factura-api` tourne déjà. Tu viens de modifier son `ExecStart=` dans `/etc/systemd/system/factura-api.service` 
+<a id="q8-8"></a>**[Q8.8](corrige.md#q8-8)** — Le service `factura-api` tourne déjà. Tu viens de modifier son `ExecStart=` dans `/etc/systemd/system/factura-api.service` 
 avec `vim`, puis tu tapes `systemctl restart factura-api` : l'ancienne commande est relancée. Que manque-t-il ?
 
 a) rien
@@ -416,7 +452,7 @@ b) `systemctl daemon-reload`
 c) `systemctl enable factura-api`
 d) `systemctl reset-failed`
 
-**Q8.9** — Tu modifies une unité avec `systemctl edit factura-api`. Après avoir
+<a id="q8-9"></a>**[Q8.9](corrige.md#q8-9)** — Tu modifies une unité avec `systemctl edit factura-api`. Après avoir
 enregistré, faut-il lancer `systemctl daemon-reload` ?
 
 a) oui, toujours
@@ -425,7 +461,7 @@ b) non : `systemctl edit` recharge la configuration tout seul ; en revanche il
 c) non, et le service est redémarré automatiquement
 d) seulement si on a utilisé `--full`
 
-**Q8.10** — Différence entre `systemctl disable nginx` et `systemctl mask nginx` ?
+<a id="q8-10"></a>**[Q8.10](corrige.md#q8-10)** — Différence entre `systemctl disable nginx` et `systemctl mask nginx` ?
 
 a) aucune, `mask` est un alias moderne
 b) `disable` retire le lien d'activation au démarrage ; `mask` pointe l'unité
@@ -434,7 +470,7 @@ b) `disable` retire le lien d'activation au démarrage ; `mask` pointe l'unité
 c) `mask` supprime le fichier d'unité livré par le paquet
 d) `disable` arrête le service en cours, `mask` non
 
-**Q8.11** — Un drop-in `/etc/systemd/system/factura-api.service.d/10-port.conf`
+<a id="q8-11"></a>**[Q8.11](corrige.md#q8-11)** — Un drop-in `/etc/systemd/system/factura-api.service.d/10-port.conf`
 contient uniquement :
 
 ```ini
@@ -451,7 +487,7 @@ b) le service échoue : `Service has more than one ExecStart= setting`, parce
 c) les deux commandes sont lancées, dans l'ordre
 d) les drop-ins ne peuvent pas contenir de `ExecStart=`
 
-**Q8.12** — Une application Java tombe à 1024 descripteurs ouverts alors que
+<a id="q8-12"></a>**[Q8.12](corrige.md#q8-12)** — Une application Java tombe à 1024 descripteurs ouverts alors que
 `/etc/security/limits.conf` contient `* - nofile 65536`. Pourquoi ?
 
 a) `limits.conf` exige un redémarrage complet de la machine
@@ -461,7 +497,7 @@ b) `limits.conf` est appliqué par `pam_limits` aux **sessions** (login, SSH,
 c) la limite `nofile` est plafonnée à 1024 par le noyau
 d) il faut écrire `* hard nofile 65536` et rien d'autre
 
-**Q8.13** — Une unité déclare `Restart=always`, `RestartSec=1s`, et son
+<a id="q8-13"></a>**[Q8.13](corrige.md#q8-13)** — Une unité déclare `Restart=always`, `RestartSec=1s`, et son
 `EnvironmentFile=` pointe vers un fichier supprimé. Que montre `systemctl status`
 au bout d'une minute ?
 
@@ -471,7 +507,7 @@ b) le service est `failed` avec `Result: start-limit-hit` : après 5 tentatives
 c) systemd désactive l'unité définitivement
 d) le service reste `activating (auto-restart)` sans jamais s'arrêter
 
-**Q8.14** — Tu exécutes `systemctl status factura-collecte` sur un service
+<a id="q8-14"></a>**[Q8.14](corrige.md#q8-14)** — Tu exécutes `systemctl status factura-collecte` sur un service
 `Type=oneshot` avec `RemainAfterExit=yes` dont le traitement s'est bien terminé.
 Qu'affiche la ligne `Active:` ?
 
@@ -480,7 +516,7 @@ b) `active (exited)`
 c) `inactive (dead)`
 d) `failed (exited)`
 
-**Q8.15** — Sur `lab-web`, `systemctl status rsyslog` affiche :
+<a id="q8-15"></a>**[Q8.15](corrige.md#q8-15)** — Sur `lab-web`, `systemctl status rsyslog` affiche :
 
 ```text
 Loaded: loaded (/usr/lib/systemd/system/rsyslog.service; disabled;
@@ -495,7 +531,7 @@ b) il ne redémarrera pas au prochain boot
 c) l'unité est masquée
 d) l'unité a été écrite à la main dans `/etc/systemd/system`
 
-**Q8.16** — Une unité contient `Requires=postgresql.service` mais aucun
+<a id="q8-16"></a>**[Q8.16](corrige.md#q8-16)** — Une unité contient `Requires=postgresql.service` mais aucun
 `After=`. Quel est le comportement au démarrage ?
 
 a) systemd ordonne automatiquement : PostgreSQL d'abord
@@ -504,7 +540,7 @@ b) les deux unités sont lancées **en parallèle** ; le service peut donc déma
 c) systemd refuse de charger l'unité
 d) `Requires=` implique `After=` depuis systemd 250
 
-**Q8.17** — Tu ajoutes `ProtectSystem=strict` à `factura-api.service`. Le service
+<a id="q8-17"></a>**[Q8.17](corrige.md#q8-17)** — Tu ajoutes `ProtectSystem=strict` à `factura-api.service`. Le service
 démarre puis s'arrête avec une erreur d'écriture sur `/var/log/factura/api.log`.
 Quelles corrections sont valables ? **Deux réponses correctes.**
 
@@ -513,7 +549,7 @@ b) `LogsDirectory=factura`, qui crée `/var/log/factura` et l'ouvre en écriture
 c) `ProtectHome=no`
 d) `PrivateTmp=no`
 
-**Q8.18** — Le journal du noyau contient :
+<a id="q8-18"></a>**[Q8.18](corrige.md#q8-18)** — Le journal du noyau contient :
 
 ```text
 Out of memory: Killed process 3412 (python3) total-vm:2489312kB,
@@ -528,7 +564,7 @@ b) le noyau a envoyé un `SIGKILL` : aucun code de nettoyage n'a tourné, et
 c) c'est systemd qui a tué le processus à cause de `MemoryMax=`
 d) le processus est passé en `Z` faute de mémoire pour le récupérer
 
-**Q8.19** — `factura-api.py` tourne, lancé par `python3
+<a id="q8-19"></a>**[Q8.19](corrige.md#q8-19)** — `factura-api.py` tourne, lancé par `python3
 /opt/factura/bin/factura-api.py`. Tu tapes `killall factura-api.py` et
 obtiens `factura-api.py: no process found`. Pourquoi, et quelle commande
 fait le travail ? **Deux réponses correctes.**
@@ -540,7 +576,7 @@ c) `pkill -f factura-api.py` cible la ligne de commande complète, et
    `pgrep -a -f factura-api.py` montre avant ce qui sera touché
 d) `killall python3` est la bonne réponse : il ne tuera que ce script
 
-**Q8.20** — `systemctl status factura-lots` affiche `Result: oom-kill` et
+<a id="q8-20"></a>**[Q8.20](corrige.md#q8-20)** — `systemctl status factura-lots` affiche `Result: oom-kill` et
 `/sys/fs/cgroup/batch.slice/memory.events` contient `oom_kill 3`.
 `free -m` montre 1,4 Go de disponible et `dmesg` ne contient **aucune**
 ligne `Out of memory: Killed process` mais trois lignes `Memory cgroup out
@@ -553,7 +589,7 @@ b) le slice `batch.slice` a atteint son `MemoryMax=` : l'OOM killer a
 c) `systemd-oomd` a tué le service à cause de la pression mémoire globale
 d) le service a fait `exit(137)` de lui-même
 
-**Q8.21** — `factura-charge.sh 2` (deux processus qui brûlent chacun un
+<a id="q8-21"></a>**[Q8.21](corrige.md#q8-21)** — `factura-charge.sh 2` (deux processus qui brûlent chacun un
 cœur) est lancé par `systemd-run - -scope -p CPUQuota=50%`. `lab-web` a deux
 vCPU. Que montre `top` et pourquoi ?
 
@@ -569,91 +605,73 @@ d) les deux à 100 % pendant 50 % du temps, puis rien : le quota est temporel
 
 ## 8.4 Quiz — questions ouvertes
 
-**QO8.1** — Décris précisément la naissance et la mort d'un processus sous Linux :
+<a id="qo8-1"></a>**[QO8.1](corrige.md#qo8-1)** — Décris précisément la naissance et la mort d'un processus sous Linux :
 qui appelle `fork()`, qui appelle `execve()`, ce que devient le code de retour,
 et ce qu'est exactement une entrée `<defunct>`. Explique ensuite pourquoi un
 zombie ne consomme presque aucune ressource mais reste un vrai problème.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.2** — *On te demande en entretien* : « Un service ne répond plus. Tu tapes
+<a id="qo8-2"></a>**[QO8.2](corrige.md#qo8-2)** — *On te demande en entretien* : « Un service ne répond plus. Tu tapes
 `kill -9`. Pourquoi mon collègue senior fait-il la grimace ? » Réponds en
 expliquant ce que `SIGTERM` déclenche dans une application correctement écrite,
 ce que `SIGKILL` empêche, et ce que systemd fait exactement quand tu tapes
 `systemctl stop`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.3** — *On te demande en entretien* : « Explique-moi la différence entre
+<a id="qo8-3"></a>**[QO8.3](corrige.md#qo8-3)** — *On te demande en entretien* : « Explique-moi la différence entre
 `Wants=`, `Requires=`, `BindsTo=` et `After=`. Donne-moi un cas réel où le choix
 change le comportement en production. »
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.4** — Un collègue a écrit une unité pour un démon qui se détache tout seul
+<a id="qo8-4"></a>**[QO8.4](corrige.md#qo8-4)** — Un collègue a écrit une unité pour un démon qui se détache tout seul
 en tâche de fond. Il a mis `Type=simple`. Explique ce qui se passera, puis donne
 la matrice de décision complète : pour chacun des cinq `Type=`, quel type
 d'application, et comment systemd sait que le démarrage est terminé.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.5** — Décris ta méthode complète de diagnostic d'un service qui refuse de
+<a id="qo8-5"></a>**[QO8.5](corrige.md#qo8-5)** — Décris ta méthode complète de diagnostic d'un service qui refuse de
 démarrer, dans l'ordre, avec pour chaque étape la commande et **ce que tu
 cherches dans la sortie**. Ta méthode doit couvrir au moins : unité introuvable,
 unité masquée, binaire absent, `User=` inexistant, `EnvironmentFile=` manquant,
 port déjà pris, isolation trop stricte.
 
-::: repondre
-lignes: 14
-:::
+<!-- repondre: 14 -->
 
-**QO8.6** — Compare les trois façons de faire survivre une opération longue à la
+<a id="qo8-6"></a>**[QO8.6](corrige.md#qo8-6)** — Compare les trois façons de faire survivre une opération longue à la
 fermeture d'une session SSH : `nohup`/`disown`, `tmux`, `systemd-run`. Pour
 chacune : ce qui survit exactement, où partent les sorties, si on peut
 « revenir dedans », et dans quel cas d'exploitation tu la choisis.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.7** — Une application tombe à 1024 descripteurs ouverts. Déroule ton
+<a id="qo8-7"></a>**[QO8.7](corrige.md#qo8-7)** — Une application tombe à 1024 descripteurs ouverts. Déroule ton
 diagnostic : comment tu confirmes la limite effective du processus en cours,
 comment tu vois combien il en consomme, et où tu poses la nouvelle limite selon
 que l'application est lancée par SSH, par cron ou par systemd. Explique pourquoi
 `ulimit -n 65536` tapé dans ton shell ne change rien au service.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.8** — Explique ce que protège concrètement chacune de ces directives, et
+<a id="qo8-8"></a>**[QO8.8](corrige.md#qo8-8)** — Explique ce que protège concrètement chacune de ces directives, et
 donne pour chacune un exemple d'attaque ou d'incident qu'elle empêche :
 `NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, `DynamicUser`,
 `CapabilityBoundingSet=`. Dis ensuite ce que mesure `systemd-analyze security` et
 pourquoi le score seul ne suffit pas.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO8.9** — Un service met 45 secondes à s'arrêter à chaque `systemctl restart`,
+<a id="qo8-9"></a>**[QO8.9](corrige.md#qo8-9)** — Un service met 45 secondes à s'arrêter à chaque `systemctl restart`,
 et le boot de la machine est passé de 12 à 70 secondes. Explique le lien possible
 entre les deux, les directives en cause, et la démarche pour trancher (quelles
 commandes, quelles valeurs par défaut).
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO8.10** — *On te demande en entretien* : « Un traitement batch met la
+<a id="qo8-10"></a>**[QO8.10](corrige.md#qo8-10)** — *On te demande en entretien* : « Un traitement batch met la
 machine à genoux chaque nuit et emporte l'API avec lui. Comment tu le
 contiens sans le mettre dans un conteneur ? » Décris la solution avec les
 cgroups v2 de systemd : slice ou scope ou unité transitoire (et quand
@@ -663,87 +681,85 @@ limite agit, ce que fait l'OOM killer d'un cgroup par rapport à l'OOM killer
 global, et où tu retrouves la trace. Termine par le rôle de `systemd-oomd`
 sur Ubuntu 24.04 et ce qu'il change à ton diagnostic.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
 ---
 
 ## 8.5 Exercices guidés ★
 
-**E8.1** — Affiche les 10 processus les plus gourmands en mémoire **résidente**
+<a id="e8-1"></a>**[E8.1](corrige.md#e8-1)** — Affiche les 10 processus les plus gourmands en mémoire **résidente**
 de `lab-web`, avec PID, PPID, utilisateur, état, nice, RSS en Ko et ligne de
 commande complète, triés du plus gros au plus petit. Une seule commande, sans
 `sort` externe.
 
-**E8.2** — Trouve le PID du processus qui écoute sur le port 8080, puis affiche,
+<a id="e8-2"></a>**[E8.2](corrige.md#e8-2)** — Trouve le PID du processus qui écoute sur le port 8080, puis affiche,
 uniquement à partir de `/proc` : sa ligne de commande complète lisible, son
 répertoire courant, le binaire réellement exécuté, et son nombre de descripteurs
 ouverts.
 
-**E8.3** — Affiche l'ascendance complète du processus `sshd` qui porte ta
+<a id="e8-3"></a>**[E8.3](corrige.md#e8-3)** — Affiche l'ascendance complète du processus `sshd` qui porte ta
 session, depuis le PID 1, avec les PID et les arguments. Puis explique en une
 ligne ce que l'arbre te dit sur l'utilisateur qui a lancé ta session.
 
-**E8.4** — Compte les processus de la machine **par état** (`R`, `S`, `D`, `Z`,
+<a id="e8-4"></a>**[E8.4](corrige.md#e8-4)** — Compte les processus de la machine **par état** (`R`, `S`, `D`, `Z`,
 `T`…), et affiche le résultat trié par nombre décroissant.
 
-**E8.5** — Fabrique un zombie avec `/opt/factura/bin/factura-zombie.py 120`,
+<a id="e8-5"></a>**[E8.5](corrige.md#e8-5)** — Fabrique un zombie avec `/opt/factura/bin/factura-zombie.py 120`,
 prouve qu'il est en état `Z`, montre que `kill -9` ne le fait pas disparaître,
 puis fais-le disparaître pour de bon. Explique en une ligne ce qui s'est passé.
 
-**E8.6** — Lance `/opt/factura/bin/factura-charge.sh 2`, repère les deux
+<a id="e8-6"></a>**[E8.6](corrige.md#e8-6)** — Lance `/opt/factura/bin/factura-charge.sh 2`, repère les deux
 processus qui brûlent du CPU, abaisse leur priorité à `nice 15` **sans les
 relancer**, et vérifie le changement dans `top` (quelle colonne ?). Puis essaie
 de revenir à `nice 0` en tant que `mathieu` et explique le refus.
 
-**E8.7** — Mets le même processus de charge en classe d'E/S « idle » et vérifie
+<a id="e8-7"></a>**[E8.7](corrige.md#e8-7)** — Mets le même processus de charge en classe d'E/S « idle » et vérifie
 la classe appliquée. Indique ensuite quel ordonnanceur de bloc est actif sur
 `/dev/sda` et ce que ça change pour `ionice`.
 
-**E8.8** — Démarre `factura-api.py` à la main sur le port 8080, envoie-lui
+<a id="e8-8"></a>**[E8.8](corrige.md#e8-8)** — Démarre `factura-api.py` à la main sur le port 8080, envoie-lui
 successivement un `SIGHUP` puis un `SIGTERM`, et montre dans
 `/var/log/factura/api.log` la trace laissée par chacun. Recommence en lançant
 l'application avec `FACTURA_SOURD=1` et explique ce qui change.
 
-**E8.9** — Sans connaître le PID, envoie un `SIGHUP` à tous les processus dont la
+<a id="e8-9"></a>**[E8.9](corrige.md#e8-9)** — Sans connaître le PID, envoie un `SIGHUP` à tous les processus dont la
 ligne de commande contient `factura-api`, mais **uniquement** ceux appartenant à
 l'utilisateur `factura`. Donne aussi la commande qui te montre ce que tu vas
 tuer avant de le faire.
 
-**E8.10** — Lance `sleep 600` au premier plan, suspends-le, remets-le en arrière-
+<a id="e8-10"></a>**[E8.10](corrige.md#e8-10)** — Lance `sleep 600` au premier plan, suspends-le, remets-le en arrière-
 plan, liste les jobs avec leur PID, puis ramène-le au premier plan et termine-le
 par son numéro de job. Enfin, relance-le et détache-le complètement du shell de
 façon qu'il survive à un `exit`.
 
-**E8.11** — Depuis `lab-adm`, ouvre une session SSH sur `lab-web`, démarre dans
+<a id="e8-11"></a>**[E8.11](corrige.md#e8-11)** — Depuis `lab-adm`, ouvre une session SSH sur `lab-web`, démarre dans
 `tmux` une session nommée `migration` qui exécute
 `/opt/factura/bin/factura-charge.sh 1`, détache-toi, coupe la session SSH,
 reconnecte-toi et reprends la main sur le processus. Vérifie son PPID avant et
 après.
 
-**E8.12** — Affiche la limite de descripteurs **effective** du processus
+<a id="e8-12"></a>**[E8.12](corrige.md#e8-12)** — Affiche la limite de descripteurs **effective** du processus
 `factura-api` en cours d'exécution (souple et stricte), puis compare-la à ce que
 donne `ulimit -n` dans ton shell. Compte les descripteurs réellement ouverts par
 ce processus.
 
-**E8.13** — Rends `factura-gourmand.py` prioritaire pour l'OOM killer (il doit
+<a id="e8-13"></a>**[E8.13](corrige.md#e8-13)** — Rends `factura-gourmand.py` prioritaire pour l'OOM killer (il doit
 être tué en premier), vérifie la valeur appliquée, puis montre la commande qui
 prouve après coup qu'un OOM killer est passé sur la machine.
 
-**E8.14** — Liste toutes les unités `.service` en échec, puis toutes les unités
+<a id="e8-14"></a>**[E8.14](corrige.md#e8-14)** — Liste toutes les unités `.service` en échec, puis toutes les unités
 masquées de la machine, puis les unités activées au démarrage dont le nom
 contient `ssh`. Trois commandes distinctes.
 
-**E8.15** — Sans ouvrir de fichier avec un éditeur, affiche la définition
+<a id="e8-15"></a>**[E8.15](corrige.md#e8-15)** — Sans ouvrir de fichier avec un éditeur, affiche la définition
 complète et réellement appliquée de `ssh.service` (drop-ins compris), puis la
 valeur effective de `Restart=`, `RestartSec=` et `LimitNOFILE=` pour cette unité.
 
-**E8.16** — Affiche tout ce qui dépend de `network-online.target`, puis tout ce
+<a id="e8-16"></a>**[E8.16](corrige.md#e8-16)** — Affiche tout ce qui dépend de `network-online.target`, puis tout ce
 dont `ssh.service` dépend, en te limitant au premier niveau. Enfin, montre les
 10 unités les plus lentes au dernier démarrage et la chaîne critique du boot.
 
-**E8.17** — Lance `factura-api.py` à la main (`python3
+<a id="e8-17"></a>**[E8.17](corrige.md#e8-17)** — Lance `factura-api.py` à la main (`python3
 /opt/factura/bin/factura-api.py &`). Montre que `killall factura-api.py`
 échoue et explique-le en lisant `/proc/PID/comm` et `/proc/PID/cmdline`.
 Donne ensuite, en une commande chacune : la liste (PID + commande) de tous
@@ -752,7 +768,7 @@ appartiennent à l'utilisateur `factura`, le processus dont le nom est
 **exactement** `sshd`, et le plus ancien processus contenant `factura`. Puis
 arrête l'API par `pkill` en vérifiant **avant** ce que tu vas tuer.
 
-**E8.18** — Lance `/opt/factura/bin/factura-charge.sh 2` et
+<a id="e8-18"></a>**[E8.18](corrige.md#e8-18)** — Lance `/opt/factura/bin/factura-charge.sh 2` et
 `/opt/factura/bin/factura-gourmand.py 20 2` (arrête ce dernier avant
 600 Mo). Dans `top` interactif, et sans quitter : trie par CPU puis par
 mémoire, affiche un compteur par cœur, la ligne de commande complète, ne
@@ -762,7 +778,7 @@ avec une commande `ps` non interactive, avec les colonnes `pid`, `user`,
 `%cpu`, `%mem`, `etimes` et `args`. Explique pourquoi `%cpu` de `ps` et
 `%CPU` de `top` ne donnent pas la même valeur pour la charge.
 
-**E8.19** — Relance `factura-gourmand.py 20 2`. Dans `/proc/PID/status`,
+<a id="e8-19"></a>**[E8.19](corrige.md#e8-19)** — Relance `factura-gourmand.py 20 2`. Dans `/proc/PID/status`,
 relève `State`, `VmSize`, `VmRSS` et `Threads`, puis observe `VmRSS` toutes
 les deux secondes pendant dix secondes et explique l'écart avec `VmSize`.
 Lance ensuite un processus à trois threads occupés :
@@ -779,7 +795,7 @@ et montre : le nombre de threads dans `status`, la vue par thread avec
 thread. Explique pourquoi le total ne dépasse pas 100 % alors qu'il y a
 trois threads et deux vCPU.
 
-**E8.20** — Exécute `factura-gourmand.py 50 0.5` dans un **scope** limité à
+<a id="e8-20"></a>**[E8.20](corrige.md#e8-20)** — Exécute `factura-gourmand.py 50 0.5` dans un **scope** limité à
 200 Mo sans swap et à un demi-cœur. Pendant qu'il tourne, retrouve son
 cgroup avec `systemd-cgls`, observe-le dans `systemd-cgtop`, lis
 `memory.current`, `pids.current` et `cpu.stat` dans le répertoire du cgroup,
@@ -788,7 +804,7 @@ le scope disparaît, réfléchis à quand lire le fichier), la ligne du noyau,
 et l'état de l'unité `.scope` dans `systemctl`. Compare avec l'équivalent
 en unité transitoire (`--unit`) : où partent les sorties, où va la trace.
 
-**E8.21** — Crée un slice `factura.slice` avec `MemoryMax=300M`,
+<a id="e8-21"></a>**[E8.21](corrige.md#e8-21)** — Crée un slice `factura.slice` avec `MemoryMax=300M`,
 `MemorySwapMax=0`, `CPUQuota=100%` et `TasksMax=64`. Lance dedans deux
 unités transitoires : `factura-charge.sh 2` et `factura-api.py` (port 8080
 libre). Montre dans `systemd-cgls` la hiérarchie obtenue, la somme CPU des
@@ -802,14 +818,14 @@ comment la rendre temporaire.
 
 ## 8.6 Labs ★★
 
-### **L8.1** — Ticket INC-3187 : « lab-web rame, personne ne sait pourquoi »
+### <a id="l8-1"></a>**[L8.1](corrige.md#l8-1)** — Ticket INC-3187 : « lab-web rame, personne ne sait pourquoi »
 
-::: contexte
-Le support remonte que l'API met plusieurs secondes à répondre depuis ce matin.
-Le monitoring n'est pas encore branché sur cette VM (module 16). On te demande un
-diagnostic de premier niveau et une mesure de mitigation immédiate, sans
-redémarrer quoi que ce soit.
-:::
+> **Contexte**
+>
+> Le support remonte que l'API met plusieurs secondes à répondre depuis ce matin.
+> Le monitoring n'est pas encore branché sur cette VM (module 16). On te demande un
+> diagnostic de premier niveau et une mesure de mitigation immédiate, sans
+> redémarrer quoi que ce soit.
 
 Prépare le terrain :
 
@@ -835,26 +851,27 @@ nohup /opt/factura/bin/factura-gourmand.py 60 1 >/tmp/gourmand.log 2>&1 &
    commandes, coupables identifiés, mitigation appliquée, action de fond
    recommandée (au moins une limite systemd chiffrée).
 
-::: check
-Critère de succès : les processus de charge tournent avec un nice strictement
-positif, `factura-gourmand.py` a un `oom_score_adj` supérieur à 500, et le
-rapport existe avec au moins 12 lignes.
-
-```bash
-bash check_M08_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : les processus de charge tournent avec un nice strictement
+> positif, `factura-gourmand.py` a un `oom_score_adj` supérieur à 500, et le
+> rapport existe avec au moins 12 lignes.
+>
+> ```bash
+> bash check_M08_01.sh
+> ```
 
 ---
 
-### **L8.2** — Servicifier `factura-api`
+### <a id="l8-2"></a>**[L8.2](corrige.md#l8-2)** — Servicifier `factura-api`
 
-::: contexte
-L'API tourne aujourd'hui dans un `tmux` lancé à la main par un développeur.
-Elle disparaît à chaque redémarrage de la VM et personne ne sait la relancer.
-On te demande d'en faire un vrai service systemd, propre, redémarrable et activé
-au boot.
-:::
+> **Contexte**
+>
+> L'API tourne aujourd'hui dans un `tmux` lancé à la main par un développeur.
+> Elle disparaît à chaque redémarrage de la VM et personne ne sait la relancer.
+> On te demande d'en faire un vrai service systemd, propre, redémarrable et activé
+> au boot.
 
 Écris `/etc/systemd/system/factura-api.service` en respectant ce cahier des
 charges. Garde une copie de travail dans `~/lab08/units/`.
@@ -883,33 +900,35 @@ Vérifications à mener toi-même :
 * `systemctl stop factura-api` produit une ligne « arret propre » dans le même
   journal.
 
-::: astuce
-`systemd-analyze verify /etc/systemd/system/factura-api.service` relit ton unité
-et signale les directives inconnues ou mal orthographiées **avant** le premier
-démarrage. Prends l'habitude : une directive mal écrite est ignorée en silence
-par systemd, pas refusée.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `systemd-analyze verify /etc/systemd/system/factura-api.service` relit ton unité
+> et signale les directives inconnues ou mal orthographiées **avant** le premier
+> démarrage. Prends l'habitude : une directive mal écrite est ignorée en silence
+> par systemd, pas refusée.
 
-::: check
-Critère de succès : le service est `active (running)`, activé au boot, tourne
-sous l'utilisateur `factura`, répond sur 8080, et `systemctl show` confirme
-`Restart=on-failure` et `TimeoutStopUSec=20s`.
-
-```bash
-bash check_M08_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le service est `active (running)`, activé au boot, tourne
+> sous l'utilisateur `factura`, répond sur 8080, et `systemctl show` confirme
+> `Restart=on-failure` et `TimeoutStopUSec=20s`.
+>
+> ```bash
+> bash check_M08_02.sh
+> ```
 
 ---
 
-### **L8.3** — Choisir le bon `Type=` : trois services, trois réponses
+### <a id="l8-3"></a>**[L8.3](corrige.md#l8-3)** — Choisir le bon `Type=` : trois services, trois réponses
 
-::: contexte
-Trois traitements de la même application doivent devenir des services. Ils n'ont
-rien à voir entre eux : un traitement ponctuel, un démon qui se détache seul, et
-l'API. Le développeur a proposé `Type=simple` pour les trois. On te demande de
-trancher et de **prouver** ton choix.
-:::
+> **Contexte**
+>
+> Trois traitements de la même application doivent devenir des services. Ils n'ont
+> rien à voir entre eux : un traitement ponctuel, un démon qui se détache seul, et
+> l'API. Le développeur a proposé `Type=simple` pour les trois. On te demande de
+> trancher et de **prouver** ton choix.
 
 1. `factura-collecte.service` : lance
    `/opt/factura/bin/factura-collecte.sh`, qui prend une mesure puis **sort**.
@@ -932,26 +951,27 @@ trancher et de **prouver** ton choix.
 5. Écris `~/lab08/rapports/types.md` : un tableau à trois colonnes
    (service, `Type=` retenu, preuve observée).
 
-::: check
-Critère de succès : `factura-collecte` est `active (exited)`, `factura-legacy`
-est `active (running)` avec un PID principal égal au contenu de
-`/run/factura/legacy.pid`, et le rapport existe.
-
-```bash
-bash check_M08_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `factura-collecte` est `active (exited)`, `factura-legacy`
+> est `active (running)` avec un PID principal égal au contenu de
+> `/run/factura/legacy.pid`, et le rapport existe.
+>
+> ```bash
+> bash check_M08_03.sh
+> ```
 
 ---
 
-### **L8.4** — Durcir l'unité et modifier un paquet sans y toucher
+### <a id="l8-4"></a>**[L8.4](corrige.md#l8-4)** — Durcir l'unité et modifier un paquet sans y toucher
 
-::: contexte
-L'audit sécurité a rendu son rapport : « le service `factura-api` tourne avec un
-accès complet au système de fichiers ». Par ailleurs, l'équipe a besoin de monter
-la limite de descripteurs de `ssh.service` — sans modifier le fichier livré par
-le paquet, qui sera écrasé à la prochaine mise à jour.
-:::
+> **Contexte**
+>
+> L'audit sécurité a rendu son rapport : « le service `factura-api` tourne avec un
+> accès complet au système de fichiers ». Par ailleurs, l'équipe a besoin de monter
+> la limite de descripteurs de `ssh.service` — sans modifier le fichier livré par
+> le paquet, qui sera écrasé à la prochaine mise à jour.
 
 Partie 1 — durcissement de `factura-api.service` :
 
@@ -987,33 +1007,35 @@ Partie 2 — override d'une unité de paquet :
    `systemctl edit --full`.
 10. Annule proprement l'override et prouve que la valeur d'origine est revenue.
 
-::: attention
-L'étape 7 touche à `ssh.service`. Garde une seconde session SSH ouverte pendant
-toute la manipulation, et ne fais **jamais** un `systemctl restart ssh` sans
-avoir validé la configuration : une erreur t'enferme dehors.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> L'étape 7 touche à `ssh.service`. Garde une seconde session SSH ouverte pendant
+> toute la manipulation, et ne fais **jamais** un `systemctl restart ssh` sans
+> avoir validé la configuration : une erreur t'enferme dehors.
 
-::: check
-Critère de succès : score `systemd-analyze security` inférieur à 3.0, service
-toujours fonctionnel sur 8080, `MemoryMax` et `LimitNOFILE` effectifs, drop-in
-`ssh.service` présent puis retiré, rapport rédigé.
-
-```bash
-bash check_M08_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : score `systemd-analyze security` inférieur à 3.0, service
+> toujours fonctionnel sur 8080, `MemoryMax` et `LimitNOFILE` effectifs, drop-in
+> `ssh.service` présent puis retiré, rapport rédigé.
+>
+> ```bash
+> bash check_M08_04.sh
+> ```
 
 ---
 
-### **L8.5** — Une migration de 40 minutes en SSH depuis un train
+### <a id="l8-5"></a>**[L8.5](corrige.md#l8-5)** — Une migration de 40 minutes en SSH depuis un train
 
-::: contexte
-Tu dois lancer sur `lab-web` une migration de données qui dure environ 40
-minutes. Tu es en 4G, la connexion tombe toutes les dix minutes. Le script
-n'est pas idempotent : s'il est interrompu au milieu, il faut tout reprendre.
-On te demande de le lancer de trois façons différentes, de les comparer, et de
-retenir la bonne.
-:::
+> **Contexte**
+>
+> Tu dois lancer sur `lab-web` une migration de données qui dure environ 40
+> minutes. Tu es en 4G, la connexion tombe toutes les dix minutes. Le script
+> n'est pas idempotent : s'il est interrompu au milieu, il faut tout reprendre.
+> On te demande de le lancer de trois façons différentes, de les comparer, et de
+> retenir la bonne.
 
 Le « script de migration » sera `/opt/factura/bin/factura-charge.sh 1`, que tu
 laisseras tourner quelques minutes.
@@ -1037,35 +1059,37 @@ laisseras tourner quelques minutes.
 6. Conclusion argumentée : laquelle retiens-tu pour une migration de production
    qui doit laisser une trace auditable, et pourquoi.
 
-::: astuce
-Pour l'étape 4, `systemd-run --unit=migration --property=CPUQuota=50% ...` crée
-une unité transitoire : elle apparaît dans `systemctl list-units`, ses sorties
-partent au journal, elle a son propre cgroup, et elle disparaît toute seule.
-C'est le moyen le plus proche d'un « vrai » service pour une opération
-ponctuelle.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Pour l'étape 4, `systemd-run --unit=migration --property=CPUQuota=50% ...` crée
+> une unité transitoire : elle apparaît dans `systemctl list-units`, ses sorties
+> partent au journal, elle a son propre cgroup, et elle disparaît toute seule.
+> C'est le moyen le plus proche d'un « vrai » service pour une opération
+> ponctuelle.
 
-::: check
-Critère de succès : le rapport existe et compare les quatre méthodes, et une
-session `tmux` nommée `migration` a bien été créée et détachée sur `lab-web`.
-
-```bash
-bash check_M08_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le rapport existe et compare les quatre méthodes, et une
+> session `tmux` nommée `migration` a bien été créée et détachée sur `lab-web`.
+>
+> ```bash
+> bash check_M08_05.sh
+> ```
 
 ---
 
-### **L8.6** — Contenir le batch de nuit dans un slice
+### <a id="l8-6"></a>**[L8.6](corrige.md#l8-6)** — Contenir le batch de nuit dans un slice
 
-::: contexte
-Ticket INC-3244 : « chaque nuit vers 2 h, l'API `factura-api` disparaît
-pendant dix minutes ». Le journal du noyau montre `Out of memory: Killed
-process … (python3)` — et la victime n'est pas le batch, c'est l'API. Le
-batch (`factura-gourmand.py`, un import qui charge tout en mémoire) doit
-continuer à tourner, mais il ne doit plus jamais emporter autre chose que
-lui-même. Interdit : toucher au code du batch, ajouter de la RAM.
-:::
+> **Contexte**
+>
+> Ticket INC-3244 : « chaque nuit vers 2 h, l'API `factura-api` disparaît
+> pendant dix minutes ». Le journal du noyau montre `Out of memory: Killed
+> process … (python3)` — et la victime n'est pas le batch, c'est l'API. Le
+> batch (`factura-gourmand.py`, un import qui charge tout en mémoire) doit
+> continuer à tourner, mais il ne doit plus jamais emporter autre chose que
+> lui-même. Interdit : toucher au code du batch, ajouter de la RAM.
 
 Prérequis : `factura-api.service` en place (L8.2) et actif ; sinon lance
 l'API à la main dans une unité transitoire (`systemd-run --unit=factura-api
@@ -1108,35 +1132,38 @@ l'API à la main dans une unité transitoire (`systemd-run --unit=factura-api
    unités), preuve que l'OOM est confiné, valeurs retenues et comment les
    changer, ce qui reste à faire côté développeurs.
 
-::: astuce
-`systemd-run -p MemoryMax=300M -p MemorySwapMax=0 --unit=test commande` te
-laisse tester une limite avant de l'écrire dans une unité. Et `watch -n1
-cat /sys/fs/cgroup/batch.slice/memory.current` remplace
-avantageusement `top` pour regarder une limite se faire toucher.
-:::
+> [!TIP]
+> **Astuce**
+>
+> `systemd-run -p MemoryMax=300M -p MemorySwapMax=0 --unit=test commande` te
+> laisse tester une limite avant de l'écrire dans une unité. Et `watch -n1
+> cat /sys/fs/cgroup/batch.slice/memory.current` remplace
+> avantageusement `top` pour regarder une limite se faire toucher.
 
-::: check
-Critère de succès : `batch.slice` chargé avec `MemoryMax` ≤ 400 Mo et
-un `CPUQuota`, `factura-lots.service` rattaché au slice avec `Restart=`,
-au moins un `oom_kill` compté dans le slice, aucune ligne d'OOM global dans
-le journal du noyau, `factura-api` toujours actif, rapport rédigé.
-
-```bash
-sudo bash check_M08_07.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `batch.slice` chargé avec `MemoryMax` ≤ 400 Mo et
+> un `CPUQuota`, `factura-lots.service` rattaché au slice avec `Restart=`,
+> au moins un `oom_kill` compté dans le slice, aucune ligne d'OOM global dans
+> le journal du noyau, `factura-api` toujours actif, rapport rédigé.
+>
+> ```bash
+> sudo bash check_M08_07.sh
+> ```
 
 ---
 
 ## 8.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9002 avant-bf08`. Le snapshot de secours
-reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec
-de l'exercice : l'objectif est de réparer, pas de rembobiner.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9002 avant-bf08`. Le snapshot de secours
+> reste `snap-clean` (`qm rollback 9002 snap-clean`), mais l'utiliser vaut échec
+> de l'exercice : l'objectif est de réparer, pas de rembobiner.
 
-### **BF8.1** — « Le service met 90 secondes à démarrer, puis échoue »
+### <a id="bf8-1"></a>**[BF8.1](corrige.md#bf8-1)** — « Le service met 90 secondes à démarrer, puis échoue »
 
 ```bash
 sudo bash break_M08_01.sh
@@ -1154,11 +1181,9 @@ les timeouts, ou passer `Restart=` à `always` pour « masquer » le problème.
 que `systemctl start` rende la main en moins de deux secondes, et expliquer
 pourquoi le service était pourtant fonctionnel pendant les 90 secondes.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF8.2** — « Le service redémarre en boucle puis abandonne »
+### <a id="bf8-2"></a>**[BF8.2](corrige.md#bf8-2)** — « Le service redémarre en boucle puis abandonne »
 
 ```bash
 sudo bash break_M08_02.sh
@@ -1179,11 +1204,9 @@ remettre le service en marche, expliquer précisément le message
 suffisait plus. Proposer enfin la modification d'une seule ligne de l'unité qui
 aurait transformé cette panne bloquante en simple avertissement.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF8.3** — « Ce service refuse de démarrer et il n'y a aucune erreur »
+### <a id="bf8-3"></a>**[BF8.3](corrige.md#bf8-3)** — « Ce service refuse de démarrer et il n'y a aucune erreur »
 
 ```bash
 sudo bash break_M08_03.sh
@@ -1204,11 +1227,9 @@ commande qui liste l'état de toutes les unités de ce type sur la machine,
 rétablir le service, et expliquer la différence entre l'état trouvé et un simple
 `disable`.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF8.4** — « L'API plante dès qu'il y a du monde »
+### <a id="bf8-4"></a>**[BF8.4](corrige.md#bf8-4)** — « L'API plante dès qu'il y a du monde »
 
 ```bash
 sudo bash break_M08_04.sh
@@ -1230,22 +1251,20 @@ durablement, et expliquer en une phrase pourquoi le contenu du fichier d'unité
 ne suffisait pas à répondre à la question « quelle est la configuration de ce
 service ».
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 8.8 Défi du module ★★★
 
-**D8 — Livrer `factura-api` comme un service de production**
+<a id="d8"></a>**[D8](corrige.md#d8) — Livrer `factura-api` comme un service de production**
 
-::: contexte
-L'API passe en production la semaine prochaine. On te demande le dossier
-complet : l'unité, son durcissement, ses limites, sa procédure d'exploitation, et
-un script qui vérifie qu'une machine est conforme. Le livrable doit être
-reprenable par un collègue qui n'a pas fait le module.
-:::
+> **Contexte**
+>
+> L'API passe en production la semaine prochaine. On te demande le dossier
+> complet : l'unité, son durcissement, ses limites, sa procédure d'exploitation, et
+> un script qui vérifie qu'une machine est conforme. Le livrable doit être
+> reprenable par un collègue qui n'a pas fait le module.
 
 Cahier des charges :
 
@@ -1295,11 +1314,12 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: check
-```bash
-bash check_M08_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M08_06.sh
+> ```
 
 ---
 
@@ -1336,3 +1356,9 @@ Pour aller plus loin :
 * Lis le fichier `/proc/PID/status` d'un processus de ton choix en entier, et
   cherche à quoi correspondent `Threads`, `voluntary_ctxt_switches` et
   `nonvoluntary_ctxt_switches`. C'est la base du diagnostic de contention.
+
+<!-- nav:début -->
+---
+
+[← Module 07](../07-bash-scripting/README.md) · [Corrigé](corrige.md) · [Module 09 →](../09-noyau-demarrage/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

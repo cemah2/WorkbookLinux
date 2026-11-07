@@ -1,353 +1,384 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie IV — Socle DevOps › **Module 25** · corrigé  
+[← Module 24](../24-iac-terraform/corrige.md) · [Énoncé](README.md) · [Module 26 →](../26-kubernetes-observabilite/corrige.md)
+
+> [!TIP]
+> Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
+<!-- nav:fin -->
+
 # Module 25 — Corrigé
 
 ## 25.3 Quiz — QCM
 
-**Q25.1** — *Déploiement en prod dès que le pipeline est vert, sans humain :
+<a id="q25-1"></a>**[Q25.1](README.md#q25-1)** — *Déploiement en prod dès que le pipeline est vert, sans humain :
 livraison continue ?*
 
 **Réponse : c)** déploiement continu, qui inclut la livraison continue.
 
-::: pourquoi
-La frontière entre les trois pratiques est la position de la **dernière
-décision humaine**. En CI, l'automate s'arrête après build et tests : il
-produit un verdict, pas un livrable. En livraison continue, il produit un
-artefact déployable, validé, prêt — et **quelqu'un** appuie sur le bouton
-pour la production. En déploiement continu, le bouton n'existe plus : le
-pipeline est la seule autorité, et chaque commit vert arrive en prod.
-Le déploiement continu suppose donc la livraison continue (il faut un
-artefact validé) plus une confiance mesurée dans les tests, le smoke test
-et le rollback automatique.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La frontière entre les trois pratiques est la position de la **dernière
+> décision humaine**. En CI, l'automate s'arrête après build et tests : il
+> produit un verdict, pas un livrable. En livraison continue, il produit un
+> artefact déployable, validé, prêt — et **quelqu'un** appuie sur le bouton
+> pour la production. En déploiement continu, le bouton n'existe plus : le
+> pipeline est la seule autorité, et chaque commit vert arrive en prod.
+> Le déploiement continu suppose donc la livraison continue (il faut un
+> artefact validé) plus une confiance mesurée dans les tests, le smoke test
+> et le rollback automatique.
 
-::: piege
-Le manager n'a pas tort sur la technique, il a tort sur la gouvernance :
-« livraison continue » laisse entendre qu'un humain décide, ce qui n'est pas
-le cas ici. En entretien, la confusion entre les deux CD est la question
-piège la plus fréquente sur le sujet.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le manager n'a pas tort sur la technique, il a tort sur la gouvernance :
+> « livraison continue » laisse entendre qu'un humain décide, ce qui n'est pas
+> le cas ici. En entretien, la confusion entre les deux CD est la question
+> piège la plus fréquente sur le sujet.
 
 ---
 
-**Q25.2** — *Aucun run après push ; `runs-on` mal indenté.*
+<a id="q25-2"></a>**[Q25.2](README.md#q25-2)** — *Aucun run après push ; `runs-on` mal indenté.*
 
 **Réponse : b)**
 
-::: pourquoi
-`jobs.test` est un mapping dont les clés (`runs-on`, `steps`) doivent être
-indentées **sous** `test`. Ici `runs-on` est au niveau de `test`, donc YAML
-lit `test:` comme une valeur nulle et `runs-on:` comme un second job… puis
-`steps` indenté de quatre espaces sous une clé scalaire déclenche
-`mapping values are not allowed here`. Le fichier n'est pas du YAML valide.
-Gitea ne crée pas de run pour un workflow qu'il ne peut pas parser : il
-journalise un avertissement (`Gitea → Administration → Journaux`, ou
-`docker compose logs gitea`) et l'onglet *Actions* reste vide. Rien à voir
-avec `branches: [ main ]`, forme parfaitement valide, ni avec
-`workflow_dispatch`, qui ne concerne que le déclenchement manuel.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `jobs.test` est un mapping dont les clés (`runs-on`, `steps`) doivent être
+> indentées **sous** `test`. Ici `runs-on` est au niveau de `test`, donc YAML
+> lit `test:` comme une valeur nulle et `runs-on:` comme un second job… puis
+> `steps` indenté de quatre espaces sous une clé scalaire déclenche
+> `mapping values are not allowed here`. Le fichier n'est pas du YAML valide.
+> Gitea ne crée pas de run pour un workflow qu'il ne peut pas parser : il
+> journalise un avertissement (`Gitea → Administration → Journaux`, ou
+> `docker compose logs gitea`) et l'onglet *Actions* reste vide. Rien à voir
+> avec `branches: [ main ]`, forme parfaitement valide, ni avec
+> `workflow_dispatch`, qui ne concerne que le déclenchement manuel.
 
-::: piege
-`python3 -c 'import yaml,sys; yaml.safe_load(sys.stdin)' < ci.yaml` ou
-`yamllint ci.yaml` avant de commiter : dix secondes qui évitent une heure.
-BF25.1 exploite exactement ce mécanisme.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `python3 -c 'import yaml,sys; yaml.safe_load(sys.stdin)' < ci.yaml` ou
+> `yamllint ci.yaml` avant de commiter : dix secondes qui évitent une heure.
+> BF25.1 exploite exactement ce mécanisme.
 
 ---
 
-**Q25.3** — *Job `runs-on: ubuntu-22.04` en `waiting` alors que le runner
+<a id="q25-3"></a>**[Q25.3](README.md#q25-3)** — *Job `runs-on: ubuntu-22.04` en `waiting` alors que le runner
 travaille.*
 
 **Réponse : a)**
 
-::: pourquoi
-Un job n'est pas « envoyé » à un runner : chaque runner **interroge** Gitea
-(`fetch_interval`) en présentant ses labels, et Gitea lui remet un job dont
-`runs-on` figure dans ces labels. Un job dont aucun runner ne porte le label
-n'est proposé à personne ; il reste `waiting` (jusqu'à l'annulation automatique au bout de `ABANDONED_JOB_TIMEOUT`, 24 h par défaut), parce
-que du point de vue de Gitea la situation n'est pas anormale — un runner
-avec ce label pourrait apparaître plus tard. Seul indice dans l'interface : l'onglet *Actions* signale « No matching online runner with label :… » en face du workflow. Le runner, lui, ne voit même
-pas ce job : ses logs restent silencieux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un job n'est pas « envoyé » à un runner : chaque runner **interroge** Gitea
+> (`fetch_interval`) en présentant ses labels, et Gitea lui remet un job dont
+> `runs-on` figure dans ces labels. Un job dont aucun runner ne porte le label
+> n'est proposé à personne ; il reste `waiting` (jusqu'à l'annulation automatique au bout de `ABANDONED_JOB_TIMEOUT`, 24 h par défaut), parce
+> que du point de vue de Gitea la situation n'est pas anormale — un runner
+> avec ce label pourrait apparaître plus tard. Seul indice dans l'interface : l'onglet *Actions* signale « No matching online runner with label :… » en face du workflow. Le runner, lui, ne voit même
+> pas ce job : ses logs restent silencieux.
 
-::: piege
-Il n'y a ni approbation ni verrou de cache dans Gitea Actions qui bloquent un
-job de cette façon. Devant un `waiting` qui dure, la première commande est
-la comparaison entre `runs-on` et *Administration → Actions → Runners*.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Il n'y a ni approbation ni verrou de cache dans Gitea Actions qui bloquent un
+> job de cette façon. Devant un `waiting` qui dure, la première commande est
+> la comparaison entre `runs-on` et *Administration → Actions → Runners*.
 
 ---
 
-**Q25.4** — *Différence entre un label `docker://` et un label `host`.*
+<a id="q25-4"></a>**[Q25.4](README.md#q25-4)** — *Différence entre un label `docker://` et un label `host`.*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Avec le schéma `docker://image`, act_runner crée un conteneur neuf à partir
-de l'image pour chaque job, y copie le dépôt, exécute les steps, puis détruit
-le conteneur : chaque job repart de zéro, ce qu'un job installe disparaît.
-Avec `host`, les steps tournent dans un shell du processus runner :
-même utilisateur, même `$HOME`, mêmes outils, et tout ce qu'un job laisse
-(paquets, fichiers, `~/.docker/config.json`, une clé SSH oubliée) est visible
-par les jobs suivants — y compris ceux d'autres dépôts. `host` n'est pas
-« privilégié » au sens Docker (a est faux) et `docker://` n'interdit pas
-l'accès à Docker : cela dépend de `container.docker_host` (d est faux).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Avec le schéma `docker://image`, act_runner crée un conteneur neuf à partir
+> de l'image pour chaque job, y copie le dépôt, exécute les steps, puis détruit
+> le conteneur : chaque job repart de zéro, ce qu'un job installe disparaît.
+> Avec `host`, les steps tournent dans un shell du processus runner :
+> même utilisateur, même `$HOME`, mêmes outils, et tout ce qu'un job laisse
+> (paquets, fichiers, `~/.docker/config.json`, une clé SSH oubliée) est visible
+> par les jobs suivants — y compris ceux d'autres dépôts. `host` n'est pas
+> « privilégié » au sens Docker (a est faux) et `docker://` n'interdit pas
+> l'accès à Docker : cela dépend de `container.docker_host` (d est faux).
 
 ---
 
-**Q25.5** — *Quels steps exposent le secret malgré le masquage ?*
+<a id="q25-5"></a>**[Q25.5](README.md#q25-5)** — *Quels steps exposent le secret malgré le masquage ?*
 
 **Réponses : b) et c)**
 
-::: pourquoi
-Le masquage est une substitution textuelle : le runner connaît la valeur
-exacte du secret et remplace chaque occurrence **de cette chaîne** par
-`***` dans le flux de sortie. Tout ce qui n'est pas cette chaîne exacte
-passe :
+> [!NOTE]
+> **Pourquoi**
+>
+> Le masquage est une substitution textuelle : le runner connaît la valeur
+> exacte du secret et remplace chaque occurrence **de cette chaîne** par
+> `***` dans le flux de sortie. Tout ce qui n'est pas cette chaîne exacte
+> passe :
+>
+> * b) `set -x` trace la commande développée ; le secret y apparaît sous forme
+>   `base64` dans l'en-tête `Authorization: Basic …`, chaîne différente de
+>   l'original, donc non masquée. Décodable en une commande.
+> * c) `curl -v` affiche les en-têtes envoyés, dont `Authorization: Basic`
+>   calculé par curl à partir de `-u` : même mécanisme, même fuite.
+> * a) le secret est dans une variable, jamais imprimé : rien ne sort.
+> * d) `${#REG_PASS}` n'imprime que la longueur — une information, pas un
+>   secret.
 
-* b) `set -x` trace la commande développée ; le secret y apparaît sous forme
-  `base64` dans l'en-tête `Authorization: Basic …`, chaîne différente de
-  l'original, donc non masquée. Décodable en une commande.
-* c) `curl -v` affiche les en-têtes envoyés, dont `Authorization: Basic`
-  calculé par curl à partir de `-u` : même mécanisme, même fuite.
-* a) le secret est dans une variable, jamais imprimé : rien ne sort.
-* d) `${#REG_PASS}` n'imprime que la longueur — une information, pas un
-  secret.
-:::
-
-::: piege
-Le masquage protège contre l'erreur d'inattention, pas contre la
-transformation. Les fuites réelles sont presque toujours des encodages
-(base64, URL, JSON) ou des traces de débogage laissées dans le workflow.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Le masquage protège contre l'erreur d'inattention, pas contre la
+> transformation. Les fuites réelles sont presque toujours des encodages
+> (base64, URL, JSON) ou des traces de débogage laissées dans le workflow.
 
 ---
 
-**Q25.6** — *`build` échoue ; `deploy` a `needs: build` et un step
+<a id="q25-6"></a>**[Q25.6](README.md#q25-6)** — *`build` échoue ; `deploy` a `needs: build` et un step
 `if: failure()`.*
 
 **Réponse : b)**
 
-::: pourquoi
-`needs` crée une dépendance : si `build` échoue, `deploy` n'est pas
-**exécuté** mais **sauté** (état `skipped`), et aucun de ses steps ne
-tourne — donc pas le rollback non plus. `failure()` est évalué au niveau
-des steps d'un job **en cours** : il vaut vrai si un step précédent de ce
-job a échoué. Pour qu'un job dépendant tourne malgré un échec en amont,
-il faut une condition au niveau du job : `if: always()` ou
-`if: failure()` (au niveau `jobs.deploy.if`), et lire alors
-`needs.build.result` (`success`, `failure`, `cancelled`, `skipped`).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `needs` crée une dépendance : si `build` échoue, `deploy` n'est pas
+> **exécuté** mais **sauté** (état `skipped`), et aucun de ses steps ne
+> tourne — donc pas le rollback non plus. `failure()` est évalué au niveau
+> des steps d'un job **en cours** : il vaut vrai si un step précédent de ce
+> job a échoué. Pour qu'un job dépendant tourne malgré un échec en amont,
+> il faut une condition au niveau du job : `if: always()` ou
+> `if: failure()` (au niveau `jobs.deploy.if`), et lire alors
+> `needs.build.result` (`success`, `failure`, `cancelled`, `skipped`).
 
 ---
 
-**Q25.7** — *Prod vieille de trois jours, pipeline vert, déploiement par
+<a id="q25-7"></a>**[Q25.7](README.md#q25-7)** — *Prod vieille de trois jours, pipeline vert, déploiement par
 `latest`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Un tag d'image est un nom qui pointe sur un digest ; n'importe qui ayant le
-droit d'écrire sur le registre peut le déplacer. Si un poste de dev, un
-autre pipeline ou un script de « hotfix » pousse `latest`, le prochain
-`docker compose pull` sur `lab-web` récupère ce contenu-là, et `up -d`
-redémarre le conteneur avec — le pipeline, lui, a bien construit et poussé
-sa propre image, il est vert de bonne foi. Le tag SHA, immuable par
-construction (un commit = un SHA), est la seule identité fiable ; c'est
-ce que vérifie un smoke test sur `/version`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un tag d'image est un nom qui pointe sur un digest ; n'importe qui ayant le
+> droit d'écrire sur le registre peut le déplacer. Si un poste de dev, un
+> autre pipeline ou un script de « hotfix » pousse `latest`, le prochain
+> `docker compose pull` sur `lab-web` récupère ce contenu-là, et `up -d`
+> redémarre le conteneur avec — le pipeline, lui, a bien construit et poussé
+> sa propre image, il est vert de bonne foi. Le tag SHA, immuable par
+> construction (un commit = un SHA), est la seule identité fiable ; c'est
+> ce que vérifie un smoke test sur `/version`.
 
-::: piege
-`docker compose up -d` recrée bien un conteneur dont l'image a changé
-(a faux) ; le registre ne cache rien (c faux). BF25.4 reproduit ce scénario.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `docker compose up -d` recrée bien un conteneur dont l'image a changé
+> (a faux) ; le registre ne cache rien (c faux). BF25.4 reproduit ce scénario.
 
 ---
 
-**Q25.8** — *Runner en `Restarting`, `connection refused` vers
+<a id="q25-8"></a>**[Q25.8](README.md#q25-8)** — *Runner en `Restarting`, `connection refused` vers
 `http://gitea:3000`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Le nom `gitea` n'est résolu que par le DNS interne du réseau Docker dans
-lequel le conteneur `gitea` est attaché. Si le runner est sur un autre
-réseau (compose séparé, `network_mode: host`, réseau par défaut), le nom
-ne se résout pas ou l'adresse n'est pas joignable. Ton navigateur passe par
-le port publié `10.10.10.14:3000`, ce qui n'a rien à voir. C'est aussi
-pourquoi le setup enregistre le runner sur `http://10.10.10.14:3000` : les
-**conteneurs de jobs** que le runner crée via le socket de l'hôte ne sont
-pas dans le réseau du compose et ne connaîtraient pas `gitea` non plus.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le nom `gitea` n'est résolu que par le DNS interne du réseau Docker dans
+> lequel le conteneur `gitea` est attaché. Si le runner est sur un autre
+> réseau (compose séparé, `network_mode: host`, réseau par défaut), le nom
+> ne se résout pas ou l'adresse n'est pas joignable. Ton navigateur passe par
+> le port publié `10.10.10.14:3000`, ce qui n'a rien à voir. C'est aussi
+> pourquoi le setup enregistre le runner sur `http://10.10.10.14:3000` : les
+> **conteneurs de jobs** que le runner crée via le socket de l'hôte ne sont
+> pas dans le réseau du compose et ne connaîtraient pas `gitea` non plus.
 
 ---
 
-**Q25.9** — *Les quatre métriques DORA.*
+<a id="q25-9"></a>**[Q25.9](README.md#q25-9)** — *Les quatre métriques DORA.*
 
 **Réponse : b)**
 
-::: pourquoi
-Fréquence de déploiement et *lead time* mesurent le **débit** ; taux
-d'échec des changements et temps de rétablissement mesurent la
-**stabilité**. Les recherches DORA montrent que les équipes performantes
-sont bonnes sur les quatre à la fois — le débit ne se paie pas en stabilité
-quand le pipeline est bon. Les autres listes sont respectivement des
-métriques de qualité de code, les *golden signals* de la supervision, et
-des indicateurs de continuité d'activité.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Fréquence de déploiement et *lead time* mesurent le **débit** ; taux
+> d'échec des changements et temps de rétablissement mesurent la
+> **stabilité**. Les recherches DORA montrent que les équipes performantes
+> sont bonnes sur les quatre à la fois — le débit ne se paie pas en stabilité
+> quand le pipeline est bon. Les autres listes sont respectivement des
+> métriques de qualité de code, les *golden signals* de la supervision, et
+> des indicateurs de continuité d'activité.
 
 ---
 
-**Q25.10** — *Ce qu'interdit « build once, deploy many ».*
+<a id="q25-10"></a>**[Q25.10](README.md#q25-10)** — *Ce qu'interdit « build once, deploy many ».*
 
 **Réponse : b)**
 
-::: pourquoi
-L'artefact testé doit être **bit pour bit** celui déployé. Reconstruire pour
-la prod réintroduit tout ce qu'un build peut faire varier : versions de
-dépendances non figées, image de base mise à jour, variable d'environnement
-du runner, horloge. Le principe exige au contraire de déployer le même
-artefact sur plusieurs environnements (a faux) et repose sur les tags Git
-pour nommer les versions (d faux).
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'artefact testé doit être **bit pour bit** celui déployé. Reconstruire pour
+> la prod réintroduit tout ce qu'un build peut faire varier : versions de
+> dépendances non figées, image de base mise à jour, variable d'environnement
+> du runner, horloge. Le principe exige au contraire de déployer le même
+> artefact sur plusieurs environnements (a faux) et repose sur les tags Git
+> pour nommer les versions (d faux).
 
 ---
 
-**Q25.11** — *Cache pip à clé fixe, tests rouges après changement de
+<a id="q25-11"></a>**[Q25.11](README.md#q25-11)** — *Cache pip à clé fixe, tests rouges après changement de
 `requirements.txt`.*
 
 **Réponse : a)**
 
-::: pourquoi
-`actions/cache` restaure le contenu associé à la clé **si elle existe**,
-et ne le met à jour que si la clé est nouvelle. Avec `key: pip-cache`,
-la clé existe depuis le premier run : le cache restauré est figé. `pip`
-trouve ses roues en cache pour les anciens paquets, et pour le nouveau…
-il devrait télécharger — sauf si le cache porte aussi sur `site-packages`
-ou si le réseau est coupé. Dans tous les cas, un cache dont la clé ne
-dépend pas de ce qu'il contient finit par mentir. La clé doit inclure
-`hashFiles('requirements*.txt')` : contenu changé → clé changée → cache
-reconstruit. `restore-keys` permet un repli partiel.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `actions/cache` restaure le contenu associé à la clé **si elle existe**,
+> et ne le met à jour que si la clé est nouvelle. Avec `key: pip-cache`,
+> la clé existe depuis le premier run : le cache restauré est figé. `pip`
+> trouve ses roues en cache pour les anciens paquets, et pour le nouveau…
+> il devrait télécharger — sauf si le cache porte aussi sur `site-packages`
+> ou si le réseau est coupé. Dans tous les cas, un cache dont la clé ne
+> dépend pas de ce qu'il contient finit par mentir. La clé doit inclure
+> `hashFiles('requirements*.txt')` : contenu changé → clé changée → cache
+> reconstruit. `restore-keys` permet un repli partiel.
 
 ---
 
-**Q25.12** — *Après `ln -sfn`, que faire pour que nginx bascule ?*
+<a id="q25-12"></a>**[Q25.12](README.md#q25-12)** — *Après `ln -sfn`, que faire pour que nginx bascule ?*
 
 **Réponse : b)**
 
-::: pourquoi
-nginx lit sa configuration au démarrage et au `reload` (SIGHUP) : il
-résout alors les `include`, donc suit le symlink vers le nouveau fichier.
-`nginx -t` valide la configuration complète avant de la charger — sur une
-erreur, `reload` refuserait de toute façon et garderait l'ancienne, mais le
-test donne le message. Le `reload` lance de nouveaux workers avec la
-nouvelle configuration et laisse les anciens finir leurs requêtes : aucune
-connexion coupée. `restart` tue les workers ; inutile et coûteux.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> nginx lit sa configuration au démarrage et au `reload` (SIGHUP) : il
+> résout alors les `include`, donc suit le symlink vers le nouveau fichier.
+> `nginx -t` valide la configuration complète avant de la charger — sur une
+> erreur, `reload` refuserait de toute façon et garderait l'ancienne, mais le
+> test donne le message. Le `reload` lance de nouveaux workers avec la
+> nouvelle configuration et laisse les anciens finir leurs requêtes : aucune
+> connexion coupée. `restart` tue les workers ; inutile et coûteux.
 
 ---
 
-**Q25.13** — *PR d'un fork qui exfiltre l'environnement.*
+<a id="q25-13"></a>**[Q25.13](README.md#q25-13)** — *PR d'un fork qui exfiltre l'environnement.*
 
 **Réponse : b)**
 
-::: pourquoi
-Le masquage n'empêche pas l'envoi réseau (a faux) ; le conteneur n'empêche
-rien non plus, le secret est dedans (d faux). La seule protection est que
-les secrets **ne soient pas fournis** au workflow d'une PR non approuvée :
-GitHub n'expose pas les secrets aux PR issues de forks, Gitea demande une
-approbation dans l'interface avant d'exécuter les workflows d'une PR venant
-d'un fork ou d'un contributeur inconnu, GitLab
-distingue les *protected variables* accessibles uniquement sur branches
-protégées. Corollaire : ne jamais faire tourner un job avec secrets sur
-`pull_request` si le dépôt accepte des contributions externes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le masquage n'empêche pas l'envoi réseau (a faux) ; le conteneur n'empêche
+> rien non plus, le secret est dedans (d faux). La seule protection est que
+> les secrets **ne soient pas fournis** au workflow d'une PR non approuvée :
+> GitHub n'expose pas les secrets aux PR issues de forks, Gitea demande une
+> approbation dans l'interface avant d'exécuter les workflows d'une PR venant
+> d'un fork ou d'un contributeur inconnu, GitLab
+> distingue les *protected variables* accessibles uniquement sur branches
+> protégées. Corollaire : ne jamais faire tourner un job avec secrets sur
+> `pull_request` si le dépôt accepte des contributions externes.
 
 ---
 
-**Q25.14** — *Approbation humaine avant `tofu apply` sur Gitea.*
+<a id="q25-14"></a>**[Q25.14](README.md#q25-14)** — *Approbation humaine avant `tofu apply` sur Gitea.*
 
 **Réponses : a) et c)**
 
-::: pourquoi
-Gitea n'a pas d'`environment` avec relecteurs. L'approbation se construit
-avec ce qui existe : la **protection de branche** (qui a le droit de faire
-arriver un commit sur `main`) et le **déclenchement manuel**
-(`workflow_dispatch`, réservé à qui peut pousser sur la branche). Dans les
-deux cas, la décision est celle d'un humain identifié. `if: gitea.actor ==
-'mathieu'` seul (b) est une condition d'affichage, pas une protection :
-l'auteur d'un commit sur une branche non protégée peut l'enlever.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Gitea n'a pas d'`environment` avec relecteurs. L'approbation se construit
+> avec ce qui existe : la **protection de branche** (qui a le droit de faire
+> arriver un commit sur `main`) et le **déclenchement manuel**
+> (`workflow_dispatch`, réservé à qui peut pousser sur la branche). Dans les
+> deux cas, la décision est celle d'un humain identifié. `if: gitea.actor ==
+> 'mathieu'` seul (b) est une condition d'affichage, pas une protection :
+> l'auteur d'un commit sur une branche non protégée peut l'enlever.
 
 ---
 
-**Q25.15** — *`Cannot connect to the Docker daemon` dans
+<a id="q25-15"></a>**[Q25.15](README.md#q25-15)** — *`Cannot connect to the Docker daemon` dans
 `container: python:3.12-slim`.*
 
 **Réponse : b)**
 
-::: pourquoi
-Deux causes distinctes donnent des messages proches. Si le binaire `docker`
-est absent, le message est `docker: command not found`, pas celui-ci. Le
-message « cannot connect » vient d'un client qui existe mais ne trouve pas
-le socket : soit `config.yaml` a `container.docker_host: "-"` (le runner ne
-monte pas le socket dans les jobs), soit le socket est monté à un autre
-chemin. `python:3.12-slim` n'a pas de client Docker, donc si tu vois ce
-message précis, quelqu'un a installé le client dans un step et le problème
-est bien le socket. `which docker` puis `ls -l /var/run/docker.sock`
-tranchent en deux commandes.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Deux causes distinctes donnent des messages proches. Si le binaire `docker`
+> est absent, le message est `docker: command not found`, pas celui-ci. Le
+> message « cannot connect » vient d'un client qui existe mais ne trouve pas
+> le socket : soit `config.yaml` a `container.docker_host: "-"` (le runner ne
+> monte pas le socket dans les jobs), soit le socket est monté à un autre
+> chemin. `python:3.12-slim` n'a pas de client Docker, donc si tu vois ce
+> message précis, quelqu'un a installé le client dans un step et le problème
+> est bien le socket. `which docker` puis `ls -l /var/run/docker.sock`
+> tranchent en deux commandes.
 
 ---
 
-**Q25.16** — *`2.3.7`, ajout d'un endpoint compatible + correction.*
+<a id="q25-16"></a>**[Q25.16](README.md#q25-16)** — *`2.3.7`, ajout d'un endpoint compatible + correction.*
 
 **Réponse : b) `2.4.0`**
 
-::: pourquoi
-SemVer : le **mineur** s'incrémente pour un ajout rétro-compatible, et
-remet le correctif à zéro. Un correctif seul donnerait `2.3.8` ; une rupture
-de compatibilité `3.0.0`. `2.4.1` supposerait un correctif après `2.4.0`,
-qui n'existe pas.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> SemVer : le **mineur** s'incrémente pour un ajout rétro-compatible, et
+> remet le correctif à zéro. Un correctif seul donnerait `2.3.8` ; une rupture
+> de compatibilité `3.0.0`. `2.4.1` supposerait un correctif après `2.4.0`,
+> qui n'existe pas.
 
 ---
 
-**Q25.17** — *Pipeline de 9 min dont 6 en `apt-get install` répété.*
+<a id="q25-17"></a>**[Q25.17](README.md#q25-17)** — *Pipeline de 9 min dont 6 en `apt-get install` répété.*
 
 **Réponse : b)**
 
-::: pourquoi
-Le temps perdu est une installation identique refaite quatre fois. Le
-remède est de ne la faire qu'une fois : image de runner ou `container:`
-qui embarque les outils (installation à zéro seconde), ou à défaut un job
-d'installation unique dont les autres dépendent (mais alors ils attendent
-et perdent le parallélisme). `timeout-minutes` ne rend rien plus rapide,
-`fail-fast` concerne les matrices, et `host` ne changerait le temps que si
-les outils étaient déjà sur l'hôte — ce qui revient à b.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le temps perdu est une installation identique refaite quatre fois. Le
+> remède est de ne la faire qu'une fois : image de runner ou `container:`
+> qui embarque les outils (installation à zéro seconde), ou à défaut un job
+> d'installation unique dont les autres dépendent (mais alors ils attendent
+> et perdent le parallélisme). `timeout-minutes` ne rend rien plus rapide,
+> `fail-fast` concerne les matrices, et `host` ne changerait le temps que si
+> les outils étaient déjà sur l'hôte — ce qui revient à b.
 
 ---
 
-**Q25.18** — *`concurrency` avec `cancel-in-progress: true` sur un
+<a id="q25-18"></a>**[Q25.18](README.md#q25-18)** — *`concurrency` avec `cancel-in-progress: true` sur un
 déploiement.*
 
 **Réponse : b)**
 
-::: pourquoi
-`concurrency.group` sérialise : un seul run du groupe à la fois.
-`cancel-in-progress` décide du sort du run **en cours** quand un nouveau
-arrive : `true` l'annule (parfait pour des tests sur une PR, on ne veut
-que le dernier), `false` met le nouveau en file d'attente. Annuler un
-déploiement à mi-chemin laisse la cible dans un état indéfini : pour
-`deploy`, toujours `false`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `concurrency.group` sérialise : un seul run du groupe à la fois.
+> `cancel-in-progress` décide du sort du run **en cours** quand un nouveau
+> arrive : `true` l'annule (parfait pour des tests sur une PR, on ne veut
+> que le dernier), `false` met le nouveau en file d'attente. Annuler un
+> déploiement à mi-chemin laisse la cible dans un état indéfini : pour
+> `deploy`, toujours `false`.
 
 ---
 
 ## 25.4 Quiz — questions ouvertes
 
-**QO25.1** — *CI, livraison continue, déploiement continu : artefact final,
+<a id="qo25-1"></a>**[QO25.1](README.md#qo25-1)** — *CI, livraison continue, déploiement continu : artefact final,
 décideur, contre-exemple.*
 
 **Réponse.**
@@ -369,17 +400,18 @@ Le déploiement continu y est une erreur non pas technique mais de
 gouvernance : la mise en prod est un acte engageant une responsabilité
 externe, qui doit être tracé et décidé.
 
-::: pourquoi
-Le mécanisme sous-jacent est toujours le même : plus la décision humaine
-est repoussée loin, plus il faut de **preuves automatiques** en amont
-(tests, scan, smoke test) et de **filet** en aval (rollback, blue/green).
-Passer d'un niveau au suivant n'est pas un réglage de pipeline, c'est un
-investissement en tests et en observabilité.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme sous-jacent est toujours le même : plus la décision humaine
+> est repoussée loin, plus il faut de **preuves automatiques** en amont
+> (tests, scan, smoke test) et de **filet** en aval (rollback, blue/green).
+> Passer d'un niveau au suivant n'est pas un réglage de pipeline, c'est un
+> investissement en tests et en observabilité.
 
 ---
 
-**QO25.2** — *Entretien : le pipeline d'une application conteneurisée, du
+<a id="qo25-2"></a>**[QO25.2](README.md#qo25-2)** — *Entretien : le pipeline d'une application conteneurisée, du
 commit à la prod.*
 
 **Réponse type (10 lignes).**
@@ -402,17 +434,18 @@ commit à la prod.*
 10. Outils, à la fin seulement : yamllint/shellcheck/hadolint, pytest,
     docker build, trivy, registre OCI, SSH/Ansible, nginx pour le blue/green.
 
-::: pourquoi
-L'ordre suit le **coût croissant** et la **confiance croissante** : chaque
-étape ne s'exécute que si la précédente a réussi (`needs`), et l'étape la
-plus coûteuse/risquée (déployer) est la dernière. Ce qui bloque à chaque
-étape est un code de retour non nul : c'est pour cela que tous les outils
-cités ont un `--exit-code` ou échouent proprement.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'ordre suit le **coût croissant** et la **confiance croissante** : chaque
+> étape ne s'exécute que si la précédente a réussi (`needs`), et l'étape la
+> plus coûteuse/risquée (déployer) est la dernière. Ce qui bloque à chaque
+> étape est un code de retour non nul : c'est pour cela que tous les outils
+> cités ont un `--exit-code` ou échouent proprement.
 
 ---
 
-**QO25.3** — *Mécanisme d'une fuite de secret « masqué », trois vecteurs,
+<a id="qo25-3"></a>**[QO25.3](README.md#qo25-3)** — *Mécanisme d'une fuite de secret « masqué », trois vecteurs,
 pourquoi `env:`.*
 
 **Réponse.**
@@ -433,17 +466,18 @@ partie du texte de la commande : il apparaît dans la trace `set -x`, dans
 `$` casse ou injecte du shell. Passé par `env:`, il n'existe que comme
 variable d'environnement, lue par `"$X"` sans interprétation.
 
-::: pourquoi
-Il y a un quatrième vecteur qu'on oublie : les **artefacts et caches**.
-Un `.env` publié « pour déboguer » ou un `~/.docker/config.json` mis en
-cache est un secret stocké sur la forge, téléchargeable par quiconque lit
-le run. Règle de revue : tout `upload-artifact` liste explicitement ses
-fichiers.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Il y a un quatrième vecteur qu'on oublie : les **artefacts et caches**.
+> Un `.env` publié « pour déboguer » ou un `~/.docker/config.json` mis en
+> cache est un secret stocké sur la forge, téléchargeable par quiconque lit
+> le run. Règle de revue : tout `upload-artifact` liste explicitement ses
+> fichiers.
 
 ---
 
-**QO25.4** — *Socket Docker monté dans les jobs : pouvoir réel,
+<a id="qo25-4"></a>**[QO25.4](README.md#qo25-4)** — *Socket Docker monté dans les jobs : pouvoir réel,
 alternatives, compromis.*
 
 **Réponse.**
@@ -474,17 +508,18 @@ VM à part de la forge (jamais sur `lab-ops` comme ici), socket monté mais
 branches protégées, PR de forks non exécutées. Passer à kaniko/buildah le
 jour où l'on ouvre le dépôt à des contributeurs externes.
 
-::: pourquoi
-La question sous-jacente est celle du **rayon d'explosion**. Un socket
-monté n'est pas grave sur un hôte qui ne contient rien ; il est catastrophique
-sur l'hôte de la forge, parce que la compromission d'un job donne la forge,
-donc tous les secrets, donc la prod. Le lab viole cette règle sciemment
-(une seule VM) : dis-le dans ton rapport.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La question sous-jacente est celle du **rayon d'explosion**. Un socket
+> monté n'est pas grave sur un hôte qui ne contient rien ; il est catastrophique
+> sur l'hôte de la forge, parce que la compromission d'un job donne la forge,
+> donc tous les secrets, donc la prod. Le lab viole cette règle sciemment
+> (une seule VM) : dis-le dans ton rapport.
 
 ---
 
-**QO25.5** — *Blue/green vs canary : infra, mesure, état, limites, feature
+<a id="qo25-5"></a>**[QO25.5](README.md#qo25-5)** — *Blue/green vs canary : infra, mesure, état, limites, feature
 flags.*
 
 **Réponse.**
@@ -513,16 +548,17 @@ active la fonction par configuration, pour un groupe, sans redéployer. Le
 flag est le canari **fonctionnel**, la stratégie de déploiement est le
 canari **technique**.
 
-::: pourquoi
-Le point que l'examinateur attend : blue/green répond à « la nouvelle
-version démarre-t-elle ? », canary répond à « la nouvelle version
-se comporte-t-elle bien sous trafic réel ? ». Ce sont deux questions
-différentes, d'où deux stratégies qu'on combine souvent.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le point que l'examinateur attend : blue/green répond à « la nouvelle
+> version démarre-t-elle ? », canary répond à « la nouvelle version
+> se comporte-t-elle bien sous trafic réel ? ». Ce sont deux questions
+> différentes, d'où deux stratégies qu'on combine souvent.
 
 ---
 
-**QO25.6** — *Entretien : pipeline vert, prod cassée.*
+<a id="qo25-6"></a>**[QO25.6](README.md#qo25-6)** — *Entretien : pipeline vert, prod cassée.*
 
 **Réponse : démarche.**
 
@@ -549,17 +585,18 @@ mauvais tag) ; (2) configuration d'exécution différente (variable, secret,
 fichier monté) ; (3) le pipeline ne teste pas ce qui a cassé (couverture,
 smoke test trop faible, dépendance externe absente en CI).
 
-::: pourquoi
-La méthode est une **comparaison de trois identités** : ce qui a été
-testé, ce qui a été livré, ce qui tourne. Si l'une des trois manque
-(pas de SHA dans l'image, pas de digest dans le run), le diagnostic devient
-de la spéculation. C'est l'argument décisif pour `APP_VERSION` injecté au
-build et `/version` exposé.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La méthode est une **comparaison de trois identités** : ce qui a été
+> testé, ce qui a été livré, ce qui tourne. Si l'une des trois manque
+> (pas de SHA dans l'image, pas de digest dans le run), le diagnostic devient
+> de la spéculation. C'est l'argument décisif pour `APP_VERSION` injecté au
+> build et `/version` exposé.
 
 ---
 
-**QO25.7** — *Build once, deploy many ; promotion ; tag de version seul
+<a id="qo25-7"></a>**[QO25.7](README.md#qo25-7)** — *Build once, deploy many ; promotion ; tag de version seul
 insuffisant ; `latest`.*
 
 **Réponse.**
@@ -583,16 +620,17 @@ dans un `compose.yaml` de déploiement, jamais poussé par le pipeline.
 S'il faut un pointeur « dernière stable », nommer explicitement (`stable`)
 et ne le déplacer que par le job de promotion.
 
-::: pourquoi
-Le mécanisme qui rend tout cela sûr est l'**adressage par contenu** des
-registres OCI : le digest `sha256:…` est le hachage du manifest ; deux
-tags sur le même digest désignent rigoureusement les mêmes couches. La
-promotion est donc gratuite et sans risque de divergence.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme qui rend tout cela sûr est l'**adressage par contenu** des
+> registres OCI : le digest `sha256:…` est le hachage du manifest ; deux
+> tags sur le même digest désignent rigoureusement les mêmes couches. La
+> promotion est donc gratuite et sans risque de divergence.
 
 ---
 
-**QO25.8** — *Approbation avant `tofu apply` sur GitLab, GitHub, Gitea.*
+<a id="qo25-8"></a>**[QO25.8](README.md#qo25-8)** — *Approbation avant `tofu apply` sur GitLab, GitHub, Gitea.*
 
 **Réponse.**
 
@@ -620,16 +658,17 @@ pu changer (dérive, autre PR mergée). Parade : `apply` télécharge
 l'artefact `plan.bin` du run approuvé et applique **celui-là** ; OpenTofu
 refuse un plan si l'état a bougé entre-temps.
 
-::: pourquoi
-Un plan est un contrat entre l'état lu et les actions prévues ; l'appliquer
-plus tard n'est sûr que si l'état n'a pas changé, et OpenTofu le vérifie
-(le plan enregistre le numéro de série de l'état). C'est pour cela qu'on
-publie `plan.bin` et non seulement `plan.txt`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un plan est un contrat entre l'état lu et les actions prévues ; l'appliquer
+> plus tard n'est sûr que si l'état n'a pas changé, et OpenTofu le vérifie
+> (le plan enregistre le numéro de série de l'état). C'est pour cela qu'on
+> publie `plan.bin` et non seulement `plan.txt`.
 
 ---
 
-**QO25.9** — *Runner éphémère : définition, problème résolu, coût, disque.*
+<a id="qo25-9"></a>**[QO25.9](README.md#qo25-9)** — *Runner éphémère : définition, problème résolu, coût, disque.*
 
 **Réponse.**
 
@@ -659,16 +698,17 @@ Plus une alerte de supervision sur `/var/lib/docker` à 80 % : un runner à
 disque plein produit des échecs incompréhensibles (`no space left on
 device` au milieu d'un `pip install`, images corrompues).
 
-::: pourquoi
-`docker system prune` sans filtre `until` supprime aussi les couches de base
-(`python:3.12-slim`) que tous les builds réutilisent : le nettoyage trop
-agressif rallonge chaque pipeline de la durée du `pull`. Le filtre temporel
-garde ce qui sert tous les jours.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `docker system prune` sans filtre `until` supprime aussi les couches de base
+> (`python:3.12-slim`) que tous les builds réutilisent : le nettoyage trop
+> agressif rallonge chaque pipeline de la durée du `pull`. Le filtre temporel
+> garde ce qui sert tous les jours.
 
 ---
 
-**QO25.10** — *Définition opérationnelle des quatre métriques DORA.*
+<a id="qo25-10"></a>**[QO25.10](README.md#qo25-10)** — *Définition opérationnelle des quatre métriques DORA.*
 
 **Réponse.**
 
@@ -687,19 +727,20 @@ le risque de chaque changement (stabilité), **à condition** que le
 pipeline vérifie chaque changement. Un pipeline qui saute les tests ou le
 smoke test transfère le coût vers le taux d'échec et le MTTR.
 
-::: pourquoi
-Ces métriques sont mesurables **sans outil dédié** avec ce que produit le
-module : le journal `deploiements.log` (E25.15) est exactement la source
-minimale. La difficulté réelle n'est pas le calcul mais la définition
-d'« incident » : convenir d'une règle (rollback exécuté = échec de
-changement) et s'y tenir.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Ces métriques sont mesurables **sans outil dédié** avec ce que produit le
+> module : le journal `deploiements.log` (E25.15) est exactement la source
+> minimale. La difficulté réelle n'est pas le calcul mais la définition
+> d'« incident » : convenir d'une règle (rollback exécuté = échec de
+> changement) et s'y tenir.
 
 ---
 
 ## 25.5 Exercices guidés
 
-**E25.1** — *Inspecter la forge livrée par le setup.*
+<a id="e25-1"></a>**[E25.1](README.md#e25-1)** — *Inspecter la forge livrée par le setup.*
 
 ```bash
 cd ~/lab25/forge
@@ -719,18 +760,19 @@ ls -la runner/data/.runner
   `labels`) est l'enregistrement. Le supprimer force un nouvel
   enregistrement au prochain démarrage.
 
-::: pourquoi
-Gitea lit toute variable `GITEA__section__CLE` et l'écrit dans `app.ini`
-au démarrage : `GITEA__database__HOST=db:5432` devient `[database]
-HOST = db:5432`. C'est le mécanisme qui permet de configurer Gitea entièrement
-depuis le compose, sans éditer le fichier dans le volume. Le runner, lui,
-n'a pas d'équivalent : ses variables `GITEA_*` ne servent qu'au **premier**
-enregistrement ; ensuite `.runner` et `config.yaml` font foi.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Gitea lit toute variable `GITEA__section__CLE` et l'écrit dans `app.ini`
+> au démarrage : `GITEA__database__HOST=db:5432` devient `[database]
+> HOST = db:5432`. C'est le mécanisme qui permet de configurer Gitea entièrement
+> depuis le compose, sans éditer le fichier dans le volume. Le runner, lui,
+> n'a pas d'équivalent : ses variables `GITEA_*` ne servent qu'au **premier**
+> enregistrement ; ensuite `.runner` et `config.yaml` font foi.
 
 ---
 
-**E25.2** — *API Gitea avec le jeton, credential helper Git.*
+<a id="e25-2"></a>**[E25.2](README.md#e25-2)** — *API Gitea avec le jeton, credential helper Git.*
 
 ```bash
 TOKEN=$(cat ~/lab25/.gitea-token)
@@ -749,24 +791,26 @@ chmod 600 ~/lab25/.git-credentials
 git push            # « Everything up-to-date », sans demande de mot de passe
 ```
 
-::: pourquoi
-Un jeton d'accès personnel remplace le mot de passe sur HTTP : l'en-tête
-`Authorization: token …` pour l'API, `mathieu:<jeton>` en Basic Auth pour
-Git. Le helper `store` garde l'identifiant en clair dans un fichier — c'est
-acceptable pour un jeton de lab, pas pour un mot de passe. En production on
-préfère SSH (clé) ou un helper chiffré. Le setup a déjà posé ce helper ;
-l'exercice te le fait refaire pour que tu saches où il est. Le port (`:3000`) fait partie de l'hôte pour Git : sans lui, l'entrée ne correspond pas au remote et Git redemande le mot de passe.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un jeton d'accès personnel remplace le mot de passe sur HTTP : l'en-tête
+> `Authorization: token …` pour l'API, `mathieu:<jeton>` en Basic Auth pour
+> Git. Le helper `store` garde l'identifiant en clair dans un fichier — c'est
+> acceptable pour un jeton de lab, pas pour un mot de passe. En production on
+> préfère SSH (clé) ou un helper chiffré. Le setup a déjà posé ce helper ;
+> l'exercice te le fait refaire pour que tu saches où il est. Le port (`:3000`) fait partie de l'hôte pour Git : sans lui, l'entrée ne correspond pas au remote et Git redemande le mot de passe.
 
-::: piege
-Ne mets jamais le jeton dans l'URL du remote (`git remote add origin
-http://mathieu:TOKEN@…`) : il finit dans `.git/config`, dans `git remote -v`
-et dans les journaux de tout script qui affiche l'URL.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Ne mets jamais le jeton dans l'URL du remote (`git remote add origin
+> http://mathieu:TOKEN@…`) : il finit dans `.git/config`, dans `git remote -v`
+> et dans les journaux de tout script qui affiche l'URL.
 
 ---
 
-**E25.3** — *Workflow `hello.yaml` : contextes et variables.*
+<a id="e25-3"></a>**[E25.3](README.md#e25-3)** — *Workflow `hello.yaml` : contextes et variables.*
 
 ```yaml
 name: hello
@@ -795,20 +839,21 @@ Différences observées : `event` vaut `push` puis `workflow_dispatch` ; le
 `sha` est identique (même commit) ; `ls -la` montre un répertoire **vide**
 hormis `.` et `..` — sans `actions/checkout`, le dépôt n'est pas cloné.
 
-::: pourquoi
-Le runner ne clone rien de lui-même : il fournit un répertoire de travail
-(`GITHUB_WORKSPACE`, `/workspace/mathieu/factura` dans le conteneur) et des
-variables. `actions/checkout@v4` est une action Node qui utilise
-`gitea.server_url` et le jeton automatique pour cloner. Les contextes
-`${{ }}` sont évalués par le runner **avant** l'exécution ; les variables
-`GITHUB_*` sont lues par le shell **pendant**. Les deux disent la même
-chose, mais seules les variables peuvent être lues par un script sans
-passer par le YAML.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le runner ne clone rien de lui-même : il fournit un répertoire de travail
+> (`GITHUB_WORKSPACE`, `/workspace/mathieu/factura` dans le conteneur) et des
+> variables. `actions/checkout@v4` est une action Node qui utilise
+> `gitea.server_url` et le jeton automatique pour cloner. Les contextes
+> `${{ }}` sont évalués par le runner **avant** l'exécution ; les variables
+> `GITHUB_*` sont lues par le shell **pendant**. Les deux disent la même
+> chose, mais seules les variables peuvent être lues par un script sans
+> passer par le YAML.
 
 ---
 
-**E25.4** — *Matrice Python et `fail-fast`.*
+<a id="e25-4"></a>**[E25.4](README.md#e25-4)** — *Matrice Python et `fail-fast`.*
 
 ```yaml
   test:
@@ -831,19 +876,20 @@ Avec `fail-fast: true`, l'échec de 3.11 **annule** 3.12 (état `cancelled`)
 s'il n'est pas terminé ; avec `false`, 3.12 va au bout et le run montre un
 job rouge et un vert.
 
-::: pourquoi
-Une matrice développe un job en N jobs indépendants, un par combinaison.
-`fail-fast` est une politique d'économie : dès qu'une combinaison échoue,
-le résultat global sera rouge, donc inutile de consommer des runners pour
-les autres. On le désactive quand l'information « lesquelles échouent »
-compte plus que la vitesse (support de plusieurs versions). Le premier
-`pytest` échoue sur `ModuleNotFoundError: flask` parce que l'image est nue :
-chaque job repart d'un conteneur neuf.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une matrice développe un job en N jobs indépendants, un par combinaison.
+> `fail-fast` est une politique d'économie : dès qu'une combinaison échoue,
+> le résultat global sera rouge, donc inutile de consommer des runners pour
+> les autres. On le désactive quand l'information « lesquelles échouent »
+> compte plus que la vitesse (support de plusieurs versions). Le premier
+> `pytest` échoue sur `ModuleNotFoundError: flask` parce que l'image est nue :
+> chaque job repart d'un conteneur neuf.
 
 ---
 
-**E25.5** — *`needs` et `outputs`.*
+<a id="e25-5"></a>**[E25.5](README.md#e25-5)** — *`needs` et `outputs`.*
 
 ```yaml
 jobs:
@@ -870,18 +916,19 @@ Durée : `a` et `b` en parallèle → ~20 s + `c`. Avec `needs: a` sur `b`,
 40 s + `c`. Avec `runner.capacity: 1`, les deux cas se valent : un seul job
 à la fois.
 
-::: pourquoi
-Une sortie de step est une ligne `nom=valeur` écrite dans le fichier
-`$GITHUB_OUTPUT` ; le runner la lit à la fin du step et l'expose dans
-`steps.<id>.outputs`. Le job la republie via `jobs.<id>.outputs`, et seul un
-job qui déclare `needs` sur lui peut la lire, parce que c'est `needs` qui
-garantit que la valeur existe au moment de l'évaluation. Limite : les sorties
-sont des chaînes courtes ; un fichier passe par un artefact.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Une sortie de step est une ligne `nom=valeur` écrite dans le fichier
+> `$GITHUB_OUTPUT` ; le runner la lit à la fin du step et l'expose dans
+> `steps.<id>.outputs`. Le job la republie via `jobs.<id>.outputs`, et seul un
+> job qui déclare `needs` sur lui peut la lire, parce que c'est `needs` qui
+> garantit que la valeur existe au moment de l'évaluation. Limite : les sorties
+> sont des chaînes courtes ; un fichier passe par un artefact.
 
 ---
 
-**E25.6** — *Artefact produit, consommé, puis cassé.*
+<a id="e25-6"></a>**[E25.6](README.md#e25-6)** — *Artefact produit, consommé, puis cassé.*
 
 ```yaml
   produire:
@@ -907,19 +954,20 @@ Après renommage (`date > rapport-final.txt` sans changer `path`),
 `warn` par défaut) : `Warning: No files were found with the provided path: rapport.txt`. `No artifacts will be uploaded.` — le job
 producteur reste **vert**. C' est le job **consommateur** qui échoue : `Error: Unable to download artifact(s): Artifact not found for name: rapport`. Mettre `if-no-files-found: error` sur l'upload déplace l'échec là où est la cause.
 
-::: pourquoi
-L'artefact est téléversé vers Gitea à la fin du step d'upload, puis
-téléchargé par l'autre job : c'est le seul canal de fichiers entre jobs,
-puisque chaque job a son propre conteneur et son propre workspace. `path`
-est relatif à `GITHUB_ WORKSPACE`. Gitea 1.22+ implémente l'API artefacts
-v4 ; avec une version plus ancienne, utiliser `@v3`. Les artefacts ont une
-rétention (`retention-days`, défaut 90 sur Gitea) et pèsent sur le disque
-de la forge.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> L'artefact est téléversé vers Gitea à la fin du step d'upload, puis
+> téléchargé par l'autre job : c'est le seul canal de fichiers entre jobs,
+> puisque chaque job a son propre conteneur et son propre workspace. `path`
+> est relatif à `GITHUB_ WORKSPACE`. Gitea 1.22+ implémente l'API artefacts
+> v4 ; avec une version plus ancienne, utiliser `@v3`. Les artefacts ont une
+> rétention (`retention-days`, défaut 90 sur Gitea) et pèsent sur le disque
+> de la forge.
 
 ---
 
-**E25.7** — *Cache pip avec `hashFiles`.*
+<a id="e25-7"></a>**[E25.7](README.md#e25-7)** — *Cache pip avec `hashFiles`.*
 
 ```yaml
       - uses: actions/cache@v4
@@ -936,19 +984,20 @@ modification de `requirements-dev.txt`, le hash change : `Cache not found`
 pour la clé exacte, mais `restore-keys` restaure l'ancien cache (repli
 partiel) et une nouvelle clé est sauvegardée.
 
-::: pourquoi
-Le cache est sauvegardé par un step *post* implicite, ajouté par l'action à
-la fin du job, **uniquement si la clé exacte n'existait pas**. La clé est
-donc le contrat : elle doit changer quand le contenu attendu change. Le
-serveur de cache est act_runner lui-même (`cache.enabled: true`, il expose
-un port aux conteneurs de jobs via `ACTIONS_CACHE_URL`) : si `cache.enabled`
-est `false`, l'action affiche `Cache service responded with 4xx` ou est
-ignorée. C'est pour cela que L25.1 l'active.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le cache est sauvegardé par un step *post* implicite, ajouté par l'action à
+> la fin du job, **uniquement si la clé exacte n'existait pas**. La clé est
+> donc le contrat : elle doit changer quand le contenu attendu change. Le
+> serveur de cache est act_runner lui-même (`cache.enabled: true`, il expose
+> un port aux conteneurs de jobs via `ACTIONS_CACHE_URL`) : si `cache.enabled`
+> est `false`, l'action affiche `Cache service responded with 4xx` ou est
+> ignorée. C'est pour cela que L25.1 l'active.
 
 ---
 
-**E25.8** — *Service PostgreSQL joignable par son nom.*
+<a id="e25-8"></a>**[E25.8](README.md#e25-8)** — *Service PostgreSQL joignable par son nom.*
 
 ```yaml
   db-test:
@@ -974,18 +1023,19 @@ place dans le **même réseau** que les services : `db` reste résolu. La
 différence apparaît sur GitHub hébergé : sans `container:`, les services
 ne sont joignables que par `localhost:<port publié>`.
 
-::: pourquoi
-act_runner crée un réseau Docker par job et y attache le conteneur du job
-et chaque service sous le nom de sa clé (`db`). La résolution est faite
-par le DNS interne de Docker. La boucle `pg_isready` est indispensable : le
-service est *démarré* avant les steps, pas *prêt* — PostgreSQL met quelques
-secondes à initialiser son cluster. Sur GitHub Actions on ajoute
-`options: --health-cmd pg_isready …` pour que le runner attende.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> act_runner crée un réseau Docker par job et y attache le conteneur du job
+> et chaque service sous le nom de sa clé (`db`). La résolution est faite
+> par le DNS interne de Docker. La boucle `pg_isready` est indispensable : le
+> service est *démarré* avant les steps, pas *prêt* — PostgreSQL met quelques
+> secondes à initialiser son cluster. Sur GitHub Actions on ajoute
+> `options: --health-cmd pg_isready …` pour que le runner attende.
 
 ---
 
-**E25.9** — *Secret via l'API, masquage et ses limites.*
+<a id="e25-9"></a>**[E25.9](README.md#e25-9)** — *Secret via l'API, masquage et ses limites.*
 
 ```bash
 TOKEN=$(cat ~/lab25/.gitea-token); API=http://10.10.10.14:3000/api/v1
@@ -1015,24 +1065,26 @@ Journal : `longueur = 12` ; `***` pour le premier `echo` ; la ligne base64
 masquée, car `set -x` développe la valeur exacte. Le vecteur qui fuit ici
 est **l'encodage**, pas la trace.
 
-::: pourquoi
-Le masquage compare des chaînes : la valeur exacte est remplacée partout où
-elle apparaît, y compris dans la trace de `set -x`. Ce qui passe est ce
-qui n'est plus la valeur exacte. `curl -v` aurait fuité de la même façon
-(`Authorization: Basic dTpzM2NyM3QtbGFiMjU=`). Règle : un secret ne sort
-jamais d'une variable, sous aucune forme.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le masquage compare des chaînes : la valeur exacte est remplacée partout où
+> elle apparaît, y compris dans la trace de `set -x`. Ce qui passe est ce
+> qui n'est plus la valeur exacte. `curl -v` aurait fuité de la même façon
+> (`Authorization: Basic dTpzM2NyM3QtbGFiMjU=`). Règle : un secret ne sort
+> jamais d'une variable, sous aucune forme.
 
-::: piege
-L'API `PUT …/actions/secrets/{name}` renvoie `201` à la création et `204`
-à la mise à jour : le même appel sert pour la rotation. Rien ne permet de
-**lire** un secret ensuite, ni par l'API ni par l'interface : si tu l'as
-perdu, tu le remplaces.
-:::
+> [!WARNING]
+> **Piège**
+>
+> L'API `PUT …/actions/secrets/{name}` renvoie `201` à la création et `204`
+> à la mise à jour : le même appel sert pour la rotation. Rien ne permet de
+> **lire** un secret ensuite, ni par l'API ni par l'interface : si tu l'as
+> perdu, tu le remplaces.
 
 ---
 
-**E25.10** — *Build, tag SHA, push, digest.*
+<a id="e25-10"></a>**[E25.10](README.md#e25-10)** — *Build, tag SHA, push, digest.*
 
 ```bash
 cd ~/lab25/factura
@@ -1051,20 +1103,21 @@ curl -sI -u mathieu:Factura-Reg-2026 \
 
 Les deux digests sont identiques : `sha256:…`.
 
-::: pourquoi
-`RepoDigests` est rempli au `push` : c'est le hachage du **manifest** tel
-que le registre l'a reçu, et le registre le renvoie dans
-`Docker-Content-Digest`. C'est ce digest, et non le tag, qui identifie
-l'image de façon immuable ; un `compose.yaml` peut d'ailleurs référencer
-`factura@sha256:…` directement. Sans l'en-tête `Accept` adapté (OCI ou
-`application/vnd.docker.distribution.manifest.v2+json`), le registre peut
-renvoyer une conversion en schéma 1 avec un digest différent — piège
-classique des scripts de promotion.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `RepoDigests` est rempli au `push` : c'est le hachage du **manifest** tel
+> que le registre l'a reçu, et le registre le renvoie dans
+> `Docker-Content-Digest`. C'est ce digest, et non le tag, qui identifie
+> l'image de façon immuable ; un `compose.yaml` peut d'ailleurs référencer
+> `factura@sha256:…` directement. Sans l'en-tête `Accept` adapté (OCI ou
+> `application/vnd.docker.distribution.manifest.v2+json`), le registre peut
+> renvoyer une conversion en schéma 1 avec un digest différent — piège
+> classique des scripts de promotion.
 
 ---
 
-**E25.11** — *Scan trivy et seuil de blocage.*
+<a id="e25-11"></a>**[E25.11](README.md#e25-11)** — *Scan trivy et seuil de blocage.*
 
 ```bash
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
@@ -1084,18 +1137,19 @@ avertissement sur `HIGH`, et un job hebdomadaire planifié qui rescanne les
 images **déployées** — une image saine au build devient vulnérable avec le
 temps sans qu'aucun commit ne la touche.
 
-::: pourquoi
-Bloquer sur tout ce qui est `HIGH` sans distinction rend le pipeline rouge
-en permanence pour des CVE que personne ne peut corriger, et l'équipe finit
-par ignorer le scan. Le scan est utile quand il produit une action
-possible : mettre à jour l'image de base ou une dépendance. Le volume
-`trivy-cache` évite de retélécharger la base de vulnérabilités (plusieurs
-dizaines de Mo) à chaque run.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Bloquer sur tout ce qui est `HIGH` sans distinction rend le pipeline rouge
+> en permanence pour des CVE que personne ne peut corriger, et l'équipe finit
+> par ignorer le scan. Le scan est utile quand il produit une action
+> possible : mettre à jour l'image de base ou une dépendance. Le volume
+> `trivy-cache` évite de retélécharger la base de vulnérabilités (plusieurs
+> dizaines de Mo) à chaque run.
 
 ---
 
-**E25.12** — *Clé à commande forcée pour `deploy` sur `lab-web`.*
+<a id="e25-12"></a>**[E25.12](README.md#e25-12)** — *Clé à commande forcée pour `deploy` sur `lab-web`.*
 
 Sur `lab-ops` :
 
@@ -1128,19 +1182,20 @@ ssh -i ~/lab25/keys/deploy deploy@10.10.10.11 id
 # commande reçue : id
 ```
 
-::: pourquoi
-`command="…"` dans `authorized_keys` remplace **toute** commande demandée
-par le client par celle indiquée ; l'original est transmis dans
-`SSH_ORIGINAL_COMMAND`. Le script devient un mini-protocole : il décide ce
-qu'il accepte. `from=` limite l'adresse source, `no-pty` empêche un shell
-interactif, les `no-*-forwarding` ferment les tunnels. Même si la clé
-privée fuit du pipeline, l'attaquant ne peut que déployer une version déjà
-présente dans le registre, depuis `lab-ops`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> `command="…"` dans `authorized_keys` remplace **toute** commande demandée
+> par le client par celle indiquée ; l'original est transmis dans
+> `SSH_ORIGINAL_COMMAND`. Le script devient un mini-protocole : il décide ce
+> qu'il accepte. `from=` limite l'adresse source, `no-pty` empêche un shell
+> interactif, les `no-*-forwarding` ferment les tunnels. Même si la clé
+> privée fuit du pipeline, l'attaquant ne peut que déployer une version déjà
+> présente dans le registre, depuis `lab-ops`.
 
 ---
 
-**E25.13** — *Runner natif `host` sur `lab-ops`.*
+<a id="e25-13"></a>**[E25.13](README.md#e25-13)** — *Runner natif `host` sur `lab-ops`.*
 
 ```bash
 V=0.2.11     # vérifie la dernière version sur https://dl.gitea.com/act_runner/
@@ -1182,19 +1237,20 @@ Sur `lab-shell` : `uid=…(runner)`, `lab-ops`, `/var/lib/act_runner/…`
 (dans `host.workdir_parent`) ; sur `ubuntu-latest` : `uid=0(root)`, un
 nom de conteneur aléatoire, `/workspace/mathieu/factura`.
 
-::: pourquoi
-Un runner `host` exécute les steps dans un sous-processus de `act_runner` :
-l'identité, le `PATH` et le disque sont ceux de l'utilisateur système
-`runner`. C'est utile pour des jobs qui ont besoin de l'hôte (accès à un
-matériel, à un cache local volumineux, à `sudo` maîtrisé) et dangereux
-pour tout le reste : l'utilisateur `runner` ne doit être ni dans `docker`
-ni dans `sudo`, sinon on a un `host` équivalent root. Le jeton
-d'enregistrement expire ; en générer un par runner.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un runner `host` exécute les steps dans un sous-processus de `act_runner` :
+> l'identité, le `PATH` et le disque sont ceux de l'utilisateur système
+> `runner`. C'est utile pour des jobs qui ont besoin de l'hôte (accès à un
+> matériel, à un cache local volumineux, à `sudo` maîtrisé) et dangereux
+> pour tout le reste : l'utilisateur `runner` ne doit être ni dans `docker`
+> ni dans `sudo`, sinon on a un `host` équivalent root. Le jeton
+> d'enregistrement expire ; en générer un par runner.
 
 ---
 
-**E25.14** — *Tag Git `v0.1.0` et tag d'image conditionnel.*
+<a id="e25-14"></a>**[E25.14](README.md#e25-14)** — *Tag Git `v0.1.0` et tag d'image conditionnel.*
 
 ```bash
 cd ~/lab25/factura
@@ -1222,19 +1278,20 @@ done
 
 Même digest sur les deux lignes.
 
-::: pourquoi
-Un push de tag déclenche `on.push.tags` avec `gitea.ref =
-refs/tags/v0.1.0` et `GITHUB_REF_NAME = v0.1.0`. Le `docker tag` n'ajoute
-qu'un nom local ; le `push` du second tag ne transfère aucune couche (le
-registre les possède déjà) et crée un second pointeur sur le même
-manifest. C'est la forme la plus simple de promotion. Attention : un push
-de tag crée un run **distinct** de celui du commit ; l'image du SHA doit
-donc être reconstruite ou retrouvée — d'où le job `promote` du défi.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un push de tag déclenche `on.push.tags` avec `gitea.ref =
+> refs/tags/v0.1.0` et `GITHUB_REF_NAME = v0.1.0`. Le `docker tag` n'ajoute
+> qu'un nom local ; le `push` du second tag ne transfère aucune couche (le
+> registre les possède déjà) et crée un second pointeur sur le même
+> manifest. C'est la forme la plus simple de promotion. Attention : un push
+> de tag crée un run **distinct** de celui du commit ; l'image du SHA doit
+> donc être reconstruite ou retrouvée — d'où le job `promote` du défi.
 
 ---
 
-**E25.15** — *`dora.sh` : quatre métriques à partir de `git log` et du
+<a id="e25-15"></a>**[E25.15](README.md#e25-15)** — *`dora.sh` : quatre métriques à partir de `git log` et du
 journal de déploiements.*
 
 ```bash
@@ -1277,23 +1334,24 @@ printf 'MTTR moyen (min)          : %s\n' \
   "$(( mttr_n ? mttr_total/60/mttr_n : 0 ))"
 ```
 
-::: pourquoi
-Chaque métrique se ramène à une soustraction de deux horodatages ou à un
-rapport de deux compteurs, à condition d'avoir la **donnée brute** : un
-journal de déploiements avec date, identité de la version et résultat.
-C'est ce que produit naturellement un pipeline qui journalise ses
-déploiements (une ligne écrite par `factura-deploy` dans
-`/srv/factura/deploiements.log`, rapatriée par `scp` ou exposée par
-l'API). Le *lead time* relie la date du commit (`git log --format=%ct`) à
-la date de mise en prod ; le MTTR relie un déploiement `ko` au premier `ok`
-suivant.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Chaque métrique se ramène à une soustraction de deux horodatages ou à un
+> rapport de deux compteurs, à condition d'avoir la **donnée brute** : un
+> journal de déploiements avec date, identité de la version et résultat.
+> C'est ce que produit naturellement un pipeline qui journalise ses
+> déploiements (une ligne écrite par `factura-deploy` dans
+> `/srv/factura/deploiements.log`, rapatriée par `scp` ou exposée par
+> l'API). Le *lead time* relie la date du commit (`git log --format=%ct`) à
+> la date de mise en prod ; le MTTR relie un déploiement `ko` au premier `ok`
+> suivant.
 
 ---
 
 ## 25.6 Labs
 
-### **L25.1** — *La forge : Gitea, runner, premier pipeline vert*
+### <a id="l25-1"></a>**[L25.1](README.md#l25-1)** — *La forge : Gitea, runner, premier pipeline vert*
 
 **1. `forge.md` : trois réponses attendues.**
 
@@ -1405,31 +1463,33 @@ merge (avec ton auto-approbation impossible : désactive temporairement
 `required_approvals` ou crée un second compte relecteur — c'est l'occasion
 de voir que la règle s'applique aussi à l'admin).
 
-::: pourquoi
-Le job `lint` tourne dans l'image du runner (Ubuntu avec Docker CLI et
-socket), d'où `apt-get` sans `sudo` (root dans le conteneur) et `docker
-run` possible pour hadolint. Le `Dockerfile` est passé **sur stdin**
-(`-i … < Dockerfile`) parce qu'un montage `-v "$PWD:/src"` désignerait un
-chemin sur l'**hôte**, où le workspace du job n'existe pas : le conteneur
-frère verrait un répertoire vide. Le job `test` tourne dans
-`python:3.12-slim` : plus petit, sans Docker, reproductible, et
-`actions/checkout` y fonctionne parce que act_runner injecte son propre
-Node dans tout conteneur de job.
-`if: always()` sur l'artefact est ce qui rend le rapport de tests utile :
-on en a besoin **surtout** quand ils échouent.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le job `lint` tourne dans l'image du runner (Ubuntu avec Docker CLI et
+> socket), d'où `apt-get` sans `sudo` (root dans le conteneur) et `docker
+> run` possible pour hadolint. Le `Dockerfile` est passé **sur stdin**
+> (`-i … < Dockerfile`) parce qu'un montage `-v "$PWD:/src"` désignerait un
+> chemin sur l'**hôte**, où le workspace du job n'existe pas : le conteneur
+> frère verrait un répertoire vide. Le job `test` tourne dans
+> `python:3.12-slim` : plus petit, sans Docker, reproductible, et
+> `actions/checkout` y fonctionne parce que act_runner injecte son propre
+> Node dans tout conteneur de job.
+> `if: always()` sur l'artefact est ce qui rend le rapport de tests utile :
+> on en a besoin **surtout** quand ils échouent.
 
-::: piege
-`yamllint -s` traite les avertissements comme des erreurs ; sans le
-`.yamllint`, la règle `truthy` refuse la clé `on` et le job est rouge avant
-même d'avoir regardé tes fichiers. Second piège : `status_check_contexts`
-compare en glob au nom réel du statut, `workflow / job` (`événement)` — d'où `ci / lint` `(*`) ; un motif qui ne correspond à rien (`ci / lint` seul, ou une faute de frappe)
-rend la PR à jamais « en attente de vérification ».
-:::
+> [!WARNING]
+> **Piège**
+>
+> `yamllint -s` traite les avertissements comme des erreurs ; sans le
+> `.yamllint`, la règle `truthy` refuse la clé `on` et le job est rouge avant
+> même d'avoir regardé tes fichiers. Second piège : `status_check_contexts`
+> compare en glob au nom réel du statut, `workflow / job` (`événement)` — d'où `ci / lint` `(*`) ; un motif qui ne correspond à rien (`ci / lint` seul, ou une faute de frappe)
+> rend la PR à jamais « en attente de vérification ».
 
 ---
 
-### **L25.2** — *Pipeline complet : de la PR au rollback automatique*
+### <a id="l25-2"></a>**[L25.2](README.md#l25-2)** — *Pipeline complet : de la PR au rollback automatique*
 
 **1. `/usr/local/bin/factura-deploy` sur `lab-web`.**
 
@@ -1660,33 +1720,35 @@ donne l'ancien tag, `/version` l'ancien SHA, `deploiements.log` une ligne
 `--cache-from`, base trivy dans le volume nommé (fait), `lint` et `test`
 parallèles (fait).
 
-::: pourquoi
-Le mécanisme central est l'**identité de bout en bout** : le SHA est
-calculé une fois (`meta`), injecté dans l'image (`APP_VERSION`), transmis
-au job `deploy` par `needs.build.outputs.tag`, validé par regex côté
-`lab-web`, puis **exigé** par le smoke test. Chaque étape peut échouer
-pour une raison distincte et le rollback n'agit que si le job de
-déploiement a réellement commencé (il est dans le même job que le smoke
-test, donc `failure()` fonctionne). `concurrency` sérialise les
-déploiements sans annuler celui en cours. La clé privée n'existe que dans
-le conteneur du job, détruit à la fin.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme central est l'**identité de bout en bout** : le SHA est
+> calculé une fois (`meta`), injecté dans l'image (`APP_VERSION`), transmis
+> au job `deploy` par `needs.build.outputs.tag`, validé par regex côté
+> `lab-web`, puis **exigé** par le smoke test. Chaque étape peut échouer
+> pour une raison distincte et le rollback n'agit que si le job de
+> déploiement a réellement commencé (il est dans le même job que le smoke
+> test, donc `failure()` fonctionne). `concurrency` sérialise les
+> déploiements sans annuler celui en cours. La clé privée n'existe que dans
+> le conteneur du job, détruit à la fin.
+>
+> Le `if: gitea.event_name != 'pull_request'` sur le push est ce qui fait
+> de la PR une CI pure : on construit et scanne (preuve), on ne publie pas
+> (pas d'effet de bord).
 
-Le `if: gitea.event_name != 'pull_request'` sur le push est ce qui fait
-de la PR une CI pure : on construit et scanne (preuve), on ne publie pas
-(pas d'effet de bord).
-:::
-
-::: piege
-* `printf '%s\n' "$KEY"` : un `echo $KEY` non quoté recolle la clé sur une
-  ligne, `ssh` répond `invalid format`.
-* `BatchMode=yes` : sans lui, un problème de clé fait attendre un mot de
-  passe jusqu'au `timeout-minutes`.
-* `${TAG:?}` dans le compose : sans le `:?`, un `.env` vide donne
-  `factura:` et Docker tire… `latest`.
-* Sur `lab-web`, `deploy` doit être dans le groupe `docker` — ce qui
-  équivaut à root sur `lab-web` ; la commande forcée est ce qui rend ce
-  choix acceptable.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `printf '%s\n' "$KEY"` : un `echo $KEY` non quoté recolle la clé sur une
+>   ligne, `ssh` répond `invalid format`.
+> * `BatchMode=yes` : sans lui, un problème de clé fait attendre un mot de
+>   passe jusqu'au `timeout-minutes`.
+> * `${TAG:?}` dans le compose : sans le `:?`, un `.env` vide donne
+>   `factura:` et Docker tire… `latest`.
+> * Sur `lab-web`, `deploy` doit être dans le groupe `docker` — ce qui
+>   équivaut à root sur `lab-web` ; la commande forcée est ce qui rend ce
+>   choix acceptable.
 
 **9. Le même pipeline ailleurs.**
 
@@ -1888,21 +1950,22 @@ pipeline {
 }
 ```
 
-::: pourquoi
-Les trois forges ont le même modèle sous des noms différents : un
-**graphe de jobs** (stages ou `needs`), des **agents étiquetés**
-(`tags`/`runs-on`/`agent { label }`), des **artefacts** et un **cache**,
-des **conditions** (`rules`/`if`/`when`), des **secrets** injectés dans
-l'environnement. Ce qui change vraiment : la gouvernance (environnements,
-approbations, variables protégées), native sur GitLab et GitHub, à
-construire sur Gitea et Jenkins ; et le modèle d'exécution de Jenkins,
-où le pipeline est un programme Groovy exécuté par le contrôleur, ce qui
-explique sa puissance et ses dérives.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Les trois forges ont le même modèle sous des noms différents : un
+> **graphe de jobs** (stages ou `needs`), des **agents étiquetés**
+> (`tags`/`runs-on`/`agent { label }`), des **artefacts** et un **cache**,
+> des **conditions** (`rules`/`if`/`when`), des **secrets** injectés dans
+> l'environnement. Ce qui change vraiment : la gouvernance (environnements,
+> approbations, variables protégées), native sur GitLab et GitHub, à
+> construire sur Gitea et Jenkins ; et le modèle d'exécution de Jenkins,
+> où le pipeline est un programme Groovy exécuté par le contrôleur, ce qui
+> explique sa puissance et ses dérives.
 
 ---
 
-### **L25.3** — *Blue/green derrière nginx, bascule depuis le pipeline*
+### <a id="l25-3"></a>**[L25.3](README.md#l25-3)** — *Blue/green derrière nginx, bascule depuis le pipeline*
 
 **1. `/srv/factura-bg/compose.yaml` et `.env`.**
 
@@ -2102,31 +2165,33 @@ upstream factura_live {
 ou `split_clients "$remote_addr" $backend { 10% green; * blue; }` pour une
 affectation stable par client.
 
-::: pourquoi
-La bascule est un `reload` de nginx après changement du **symlink**, donc
-une opération atomique côté fichier (`ln -sfn` remplace le lien d'un coup)
-et sans coupure côté réseau (les anciens workers finissent leurs
-requêtes). Le retour arrière est la même opération dans l'autre sens :
-c'est ce qui rend le rollback instantané et sans `docker compose`.
-Le smoke test **avant** bascule est ce qui change tout par rapport à
-L25.2 : on valide la version sur une instance qui ne reçoit pas de trafic.
-La séparation en deux clés (`deploy`, `bg`) avec deux commandes forcées
-tient les privilèges au plus juste : la clé `bg` est la seule à pouvoir
-faire un `sudo`, et seulement les quatre commandes du fichier sudoers.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> La bascule est un `reload` de nginx après changement du **symlink**, donc
+> une opération atomique côté fichier (`ln -sfn` remplace le lien d'un coup)
+> et sans coupure côté réseau (les anciens workers finissent leurs
+> requêtes). Le retour arrière est la même opération dans l'autre sens :
+> c'est ce qui rend le rollback instantané et sans `docker compose`.
+> Le smoke test **avant** bascule est ce qui change tout par rapport à
+> L25.2 : on valide la version sur une instance qui ne reçoit pas de trafic.
+> La séparation en deux clés (`deploy`, `bg`) avec deux commandes forcées
+> tient les privilèges au plus juste : la clé `bg` est la seule à pouvoir
+> faire un `sudo`, et seulement les quatre commandes du fichier sudoers.
 
-::: piege
-`steps.switch.outcome` distingue `success`, `failure`, `cancelled`,
-`skipped` : sans cette condition, un échec **avant** `switch` déclencherait
-un `back` qui basculerait vers la couleur non testée. Autre piège :
-`readlink -f` sur le symlink donne le chemin résolu ; `basename … .conf`
-donne `blue`/`green`. Si tu nommes les fichiers autrement, `live()` casse
-en silence.
-:::
+> [!WARNING]
+> **Piège**
+>
+> `steps.switch.outcome` distingue `success`, `failure`, `cancelled`,
+> `skipped` : sans cette condition, un échec **avant** `switch` déclencherait
+> un `back` qui basculerait vers la couleur non testée. Autre piège :
+> `readlink -f` sur le symlink donne le chemin résolu ; `basename … .conf`
+> donne `blue`/`green`. Si tu nommes les fichiers autrement, `live()` casse
+> en silence.
 
 ---
 
-### **L25.4** — *Pipeline d'infrastructure : Ansible et OpenTofu*
+### <a id="l25-4"></a>**[L25.4](README.md#l25-4)** — *Pipeline d'infrastructure : Ansible et OpenTofu*
 
 **1. Clé Ansible et premier `--check --diff`.**
 
@@ -2347,43 +2412,45 @@ tofu version
 **6.** Protection de `main` sur `factura-infra` avec
 `status_check_contexts: ["ansible / lint (*)", "tofu / plan (*)"]`.
 
-::: pourquoi
-Le principe des deux workflows est identique : **en PR, on montre ; au
-merge ou sur décision, on fait**. `--check --diff` et `plan` sont les
-« preuves » que le relecteur lit ; `apply` réutilise exactement ce qui a
-été montré (`plan.bin`, même playbook). Le mot de passe `become` passe par
-un fichier de variables lu par Ansible, jamais par `-e
-ansible_become_password=…` qui apparaîtrait dans `ps` et dans la trace.
-Pour OpenTofu, `plan.bin` enregistre l'état lu : si l'état a changé entre
-`plan` et `apply`, `apply` refuse (`Saved plan is stale`) — c'est la
-garantie qu'on applique ce qui a été approuvé, et la raison de passer par
-un artefact plutôt que de replanifier.
+> [!NOTE]
+> **Pourquoi**
+>
+> Le principe des deux workflows est identique : **en PR, on montre ; au
+> merge ou sur décision, on fait**. `--check --diff` et `plan` sont les
+> « preuves » que le relecteur lit ; `apply` réutilise exactement ce qui a
+> été montré (`plan.bin`, même playbook). Le mot de passe `become` passe par
+> un fichier de variables lu par Ansible, jamais par `-e
+> ansible_become_password=…` qui apparaîtrait dans `ps` et dans la trace.
+> Pour OpenTofu, `plan.bin` enregistre l'état lu : si l'état a changé entre
+> `plan` et `apply`, `apply` refuse (`Saved plan is stale`) — c'est la
+> garantie qu'on applique ce qui a été approuvé, et la raison de passer par
+> un artefact plutôt que de replanifier.
+>
+> L'état sur le disque du runner est inacceptable au-delà du lab parce qu'il
+> n'est ni sauvegardé, ni verrouillé, ni partagé : deux runners = deux
+> états, un disque perdu = infrastructure orpheline. En production : backend
+> distant avec verrou (S3/MinIO + DynamoDB ou verrou natif, PostgreSQL,
+> Consul), et l'état ne transite jamais par un artefact lisible (il
+> contient des secrets en clair).
 
-L'état sur le disque du runner est inacceptable au-delà du lab parce qu'il
-n'est ni sauvegardé, ni verrouillé, ni partagé : deux runners = deux
-états, un disque perdu = infrastructure orpheline. En production : backend
-distant avec verrou (S3/MinIO + DynamoDB ou verrou natif, PostgreSQL,
-Consul), et l'état ne transite jamais par un artefact lisible (il
-contient des secrets en clair).
-:::
-
-::: piege
-* `paths:` sur `push`/`pull_request` évite de lancer Ansible quand seul
-  `tofu/` change, mais un PR qui touche les **deux** déclenche les deux
-  workflows : c'est voulu.
-* `ansible-lint --profile production` exige les FQCN
-  (`ansible.builtin.apt`), un `name` sur chaque tâche, `changed_when` sur
-  `command`/`shell`, et des permissions explicites sur `file`/`template`.
-  Le playbook livré est conforme sauf la tâche piège.
-* `gitea.event.inputs.confirm` : sur un `push`, `inputs` n'existe pas et
-  l'expression vaut `''` : le job `apply` est sauté, pas en erreur.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * `paths:` sur `push`/`pull_request` évite de lancer Ansible quand seul
+>   `tofu/` change, mais un PR qui touche les **deux** déclenche les deux
+>   workflows : c'est voulu.
+> * `ansible-lint --profile production` exige les FQCN
+>   (`ansible.builtin.apt`), un `name` sur chaque tâche, `changed_when` sur
+>   `command`/`shell`, et des permissions explicites sur `file`/`template`.
+>   Le playbook livré est conforme sauf la tâche piège.
+> * `gitea.event.inputs.confirm` : sur un `push`, `inputs` n'existe pas et
+>   l'expression vaut `''` : le job `apply` est sauté, pas en erreur.
 
 ---
 
 ## 25.7 Break & Fix
 
-### **BF25.1** — *« Le pipeline a disparu »*
+### <a id="bf25-1"></a>**[BF25.1](README.md#bf25-1)** — *« Le pipeline a disparu »*
 
 *Depuis le commit « refacto ci », aucun run n'apparaît, ni sur push ni en
 manuel ; le runner est Idle.*
@@ -2439,17 +2506,18 @@ et, côté forge, un workflow minimal `lint-workflows.yaml` qui ne fait que
 invalide (il tournerait quand même, lui, et deviendrait rouge : c'est le
 signal qu'on cherchait).
 
-::: pourquoi
-Le mécanisme : Gitea, à la réception d'un push, lit chaque fichier de
-`.gitea/workflows/`, le parse, évalue `on:` et **seulement alors** crée un
-run par workflow concerné. Un fichier illisible est écarté à la première
-étape : aucun objet « run » n'est créé, donc aucune trace dans la liste des runs — l'erreur de parsing va dans le journal du serveur et, dans l'interface, dans la liste des workflows de l'onglet *Actions*. C'est
-le cas d'école du « silence de l'automate » : il faut savoir où l'outil range ce qu'il n'a pas pu exécuter.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le mécanisme : Gitea, à la réception d'un push, lit chaque fichier de
+> `.gitea/workflows/`, le parse, évalue `on:` et **seulement alors** crée un
+> run par workflow concerné. Un fichier illisible est écarté à la première
+> étape : aucun objet « run » n'est créé, donc aucune trace dans la liste des runs — l'erreur de parsing va dans le journal du serveur et, dans l'interface, dans la liste des workflows de l'onglet *Actions*. C'est
+> le cas d'école du « silence de l'automate » : il faut savoir où l'outil range ce qu'il n'a pas pu exécuter.
 
 ---
 
-### **BF25.2** — *« Ça tourne depuis 40 minutes »*
+### <a id="bf25-2"></a>**[BF25.2](README.md#bf25-2)** — *« Ça tourne depuis 40 minutes »*
 
 *`lint` et `test` verts, `build` en `waiting`, runner Idle.*
 
@@ -2492,27 +2560,29 @@ Dans les deux cas, écrire la justification dans le commit ou dans
 `forge.md`. Un label ajouté « pour que ça passe » sans décision est une
 dette.
 
-::: pourquoi
-Un runner tire ses labels de `config.yaml` (`runner.labels`) s'ils y sont
-définis, sinon de `.runner` (enregistrement initial). Il les envoie à
-Gitea à chaque démarrage (`declare`). Gitea assigne un job à un runner si
-**la valeur de `runs-on`** figure dans les labels de ce runner. Il n'y a
-pas d'erreur côté run : seul l'onglet *Actions* affiche, en face du workflow,
-« No matching online runner with label : build-docker », et le job finit annulé après `ABANDONED_JOB_TIMEOUT` (24 h). `timeout-minutes` ne
-s'applique qu'à un job **démarré**.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un runner tire ses labels de `config.yaml` (`runner.labels`) s'ils y sont
+> définis, sinon de `.runner` (enregistrement initial). Il les envoie à
+> Gitea à chaque démarrage (`declare`). Gitea assigne un job à un runner si
+> **la valeur de `runs-on`** figure dans les labels de ce runner. Il n'y a
+> pas d'erreur côté run : seul l'onglet *Actions* affiche, en face du workflow,
+> « No matching online runner with label : build-docker », et le job finit annulé après `ABANDONED_JOB_TIMEOUT` (24 h). `timeout-minutes` ne
+> s'applique qu'à un job **démarré**.
 
-::: piege
-Modifier `.runner` à la main ne suffit pas : c'est `config.yaml` qui prime
-quand `runner.labels` y est non vide, et il faut redémarrer. Et si tu
-enregistres un second runner avec le même nom, l'ancien reste listé
-`Offline` dans l'administration : supprime-le, sinon tu liras de faux
-labels.
-:::
+> [!WARNING]
+> **Piège**
+>
+> Modifier `.runner` à la main ne suffit pas : c'est `config.yaml` qui prime
+> quand `runner.labels` y est non vide, et il faut redémarrer. Et si tu
+> enregistres un second runner avec le même nom, l'ancien reste listé
+> `Offline` dans l'administration : supprime-le, sinon tu liras de faux
+> labels.
 
 ---
 
-### **BF25.3** — *« Le mot de passe du registre est dans les logs »*
+### <a id="bf25-3"></a>**[BF25.3](README.md#bf25-3)** — *« Le mot de passe du registre est dans les logs »*
 
 *Le secret apparaît en `*`*`/*` *mais l'auditeur a trouvé de quoi se connecter.*
 
@@ -2587,19 +2657,20 @@ un step qui a accès à un secret ; (2) un secret ne quitte jamais sa
 variable : pas de `echo`, `printf`, `base64`, `sed`, `cut`, `jq` dessus,
 même « pour vérifier ».
 
-::: pourquoi
-Le masquage est implémenté dans le runner comme un filtre de flux qui
-remplace les valeurs connues (secrets, plus ce qui est déclaré par
-`::add-mask::`) ; il est efficace contre l'oubli, impuissant contre la
-transformation. `--password-stdin` de `docker login` existe pour cela : le
-secret passe par un tube, jamais par la ligne de commande (visible dans
-`ps` et dans la trace). La rotation n'est pas optionnelle : un secret vu
-est un secret perdu, quelle que soit la probabilité qu'il ait été lu.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le masquage est implémenté dans le runner comme un filtre de flux qui
+> remplace les valeurs connues (secrets, plus ce qui est déclaré par
+> `::add-mask::`) ; il est efficace contre l'oubli, impuissant contre la
+> transformation. `--password-stdin` de `docker login` existe pour cela : le
+> secret passe par un tube, jamais par la ligne de commande (visible dans
+> `ps` et dans la trace). La rotation n'est pas optionnelle : un secret vu
+> est un secret perdu, quelle que soit la probabilité qu'il ait été lu.
 
 ---
 
-### **BF25.4** — *« Le pipeline est vert, la prod est vieille »*
+### <a id="bf25-4"></a>**[BF25.4](README.md#bf25-4)** — *« Le pipeline est vert, la prod est vieille »*
 
 *Runs verts, `deploy` affiche Pulled/Started, mais `/version` renvoie un
 SHA inconnu et la fonctionnalité n'est pas là.*
@@ -2668,22 +2739,23 @@ de code refuse tout `latest` dans `deploy/`, `compose.yaml` et le
 workflow. Optionnel : un job planifié qui compare chaque jour le digest en
 prod au digest attendu du dernier commit de `main`.
 
-::: pourquoi
-Un tag est une entrée dans un index du registre : `tags/list` renvoie des
-noms, `manifests/<tag>` renvoie **ce sur quoi le nom pointe aujourd'hui**.
-`docker compose pull` demande le nom, reçoit le digest courant, compare
-avec l'image locale et redémarre le conteneur si c'est différent : tout
-fonctionne comme prévu, avec une mauvaise entrée. La panne est invisible
-parce que les trois garde-fous (tag immuable, pipeline unique écrivain,
-smoke test de version) ont été retirés **ensemble**, chacun paraissant
-inutile tant que les deux autres tenaient.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Un tag est une entrée dans un index du registre : `tags/list` renvoie des
+> noms, `manifests/<tag>` renvoie **ce sur quoi le nom pointe aujourd'hui**.
+> `docker compose pull` demande le nom, reçoit le digest courant, compare
+> avec l'image locale et redémarre le conteneur si c'est différent : tout
+> fonctionne comme prévu, avec une mauvaise entrée. La panne est invisible
+> parce que les trois garde-fous (tag immuable, pipeline unique écrivain,
+> smoke test de version) ont été retirés **ensemble**, chacun paraissant
+> inutile tant que les deux autres tenaient.
 
 ---
 
 ## 25.8 Défi du module
 
-**D25** — *Chaîne de release : tag SemVer → promotion sans rebuild →
+<a id="d25"></a>**[D25](README.md#d25)** — *Chaîne de release : tag SemVer → promotion sans rebuild →
 changelog → release → approbation → prod.*
 
 **1–2. `release`**`.yaml` **: jobs `guard` et `promote`.**
@@ -2942,27 +3014,35 @@ durée du run), `DEPLOY_SSH_KEY` (plus utilisé par la release — à retirer
 si L25.3 remplace L25.2). DORA : `dora.sh` sur `deploiements.log`
 rapatrié de `lab-web`.
 
-::: pourquoi
-Le cœur du défi est la **promotion par manifest** : l'API OCI permet de
-`GET` le manifest d'un tag et de le `PUT` sous un autre nom ; le registre
-reconnaît les couches déjà présentes, rien n'est transféré, et le digest
-est identique par construction — `release-check.sh` le vérifie. Tout le
-reste (changelog, release, approbation) est de la traçabilité : rendre
-lisible **ce qui** a été promu, **par qui**, **quand**. L'approbation par
-`workflow_dispatch` est la seule forme native sur Gitea ; sa faiblesse
-(rien ne garantit que ce qui est en stage est ce qui a été validé) est
-compensée par le contrôle du `.env` avant `switch`.
-:::
+> [!NOTE]
+> **Pourquoi**
+>
+> Le cœur du défi est la **promotion par manifest** : l'API OCI permet de
+> `GET` le manifest d'un tag et de le `PUT` sous un autre nom ; le registre
+> reconnaît les couches déjà présentes, rien n'est transféré, et le digest
+> est identique par construction — `release-check.sh` le vérifie. Tout le
+> reste (changelog, release, approbation) est de la traçabilité : rendre
+> lisible **ce qui** a été promu, **par qui**, **quand**. L'approbation par
+> `workflow_dispatch` est la seule forme native sur Gitea ; sa faiblesse
+> (rien ne garantit que ce qui est en stage est ce qui a été validé) est
+> compensée par le contrôle du `.env` avant `switch`.
 
-::: piege
-* Sans `fetch-depth: 0`, `git describe` et `git branch --contains` ne
-  voient qu'un commit : `guard` et `changelog` mentent.
-* Le `PUT` du manifest échoue en `400 MANIFEST_INVALID` si le
-  `Content-Type` renvoyé n'est pas repris tel quel — d'où la lecture de
-  l'en-tête.
-* `[skip ci]` doit être dans le message du **commit**, pas du tag.
-* Un push de tag et le push du commit correspondant déclenchent deux runs
-  (`ci` et `release`) ; `promote` exige que `ci` ait fini de pousser
-  l'image du SHA — d'où le test d'existence et le message d'erreur
-  explicite. En pratique : pousser le tag **après** le run `ci` vert.
-:::
+> [!WARNING]
+> **Piège**
+>
+> * Sans `fetch-depth: 0`, `git describe` et `git branch --contains` ne
+>   voient qu'un commit : `guard` et `changelog` mentent.
+> * Le `PUT` du manifest échoue en `400 MANIFEST_INVALID` si le
+>   `Content-Type` renvoyé n'est pas repris tel quel — d'où la lecture de
+>   l'en-tête.
+> * `[skip ci]` doit être dans le message du **commit**, pas du tag.
+> * Un push de tag et le push du commit correspondant déclenchent deux runs
+>   (`ci` et `release`) ; `promote` exige que `ci` ait fini de pousser
+>   l'image du SHA — d'où le test d'existence et le message d'erreur
+>   explicite. En pratique : pousser le tag **après** le run `ci` vert.
+
+<!-- nav:début -->
+---
+
+[← Module 24](../24-iac-terraform/corrige.md) · [Énoncé](README.md) · [Module 26 →](../26-kubernetes-observabilite/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

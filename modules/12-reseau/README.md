@@ -1,40 +1,67 @@
+<!-- nav:début -->
+[Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie II — Administration système › **Module 12**  
+[← Module 11](../11-stockage-lvm/README.md) · [Corrigé](corrige.md) · [Module 13 →](../13-reseau-avance/README.md)
+
+<details><summary>Scripts du module (11)</summary>
+
+Sur la VM indiquée en section « Mise en place », depuis `~/workbook/scripts/` (voir [chapitre 0](../../docs/00-mise-en-place.md)).
+
+| Script | Rôle |
+|---|---|
+| [`setup_M12.sh`](../../scripts/setup/setup_M12.sh) | prépare le module |
+| [`check_M12_01.sh`](../../scripts/check/check_M12_01.sh) | vérification |
+| [`check_M12_02.sh`](../../scripts/check/check_M12_02.sh) | vérification |
+| [`check_M12_03.sh`](../../scripts/check/check_M12_03.sh) | vérification |
+| [`check_M12_04.sh`](../../scripts/check/check_M12_04.sh) | vérification |
+| [`check_M12_05.sh`](../../scripts/check/check_M12_05.sh) | vérification |
+| [`check_M12_06.sh`](../../scripts/check/check_M12_06.sh) | vérification |
+| [`break_M12_01.sh`](../../scripts/break/break_M12_01.sh) | installe une panne |
+| [`break_M12_02.sh`](../../scripts/break/break_M12_02.sh) | installe une panne |
+| [`break_M12_03.sh`](../../scripts/break/break_M12_03.sh) | installe une panne |
+| [`break_M12_04.sh`](../../scripts/break/break_M12_04.sh) | installe une panne |
+
+</details>
+<!-- nav:fin -->
+
 # Module 12 — Réseau Linux et diagnostic
 
 ## 12.0 Objectifs et compétences
 
-::: objectif
-À la fin de ce module, je sais :
-
-* calculer de tête un sous-réseau IPv4 (adresse de réseau, diffusion, première et
-  dernière adresse utilisable, nombre d'hôtes) et découper un `/24` en blocs
-  égaux sans me tromper d'une adresse ;
-* lire et modifier à chaud adresses, routes et table de voisinage avec `iproute2`,
-  et traduire n'importe quelle commande d'un vieux runbook `ifconfig`/`route`/
-  `netstat` vers son équivalent moderne ;
-* écrire la même configuration réseau statique de trois façons — Netplan sur
-  Ubuntu 24.04, `nmcli` sur Rocky 9, `/etc/network/interfaces` en héritage — et
-  dire laquelle est réellement active sur une machine inconnue ;
-* expliquer le chemin complet d'une résolution de nom (`nsswitch` → `hosts` →
-  stub `127.0.0.53` → serveur amont) et dire à quelle étape ça casse quand
-  « ça marche avec l'IP mais pas avec le nom » ;
-* interpréter une sortie `dig` section par section (flags, `status`, TTL,
-  `AUTHORITY`) et distinguer un `NXDOMAIN` d'un `SERVFAIL` d'un timeout ;
-* inventorier les sockets d'une machine avec `ss` et `lsof`, dire ce que révèlent
-  `TIME-WAIT` et `CLOSE-WAIT`, et diagnostiquer un service qui n'écoute pas là
-  où on croit ;
-* tester un service de bout en bout avec `ping`, `traceroute`/`mtr`, `nc -zv` et
-  `curl` en mode diagnostic (`-v`, `-I`, `-w`, `--resolve`) ;
-* capturer du trafic avec `tcpdump`, écrire un filtre correct, relire une capture
-  et y reconnaître une poignée de main, un `RST` et une retransmission ;
-* diagnostiquer un MTU cassé sur un tunnel avec `ping -M do -s` et expliquer
-  pourquoi « la connexion s'établit puis gèle » ;
-* dérouler une checklist ordonnée, couche par couche, face à un
-  « le site ne répond pas », et savoir quelle commande tranche à chaque étage.
-
-Temps estimé : 7 h
-Prérequis : modules 01 (shell), 08 (processus et systemd). Le pare-feu est traité
-au module 18, SSH au module 14 : ici on les suppose ouverts et fonctionnels.
-:::
+> [!NOTE]
+> **Objectifs**
+>
+> À la fin de ce module, je sais :
+>
+> * calculer de tête un sous-réseau IPv4 (adresse de réseau, diffusion, première et
+>   dernière adresse utilisable, nombre d'hôtes) et découper un `/24` en blocs
+>   égaux sans me tromper d'une adresse ;
+> * lire et modifier à chaud adresses, routes et table de voisinage avec `iproute2`,
+>   et traduire n'importe quelle commande d'un vieux runbook `ifconfig`/`route`/
+>   `netstat` vers son équivalent moderne ;
+> * écrire la même configuration réseau statique de trois façons — Netplan sur
+>   Ubuntu 24.04, `nmcli` sur Rocky 9, `/etc/network/interfaces` en héritage — et
+>   dire laquelle est réellement active sur une machine inconnue ;
+> * expliquer le chemin complet d'une résolution de nom (`nsswitch` → `hosts` →
+>   stub `127.0.0.53` → serveur amont) et dire à quelle étape ça casse quand
+>   « ça marche avec l'IP mais pas avec le nom » ;
+> * interpréter une sortie `dig` section par section (flags, `status`, TTL,
+>   `AUTHORITY`) et distinguer un `NXDOMAIN` d'un `SERVFAIL` d'un timeout ;
+> * inventorier les sockets d'une machine avec `ss` et `lsof`, dire ce que révèlent
+>   `TIME-WAIT` et `CLOSE-WAIT`, et diagnostiquer un service qui n'écoute pas là
+>   où on croit ;
+> * tester un service de bout en bout avec `ping`, `traceroute`/`mtr`, `nc -zv` et
+>   `curl` en mode diagnostic (`-v`, `-I`, `-w`, `--resolve`) ;
+> * capturer du trafic avec `tcpdump`, écrire un filtre correct, relire une capture
+>   et y reconnaître une poignée de main, un `RST` et une retransmission ;
+> * diagnostiquer un MTU cassé sur un tunnel avec `ping -M do -s` et expliquer
+>   pourquoi « la connexion s'établit puis gèle » ;
+> * dérouler une checklist ordonnée, couche par couche, face à un
+>   « le site ne répond pas », et savoir quelle commande tranche à chaque étage.
+>
+> **Temps estimé** : 7 h
+>
+> **Prérequis** : modules 01 (shell), 08 (processus et systemd). Le pare-feu est traité
+> au module 18, SSH au module 14 : ici on les suppose ouverts et fonctionnels.
 
 ---
 
@@ -58,12 +85,13 @@ sudo apt install -y iproute2 iputils-ping iputils-tracepath dnsutils \
   ethtool bind9-dnsutils nginx dnsmasq
 ```
 
-::: rhel
-Sous Rocky 9 : `sudo dnf install -y iproute iputils bind-utils traceroute mtr \
-tcpdump lsof nmap-ncat curl wget iperf3 ethtool nginx dnsmasq`.
-Le paquet `net-tools` (qui fournit `ifconfig`, `route`, `netstat`) n'est installé
-par défaut ni sur Ubuntu 24.04 ni sur Rocky 9 : c'est voulu, voir §12.2.
-:::
+> [!IMPORTANT]
+> **Variante Rocky / RHEL**
+>
+> Sous Rocky 9 : `sudo dnf install -y iproute iputils bind-utils traceroute mtr \
+> tcpdump lsof nmap-ncat curl wget iperf3 ethtool nginx dnsmasq`.
+> Le paquet `net-tools` (qui fournit `ifconfig`, `route`, `netstat`) n'est installé
+> par défaut ni sur Ubuntu 24.04 ni sur Rocky 9 : c'est voulu, voir §12.2.
 
 Script de préparation (idempotent, à lancer sur `lab-adm` **et** sur `lab-web`) :
 
@@ -76,12 +104,13 @@ publie un vhost `www.lab.local` sur `lab-web`, déploie un faux service applicat
 `factura-api` sur le port 8099, prépare `~/lab12/` et une capture à analyser dans
 `/srv/captures/`.
 
-::: attention
-Le module modifie la configuration réseau et la résolution de noms. Une erreur
-de Netplan peut te couper ta session SSH : utilise `sudo netplan try` (rollback
-automatique au bout de 120 s) et garde une console Proxmox ouverte
-(`qm terminal 9001`) pendant les labs L12.2 et suivants.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Le module modifie la configuration réseau et la résolution de noms. Une erreur
+> de Netplan peut te couper ta session SSH : utilise `sudo netplan try` (rollback
+> automatique au bout de 120 s) et garde une console Proxmox ouverte
+> (`qm terminal 9001`) pendant les labs L12.2 et suivants.
 
 ---
 
@@ -98,7 +127,9 @@ automatique au bout de 120 s) et garde une console Proxmox ouverte
 
 Règle : on ne monte d'un étage qu'une fois l'étage du dessous **prouvé**.
 
-@fig(diag-couches): L'échelle « le site ne répond pas » : à chaque barreau, la commande qui tranche et le symptôme typique, sans jamais sauter un barreau.
+<p align="center"><img src="../../assets/figures/diag-couches.svg" alt="Schéma : diag-couches"></p>
+
+*Figure — L'échelle « le site ne répond pas » : à chaque barreau, la commande qui tranche et le symptôme typique, sans jamais sauter un barreau.*
 
 ### iproute2 — l'essentiel
 
@@ -238,7 +269,9 @@ lsof -i -P -n      # tous les sockets, sans résolution
 Poignée de main : `SYN` → `SYN,ACK` → `ACK`. Fermeture : `FIN` → `ACK` →
 `FIN` → `ACK`.
 
-@fig(tcp-poignee): Ouverture en trois temps, fermeture en quatre : les états que `ss` affiche à chaque étape, et pourquoi `TIME-WAIT` est normal alors que `CLOSE-WAIT` qui s'accumule est un bug applicatif.
+<p align="center"><img src="../../assets/figures/tcp-poignee.svg" alt="Schéma : tcp-poignee"></p>
+
+*Figure — Ouverture en trois temps, fermeture en quatre : les états que `ss` affiche à chaque étape, et pourquoi `TIME-WAIT` est normal alors que `CLOSE-WAIT` qui s'accumule est un bug applicatif.*
 
 | État | Signification | Ce qu'il révèle |
 |---|---|---|
@@ -319,7 +352,9 @@ même métrique = comportement aléatoire, c'est un incident, pas une redondance
 Le NAT côté Linux (`masquerade`) est au module 13, le pare-feu au module 18 : ici, retiens
 qu'une machine ne relaie **rien** tant que `net.ipv4.ip_forward=1` n'est pas posé.
 
-@fig(routage-decision): Décision de routage d'un paquet : réseau connecté → ARP de la destination et livraison directe ; sinon plus long préfixe → ARP de la passerelle, l'IP de destination restant inchangée.
+<p align="center"><img src="../../assets/figures/routage-decision.svg" alt="Schéma : routage-decision"></p>
+
+*Figure — Décision de routage d'un paquet : réseau connecté → ARP de la destination et livraison directe ; sinon plus long préfixe → ARP de la passerelle, l'IP de destination restant inchangée.*
 
 ### Les cinq `sysctl` réseau qui servent vraiment
 
@@ -352,7 +387,7 @@ un fichier dans `/etc/sysctl.d/` puis `sysctl --system`.
 
 ## 12.3 Quiz — QCM
 
-**Q12.1** — Sur `lab-adm`, `ip -br a` affiche :
+<a id="q12-1"></a>**[Q12.1](corrige.md#q12-1)** — Sur `lab-adm`, `ip -br a` affiche :
 
 ```text
 lo     UNKNOWN  127.0.0.1/8 ::1/128
@@ -366,21 +401,21 @@ b) `ens18` a une adresse IPv6 routable
 c) `ens18` est active, avec une IPv4 et une IPv6 link-local
 d) la passerelle par défaut est `10.10.10.1`
 
-**Q12.2** — L'adresse `192.168.42.130/26`. Quelle est l'adresse de diffusion ?
+<a id="q12-2"></a>**[Q12.2](corrige.md#q12-2)** — L'adresse `192.168.42.130/26`. Quelle est l'adresse de diffusion ?
 
 a) `192.168.42.255`
 b) `192.168.42.191`
 c) `192.168.42.159`
 d) `192.168.42.130`
 
-**Q12.3** — Combien d'adresses **utilisables** dans un `/21` ?
+<a id="q12-3"></a>**[Q12.3](corrige.md#q12-3)** — Combien d'adresses **utilisables** dans un `/21` ?
 
 a) 2048
 b) 2046
 c) 1022
 d) 510
 
-**Q12.4** — Une machine affiche `169.254.12.88/16` sur son interface principale.
+<a id="q12-4"></a>**[Q12.4](corrige.md#q12-4)** — Une machine affiche `169.254.12.88/16` sur son interface principale.
 Quelle est la cause la plus probable ?
 
 a) l'administrateur a configuré une adresse privée non standard
@@ -388,7 +423,7 @@ b) le serveur DHCP n'a pas répondu, la machine s'est auto-attribué une link-lo
 c) l'interface est en IPv6 uniquement
 d) le masque `/16` est incompatible avec cette plage
 
-**Q12.5** — Tu tapes `ip route get 9.9.9.9` et obtiens :
+<a id="q12-5"></a>**[Q12.5](corrige.md#q12-5)** — Tu tapes `ip route get 9.9.9.9` et obtiens :
 
 ```text
 9.9.9.9 via 10.10.10.1 dev ens18 src 10.10.10.10 uid 1000
@@ -403,7 +438,7 @@ b) que le paquet sortira par `ens18` via `10.10.10.1` après application de tout
 c) que la destination `9.9.9.9` répond au ping
 d) que la route est de type statique
 
-**Q12.6** — Sur Ubuntu 24.04, `cat /etc/resolv.conf` affiche
+<a id="q12-6"></a>**[Q12.6](corrige.md#q12-6)** — Sur Ubuntu 24.04, `cat /etc/resolv.conf` affiche
 `nameserver 127.0.0.53`. Tu en conclus :
 
 a) que le serveur DNS de l'entreprise est mal configuré
@@ -412,7 +447,7 @@ b) que `systemd-resolved` expose un stub local ; le vrai serveur est visible ave
 c) que la machine n'a pas de DNS et résout tout par `/etc/hosts`
 d) qu'un `dnsmasq` local écoute sur cette adresse
 
-**Q12.7** — `ping www.lab.local` répond `10.10.10.99`, mais
+<a id="q12-7"></a>**[Q12.7](corrige.md#q12-7)** — `ping www.lab.local` répond `10.10.10.99`, mais
 `dig +short @10.10.10.10 www.lab.local` répond `10.10.10.11`. Quelle est la cause ?
 
 a) le cache de `systemd-resolved` est périmé
@@ -420,7 +455,7 @@ b) une entrée dans `/etc/hosts` : `files` passe avant `dns` dans `nsswitch.conf
 c) `dig` ne sait pas résoudre les CNAME
 d) `ping` utilise un serveur DNS différent de `dig`
 
-**Q12.8** — `dig lab-inconnu.lab.local` renvoie `status: SERVFAIL`.
+<a id="q12-8"></a>**[Q12.8](corrige.md#q12-8)** — `dig lab-inconnu.lab.local` renvoie `status: SERVFAIL`.
 Qu'est-ce que ça signifie ?
 
 a) le nom n'existe pas
@@ -429,7 +464,7 @@ b) le serveur interrogé a tenté de répondre et a échoué (amont injoignable,
 c) le serveur refuse de te répondre, tu n'es pas dans sa liste d'ACL
 d) la requête n'est jamais arrivée, c'est un timeout
 
-**Q12.9** — `ss -tulpn` sur `lab-web` :
+<a id="q12-9"></a>**[Q12.9](corrige.md#q12-9)** — `ss -tulpn` sur `lab-web` :
 
 ```text
 Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
@@ -445,7 +480,7 @@ b) il écoute uniquement sur la boucle locale, inaccessible depuis l'extérieur
 c) le port 8099 est un port privilégié
 d) nginx occupe déjà le port
 
-**Q12.10** — Un serveur accumule 4 000 connexions en `CLOSE-WAIT`. Que fais-tu ?
+<a id="q12-10"></a>**[Q12.10](corrige.md#q12-10)** — Un serveur accumule 4 000 connexions en `CLOSE-WAIT`. Que fais-tu ?
 
 a) tu augmentes `net.ipv4.tcp_fin_timeout`
 b) tu actives `net.ipv4.tcp_tw_reuse`
@@ -453,7 +488,7 @@ c) tu remontes le bug à l'équipe applicative : le programme ne ferme pas ses
    descripteurs après le `FIN` du client
 d) tu redémarres le réseau
 
-**Q12.11** — 20 000 sockets en `TIME-WAIT` côté client sur un frontal qui fait
+<a id="q12-11"></a>**[Q12.11](corrige.md#q12-11)** — 20 000 sockets en `TIME-WAIT` côté client sur un frontal qui fait
 beaucoup de requêtes sortantes. **Deux réponses correctes.**
 
 a) c'est l'état normal du côté qui ferme la connexion en premier
@@ -462,7 +497,7 @@ c) `net.ipv4.tcp_tw_reuse` et l'usage de connexions persistantes (keep-alive)
    sont les leviers pertinents
 d) il faut passer `net.ipv4.tcp_fin_timeout` à 5 pour vider la table
 
-**Q12.12** — `curl https://www.lab.local/` renvoie le code de retour 6, sans
+<a id="q12-12"></a>**[Q12.12](corrige.md#q12-12)** — `curl https://www.lab.local/` renvoie le code de retour 6, sans
 aucune sortie. À quel étage est le problème ?
 
 a) TLS : le certificat n'est pas valide
@@ -470,7 +505,7 @@ b) résolution de noms : `curl` n'a pas pu obtenir d'adresse
 c) transport : le port 443 est fermé
 d) applicatif : le serveur renvoie une erreur 500
 
-**Q12.13** — Tu veux tester la nouvelle IP `10.10.10.11` d'un vhost
+<a id="q12-13"></a>**[Q12.13](corrige.md#q12-13)** — Tu veux tester la nouvelle IP `10.10.10.11` d'un vhost
 `shop.lab.local` **avant** de basculer le DNS public. Quelle commande ?
 
 a) `curl -H 'Host: shop.lab.local' https://10.10.10.11/`
@@ -478,7 +513,7 @@ b) `curl --resolve shop.lab.local:443:10.10.10.11 https://shop.lab.local/`
 c) `curl -k https://10.10.10.11/`
 d) `dig @10.10.10.11 shop.lab.local`
 
-**Q12.14** — Un tunnel WireGuard est monté. `ssh` se connecte, la bannière
+<a id="q12-14"></a>**[Q12.14](corrige.md#q12-14)** — Un tunnel WireGuard est monté. `ssh` se connecte, la bannière
 s'affiche, puis la session gèle dès qu'on lance `ls -lR /usr`. `ping` passe
 parfaitement. Quelle piste ?
 
@@ -487,7 +522,7 @@ b) un MTU inadapté sur le tunnel, avec les ICMP « fragmentation needed » filt
 c) le serveur SSH est saturé
 d) la route par défaut est manquante
 
-**Q12.15** — Quelle commande capture uniquement les paquets échangés avec
+<a id="q12-15"></a>**[Q12.15](corrige.md#q12-15)** — Quelle commande capture uniquement les paquets échangés avec
 `10.10.10.11` sur le port 443, sans résolution DNS, en s'arrêtant après
 100 paquets ?
 
@@ -496,7 +531,7 @@ b) `tcpdump -i ens18 -c 100 dst 10.10.10.11 port 443`
 c) `tcpdump -nn -c 100 -i any 'net 10.10.10.11 or port 443'`
 d) `tcpdump -i ens18 -n --count 100 'ip 10.10.10.11:443'`
 
-**Q12.16** — Sur Ubuntu 24.04, tu as modifié `/etc/netplan/01-lab.yaml`. Quelle
+<a id="q12-16"></a>**[Q12.16](corrige.md#q12-16)** — Sur Ubuntu 24.04, tu as modifié `/etc/netplan/01-lab.yaml`. Quelle
 séquence est la plus sûre sur une machine à laquelle tu accèdes en SSH ?
 
 a) `sudo netplan apply` puis vérifier
@@ -504,7 +539,7 @@ b) `sudo netplan try` puis confirmer dans les 120 s
 c) `sudo systemctl restart systemd-networkd`
 d) `sudo reboot`
 
-**Q12.17** — Sur `lab-rhel` (Rocky 9), quelle commande fixe l'adresse de façon
+<a id="q12-17"></a>**[Q12.17](corrige.md#q12-17)** — Sur `lab-rhel` (Rocky 9), quelle commande fixe l'adresse de façon
 persistante ? **Deux réponses correctes.**
 
 a) `nmcli con mod lab-ens18 ipv4.method manual ipv4.addresses 10.10.10.13/24`
@@ -513,7 +548,7 @@ c) éditer `/etc/NetworkManager/system-connections/lab-ens18.nmconnection`
    puis `nmcli con reload && nmcli con up lab-ens18`
 d) éditer `/etc/netplan/01-lab.yaml` puis `netplan apply`
 
-**Q12.18** — `ip neigh` affiche :
+<a id="q12-18"></a>**[Q12.18](corrige.md#q12-18)** — `ip neigh` affiche :
 
 ```text
 10.10.10.1 dev ens18 lladdr 52:54:00:aa:bb:cc REACHABLE
@@ -531,100 +566,82 @@ d) le cache ARP doit être vidé, l'entrée est juste périmée
 
 ## 12.4 Quiz — questions ouvertes
 
-**QO12.1** — Décris le chemin **complet** parcouru par `curl https://www.lab.local/`
+<a id="qo12-1"></a>**[QO12.1](corrige.md#qo12-1)** — Décris le chemin **complet** parcouru par `curl https://www.lab.local/`
 depuis `lab-adm`, de l'appel `getaddrinfo()` jusqu'au premier octet de réponse.
 Nomme à chaque étape le fichier ou le composant impliqué, et cite pour chacune
 la commande qui permet de vérifier qu'elle s'est bien passée.
 
-::: repondre
-lignes: 12
-:::
+<!-- repondre: 12 -->
 
-**QO12.2** — *On te demande en entretien* : « Un utilisateur dit : ça marche avec
+<a id="qo12-2"></a>**[QO12.2](corrige.md#qo12-2)** — *On te demande en entretien* : « Un utilisateur dit : ça marche avec
 l'IP mais pas avec le nom. Donne-moi cinq causes possibles et, pour chacune, la
 commande qui la confirme en une seule ligne. »
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO12.3** — Explique la différence entre `TIME-WAIT` et `CLOSE-WAIT` : qui ferme,
+<a id="qo12-3"></a>**[QO12.3](corrige.md#qo12-3)** — Explique la différence entre `TIME-WAIT` et `CLOSE-WAIT` : qui ferme,
 à quel moment, combien de temps, et ce que chacun t'apprend sur le code de
 l'application. Termine par ce qu'il ne faut **pas** faire dans chaque cas.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO12.4** — *On te demande en entretien* : « Une VM ping sa passerelle mais pas
+<a id="qo12-4"></a>**[QO12.4](corrige.md#qo12-4)** — *On te demande en entretien* : « Une VM ping sa passerelle mais pas
 internet. Déroule ton diagnostic. » Donne les commandes dans l'ordre, et à chaque
 étape ce que tu regardes exactement dans la sortie.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO12.5** — Trois façons de configurer la même IP statique (Netplan, `nmcli`,
+<a id="qo12-5"></a>**[QO12.5](corrige.md#qo12-5)** — Trois façons de configurer la même IP statique (Netplan, `nmcli`,
 `/etc/network/interfaces`). Sur une machine inconnue, comment détermines-tu en
 moins d'une minute laquelle est **réellement** active ? Explique aussi ce qui se
 passe si deux d'entre elles sont installées en même temps.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO12.6** — Un tunnel VXLAN relie deux sites. Les sessions s'établissent puis
+<a id="qo12-6"></a>**[QO12.6](corrige.md#qo12-6)** — Un tunnel VXLAN relie deux sites. Les sessions s'établissent puis
 gèlent sur les gros transferts. Explique le mécanisme complet : où sont ajoutés
 les octets d'en-tête, pourquoi le paquet est jeté, quel message ICMP aurait dû
 revenir, pourquoi il ne revient pas, et les deux corrections possibles.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-**QO12.7** — Compare `dig`, `getent hosts` et `resolvectl query` : que consulte
+<a id="qo12-7"></a>**[QO12.7](corrige.md#qo12-7)** — Compare `dig`, `getent hosts` et `resolvectl query` : que consulte
 chacun, dans quel ordre, et lequel utilises-tu pour prouver qu'un problème vient
 du DNS plutôt que de la configuration locale ? Donne un cas où les trois donnent
 trois réponses différentes.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO12.8** — `ip a add 10.10.20.10/24 dev ens18` fonctionne, le service répond,
+<a id="qo12-8"></a>**[QO12.8](corrige.md#qo12-8)** — `ip a add 10.10.20.10/24 dev ens18` fonctionne, le service répond,
 puis tout casse après le redémarrage. Explique pourquoi, et décris comment tu
 aurais dû procéder pour que ce soit à la fois testable sans risque et persistant.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
-**QO12.9** — Deux serveurs identiques, même application. Un `iperf3` entre eux
+<a id="qo12-9"></a>**[QO12.9](corrige.md#qo12-9)** — Deux serveurs identiques, même application. Un `iperf3` entre eux
 donne 940 Mbit/s avec `Retr 0`, un autre donne 210 Mbit/s avec `Retr 4213`.
 Qu'est-ce que la colonne `Retr` mesure, et quelles sont les trois causes physiques
 ou logiques que tu vas vérifier en priorité ?
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 12.5 Exercices guidés ★
 
-**E12.1** — Affiche en une ligne par interface, sur `lab-adm`, uniquement les
+<a id="e12-1"></a>**[E12.1](corrige.md#e12-1)** — Affiche en une ligne par interface, sur `lab-adm`, uniquement les
 interfaces qui sont `UP` et uniquement leurs adresses IPv4.
 
-**E12.2** — Ajoute à chaud l'adresse secondaire `10.10.20.10/24` sur l'interface
+<a id="e12-2"></a>**[E12.2](corrige.md#e12-2)** — Ajoute à chaud l'adresse secondaire `10.10.20.10/24` sur l'interface
 principale de `lab-adm`, prouve qu'elle est active (deux preuves différentes),
 puis supprime-la proprement. Explique pourquoi `ip a add` n'écrase pas
 l'adresse existante.
 
-**E12.3** — Sans faire un seul paquet vers l'extérieur, détermine par quelle
+<a id="e12-3"></a>**[E12.3](corrige.md#e12-3)** — Sans faire un seul paquet vers l'extérieur, détermine par quelle
 interface, via quelle passerelle et avec quelle adresse source `lab-adm` joindrait
 `9.9.9.9`, puis `10.10.10.12`. Explique l'écart entre les deux réponses.
 
-**E12.4** — Un vieux runbook de l'équipe contient ces quatre lignes. Traduis-les
+<a id="e12-4"></a>**[E12.4](corrige.md#e12-4)** — Un vieux runbook de l'équipe contient ces quatre lignes. Traduis-les
 en `iproute2`, et dis pour chacune ce que l'ancienne commande ne savait pas faire.
 
 ```bash
@@ -634,7 +651,7 @@ arp -an
 netstat -tulpn | grep 8080
 ```
 
-**E12.5** — Pour chacune de ces adresses, donne : adresse de réseau, masque en
+<a id="e12-5"></a>**[E12.5](corrige.md#e12-5)** — Pour chacune de ces adresses, donne : adresse de réseau, masque en
 notation décimale, adresse de diffusion, première et dernière adresse utilisable,
 nombre d'hôtes. Fais-le **à la main** d'abord, vérifie ensuite avec `ipcalc` ou
 un `python3 -c`.
@@ -647,51 +664,51 @@ un `python3 -c`.
 192.168.100.37/27
 ```
 
-**E12.6** — Découpe `10.10.10.0/24` en quatre sous-réseaux égaux. Donne pour
+<a id="e12-6"></a>**[E12.6](corrige.md#e12-6)** — Découpe `10.10.10.0/24` en quatre sous-réseaux égaux. Donne pour
 chacun le préfixe CIDR, la plage utilisable et l'adresse de diffusion. Puis dis
 dans lequel tombe `10.10.10.130`.
 
-**E12.7** — Ajoute à chaud une route vers `10.10.20.0/24` via `10.10.10.1`,
+<a id="e12-7"></a>**[E12.7](corrige.md#e12-7)** — Ajoute à chaud une route vers `10.10.20.0/24` via `10.10.10.1`,
 vérifie qu'elle est prise en compte pour la destination `10.10.20.7`, puis
 supprime-la. Vérifie ensuite qu'il ne reste **aucune** trace dans la table.
 
-**E12.8** — Liste tous les sockets TCP IPv4 en écoute sur `lab-web`, avec le nom
+<a id="e12-8"></a>**[E12.8](corrige.md#e12-8)** — Liste tous les sockets TCP IPv4 en écoute sur `lab-web`, avec le nom
 et le PID du processus, sans aucune résolution de nom ni de port. Isole ceux qui
 écoutent sur une adresse joignable depuis l'extérieur.
 
-**E12.9** — Sur `lab-adm`, lance 50 requêtes `curl` successives vers
+<a id="e12-9"></a>**[E12.9](corrige.md#e12-9)** — Sur `lab-adm`, lance 50 requêtes `curl` successives vers
 `http://10.10.10.11/`, puis compte les sockets par état TCP. Combien sont en
 `TIME-WAIT`, et de quel côté de la connexion es-tu ?
 
-**E12.10** — Le port 8099 est occupé sur `lab-web`. Donne deux commandes
+<a id="e12-10"></a>**[E12.10](corrige.md#e12-10)** — Le port 8099 est occupé sur `lab-web`. Donne deux commandes
 différentes qui identifient le processus propriétaire, son utilisateur et le
 chemin de son exécutable.
 
-**E12.11** — Avec `dig` : obtiens l'IPv4 de `lab-web.lab.local` en une seule
+<a id="e12-11"></a>**[E12.11](corrige.md#e12-11)** — Avec `dig` : obtiens l'IPv4 de `lab-web.lab.local` en une seule
 valeur brute ; interroge explicitement le serveur `10.10.10.10` ; relance deux
 fois la même requête et explique ce qui change dans la sortie ; enfin, fais la
 résolution inverse de `10.10.10.11`.
 
-**E12.12** — Toujours avec `dig` sur le domaine `lab.local` : affiche le `CNAME`
+<a id="e12-12"></a>**[E12.12](corrige.md#e12-12)** — Toujours avec `dig` sur le domaine `lab.local` : affiche le `CNAME`
 de `www`, l'enregistrement `MX`, le `TXT` du domaine et le `SRV` de
 `_http._tcp.lab.local`. Puis, sur un nom public, montre la délégation complète
 depuis la racine.
 
-**E12.13** — Produis une ligne unique qui affiche, pour `http://10.10.10.11/`,
+<a id="e12-13"></a>**[E12.13](corrige.md#e12-13)** — Produis une ligne unique qui affiche, pour `http://10.10.10.11/`,
 le code HTTP et le temps total séparés par une espace, sans aucun autre affichage.
 Puis récupère uniquement les en-têtes de réponse. Puis teste le vhost
 `shop.lab.local` sur `10.10.10.11` sans toucher au DNS ni à `/etc/hosts`.
 
-**E12.14** — Vérifie en une commande si les ports 22, 80, 443 et 8099 de
+<a id="e12-14"></a>**[E12.14](corrige.md#e12-14)** — Vérifie en une commande si les ports 22, 80, 443 et 8099 de
 `lab-web` acceptent une connexion TCP, sans transférer de données. Explique la
 différence de sortie entre un port fermé et un port filtré.
 
-**E12.15** — Capture 20 paquets de la conversation HTTP entre `lab-adm` et
+<a id="e12-15"></a>**[E12.15](corrige.md#e12-15)** — Capture 20 paquets de la conversation HTTP entre `lab-adm` et
 `lab-web`, sans résolution, dans `/srv/captures/e15.pcap`, pendant qu'un `curl`
 tourne. Relis ensuite la capture et identifie les trois paquets de la poignée de
 main.
 
-**E12.16** — Détermine par dichotomie le plus grand paquet ICMP que `lab-adm`
+<a id="e12-16"></a>**[E12.16](corrige.md#e12-16)** — Détermine par dichotomie le plus grand paquet ICMP que `lab-adm`
 peut envoyer à `lab-web` sans fragmentation. Déduis-en le MTU du chemin et
 compare avec le MTU affiché sur l'interface.
 
@@ -699,14 +716,14 @@ compare avec le MTU affiché sur l'interface.
 
 ## 12.6 Labs ★★
 
-### **L12.1** — Plan d'adressage et manipulation à chaud
+### <a id="l12-1"></a>**[L12.1](corrige.md#l12-1)** — Plan d'adressage et manipulation à chaud
 
-::: contexte
-L'équipe infra veut segmenter le lab : un segment pour les serveurs applicatifs,
-un pour les bases, un pour l'administration, un en réserve. On te donne
-`10.10.10.0/24` et on te demande le plan d'adressage, puis une validation à chaud
-sur `lab-adm` avant de figer quoi que ce soit.
-:::
+> **Contexte**
+>
+> L'équipe infra veut segmenter le lab : un segment pour les serveurs applicatifs,
+> un pour les bases, un pour l'administration, un en réserve. On te donne
+> `10.10.10.0/24` et on te demande le plan d'adressage, puis une validation à chaud
+> sur `lab-adm` avant de figer quoi que ce soit.
 
 Travaille sur `lab-adm`, livrable dans `~/lab12/rapports/plan-adressage.md`.
 
@@ -727,31 +744,33 @@ Travaille sur `lab-adm`, livrable dans `~/lab12/rapports/plan-adressage.md`.
 6. Nettoie : l'adresse et la route ajoutées doivent avoir disparu, et tu dois
    pouvoir le prouver.
 
-::: astuce
-`ip route get` applique toutes les règles, métriques et routes plus spécifiques :
-c'est la seule commande qui répond « voilà ce que le noyau ferait vraiment ».
-:::
+> [!TIP]
+> **Astuce**
+>
+> `ip route get` applique toutes les règles, métriques et routes plus spécifiques :
+> c'est la seule commande qui répond « voilà ce que le noyau ferait vraiment ».
 
-::: check
-Critère de succès : le rapport contient les quatre sous-réseaux avec des valeurs
-exactes, la proposition de DMZ, et les trois sorties de `ip route get`. Aucune
-adresse ni route de test ne subsiste sur l'interface.
-
-```bash
-bash check_M12_01.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le rapport contient les quatre sous-réseaux avec des valeurs
+> exactes, la proposition de DMZ, et les trois sorties de `ip route get`. Aucune
+> adresse ni route de test ne subsiste sur l'interface.
+>
+> ```bash
+> bash check_M12_01.sh
+> ```
 
 ---
 
-### **L12.2** — La même configuration, trois fois : Netplan, nmcli, ifupdown
+### <a id="l12-2"></a>**[L12.2](corrige.md#l12-2)** — La même configuration, trois fois : Netplan, nmcli, ifupdown
 
-::: contexte
-Le parc est hétérogène : Ubuntu 24.04 en majorité, quelques Rocky 9, et deux
-vieilles machines Debian encore en `/etc/network/interfaces`. On te demande une
-fiche de référence qui donne **la même configuration** dans les trois formalismes,
-et son application réelle sur `lab-adm` et `lab-rhel`.
-:::
+> **Contexte**
+>
+> Le parc est hétérogène : Ubuntu 24.04 en majorité, quelques Rocky 9, et deux
+> vieilles machines Debian encore en `/etc/network/interfaces`. On te demande une
+> fiche de référence qui donne **la même configuration** dans les trois formalismes,
+> et son application réelle sur `lab-adm` et `lab-rhel`.
 
 Livrable écrit : `~/lab12/rapports/reseau-3-formalismes.md`.
 La configuration cible, identique partout :
@@ -784,32 +803,34 @@ adresse secondaire   : 10.10.20.<dernier octet>/24
 7. Conclus par une procédure en trois lignes : « sur une machine inconnue,
    comment je détermine quel outil pilote réellement le réseau ».
 
-::: attention
-Une erreur dans `01-lab.yaml` peut te couper de la machine. `netplan try` ramène
-la configuration précédente après 120 s sans confirmation : c'est ton filet.
-Ne lance jamais `netplan apply` à l'aveugle sur une machine distante.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Une erreur dans `01-lab.yaml` peut te couper de la machine. `netplan try` ramène
+> la configuration précédente après 120 s sans confirmation : c'est ton filet.
+> Ne lance jamais `netplan apply` à l'aveugle sur une machine distante.
 
-::: check
-Critère de succès : `lab-adm` a ses deux adresses, sa route par défaut et son
-domaine de recherche après un redémarrage complet, le fichier Netplan est en
-`0600`, et le rapport contient les trois formalismes.
-
-```bash
-bash check_M12_02.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `lab-adm` a ses deux adresses, sa route par défaut et son
+> domaine de recherche après un redémarrage complet, le fichier Netplan est en
+> `0600`, et le rapport contient les trois formalismes.
+>
+> ```bash
+> bash check_M12_02.sh
+> ```
 
 ---
 
-### **L12.3** — Ticket INC-3307 : « le nouveau site répond par intermittence »
+### <a id="l12-3"></a>**[L12.3](corrige.md#l12-3)** — Ticket INC-3307 : « le nouveau site répond par intermittence »
 
-::: contexte
-Un dev signale que `www.lab.local` répond parfois l'ancienne application, parfois
-la nouvelle, « selon la machine ». Le DNS du lab (`dnsmasq` sur `lab-adm`) a été
-mis à jour hier. Ta mission : établir la vérité, expliquer chaque comportement
-observé, et remettre de l'ordre dans la chaîne de résolution.
-:::
+> **Contexte**
+>
+> Un dev signale que `www.lab.local` répond parfois l'ancienne application, parfois
+> la nouvelle, « selon la machine ». Le DNS du lab (`dnsmasq` sur `lab-adm`) a été
+> mis à jour hier. Ta mission : établir la vérité, expliquer chaque comportement
+> observé, et remettre de l'ordre dans la chaîne de résolution.
 
 Travaille depuis `lab-adm`, puis vérifie depuis `lab-web`.
 
@@ -838,26 +859,27 @@ Travaille depuis `lab-adm`, puis vérifie depuis `lab-web`.
    occupe `127.0.0.53:53` sur la même machine. Explique comment les deux
    cohabitent sans conflit, preuve `ss` à l'appui.
 
-::: check
-Critère de succès : `getent hosts www.lab.local` et `dig +short @10.10.10.10 www.lab.local`
-donnent la même adresse, `ping -c1 lab-db` fonctionne sans suffixe, et le rapport
-de zone contient les six types d'enregistrements.
-
-```bash
-bash check_M12_03.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : `getent hosts www.lab.local` et `dig +short @10.10.10.10 www.lab.local`
+> donnent la même adresse, `ping -c1 lab-db` fonctionne sans suffixe, et le rapport
+> de zone contient les six types d'enregistrements.
+>
+> ```bash
+> bash check_M12_03.sh
+> ```
 
 ---
 
-### **L12.4** — Audit des sockets et lecture des états TCP
+### <a id="l12-4"></a>**[L12.4](corrige.md#l12-4)** — Audit des sockets et lecture des états TCP
 
-::: contexte
-Avant une revue de sécurité, on te demande l'inventaire exact de ce qui écoute
-sur `lab-web` : quel port, quelle adresse, quel processus, quelle unité systemd,
-et si c'est joignable depuis l'extérieur. Dans la foulée, l'équipe applicative se
-plaint d'un « problème réseau » sur son API : à toi de démontrer ce qu'il en est.
-:::
+> **Contexte**
+>
+> Avant une revue de sécurité, on te demande l'inventaire exact de ce qui écoute
+> sur `lab-web` : quel port, quelle adresse, quel processus, quelle unité systemd,
+> et si c'est joignable depuis l'extérieur. Dans la foulée, l'équipe applicative se
+> plaint d'un « problème réseau » sur son API : à toi de démontrer ce qu'il en est.
 
 1. Produis dans `~/lab12/rapports/sockets.md` un tableau à quatre colonnes :
    protocole, adresse:port en écoute, processus (nom + PID), unité systemd.
@@ -884,31 +906,33 @@ plaint d'un « problème réseau » sur son API : à toi de démontrer ce qu'il 
    limite, et le symptôme observable quand il est trop bas. Pose une valeur
    persistante pour `somaxconn` via `/etc/sysctl.d/`.
 
-::: astuce
-`systemctl status <PID>` remonte du PID à l'unité systemd : c'est le chaînon qui
-manque souvent entre `ss -tulpn` et « qui a démarré ça ».
-:::
+> [!TIP]
+> **Astuce**
+>
+> `systemctl status <PID>` remonte du PID à l'unité systemd : c'est le chaînon qui
+> manque souvent entre `ss -tulpn` et « qui a démarré ça ».
 
-::: check
-Critère de succès : le rapport existe et est cohérent avec la réalité de la
-machine, `curl http://10.10.10.11/api/` répond depuis `lab-adm`, et
-`somaxconn` est réglé de façon persistante.
-
-```bash
-bash check_M12_04.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : le rapport existe et est cohérent avec la réalité de la
+> machine, `curl http://10.10.10.11/api/` répond depuis `lab-adm`, et
+> `somaxconn` est réglé de façon persistante.
+>
+> ```bash
+> bash check_M12_04.sh
+> ```
 
 ---
 
-### **L12.5** — Capture, MTU et bande passante
+### <a id="l12-5"></a>**[L12.5](corrige.md#l12-5)** — Capture, MTU et bande passante
 
-::: contexte
-Une équipe monte un tunnel entre deux sites. Les sessions s'ouvrent, puis
-« gèlent au hasard » sur les gros transferts. En parallèle, on te demande de
-mesurer et de documenter la bande passante réelle entre `lab-adm` et `lab-web`.
-On te demande une analyse écrite, pas une intuition.
-:::
+> **Contexte**
+>
+> Une équipe monte un tunnel entre deux sites. Les sessions s'ouvrent, puis
+> « gèlent au hasard » sur les gros transferts. En parallèle, on te demande de
+> mesurer et de documenter la bande passante réelle entre `lab-adm` et `lab-web`.
+> On te demande une analyse écrite, pas une intuition.
 
 1. Capture sur `lab-adm` l'échange HTTP complet avec `lab-web` pendant qu'un
    `curl` récupère `http://10.10.10.11/`. Écris la capture dans
@@ -934,34 +958,37 @@ On te demande une analyse écrite, pas une intuition.
 8. Refais une mesure `iperf3` avec le MTU à 1400 et compare. Conclusion en deux
    lignes.
 
-::: attention
-Baisser le MTU d'une interface coupe parfois les sessions SSH en cours sur les
-gros transferts. Fais l'étape 5 depuis la console Proxmox ou accepte de
-reconnecter ta session.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Baisser le MTU d'une interface coupe parfois les sessions SSH en cours sur les
+> gros transferts. Fais l'étape 5 depuis la console Proxmox ou accepte de
+> reconnecter ta session.
 
-::: check
-Critère de succès : les deux captures existent et sont lisibles, les rapports
-`capture.md` et `debit.md` sont renseignés, le MTU de l'interface est revenu à
-1500.
-
-```bash
-bash check_M12_05.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> Critère de succès : les deux captures existent et sont lisibles, les rapports
+> `capture.md` et `debit.md` sont renseignés, le MTU de l'interface est revenu à
+> 1500.
+>
+> ```bash
+> bash check_M12_05.sh
+> ```
 
 ---
 
 ## 12.7 Break & Fix ★★★
 
-::: attention
-Avant chaque Break & Fix : `qm snapshot 9001 avant-bf12` (et `9002` pour BF12.3).
-Le snapshot de secours reste `snap-clean` (`qm rollback 9001 snap-clean`), mais
-l'utiliser vaut échec de l'exercice : l'objectif est de réparer, pas de rembobiner.
-Les Break & Fix de ce module cassent le réseau : garde une console Proxmox ouverte.
-:::
+> [!CAUTION]
+> **Attention**
+>
+> Avant chaque Break & Fix : `qm snapshot 9001 avant-bf12` (et `9002` pour BF12.3).
+> Le snapshot de secours reste `snap-clean` (`qm rollback 9001 snap-clean`), mais
+> l'utiliser vaut échec de l'exercice : l'objectif est de réparer, pas de rembobiner.
+> Les Break & Fix de ce module cassent le réseau : garde une console Proxmox ouverte.
 
-### **BF12.1** — « Plus d'internet, mais le lab fonctionne »
+### <a id="bf12-1"></a>**[BF12.1](corrige.md#bf12-1)** — « Plus d'internet, mais le lab fonctionne »
 
 ```bash
 sudo bash break_M12_01.sh
@@ -979,11 +1006,9 @@ pare-feu.
 durable. Explique dans ta réponse pourquoi le message arrive instantanément et
 ce que ça t'a appris avant même de lancer la moindre commande de diagnostic.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF12.2** — « Tout est lent, puis plus rien ne résout »
+### <a id="bf12-2"></a>**[BF12.2](corrige.md#bf12-2)** — « Tout est lent, puis plus rien ne résout »
 
 ```bash
 sudo bash break_M12_02.sh
@@ -1000,11 +1025,9 @@ puis échoue avec `Could not resolve host`. `apt update` est devenu interminable
 survive à un redémarrage — et expliquer pourquoi le délai est d'environ dix
 secondes et pas d'une seconde ni d'une minute.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF12.3** — « L'API répond sur le serveur mais pas depuis le poste d'admin »
+### <a id="bf12-3"></a>**[BF12.3](corrige.md#bf12-3)** — « L'API répond sur le serveur mais pas depuis le poste d'admin »
 
 ```bash
 # à lancer sur lab-web
@@ -1024,11 +1047,9 @@ passe à autre chose), modifier le code de l'application.
 rétablir l'accès depuis `lab-adm`, et expliquer la différence entre les codes de
 retour 7 et 28 de `curl` — et ce que chacun t'aurait appris ici.
 
-::: repondre
-lignes: 10
-:::
+<!-- repondre: 10 -->
 
-### **BF12.4** — « Cette machine-là voit un autre site que les autres »
+### <a id="bf12-4"></a>**[BF12.4](corrige.md#bf12-4)** — « Cette machine-là voit un autre site que les autres »
 
 ```bash
 sudo bash break_M12_04.sh
@@ -1046,23 +1067,21 @@ DNS du lab.
 en donnant la commande qui le prouve en une ligne, corriger, et énoncer la règle
 générale à retenir sur l'ordre de consultation des sources de noms.
 
-::: repondre
-lignes: 8
-:::
+<!-- repondre: 8 -->
 
 ---
 
 ## 12.8 Défi du module ★★★
 
-**D12 — `netdiag.sh` : le diagnostic réseau ordonné, couche par couche**
+<a id="d12"></a>**[D12](corrige.md#d12) — `netdiag.sh` : le diagnostic réseau ordonné, couche par couche**
 
-::: contexte
-L'astreinte reçoit trop souvent des tickets « le site ne répond pas » sans aucune
-information exploitable. On te demande l'outil qui produit, en une exécution et
-en moins de trente secondes, le rapport que tu aurais écrit à la main : ordonné
-par couche, avec un verdict clair à chaque étage et un premier diagnostic.
-Livrable : un script plus un rapport d'exemple.
-:::
+> **Contexte**
+>
+> L'astreinte reçoit trop souvent des tickets « le site ne répond pas » sans aucune
+> information exploitable. On te demande l'outil qui produit, en une exécution et
+> en moins de trente secondes, le rapport que tu aurais écrit à la main : ordonné
+> par couche, avec un verdict clair à chaque étage et un premier diagnostic.
+> Livrable : un script plus un rapport d'exemple.
 
 Cahier des charges :
 
@@ -1101,17 +1120,19 @@ Cahier des charges :
 
 Temps visé : 60 à 90 minutes.
 
-::: astuce
-Écris d'abord les sept fonctions de test avec un verdict en dur, vérifie la mise
-en forme et le code de retour, puis remplis les tests un par un. Tu éviteras de
-déboguer en même temps la logique et l'affichage.
-:::
+> [!TIP]
+> **Astuce**
+>
+> Écris d'abord les sept fonctions de test avec un verdict en dur, vérifie la mise
+> en forme et le code de retour, puis remplis les tests un par un. Tu éviteras de
+> déboguer en même temps la logique et l'affichage.
 
-::: check
-```bash
-bash check_M12_06.sh
-```
-:::
+> [!TIP]
+> **Critère de succès**
+>
+> ```bash
+> bash check_M12_06.sh
+> ```
 
 ---
 
@@ -1144,3 +1165,9 @@ Pour aller plus loin :
 * Compare `traceroute` (UDP), `traceroute -I` (ICMP) et `traceroute -T -p 443`
   (TCP) vers la même destination : les résultats diffèrent, et cet écart est
   lui-même une information sur le filtrage du chemin.
+
+<!-- nav:début -->
+---
+
+[← Module 11](../11-stockage-lvm/README.md) · [Corrigé](corrige.md) · [Module 13 →](../13-reseau-avance/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+<!-- nav:fin -->

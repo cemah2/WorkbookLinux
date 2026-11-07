@@ -3,45 +3,22 @@
 import re, subprocess, sys, shutil
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-SRC, BUILD, TEX = ROOT / "src", ROOT / "build", ROOT / "tex"
+HERE = Path(__file__).resolve().parent            # tools/pdf
+ROOT = HERE.parent.parent                         # racine du dépôt
+BUILD, TEX, FONTS = ROOT / "build", HERE / "tex", HERE / "fonts"
 BUILD.mkdir(exist_ok=True)
+sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent))
+from gfm2pandoc import convert as gfm2pandoc     # noqa: E402
+from workbook import PARTS, item_dir, items       # noqa: E402
 
-PARTS = [
-    ("Partie I", "Fondamentaux du shell et du système de fichiers",
-     "Tout ce qu'un administrateur manipule cent fois par jour : le shell, "
-     "l'arborescence, les droits, les comptes, le texte.",
-     ["01-shell-bases", "02-filesystem-fhs", "03-permissions",
-      "04-users-groups-sudo", "05-text-processing", "06-vim-archives"]),
-    ("Partie II", "Administration système",
-     "Scripter, piloter les processus et le noyau, installer, stocker, connecter, "
-     "accéder à distance : le socle d'un serveur en production.",
-     ["07-bash-scripting", "08-processus-systemd", "09-noyau-demarrage", "10-paquets",
-      "11-stockage-lvm", "12-reseau", "13-reseau-avance", "14-ssh"]),
-    ("Partie III", "Exploitation, sécurité et incidents",
-     "Ce qui distingue un serveur qui tourne d'un serveur qu'on exploite : services, "
-     "journaux, planification, durcissement, dépannage.",
-     ["15-services-applicatifs", "16-logs-monitoring", "17-cron-timers", "18-securite",
-      "19-troubleshooting-perf"]),
-    ("Projet A", "Factura : plateforme multi-services, à la main",
-     "Premier projet fil rouge. Tu déploies, sécurises, sauvegardes et "
-     "supervises une plateforme complète avec les seuls modules 1 à 19.",
-     ["P1-factura"]),
-    ("Partie IV", "Socle DevOps",
-     "Virtualiser, versionner, conteneuriser, automatiser, provisionner, livrer en continu, "
-     "orchestrer, observer, outiller en Python.",
-     ["20-virtualisation-kvm", "21-git", "22-docker", "23-ansible", "24-iac-terraform",
-      "25-cicd", "26-kubernetes-observabilite", "27-python-ops"]),
-    ("Projet B", "Factura v2 : industrialisation DevOps",
-     "La même plateforme, reconstruite par le code : OpenTofu, Ansible, "
-     "Compose, CI/CD, observabilité, k3s.",
-     ["P2-factura-devops"]),
-    ("Projet C", "Une semaine d'astreinte",
-     "Examen final : cinq journées de tickets, d'incidents et de "
-     "post-mortems sur la plateforme Factura.",
-     ["P3-astreinte"]),
-]
 
+def source(path):
+    """Lit un Markdown du dépôt (format GitHub) et le rend au format pandoc."""
+    return gfm2pandoc(path.read_text(encoding="utf-8"))
+
+
+def item_file(slug, kind):
+    return item_dir(slug) / ("README.md" if kind == "labs" else "corrige.md")
 
 def tex_escape(s):
     return (s.replace("\\", r"\textbackslash{}").replace("&", r"\&").replace("%", r"\%")
@@ -58,11 +35,15 @@ def cover(title, subtitle, desc, rows, badge):
     return raw(f"\\coverpage{{{tex_escape(title)}}}{{{tex_escape(subtitle)}}}{{{desc}}}{{{tab}}}{{{tex_escape(badge)}}}")
 
 
+NMOD = sum(1 for _, s in items() if not s.startswith("P"))
+NPROJ = sum(1 for _, s in items() if s.startswith("P"))
+
+
 def part(num, title, desc, mods, kind):
     items = []
     for m in mods:
-        p = SRC / kind / f"{m}.md"
-        first = p.read_text(encoding="utf-8").splitlines()[0].lstrip("# ").strip()
+        first = next(l for l in source(item_file(m, kind)).splitlines() if l.startswith("# "))
+        first = first.lstrip("# ").strip()
         items.append(f"\\item {tex_escape(first)}")
     body = (f"{tex_escape(desc)}\\par\\vspace{{10pt}}\\begin{{itemize}}[nosep]\\normalsize"
             + "".join(items) + "\\end{itemize}")
@@ -80,7 +61,7 @@ def assemble(kind):
     if kind == "labs":
         parts.append(cover(
             "Énoncés", "Quiz, exercices, labs, Break & Fix, projets",
-            "27 modules et 3 projets fil rouge pour devenir opérationnel sur Linux "
+            f"{NMOD} modules et {NPROJ} projets fil rouge pour devenir opérationnel sur Linux "
             "puis sur le socle DevOps : Git, Docker, Ansible, OpenTofu, CI/CD, Kubernetes, "
             "observabilité. Chaque module se joue sur ton laboratoire Proxmox et se corrige "
             "avec le volume \\emph{Corrigés \\& explications}.\\par\\vspace{8pt}"
@@ -92,12 +73,12 @@ def assemble(kind):
              ("Durée conseillée", "14 à 19 semaines"),
              ("Compagnons", "Corrigés & explications · Mémo · scripts.zip")], "VOLUME 1 / 3"))
         parts.append(raw("\\tableofcontents\\clearpage"))
-        parts.append(clean_md((SRC / "00-mise-en-place.md").read_text(encoding="utf-8")))
+        parts.append(clean_md(source(ROOT / "docs" / "00-mise-en-place.md")))
         for num, title, desc, mods in PARTS:
             parts.append(part(num, title, desc, mods, "labs"))
             for m in mods:
-                parts.append(clean_md((SRC / "labs" / f"{m}.md").read_text(encoding="utf-8")))
-        parts.append(clean_md((SRC / "99-annexes.md").read_text(encoding="utf-8")))
+                parts.append(clean_md(source(item_file(m, "labs"))))
+        parts.append(clean_md(source(ROOT / "docs" / "annexes.md")))
         title, foot = "Workbook Linux \\& DevOps — Énoncés", "Énoncés"
     elif kind == "solutions":
         parts.append(cover(
@@ -113,7 +94,7 @@ def assemble(kind):
         for num, title, desc, mods in PARTS:
             parts.append(part(num, title + " — corrigés", desc, mods, "solutions"))
             for m in mods:
-                parts.append(clean_md((SRC / "solutions" / f"{m}.md").read_text(encoding="utf-8")))
+                parts.append(clean_md(source(item_file(m, "solutions"))))
         title, foot = "Workbook Linux \\& DevOps — Corrigés", "Corrigés \\& explications"
     else:
         parts.append(cover(
@@ -123,7 +104,7 @@ def assemble(kind):
             "permissions, codes HTTP, états TCP) et la checklist des 60 secondes.",
             [("Volume", "3 / 3 — Mémo"), ("Usage", "À imprimer et garder à côté du clavier")], "VOLUME 3 / 3"))
         parts.append(raw("\\tableofcontents\\clearpage"))
-        parts.append(clean_md((SRC / "memo.md").read_text(encoding="utf-8")))
+        parts.append(clean_md(source(ROOT / "docs" / "memo.md")))
         title, foot = "Mémo Linux \\& DevOps", "Mémo"
     md = BUILD / f"{kind}.md"
     md.write_text("".join(parts), encoding="utf-8")
@@ -144,7 +125,7 @@ def build(kind, name, a5=False):
          "--lua-filter", str(TEX / "divs.lua"), "--template", str(TEX / "template.tex"),
          "--top-level-division=chapter", "--highlight-style=pygments",
          "-V", f"footer-title={foot}", "-V", f"title={title}",
-         "-V", f"fontdir={ROOT / 'fonts'}", "-V", f"texdir={TEX}", "-o", str(tex)]
+         "-V", f"fontdir={FONTS}", "-V", f"texdir={TEX}", "-o", str(tex)]
         + (["-V", "index=true"] if kind == "labs" else [])
         + (["-V", "a5=true"] if a5 else []),
         check=True, env=env)
