@@ -519,27 +519,19 @@ que contient réellement l'objet commit, puis déduis-en ce que font
 vraiment `--amend`, `rebase` et `filter-repo`, et pourquoi le reflog permet
 de « revenir en arrière » malgré tout.
 
-<!-- repondre: 8 -->
-
 <a id="qo21-2"></a>**[QO21.2](corrige.md#qo21-2)** — *On te demande en entretien* : « Merge ou rebase pour intégrer
 une branche de feature ? » Réponds avec les critères qui font pencher d'un
 côté ou de l'autre (historique partagé ou non, lisibilité du graphe,
 bisect, revue), et donne la règle que tu imposerais à une équipe infra.
 
-<!-- repondre: 10 -->
-
 <a id="qo21-3"></a>**[QO21.3](corrige.md#qo21-3)** — Décris précisément ce que `git reset --soft`, `--mixed` et
 `--hard` font aux trois zones, avec un cas d'usage légitime pour chacun,
 puis le cas où `reset` est interdit et ce qu'on fait à la place.
-
-<!-- repondre: 8 -->
 
 <a id="qo21-4"></a>**[QO21.4](corrige.md#qo21-4)** — Un collègue a poussé une clé API dans `terraform.tfvars` il y a
 trois jours. Décris la procédure complète, dans l'ordre, en expliquant
 **pourquoi** l'ordre compte (rotation, purge, force-push, re-clone,
 prévention), et ce que tu réponds à « on n'a qu'à supprimer le fichier ».
-
-<!-- repondre: 10 -->
 
 <a id="qo21-5"></a>**[QO21.5](corrige.md#qo21-5)** — *On te demande en entretien* : « Un push est rejeté en
 `non-fast-forward`. Explique ce qui s'est passé et pourquoi `--force` est
@@ -547,35 +539,25 @@ la mauvaise réponse dans 99 % des cas. » Réponds en décrivant l'état des
 deux dépôts, les deux façons correctes d'intégrer, et le seul cas où un
 push forcé est légitime (avec quelle option).
 
-<!-- repondre: 8 -->
-
 <a id="qo21-6"></a>**[QO21.6](corrige.md#qo21-6)** — Compare `fetch` et `pull`, puis `pull` avec et sans `--rebase`.
 Quel réglage global recommandes-tu à un ops et pourquoi le `pull` par
 défaut de Git 2.43 refuse-t-il parfois de faire quoi que ce soit
 (`Need to specify how to reconcile divergent branches`) ?
-
-<!-- repondre: 8 -->
 
 <a id="qo21-7"></a>**[QO21.7](corrige.md#qo21-7)** — Explique la différence entre `.gitignore`, `.git/info/exclude`
 et `core.excludesFile`, dis ce qui va dans chacun, puis décris les deux
 raisons pour lesquelles un fichier « refuse » de s'ignorer et la commande
 qui tranche.
 
-<!-- repondre: 8 -->
-
 <a id="qo21-8"></a>**[QO21.8](corrige.md#qo21-8)** — Tu dois convaincre ton équipe de versionner `/etc` des cinq VM
 du lab avec `etckeeper`. Qu'est-ce que ça apporte concrètement lors d'un
 incident, quelles limites (secrets dans `/etc`, taille, droits), et
 comment `etckeeper` s'articule-t-il avec `apt` ?
 
-<!-- repondre: 8 -->
-
 <a id="qo21-9"></a>**[QO21.9](corrige.md#qo21-9)** — Décris la démarche de diagnostic quand `git status` affirme
 `HEAD detached at 4a34e42` alors que tu pensais être sur `main` : comment
 c'est arrivé (trois causes courantes), comment sauver le travail éventuel,
 et comment revenir sur `main`.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -972,8 +954,6 @@ jour, `git status` propre. Explique pourquoi `git rebase --continue` tel
 quel aurait été pire que la panne, et quelle commande l'aurait détecté en
 une ligne.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf21-2"></a>**[BF21.2](corrige.md#bf21-2)** — « Les correctifs de l'astreinte ont disparu »
 
 ```bash
@@ -993,8 +973,6 @@ toute commande qui expire le reflog.
 « perdus » (reconstitue la séquence exacte à partir du reflog), les
 remettre dans une branche `hotfix/deploy-quotes`, l'intégrer à `main`
 proprement, et dire combien de temps il te restait pour les retrouver.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf21-3"></a>**[BF21.3](corrige.md#bf21-3)** — « Impossible de pousser, et pull ne veut rien faire »
 
@@ -1017,8 +995,6 @@ groupe, plus aucune divergence. Identifie le réglage local responsable du
 comportement de `pull`, dis s'il faut le garder, et donne les deux
 stratégies d'intégration possibles avec le graphe résultant de chacune.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf21-4"></a>**[BF21.4](corrige.md#bf21-4)** — « git status affiche 2 000 fichiers »
 
 ```bash
@@ -1040,8 +1016,6 @@ Retrouve **quand** et **par qui** le `.gitignore` a disparu, restaure-le
 depuis l'historique (pas de réécriture à la main), et explique ce qui
 reste à faire au sujet du mot de passe dans le `tfstate` — même une fois
 le fichier non suivi.
-
-<!-- repondre: 10 -->
 
 ---
 

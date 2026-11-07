@@ -1,5 +1,5 @@
 """Structure du workbook : source unique pour la navigation, le README,
-la vérification des identifiants et la construction des PDF.
+et la vérification des identifiants.
 
 Ajouter un module = créer modules/NN-slug/{README.md,corrige.md} puis
 l'inscrire ici, dans la bonne partie.

@@ -217,8 +217,6 @@ qu'un certificat n'expire plus jamais en silence.
 >    sudo bash check_PC_1_1.sh
 > ```
 
-<!-- repondre: 8 -->
-
 ### <a id="pc-1-2"></a>[PC.1.2](corrige.md#pc-1-2) — « Plus personne n'arrive à se connecter à l'appli »
 
 > **Contexte**
@@ -245,8 +243,6 @@ symptôme, et poser un garde-fou contre les transactions abandonnées.
 > ```bash
 >    sudo bash check_PC_1_2.sh
 > ```
-
-<!-- repondre: 8 -->
 
 ### <a id="pc-1-3"></a>[PC.1.3](corrige.md#pc-1-3) — Demande : publier le site de documentation
 
@@ -276,8 +272,6 @@ world-writable dans la racine servie.
 >    sudo bash check_PC_1_3.sh
 > ```
 
-<!-- repondre: 6 -->
-
 ### <a id="pc-1-4"></a>[PC.1.4](corrige.md#pc-1-4) — 502 partout après le déploiement de 15 h
 
 > **Contexte**
@@ -305,8 +299,6 @@ service en ligne.
 > ```bash
 >    sudo bash check_PC_1_4.sh
 > ```
-
-<!-- repondre: 8 -->
 
 **Fin de journée :** remplis `~/astreinte/rapports/lundi.md` à partir du modèle.
 
@@ -343,8 +335,6 @@ rotation qui manquait — sans redémarrer PostgreSQL.
 >    sudo bash check_PC_2_1.sh
 > ```
 
-<!-- repondre: 10 -->
-
 ### <a id="pc-2-2"></a>[PC.2.2](corrige.md#pc-2-2) — L'export nocturne est figé
 
 > **Contexte**
@@ -371,8 +361,6 @@ bloquer le boot et les jobs à l'avenir.
 > ```bash
 >    sudo bash check_PC_2_2.sh
 > ```
-
-<!-- repondre: 10 -->
 
 ### <a id="pc-2-3"></a>[PC.2.3](corrige.md#pc-2-3) — « La sauvegarde marche mais l'archive est vide »
 
@@ -403,8 +391,6 @@ restauration.
 >    sudo bash check_PC_2_3.sh
 > ```
 
-<!-- repondre: 10 -->
-
 ### <a id="pc-2-4"></a>[PC.2.4](corrige.md#pc-2-4) — Demande : purge automatique des exports
 
 > **Contexte**
@@ -432,8 +418,6 @@ de plus de 30 jours, épargne les fichiers légaux, trace ses suppressions, a un
 > ```bash
 >    sudo bash check_PC_2_4.sh
 > ```
-
-<!-- repondre: 8 -->
 
 **Fin de journée :** `~/astreinte/rapports/mardi.md`.
 
@@ -480,8 +464,6 @@ de l'attaquant, verrouiller le compte, désactiver l'auth par mot de passe),
 >    sudo bash check_PC_3_1.sh
 > ```
 
-<!-- repondre: 12 -->
-
 ### <a id="pc-3-2"></a>[PC.3.2](corrige.md#pc-3-2) — Le déploiement échoue : Permission denied (publickey)
 
 > **Contexte**
@@ -508,8 +490,6 @@ rétablir un déploiement par clé cohérent, sans jamais repasser au mot de pas
 > ```bash
 >    sudo bash check_PC_3_2.sh
 > ```
-
-<!-- repondre: 8 -->
 
 ### <a id="pc-3-3"></a>[PC.3.3](corrige.md#pc-3-3) — « La base est injoignable » (mais elle répond)
 
@@ -538,8 +518,6 @@ vert.
 >    sudo bash check_PC_3_3.sh
 > ```
 
-<!-- repondre: 8 -->
-
 ### <a id="pc-3-4"></a>[PC.3.4](corrige.md#pc-3-4) — Exercice de communication : message de statut
 
 > **Contexte**
@@ -561,8 +539,6 @@ technique** (clients + interne), dans
 
 Contraintes : pas de jargon (« résolution DNS » → « annuaire interne »), pas
 d'accusation, pas de délai chiffré non garanti, une action claire par message.
-
-<!-- repondre: 16 -->
 
 **Fin de journée :** `~/astreinte/rapports/mercredi.md`.
 
@@ -600,8 +576,6 @@ rien de plus ouvert, service partenaire joignable.
 >    sudo bash check_PC_4_1.sh
 > ```
 
-<!-- repondre: 6 -->
-
 ### <a id="pc-4-2"></a>[PC.4.2](corrige.md#pc-4-2) — TLS échoue, sans qu'on ait touché aux certificats
 
 > **Contexte**
@@ -627,8 +601,6 @@ resynchroniser, et réactiver la synchro au démarrage.
 > ```bash
 >    sudo bash check_PC_4_2.sh
 > ```
-
-<!-- repondre: 8 -->
 
 ### <a id="pc-4-3"></a>[PC.4.3](corrige.md#pc-4-3) — Redis rame et la VM db swappe
 
@@ -656,8 +628,6 @@ persister le réglage, et faire cesser le swap.
 > ```bash
 >    sudo bash check_PC_4_3.sh
 > ```
-
-<!-- repondre: 8 -->
 
 ### <a id="pc-4-4"></a>[PC.4.4](corrige.md#pc-4-4) — Le conteneur worker clignote
 
@@ -688,8 +658,6 @@ le healthcheck au bon endroit, et retrouver un conteneur `healthy` stable.
 >
 > Si Docker n'est pas disponible sur ta VM, ce ticket est **facultatif** : le
 > `break` te le dira et tu peux passer.
-
-<!-- repondre: 8 -->
 
 **Fin de journée :** `~/astreinte/rapports/jeudi.md`.
 
@@ -727,8 +695,6 @@ qui ne s'ouvre pas à tout Internet.
 >    sudo bash check_PC_5_1.sh
 > ```
 
-<!-- repondre: 8 -->
-
 ### <a id="pc-5-2"></a>[PC.5.2](corrige.md#pc-5-2) — Après les mises à jour de nuit, le site a disparu
 
 > **Contexte**
@@ -757,8 +723,6 @@ récidive (conf versionnée).
 >    sudo bash check_PC_5_2.sh
 > ```
 
-<!-- repondre: 10 -->
-
 ### <a id="pc-5-3"></a>[PC.5.3](corrige.md#pc-5-3) — « No space left » mais le disque est vide
 
 > **Contexte**
@@ -785,8 +749,6 @@ poser une surveillance des inodes (pas seulement de l'espace).
 >    sudo bash check_PC_5_3.sh
 > ```
 
-<!-- repondre: 8 -->
-
 ### <a id="pc-5-4"></a>[PC.5.4](corrige.md#pc-5-4) — Exercice : post-mortem complet
 
 > **Contexte**
@@ -805,8 +767,6 @@ Remplis le modèle `~/astreinte/modeles/postmortem.md` dans
 * section « ce qui a bien marché » (obligatoire) ;
 * **trois actions correctives** dont au moins une **de détection** et une **de
   prévention**, chacune avec responsable, échéance, et **comment on l'automatise**.
-
-<!-- repondre: 16 -->
 
 **Fin de journée :** `~/astreinte/rapports/vendredi.md`, puis passe à la revue.
 
@@ -835,8 +795,6 @@ d'amélioration retenue.
   changement bien mené ne compte pas) de ta semaine.
 * Calcule la disponibilité de la semaine et le **budget d'erreur consommé**
   (semaine + les 43 min déjà consommées avant lundi).
-
-<!-- repondre: 6 -->
 
 ### 3. Budget d'erreur : décision
 
@@ -926,8 +884,6 @@ comme en entretien, en 2 à 3 minutes chacune.
    n'écris **pas** ? »
 10. « C'est quoi un budget d'erreur, et qu'est-ce que tu proposes quand il est
     épuisé au milieu du mois ? »
-
-<!-- repondre: 10 -->
 
 ---
 

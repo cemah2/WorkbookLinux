@@ -48,7 +48,7 @@ en tête, sous forme de liste (`Q7.3 : b — parce que…`).
   tout le reste est **public** un jour ou l'autre.
 * Une IP publique, un nom de client, un nom d'employeur, une capture
   d'un système réel.
-* Les PDF et autres artefacts générés (`.gitignore`).
+* Les fichiers générés ou volumineux (archives, images disque, sauvegardes de lab).
 
 ## Commits
 

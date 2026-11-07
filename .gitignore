@@ -1,13 +1,6 @@
-# produits de la chaîne PDF (tools/pdf/build.py) : build/, PDF, fichiers LaTeX
+# fichiers temporaires
 build/
-*.pdf
-*.aux
 *.log
-*.toc
-*.out
-*.idx
-*.ind
-*.ilg
 
 # Python
 __pycache__/

@@ -994,8 +994,6 @@ que « durcir un peu » ne se reproduise plus sans trace.
 sudo bash ~/workbook/scripts/projects/P1/break_PA_01.sh
 ```
 
-<!-- repondre: 8 -->
-
 ---
 
 ### <a id="inc-a2"></a>**[INC-A2](corrige.md#inc-a2)** — « Les factures passent en erreur, aucun PDF »
@@ -1018,8 +1016,6 @@ supervision pour qu'elle voie ce type de panne la prochaine fois.
 # sur lab-web
 sudo bash ~/workbook/scripts/projects/P1/break_PA_02.sh
 ```
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1045,8 +1041,6 @@ règle d'exploitation pour les « règles temporaires ».
 # sur lab-web
 sudo bash ~/workbook/scripts/projects/P1/break_PA_03.sh
 ```
-
-<!-- repondre: 8 -->
 
 ---
 

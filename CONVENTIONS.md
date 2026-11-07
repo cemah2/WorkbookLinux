@@ -1,8 +1,8 @@
 # CONVENTIONS — Workbook Linux / DevOps
 
 Document de référence **obligatoire** pour tous les rédacteurs de modules.
-Le dépôt est écrit en **Markdown GitHub** : c'est la seule source, lue telle
-quelle sur GitHub et convertie pour les PDF par `tools/pdf/gfm2pandoc.py`.
+Le dépôt est écrit en **Markdown GitHub** et se lit tel quel sur GitHub :
+pas de format intermédiaire, pas de génération, pas de version PDF.
 Langue : **français** (termes techniques en anglais quand c'est l'usage : *pipeline*, *runner*, *rollback*).
 Public : administrateur/dev **niveau intermédiaire** visant un poste DevOps. Pas de blabla débutant,
 pas de « qu'est-ce qu'un ordinateur ». On suppose acquis : se connecter en SSH, `cd`, `ls`, éditer un fichier.
@@ -159,13 +159,13 @@ donc rappeler l'énoncé en une ligne en italique avant la réponse.
 
 ---
 
-## 5. Encadrés, schémas, zones de réponse
+## 5. Encadrés, schémas, navigation
 
 ### Encadrés : alertes GitHub avec libellé
 
 Un encadré est une alerte GitHub dont la **première ligne est le libellé en
-gras**. Le couple (type d'alerte, libellé) est fixe : c'est lui que la chaîne
-PDF reconnaît pour produire l'encadré coloré.
+gras**. Le couple (type d'alerte, libellé) est fixe : le lecteur reconnaît
+l'encadré à sa couleur, et `make check` refuse un libellé inconnu.
 
 ```markdown
 > [!IMPORTANT]
@@ -191,9 +191,30 @@ blocs de code compris. Pas d'encadré dans un encadré.
 
 ### Schémas
 
-Les schémas sont écrits en TikZ dans `tools/pdf/tex/figures/<nom>.tex` (styles
-communs dans `wbfig.tex`), rendus en SVG par `bash tools/render_figures.sh
-<nom>`, et insérés ainsi (chemin relatif depuis le fichier) :
+**Nouveau schéma : Mermaid**, directement dans le Markdown, rendu par GitHub
+(`flowchart`, `sequenceDiagram`, `stateDiagram-v2`…). Il se modifie comme du
+texte et se relit dans une revue de code. Suivi de sa légende :
+
+````markdown
+```mermaid
+sequenceDiagram
+    participant C as lab-web (client)
+    participant K as lab-rhel (KDC)
+    C->>K: AS-REQ
+    K-->>C: AS-REP (TGT)
+```
+
+*Figure — Légende en une phrase qui dit ce que le schéma montre.*
+````
+
+Rester sobre : une dizaine de nœuds au plus, des libellés courts entre
+guillemets (`A["texte, avec virgule"]`), pas de style ni de couleur imposés
+(GitHub adapte le rendu au thème clair ou sombre).
+
+**Les 48 schémas d'origine** sont des images SVG (`assets/figures/<nom>.svg`)
+rendues depuis des sources TikZ (`assets/figures/src/<nom>.tex`, styles
+communs dans `_styles.tex`) par `bash tools/render_figures.sh <nom>`. On les
+insère ainsi (chemin relatif depuis le fichier) :
 
 ```markdown
 <p align="center"><img src="../../assets/figures/<nom>.svg" alt="Schéma : <nom>"></p>
@@ -201,19 +222,11 @@ communs dans `wbfig.tex`), rendus en SVG par `bash tools/render_figures.sh
 *Figure — Légende en une phrase qui dit ce que le schéma montre.*
 ```
 
-Largeur maximale du schéma : 480 pt (`bash tools/pdf/tex/figtest.sh <nom>`
-l'indique).
+### Réponses du lecteur
 
-### Zones de réponse
-
-Après une question ouverte ou un Break & Fix, une zone de réponse pour le PDF
-d'énoncés, invisible sur GitHub :
-
-```markdown
-<!-- repondre: 10 -->
-```
-
-Le nombre est la hauteur en lignes (2 à 14).
+Les énoncés ne contiennent pas de zone de réponse : le lecteur écrit dans
+`reponses/` de son *fork*, un fichier par identifiant (voir
+`reponses/README.md`).
 
 ### Navigation
 
@@ -235,10 +248,12 @@ par `make nav` : ne pas les éditer à la main.
   `postgresql@16-main.service`, etc.).
 * Pas de `sudo` sur les commandes qui n'en ont pas besoin.
 * Les scripts fournis commencent par `#!/usr/bin/env bash` et `set -euo pipefail` (sauf raison pédagogique explicite).
-* Longueur des lignes de code : **80 colonnes max** (sinon ça déborde dans le PDF). Couper avec `\`.
+* Longueur des lignes de code : **80 colonnes max** (au-delà, GitHub ajoute une barre de défilement et la
+  fin de la commande disparaît). Couper avec `\`.
 * Un code inline (`` `...` ``) qui passe à la ligne ne doit pas laisser une ligne commencer par `|` :
-  GitHub et pandoc la liraient comme une ligne de tableau.
-* Pas de tableau de plus de 4 colonnes (débordement PDF). Dans une cellule, un `|` s'écrit `\|`, y compris dans du code.
+  GitHub la lirait comme une ligne de tableau.
+* Pas de tableau de plus de 5 colonnes (illisible sur un écran étroit). Dans une cellule, un `|` s'écrit `\|`,
+  y compris dans du code.
 * Ne pas écrire « comme vu au module X » sans donner l'information minimale : chaque module doit rester utilisable seul.
 
 ## 7. Scripts de vérification

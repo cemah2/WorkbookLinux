@@ -17,17 +17,17 @@ ces IP et ce snapshot `snap-clean`.
 ### Les livrables
 
 Tout vit dans un dépôt Git, [`cemah2/WorkbookLinux`](https://github.com/cemah2/WorkbookLinux),
-lisible directement sur GitHub et décliné en PDF :
+entièrement en Markdown et lisible directement sur GitHub :
 
-| Livrable | Sur GitHub | En PDF | Quand l'ouvrir |
-|---|---|---|---|
-| **Énoncés** | `modules/NN-sujet/README.md` | volume 1, avec zones de réponse | pendant le travail |
-| **Corrigés** | `modules/NN-sujet/corrige.md` | volume 2 | après avoir cherché |
-| **Mémo** | `docs/memo.md` | volume 3 + livret A5 | en permanence |
-| **Scripts** | `scripts/` : `setup/`, `check/`, `break/`, `lab/`, `projects/` | — | sur les VM |
+| Livrable | Où | Quand l'ouvrir |
+|---|---|---|
+| **Énoncés** | `modules/NN-sujet/README.md` | pendant le travail |
+| **Corrigés** | `modules/NN-sujet/corrige.md` | après avoir cherché |
+| **Mémo** | `docs/memo.md` | en permanence |
+| **Scripts** | `scripts/` : `setup/`, `check/`, `break/`, `lab/`, `projects/` | sur les VM |
+| **Tes réponses** | `reponses/` de ton *fork* | après chaque item |
 
-Les PDF se téléchargent dans les *Releases* du dépôt ou se construisent en
-une commande (§0.9). Le corrigé n'est pas une correction scolaire : c'est là
+Le corrigé n'est pas une correction scolaire : c'est là
 que se trouve l'explication du mécanisme (encadrés **Pourquoi** et
 **Piège**). Lis-le même quand tu as juste.
 
@@ -1535,8 +1535,8 @@ restauration et chaque mise à jour.
 ## 0.9 Versionner le workbook lui-même
 
 Le workbook n'est pas seulement un ensemble de pages : c'est un dépôt Git.
-Les énoncés, les corrigés, les scripts, la chaîne PDF et, surtout,
-**tes réponses** vivent dans un seul dépôt. Cette section le met en place
+Les énoncés, les corrigés, le mémo, les scripts et, surtout,
+**tes réponses** vivent dans un seul dépôt, entièrement en Markdown. Cette section le met en place
 en une demi-heure ; le reste du workbook consiste à le remplir.
 
 ### Ton fork du dépôt
@@ -1568,14 +1568,14 @@ WorkbookLinux/
 ├── projets/PX-sujet/        les trois projets fil rouge
 ├── docs/                    ce chapitre, parcours, annexes, mémo
 ├── scripts/                 setup/ check/ break/ lab/ projects/
-├── assets/figures/          schémas SVG
-├── tools/                   navigation, contrôles, chaîne PDF (tools/pdf/)
+├── assets/figures/          schémas SVG (et leurs sources dans src/)
+├── tools/                   navigation générée, contrôles de cohérence
 ├── reponses/                TON TRAVAIL : un fichier par lab
 │   ├── README.md            comment ranger
 │   └── M07/L7.2.md          le modèle
 ├── CONVENTIONS.md           la charte de rédaction des modules
 ├── CONTRIBUTING.md          signaler une erreur, proposer une correction
-└── Makefile                 make check | lint | nav | pdf
+└── Makefile                 make check | lint | nav
 ```
 
 Pour récupérer les corrections publiées dans le dépôt de référence :
@@ -1609,7 +1609,7 @@ git push -u lab main
 ```
 
 Recharge la page du dépôt dans Gitea : le README s'affiche, l'onglet
-*Actions* montre le workflow `.gitea/workflows/build-pdf.yaml` en attente
+*Actions* montre le workflow `.gitea/workflows/controles.yaml` en attente
 (normal, voir plus bas). Ensuite, `git push` (vers GitHub) et
 `git push lab` (vers le lab) suffisent ; une seule commande pour les deux :
 `git remote set-url --add --push origin git@lab-git:workbook/linux-devops-workbook.git`
@@ -1621,7 +1621,7 @@ Trois zones, trois règles, à ne jamais mélanger :
 
 | Zone | Contenu | Qui écrit |
 |---|---|---|
-| `modules/`, `projets/`, `docs/`, `tools/` | énoncés, corrigés, mémo, chaîne PDF | le workbook (toi seulement pour une coquille, en PR) |
+| `modules/`, `projets/`, `docs/`, `tools/` | énoncés, corrigés, mémo, outillage | le workbook (toi seulement pour une coquille, en PR) |
 | `scripts/` | setup, check, break, lab, projets | le workbook + **tes** scripts de défi dans `scripts/mes/` |
 | `reponses/MXX/` | un fichier Markdown par lab, tes scripts, tes rapports | **toi**, et personne d'autre |
 
@@ -1663,10 +1663,7 @@ travail, pas des énoncés copiés.
 Le `.gitignore` fourni :
 
 ```gitignore
-# produits de la chaîne PDF (tools/pdf/build.py)
 build/
-*.pdf
-*.aux
 *.log
 __pycache__/
 .venv/
@@ -1674,10 +1671,9 @@ __pycache__/
 reponses/**/secrets*
 ```
 
-Les PDF sont des **artefacts** : reproductibles depuis les sources en une
-commande, lourds (plusieurs Mo par version) et illisibles en `diff`. Les
-commiter fait grossir le dépôt à chaque page corrigée ; c'est pour ça que
-`build/` est ignoré et que la CI les publie dans les *Releases*. Les secrets : tout
+Les fichiers générés ou volumineux (archives, images disque, sauvegardes de
+lab) n'ont rien à faire dans le dépôt : lourds, illisibles en `diff`, ils le
+font grossir à chaque version. Les secrets : tout
 fichier de `reponses/` dont le nom commence par `secrets` est ignoré,
 pour que tu aies un endroit où noter un mot de passe de lab sans risquer
 de le pousser. Un secret commité puis retiré est toujours dans
@@ -1725,60 +1721,41 @@ le projet (`P2`). Le corps du message, après une ligne vide, dit
 échouait sur les fichiers cachés ». Le module 21 y revient et te fait
 ajouter un hook qui refuse les messages hors format.
 
-### Régénérer les PDF
+### Les contrôles du dépôt
 
-La chaîne relit le Markdown du dépôt (`tools/pdf/gfm2pandoc.py` le convertit
-en Markdown pandoc : encadrés, schémas, zones de réponse), puis pandoc
-(filtre `tools/pdf/tex/divs.lua`) → XeLaTeX. Les polices (Source Sans 3,
-JetBrains Mono, Font Awesome) sont livrées dans `tools/pdf/fonts/`. Sur ton
-poste Ubuntu 24.04 ou dans WSL :
+Rien à construire : le Markdown se lit tel quel sur GitHub, dans VS Code
+(aperçu Markdown) ou dans Gitea. Le `Makefile` ne sert qu'à vérifier :
 
 ```bash
-sudo apt update
-sudo apt install -y pandoc texlive-xetex texlive-latex-extra \
-  texlive-fonts-recommended texlive-pictures python3 python3-pypdf
-make pdf                  # les 3 volumes + le livret A5, ~5 min
-# Workbook-Linux-DevOps-3-Memo.pdf: 103 pages, 0 overfull hbox
-# Workbook-Linux-DevOps-1-Enonces.pdf: 779 pages, 9 overfull hbox
-make memo                 # un seul volume (ou make labs, make solutions)
-ls build/*.pdf
+make check        # identifiants énoncé ↔ corrigé, liens, schémas, scripts cités
+make lint         # bash -n, shellcheck, py_compile sur scripts/ et tools/
+make nav          # régénère la navigation et les tables du parcours
 ```
 
-Les autres cibles : `make check` (identifiants énoncé ↔ corrigé, liens,
-schémas, scripts cités), `make lint` (`bash -n`, `shellcheck`,
-`py_compile`), `make nav` (navigation et tables du parcours), `make figures`
-(schémas TikZ → SVG). `texlive-latex-extra` pèse 1 Go avec ses
-recommandations : c'est le prix de `tcolorbox`, `titlesec` et `fvextra` ;
-`python3-pypdf` ne sert qu'au livret A5 du mémo. Les « overfull hbox » sont
-des lignes de code qui dépassent la marge ; s'il y en a plus d'une dizaine,
-une source contient une ligne de plus de 80 colonnes.
+`make figures` régénère les SVG des schémas d'origine depuis leurs sources
+TikZ (`assets/figures/src/`) ; il ne sert qu'à qui modifie l'un de ces
+schémas et demande TeX Live. Les nouveaux schémas sont en Mermaid, écrits
+directement dans le Markdown.
 
 ### La CI : GitHub Actions, puis Gitea Actions
 
-Sur GitHub, deux workflows tournent sans rien installer :
+Sur GitHub, `.github/workflows/ci.yml` tourne à chaque push et pull
+request : cohérence du dépôt (`tools/check_repo.py`), navigation à jour,
+`bash -n`, `shellcheck`, `py_compile`.
 
-* `.github/workflows/ci.yml`, à chaque push et pull request : cohérence du
-  dépôt (`tools/check_repo.py`), navigation à jour, lecture de chaque
-  fichier par pandoc, `bash -n`, `shellcheck`, `py_compile` ;
-* `.github/workflows/pdf.yml`, sur une étiquette `v*` (ou à la demande) :
-  construit les PDF et les publie dans une *Release*.
-
-Le miroir `lab-git` porte son propre workflow,
-`.gitea/workflows/build-pdf.yaml`, qui reconstruit les PDF à chaque push
-sur `main`. Il **ne tournera pas avant le module 25** : Gitea Actions a
-besoin d'un *runner* (`act_runner`) enregistré sur cette instance, et c'est
-exactement ce que le module 25 installe sur `lab-ops`. Jusque-là, les runs
-restent en attente (*waiting*) dans l'onglet *Actions*, sans conséquence.
-Quand le runner du module 25 existe, enregistre-le une seconde fois sur
-`http://lab-git.lab.local:3000/`, et le prochain push sur `main` produira
-les PDF en 6 à 8 minutes — le temps d'installer TeX Live dans le
-conteneur ; le module 25 montre comment construire une image `runner` qui
-l'embarque déjà.
+Le miroir `lab-git` porte les mêmes contrôles,
+`.gitea/workflows/controles.yaml`. Il **ne tournera pas avant le module 25** :
+Gitea Actions a besoin d'un *runner* (`act_runner`) enregistré sur cette
+instance, et c'est exactement ce que le module 25 installe sur `lab-ops`.
+Jusque-là, les runs restent en attente (*waiting*) dans l'onglet *Actions*,
+sans conséquence. Quand le runner du module 25 existe, enregistre-le une
+seconde fois sur `http://lab-git.lab.local:3000/`, et le prochain push sur
+`main` lancera les contrôles en une minute.
 
 > [!CAUTION]
 > **Attention**
 >
-> Le `paths:` du workflow Gitea évite de reconstruire 1 500 pages quand tu ne
+> Le `paths:` du workflow Gitea évite de relancer les contrôles quand tu ne
 > pousses qu'une réponse dans `reponses/`. Les jobs tournent en root dans le
 > conteneur du runner, d'où `apt-get` sans `sudo`.
 
@@ -1809,8 +1786,8 @@ portfolio, sans effort supplémentaire.
 > **Critère de succès**
 >
 > `git remote -v` montre `origin` (ton fork), `upstream` (le dépôt de
-> référence) et `lab` (le miroir Gitea) ; `git status` est propre après
-> `make pdf` (les PDF sont ignorés) ; `reponses/M07/L7.2.md` existe et
+> référence) et `lab` (le miroir Gitea) ; `make check` répond OK sur les
+> cinq contrôles ; `reponses/M07/L7.2.md` existe et
 > `git diff upstream/main -- modules` est vide ; le dépôt est visible dans
 > Gitea avec son README ; ton premier vrai commit `feat(M01): ...`
 > arrivera à la fin de la première séance du module 01.

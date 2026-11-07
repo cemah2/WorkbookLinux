@@ -471,20 +471,14 @@ d) `ssh lab-web dpkg -l | diff <(ssh lab-db dpkg -l)`, le tube fournissant le se
 `cmd > f 2>&1` et `cmd 2>&1 > f`. Puis décris un cas réel où la seconde forme est
 exactement ce qu'on veut.
 
-<!-- repondre: 8 -->
-
 <a id="qo5-2"></a>**[QO5.2](corrige.md#qo5-2)** — *On te demande en entretien* : « Notre script de sauvegarde se termine
 toujours en succès, même quand le `pg_dump` plante. Le pipeline est
 `pg_dump ... | gzip > dump.sql.gz`. Explique le problème et donne deux corrections
 différentes. »
 
-<!-- repondre: 8 -->
-
 <a id="qo5-3"></a>**[QO5.3](corrige.md#qo5-3)** — Compare `grep`, `sed` et `awk` pour extraire la troisième colonne d'un
 fichier délimité. Donne la commande dans chaque outil, puis explique dans quel cas
 chacun est le bon choix — et lequel tu interdirais en revue de code.
-
-<!-- repondre: 8 -->
 
 <a id="qo5-4"></a>**[QO5.4](corrige.md#qo5-4)** — On te donne ce pipeline :
 
@@ -496,45 +490,31 @@ Détaille ce que fait **chaque** maillon et ce qui casse si on retire le premier
 Estime ensuite le coût : que se passe-t-il sur un fichier de 40 Go, et que
 proposerais-tu à la place ?
 
-<!-- repondre: 10 -->
-
 <a id="qo5-5"></a>**[QO5.5](corrige.md#qo5-5)** — *On te demande en entretien* : « Un `sort -k2 -n` sur un fichier de logs
 donne un ordre incohérent en production alors qu'il est correct sur ton poste.
 Cite trois causes possibles et la commande qui tranche pour chacune. »
-
-<!-- repondre: 8 -->
 
 <a id="qo5-6"></a>**[QO5.6](corrige.md#qo5-6)** — Explique la différence entre une substitution de commande `$(cmd)`, un
 here-string `<<<`, et une substitution de processus `<(cmd)`. Donne pour chacune un
 cas où les deux autres ne conviennent pas.
 
-<!-- repondre: 8 -->
-
 <a id="qo5-7"></a>**[QO5.7](corrige.md#qo5-7)** — Un développeur veut extraire le champ `"version"` d'un JSON avec
 `grep -o '"version":"[^"]*"'`. Explique pourquoi tu refuses en revue de code, en
 citant au moins trois cas concrets où ça casse, et ce que tu proposes.
-
-<!-- repondre: 8 -->
 
 <a id="qo5-8"></a>**[QO5.8](corrige.md#qo5-8)** — Décris ta démarche complète, commande par commande, pour répondre à
 « pourquoi le site a-t-il été lent hier entre 14 h et 16 h ? » avec pour seule
 donnée un `access.log` au format `combined` + `$request_time`. Précise, pour chaque
 étape, la question à laquelle elle répond.
 
-<!-- repondre: 12 -->
-
 <a id="qo5-9"></a>**[QO5.9](corrige.md#qo5-9)** — Explique le mécanisme de `awk 'NR==FNR { ... ; next } { ... }'`.
 Pourquoi `next` est-il indispensable ? Que se passe-t-il si le premier fichier est
 vide, et comment t'en prémunir ?
-
-<!-- repondre: 8 -->
 
 <a id="qo5-10"></a>**[QO5.10](corrige.md#qo5-10)** — Un `.csv` généré par un tableur fait échouer un script qui fonctionnait
 jusque-là. Liste cinq causes possibles liées au format (encodage, fins de ligne,
 séparateur, quoting, en-tête), et pour chacune la commande de diagnostic et le
 correctif en une ligne.
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -838,8 +818,6 @@ supervision n'a rien signalé et personne ne s'en est aperçu pendant trois jour
 même en 0, corriger les deux problèmes séparément, et dire quelle ligne de bash aurait
 évité trois jours de silence.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf5-2"></a>**[BF5.2](corrige.md#bf5-2)** — « Le déploiement échoue avec une erreur qui n'a aucun sens »
 
 ```bash
@@ -858,8 +836,6 @@ avait mangé le début de la ligne. La valeur affichée est pourtant la bonne, e
 comparaison échouait alors que `cat` semble donner raison à l'utilisateur, et donner
 la commande qui aurait montré le problème en une seconde.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf5-3"></a>**[BF5.3](corrige.md#bf5-3)** — « Le top 10 des IP compte deux fois la même adresse »
 
 ```bash
@@ -875,8 +851,6 @@ n'a pas changé de format, juste de provenance (il vient maintenant d'un agréga
 **Objectif** : identifier ce qui distingue des lignes visuellement identiques,
 corriger le pipeline pour que le classement soit juste quelle que soit la provenance
 du fichier, et expliquer pourquoi `uniq` n'a pas fait son travail.
-
-<!-- repondre: 8 -->
 
 ---
 

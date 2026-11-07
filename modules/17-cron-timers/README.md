@@ -479,36 +479,26 @@ croire. Donne la règle générale (quand est-ce un ET, quand est-ce un OU), pui
 écris deux expressions : l'une qui s'exécute le 1er du mois **seulement si**
 c'est un vendredi, l'autre qui s'exécute le premier vendredi du mois.
 
-<!-- repondre: 10 -->
-
 <a id="qo17-2"></a>**[QO17.2](corrige.md#qo17-2)** — *On te demande en entretien* : « Un dev me dit que son script marche
 quand il le lance à la main mais échoue en cron. Décris-moi ta démarche, dans
 l'ordre, en nommant les commandes. » Réponds en cinq étapes maximum, et cite la
 commande qui permet de **reproduire** l'environnement de cron sans attendre la
 prochaine exécution.
 
-<!-- repondre: 10 -->
-
 <a id="qo17-3"></a>**[QO17.3](corrige.md#qo17-3)** — *On te demande en entretien* : « On migre nos tâches planifiées vers
 systemd. Qu'est-ce que ça nous apporte concrètement, et dans quels cas
 garderiez-vous cron ? » Structure ta réponse autour de quatre critères
 techniques, pas autour de « c'est plus moderne ».
-
-<!-- repondre: 10 -->
 
 <a id="qo17-4"></a>**[QO17.4](corrige.md#qo17-4)** — `Persistent=true` d'un timer systemd et `anacron` résolvent le même
 problème. Explique **où** chacun stocke son état, à quel moment il décide de
 rattraper, et cite un cas où l'un fait quelque chose que l'autre ne sait pas
 faire.
 
-<!-- repondre: 8 -->
-
 <a id="qo17-5"></a>**[QO17.5](corrige.md#qo17-5)** — Explique le mécanisme de `flock -n /var/lock/x.lock cmd` :
 sur quoi porte réellement le verrou, pourquoi on parle de verrou **consultatif**,
 qui libère le verrou si le script est tué par `kill -9`, et pourquoi
 `if [ -f /var/run/x.pid ]` est une mauvaise réimplémentation du même besoin.
-
-<!-- repondre: 10 -->
 
 <a id="qo17-6"></a>**[QO17.6](corrige.md#qo17-6)** — Un job de facturation tourne à 02:30 sur un serveur réglé en
 `Europe/Paris`. Décris précisément ce qui se passe le jour du passage à l'heure
@@ -516,23 +506,17 @@ d'été et le jour du retour à l'heure d'hiver, pour cron **et** pour un timer
 systemd. Quelle configuration recommandes-tu sur un serveur de production, et
 comment gères-tu le cas d'un rapport qui doit être daté en heure locale ?
 
-<!-- repondre: 10 -->
-
 <a id="qo17-7"></a>**[QO17.7](corrige.md#qo17-7)** — Une sauvegarde nocturne a cessé de tourner il y a onze jours.
 Personne ne s'en est aperçu : aucune alerte, aucun mail, aucun `failed`.
 Explique pourquoi la supervision classique « alerter quand le job échoue » ne
 peut structurellement pas détecter ce cas, puis décris deux mécanismes concrets
 qui le détectent, dont un implémentable sans outil externe.
 
-<!-- repondre: 10 -->
-
 <a id="qo17-8"></a>**[QO17.8](corrige.md#qo17-8)** — Un runbook d'équipe recommande de terminer toutes les lignes de
 crontab par `> /dev/null 2>&1` « pour ne pas polluer la boîte mail de root ».
 Explique pourquoi c'est une mauvaise pratique, ce qu'on perd exactement, et
 propose trois écritures alternatives selon que la sortie doit finir dans un
 fichier, dans le journal système, ou nulle part mais avec trace de l'échec.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -886,8 +870,6 @@ installer un paquet, ajouter un `source /etc/profile` dans la crontab.
 l'endroit qui convient, et expliquer pourquoi `sudo -u factura` ne reproduisait
 pas le problème.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf17-2"></a>**[BF17.2](corrige.md#bf17-2)** — « Le rapport hebdo n'arrive plus, mais rien n'est en erreur »
 
 ```bash
@@ -906,8 +888,6 @@ guise de réparation.
 **Objectif** : prouver en une commande que la tâche n'est plus planifiée, trouver
 ce qui l'a désactivée, remettre en service, et proposer la supervision qui aurait
 levé l'alerte au bout de 24 h au lieu de trois semaines.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf17-3"></a>**[BF17.3](corrige.md#bf17-3)** — « Le compteur de factures est incohérent une nuit sur trois »
 
@@ -928,8 +908,6 @@ mécanisme en cause, corriger la planification pour qu'il ne puisse plus se
 produire, et dire quelle protection tu appliquerais si le même script devait
 tourner sur trois serveurs partageant le même fichier.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf17-4"></a>**[BF17.4](corrige.md#bf17-4)** — « L'archivage ne produit plus rien depuis la simplification »
 
 ```bash
@@ -949,8 +927,6 @@ diagnostic — il faut d'abord expliquer et corriger **dans la crontab**).
 **Objectif** : citer la ligne exacte qui pose problème, expliquer le mécanisme
 caractère par caractère, la corriger en restant dans la crontab, puis énoncer la
 règle générale qui évite définitivement cette famille de pannes.
-
-<!-- repondre: 8 -->
 
 ---
 

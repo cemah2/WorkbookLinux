@@ -444,52 +444,36 @@ d'un fichier en `---rwxrwx` (mode 077) ne peut ni le lire ni le modifier alors q
 n'importe quel membre du groupe ou tiers le peut. Quel principe général cela
 illustre-t-il ?
 
-<!-- repondre: 6 -->
-
 <a id="qo3-2"></a>**[QO3.2](corrige.md#qo3-2)** — On te donne `umask 007`. Détaille le calcul complet du mode d'un fichier
 et d'un répertoire nouvellement créés, en montrant l'opération bit à bit. Puis
 explique pourquoi un umask **ne peut jamais** ajouter le bit `x` à un fichier créé
 par `touch` ou une redirection.
 
-<!-- repondre: 8 -->
-
 <a id="qo3-3"></a>**[QO3.3](corrige.md#qo3-3)** — *On te demande en entretien* : « Quelle est la différence entre SGID sur
 un fichier et SGID sur un répertoire ? Donne un cas d'usage réel du second. »
 Réponds comme en entretien.
-
-<!-- repondre: 8 -->
 
 <a id="qo3-4"></a>**[QO3.4](corrige.md#qo3-4)** — Explique le rôle du **masque** dans une ACL POSIX. Pourquoi peut-on
 avoir une entrée `u:webdev:rwx` qui n'accorde en réalité que `r--` ? Comment
 `setfacl` recalcule-t-il le masque, et comment forcer une valeur ?
 
-<!-- repondre: 8 -->
-
 <a id="qo3-5"></a>**[QO3.5](corrige.md#qo3-5)** — *On te demande en entretien* : « Un binaire est en SUID root et tu y
 trouves une vulnérabilité. Décris précisément ce qu'un attaquant local peut en
 faire, et pourquoi une capability aurait limité les dégâts. »
-
-<!-- repondre: 8 -->
 
 <a id="qo3-6"></a>**[QO3.6](corrige.md#qo3-6)** — Compare deux façons de partager en écriture un répertoire entre trois
 utilisateurs : (a) un groupe Unix + SGID + `chmod g+w`, et (b) des ACL POSIX. Dans
 quel cas chacune est la bonne réponse ? Cite une limite concrète de la solution par
 groupe que les ACL résolvent.
 
-<!-- repondre: 8 -->
-
 <a id="qo3-7"></a>**[QO3.7](corrige.md#qo3-7)** — Décris ta démarche complète, dans l'ordre, face à un utilisateur qui
 signale `Permission denied` en lisant un fichier dont il jure qu'il est en `644`.
 Nomme chaque commande et ce que tu cherches dans sa sortie, jusqu'à écarter
 AppArmor/SELinux.
 
-<!-- repondre: 10 -->
-
 <a id="qo3-8"></a>**[QO3.8](corrige.md#qo3-8)** — À quoi servent `chattr +i` et `chattr +a` ? Donne un cas d'usage
 opérationnel de chacun, et explique le piège que `+i` peut créer pour une mise à
 jour de paquet ou un déploiement automatisé.
-
-<!-- repondre: 6 -->
 
 ---
 
@@ -727,8 +711,6 @@ composant du chemin qui bloque, corriger **au bon niveau et avec le bon mode**, 
 expliquer pourquoi des fichiers en `644` ne suffisent pas si un répertoire parent
 perd son bit `x`.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf3-2"></a>**[BF3.2](corrige.md#bf3-2)** — « Impossible d'écrire dans le dépôt d'exports, et le groupe ne suit plus »
 
 ```bash
@@ -746,8 +728,6 @@ répertoire existe toujours et ils ont bien le droit d'y créer des fichiers.
 identifier ce qui a été retiré (un bit spécial et/ou une ACL), et énoncer la règle
 qui garantit qu'un fichier déposé reste modifiable par tout le groupe.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf3-3"></a>**[BF3.3](corrige.md#bf3-3)** — « resolv.conf revient toujours et le déploiement échoue »
 
 ```bash
@@ -764,8 +744,6 @@ pipeline.
 
 **Objectif** : rendre le fichier modifiable, expliquer pourquoi **root lui-même**
 était bloqué, et dire dans quel cas légitime on pose ce type de protection.
-
-<!-- repondre: 8 -->
 
 ---
 

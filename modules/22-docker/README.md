@@ -741,22 +741,16 @@ Docker : nomme les mécanismes noyau impliqués, ce que chacun isole ou limite,
 et déduis-en trois conséquences concrètes pour la sécurité, la performance et
 l'exploitation.
 
-<!-- repondre: 12 -->
-
 <a id="qo22-2"></a>**[QO22.2](corrige.md#qo22-2)** — *On te demande en entretien* : « `ENTRYPOINT` ou `CMD` ? Forme
 exec ou forme shell ? » Explique comment les deux se combinent, ce que
 `docker run image arg` remplace, ce qui devient PID 1 dans chaque forme, et
 pourquoi ce PID 1 change le comportement de `docker stop`. Termine par le rôle
 de `--init`.
 
-<!-- repondre: 12 -->
-
 <a id="qo22-3"></a>**[QO22.3](corrige.md#qo22-3)** — Décris le fonctionnement du cache de build : ce qui invalide une
 couche, ce qui se propage, pourquoi `COPY . .` en tête de Dockerfile est un
 contresens, ce qu'apporte un build multi-stage, et comment tu vérifies la
 taille de chaque couche d'une image produite.
-
-<!-- repondre: 10 -->
 
 <a id="qo22-4"></a>**[QO22.4](corrige.md#qo22-4)** — Un conteneur « ne démarre pas ». Déroule ta méthode de diagnostic
 dans l'ordre, avec pour chaque étape la commande et **ce que tu cherches** :
@@ -764,14 +758,10 @@ dans l'ordre, avec pour chaque étape la commande et **ce que tu cherches** :
 port déjà pris, dépendance absente, permissions sur un montage, limite
 mémoire. Distingue les codes 0, 1, 125, 137, 139, 143.
 
-<!-- repondre: 14 -->
-
 <a id="qo22-5"></a>**[QO22.5](corrige.md#qo22-5)** — Explique le trajet d'un paquet TCP de `lab-adm` vers un conteneur
 qui a publié `-p 8080:80` sur `lab-ops` : chaînes `iptables` traversées,
 DNAT, rôle de `docker-proxy`, et pourquoi `ufw` n'a pas son mot à dire.
 Donne ensuite deux façons correctes de restreindre l'accès à ce port.
-
-<!-- repondre: 10 -->
 
 <a id="qo22-6"></a>**[QO22.6](corrige.md#qo22-6)** — *On te demande en entretien* : « Pourquoi dit-on que le groupe
 `docker` équivaut à root ? » Donne la commande en une ligne qui le prouve,
@@ -780,15 +770,11 @@ UID sont projetés, ce qui ne marche plus). Cite enfin cinq options de
 `docker run` qui réduisent la surface d'attaque d'un conteneur et ce que
 chacune empêche.
 
-<!-- repondre: 12 -->
-
 <a id="qo22-7"></a>**[QO22.7](corrige.md#qo22-7)** — Un développeur monte `~/projet/data` dans son conteneur et obtient
 `PermissionError: [Errno 13] Permission denied`. Explique ce qui se passe au
 niveau des UID entre l'hôte et le conteneur, pourquoi un volume nommé n'aurait
 pas posé le problème, et donne trois corrections possibles avec leurs
 inconvénients.
-
-<!-- repondre: 10 -->
 
 <a id="qo22-8"></a>**[QO22.8](corrige.md#qo22-8)** — Dans une pile Compose (proxy, app, base, cache), explique ce que
 fait précisément `docker compose down` par rapport à `stop`, ce que `-v`
@@ -796,15 +782,11 @@ détruit, comment tu mets à jour **uniquement** l'image de `app` sans couper le
 autres services, et comment tu fais démarrer la pile au boot de la machine sans
 écrire d'unité systemd.
 
-<!-- repondre: 10 -->
-
 <a id="qo22-9"></a>**[QO22.9](corrige.md#qo22-9)** — Trivy remonte 41 CVE sur ton image, dont 3 `CRITICAL` dans
 `libssl3` de l'image de base et 1 `HIGH` dans une bibliothèque Python.
 Décris ta démarche de décision : ce que tu vérifies pour chaque CVE, ce qui
 justifie d'ignorer une alerte, ce qui impose un rebuild, et pourquoi
 `--ignore-unfixed` est à la fois utile et dangereux.
-
-<!-- repondre: 8 -->
 
 <a id="qo22-10"></a>**[QO22.10](corrige.md#qo22-10)** — *On te demande en entretien* : « Raconte-moi ce qui se passe
 entre le moment où je tape `docker run nginx` et celui où le processus
@@ -815,8 +797,6 @@ pourquoi le père du processus final n'est pas `dockerd`. Termine en
 expliquant où se placent `ctr`, `nerdctl`, `crictl`, Podman et `skopeo` dans
 ce schéma, et pourquoi Kubernetes n'a plus besoin de Docker.
 
-<!-- repondre: 14 -->
-
 <a id="qo22-11"></a>**[QO22.11](corrige.md#qo22-11)** — Décris les couches de défense en profondeur d'un conteneur
 Docker par défaut, de la plus externe à la plus interne : namespaces,
 capabilities, profil seccomp, profil AppArmor, `no-new-privileges`, système
@@ -825,8 +805,6 @@ ce qu'elle bloque concrètement (un exemple de commande refusée), comment tu
 la vérifies depuis l'hôte ou depuis le conteneur, et l'option qui la
 désactive. Explique ce que `--privileged` supprime d'un coup, et pourquoi
 `userns-remap` n'est pas activé par défaut malgré son intérêt.
-
-<!-- repondre: 12 -->
 
 ---
 
@@ -1432,8 +1410,6 @@ de façon que le conteneur tourne indéfiniment et s'arrête en moins de 2 s
 avec le code `0`, et citer deux autres façons d'obtenir le même résultat sans
 réécrire le script.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf22-2"></a>**[BF22.2](corrige.md#bf22-2)** — « /visites renvoie une erreur 500 depuis la migration »
 
 ```bash
@@ -1452,8 +1428,6 @@ changer le chemin de données.
 **Objectif** : identifier avec quel UID l'application écrit, corriger
 l'hôte de la façon la plus restrictive possible, sans redémarrer le
 conteneur, et expliquer pourquoi un volume nommé n'aurait pas eu ce problème.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf22-3"></a>**[BF22.3](corrige.md#bf22-3)** — « Le port est publié mais personne n'y accède »
 
@@ -1475,8 +1449,6 @@ pourquoi le test local passait (quel chemin prend un paquet vers
 `127.0.0.1:8003` par rapport à un paquet venant de `lab-adm`), et dire où une
 telle règle aurait dû être documentée.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf22-4"></a>**[BF22.4](corrige.md#bf22-4)** — « Plus rien ne se lance : no space left on device »
 
 ```bash
@@ -1496,8 +1468,6 @@ sous `/var/lib/docker/`, agrandir le disque, supprimer les images du module.
 libérer l'espace par une commande Docker, et proposer deux mesures pour que
 ça ne se reproduise pas (dont une limite chiffrée).
 
-<!-- repondre: 8 -->
-
 ### <a id="bf22-5"></a>**[BF22.5](corrige.md#bf22-5)** — « L'API ne trouve plus Redis »
 
 ```bash
@@ -1516,8 +1486,6 @@ en dur dans `REDIS_URL`, recréer les conteneurs.
 **Objectif** : expliquer pourquoi la résolution échoue alors que la
 connectivité IP fonctionne, corriger **sans recréer** les conteneurs, et
 dire comment il aurait fallu les lancer.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf22-6"></a>**[BF22.6](corrige.md#bf22-6)** — « Le traitement par lots n'avance plus, et on ne peut même plus entrer dedans »
 
@@ -1540,8 +1508,6 @@ n'affiche que 180 processus.
 la corriger à chaud pour que les lots se terminent, dire d'où venait la
 valeur initiale (indice : `docker inspect`), et proposer une méthode chiffrée
 pour dimensionner cette limite avant la mise en production.
-
-<!-- repondre: 8 -->
 
 ---
 

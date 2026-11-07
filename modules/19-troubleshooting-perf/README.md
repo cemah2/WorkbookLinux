@@ -628,14 +628,10 @@ l'appliquerais à ce ticket : « depuis ce matin le site est lent ». Pour chaqu
 **ce que tu fais du résultat**. Insiste sur la délimitation : quelles quatre
 questions permettent de réduire le périmètre avant même de se connecter ?
 
-<!-- repondre: 12 -->
-
 <a id="qo19-2"></a>**[QO19.2](corrige.md#qo19-2)** — Explique la différence entre USE et les quatre signaux dorés, avec
 un exemple concret où les deux méthodes donnent des conclusions différentes sur
 le même incident. Dans quel cas USE est-il aveugle ? Dans quel cas les signaux
 dorés le sont-ils ?
-
-<!-- repondre: 10 -->
 
 <a id="qo19-3"></a>**[QO19.3](corrige.md#qo19-3)** — *On te demande en entretien* : « Tu te connectes sur un serveur de
 production qui rame, tu as 60 secondes avant que le client te rappelle. Tu tapes
@@ -643,15 +639,11 @@ quoi, dans quel ordre, et qu'est-ce que tu regardes dans chaque sortie ? »
 Réponds comme en entretien : la liste des commandes et, pour chacune, **une
 phrase** sur l'information recherchée.
 
-<!-- repondre: 12 -->
-
 <a id="qo19-4"></a>**[QO19.4](corrige.md#qo19-4)** — Un processus `java` a un RSS qui monte de 40 Mo par heure depuis
 trois jours. Décris comment tu prouves qu'il s'agit d'une fuite et non d'un
 cache qui se remplit normalement, quelles données tu collectes pour le
 développeur, et ce que tu mets en place pour que l'incident ne réveille personne
 à 3 h du matin en attendant le correctif.
-
-<!-- repondre: 10 -->
 
 <a id="qo19-5"></a>**[QO19.5](corrige.md#qo19-5)** — Explique le fonctionnement de l'OOM killer : à quel moment il se
 déclenche, comment le score d'une tâche est calculé, ce que font
@@ -659,14 +651,10 @@ déclenche, comment le score d'une tâche est calculé, ce que font
 n'est presque jamais le vrai coupable. Termine par ce que tu changerais sur une
 machine où l'OOM killer a tué la base de données au lieu de l'application.
 
-<!-- repondre: 10 -->
-
 <a id="qo19-6"></a>**[QO19.6](corrige.md#qo19-6)** — *On te demande en entretien* : « `df` dit 100 %, `du` dit 40 %.
 Explique-moi ce qui se passe et comment tu récupères l'espace sans redémarrer le
 service. » Réponds, puis explique ce qui se passerait si tu avais fait un
 `rm` du fichier de log au lieu d'un `truncate`.
-
-<!-- repondre: 8 -->
 
 <a id="qo19-7"></a>**[QO19.7](corrige.md#qo19-7)** — Compare `strace`, `perf top` et les compteurs de `/proc` du point de
 vue du coût en production : ce que chacun observe, ce qu'il rate, ce qu'il
@@ -674,14 +662,10 @@ coûte, et dans quel ordre tu les emploies sur un serveur qui sert encore du
 trafic. Donne la commande exacte que tu utiliserais pour ne pas dépasser dix
 secondes d'observation avec `strace`.
 
-<!-- repondre: 10 -->
-
 <a id="qo19-8"></a>**[QO19.8](corrige.md#qo19-8)** — Un service répond en 5,1 s au lieu de 40 ms. `top` montre le
 processus à 0,2 % de CPU. Décris ta démarche complète pour prouver que le temps
 est passé dans une dépendance externe, puis pour dire **laquelle**. Cite au
 moins trois outils et ce que tu attends de chacun.
-
-<!-- repondre: 10 -->
 
 <a id="qo19-9"></a>**[QO19.9](corrige.md#qo19-9)** — On te confie la gestion d'un incident majeur : le site est
 inaccessible depuis 10 minutes, quatre personnes sont sur le pont, la direction
@@ -690,15 +674,11 @@ en place (rôles, canal, cadence), comment tu arbitres entre « rétablir tout d
 suite » et « comprendre d'abord », et la liste exacte des preuves que tu fais
 collecter avant tout redémarrage.
 
-<!-- repondre: 12 -->
-
 <a id="qo19-10"></a>**[QO19.10](corrige.md#qo19-10)** — Explique la méthode des cinq pourquoi sur cet incident réel :
 « le site a été indisponible 40 minutes parce que le disque `/var` était plein ».
 Déroule les cinq niveaux, puis dis à quel niveau se situe l'action corrective
 qui empêche vraiment la récidive — et pourquoi s'arrêter au premier niveau
 (« on a purgé les logs ») garantit que ça recommencera.
-
-<!-- repondre: 10 -->
 
 <a id="qo19-11"></a>**[QO19.11](corrige.md#qo19-11)** — *On te demande en entretien* : « Un service Python répond
 lentement, `top` montre son processus à 100 % d'un cœur. Déroule ta
@@ -709,8 +689,6 @@ ranges), le premier outil que tu attaches et pourquoi (`perf` plutôt que
 quand `perf` ne montre que `_PyEval_EvalFrameDefault`, comment tu passes de
 « la fonction chaude » à « la ligne coupable », le critère qui prouve que
 la correction est bonne, et ce que tu refuses de faire.
-
-<!-- repondre: 12 -->
 
 ---
 
@@ -1291,8 +1269,6 @@ trace complète dans le journal du noyau, expliquer pourquoi c'est **ce**
 processus qui a été choisi, rétablir un service stable sans correctif applicatif,
 et dire ce que tu transmets au développeur.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf19-2"></a>**[BF19.2](corrige.md#bf19-2)** — « Passé 200 utilisateurs, tout casse »
 
 ```bash
@@ -1312,8 +1288,6 @@ appliquée au processus (pas celle de ton shell), dire d'où vient cette limite,
 la corriger durablement au bon endroit, et expliquer comment tu aurais détecté la
 dérive avant l'incident.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf19-3"></a>**[BF19.3](corrige.md#bf19-3)** — « Plus un octet de libre, mais le disque est vide »
 
 ```bash
@@ -1332,8 +1306,6 @@ tuer un processus.
 le descripteur responsables, récupérer l'espace **sans tuer personne**, vérifier
 que l'application réécrit, et proposer la mesure qui empêche la récidive.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf19-4"></a>**[BF19.4](corrige.md#bf19-4)** — « Le serveur rame, on ne voit rien dans le top »
 
 ```bash
@@ -1350,8 +1322,6 @@ La charge moyenne est montée à plus de 4 sur une VM à 2 vCPU. L'équipe a reg
 prouver qu'il est bien la cause (et non une conséquence), dire d'où il a été
 lancé et par quoi il est maintenu en vie, le neutraliser proprement et
 durablement, puis vérifier le retour à la latence de baseline.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf19-5"></a>**[BF19.5](corrige.md#bf19-5)** — « Les appels vers l'API interne échouent une fois sur deux »
 
@@ -1372,8 +1342,6 @@ temporairement et tu perdrais la preuve).
 durablement, et expliquer pourquoi un redémarrage aurait « réglé » le problème
 pendant une heure.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf19-6"></a>**[BF19.6](corrige.md#bf19-6)** — « Tout est lent, exactement lent »
 
 ```bash
@@ -1391,8 +1359,6 @@ code applicatif.
 **Objectif** : décomposer les 5 secondes phase par phase, prouver où elles
 passent avec deux outils indépendants, identifier le composant responsable,
 corriger, et expliquer pourquoi la régularité du délai était l'indice principal.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf19-7"></a>**[BF19.7](corrige.md#bf19-7)** — « Le service tourne mais n'écrit plus rien »
 
@@ -1413,8 +1379,6 @@ noyau ce qui a provoqué le basculement, expliquer le rôle de l'option
 `errors=remount-ro`, remonter le volume en écriture **proprement** (un simple
 `remount,rw` ne suffira pas, dis pourquoi), vérifier l'intégrité, et énoncer ce
 qu'il faut surveiller pour être prévenu la prochaine fois.
-
-<!-- repondre: 12 -->
 
 ### <a id="bf19-8"></a>**[BF19.8](corrige.md#bf19-8)** — « Le service clignote »
 
@@ -1437,8 +1401,6 @@ seulement si tu l'expliques et si tu répares ensuite la vraie cause.
 tenir en place, corriger, et expliquer le rôle exact de `Restart=`,
 `RestartSec=`, `StartLimitIntervalSec=` et `StartLimitBurst=` dans ce que tu as
 observé. Précise qui a arrêté le service : l'application, ou systemd ?
-
-<!-- repondre: 12 -->
 
 ---
 

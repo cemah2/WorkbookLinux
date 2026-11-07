@@ -610,28 +610,20 @@ qui appelle `fork()`, qui appelle `execve()`, ce que devient le code de retour,
 et ce qu'est exactement une entrée `<defunct>`. Explique ensuite pourquoi un
 zombie ne consomme presque aucune ressource mais reste un vrai problème.
 
-<!-- repondre: 10 -->
-
 <a id="qo8-2"></a>**[QO8.2](corrige.md#qo8-2)** — *On te demande en entretien* : « Un service ne répond plus. Tu tapes
 `kill -9`. Pourquoi mon collègue senior fait-il la grimace ? » Réponds en
 expliquant ce que `SIGTERM` déclenche dans une application correctement écrite,
 ce que `SIGKILL` empêche, et ce que systemd fait exactement quand tu tapes
 `systemctl stop`.
 
-<!-- repondre: 10 -->
-
 <a id="qo8-3"></a>**[QO8.3](corrige.md#qo8-3)** — *On te demande en entretien* : « Explique-moi la différence entre
 `Wants=`, `Requires=`, `BindsTo=` et `After=`. Donne-moi un cas réel où le choix
 change le comportement en production. »
-
-<!-- repondre: 10 -->
 
 <a id="qo8-4"></a>**[QO8.4](corrige.md#qo8-4)** — Un collègue a écrit une unité pour un démon qui se détache tout seul
 en tâche de fond. Il a mis `Type=simple`. Explique ce qui se passera, puis donne
 la matrice de décision complète : pour chacun des cinq `Type=`, quel type
 d'application, et comment systemd sait que le démarrage est terminé.
-
-<!-- repondre: 10 -->
 
 <a id="qo8-5"></a>**[QO8.5](corrige.md#qo8-5)** — Décris ta méthode complète de diagnostic d'un service qui refuse de
 démarrer, dans l'ordre, avec pour chaque étape la commande et **ce que tu
@@ -639,14 +631,10 @@ cherches dans la sortie**. Ta méthode doit couvrir au moins : unité introuvabl
 unité masquée, binaire absent, `User=` inexistant, `EnvironmentFile=` manquant,
 port déjà pris, isolation trop stricte.
 
-<!-- repondre: 14 -->
-
 <a id="qo8-6"></a>**[QO8.6](corrige.md#qo8-6)** — Compare les trois façons de faire survivre une opération longue à la
 fermeture d'une session SSH : `nohup`/`disown`, `tmux`, `systemd-run`. Pour
 chacune : ce qui survit exactement, où partent les sorties, si on peut
 « revenir dedans », et dans quel cas d'exploitation tu la choisis.
-
-<!-- repondre: 10 -->
 
 <a id="qo8-7"></a>**[QO8.7](corrige.md#qo8-7)** — Une application tombe à 1024 descripteurs ouverts. Déroule ton
 diagnostic : comment tu confirmes la limite effective du processus en cours,
@@ -654,22 +642,16 @@ comment tu vois combien il en consomme, et où tu poses la nouvelle limite selon
 que l'application est lancée par SSH, par cron ou par systemd. Explique pourquoi
 `ulimit -n 65536` tapé dans ton shell ne change rien au service.
 
-<!-- repondre: 10 -->
-
 <a id="qo8-8"></a>**[QO8.8](corrige.md#qo8-8)** — Explique ce que protège concrètement chacune de ces directives, et
 donne pour chacune un exemple d'attaque ou d'incident qu'elle empêche :
 `NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, `DynamicUser`,
 `CapabilityBoundingSet=`. Dis ensuite ce que mesure `systemd-analyze security` et
 pourquoi le score seul ne suffit pas.
 
-<!-- repondre: 10 -->
-
 <a id="qo8-9"></a>**[QO8.9](corrige.md#qo8-9)** — Un service met 45 secondes à s'arrêter à chaque `systemctl restart`,
 et le boot de la machine est passé de 12 à 70 secondes. Explique le lien possible
 entre les deux, les directives en cause, et la démarche pour trancher (quelles
 commandes, quelles valeurs par défaut).
-
-<!-- repondre: 8 -->
 
 <a id="qo8-10"></a>**[QO8.10](corrige.md#qo8-10)** — *On te demande en entretien* : « Un traitement batch met la
 machine à genoux chaque nuit et emporte l'API avec lui. Comment tu le
@@ -680,8 +662,6 @@ tâches), les fichiers de `/sys/fs/cgroup` que tu lis pour prouver que la
 limite agit, ce que fait l'OOM killer d'un cgroup par rapport à l'OOM killer
 global, et où tu retrouves la trace. Termine par le rôle de `systemd-oomd`
 sur Ubuntu 24.04 et ce qu'il change à ton diagnostic.
-
-<!-- repondre: 12 -->
 
 ---
 
@@ -1181,8 +1161,6 @@ les timeouts, ou passer `Restart=` à `always` pour « masquer » le problème.
 que `systemctl start` rende la main en moins de deux secondes, et expliquer
 pourquoi le service était pourtant fonctionnel pendant les 90 secondes.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf8-2"></a>**[BF8.2](corrige.md#bf8-2)** — « Le service redémarre en boucle puis abandonne »
 
 ```bash
@@ -1203,8 +1181,6 @@ remettre le service en marche, expliquer précisément le message
 « start request repeated too quickly » et pourquoi un simple `restart` ne
 suffisait plus. Proposer enfin la modification d'une seule ligne de l'unité qui
 aurait transformé cette panne bloquante en simple avertissement.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf8-3"></a>**[BF8.3](corrige.md#bf8-3)** — « Ce service refuse de démarrer et il n'y a aucune erreur »
 
@@ -1227,8 +1203,6 @@ commande qui liste l'état de toutes les unités de ce type sur la machine,
 rétablir le service, et expliquer la différence entre l'état trouvé et un simple
 `disable`.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf8-4"></a>**[BF8.4](corrige.md#bf8-4)** — « L'API plante dès qu'il y a du monde »
 
 ```bash
@@ -1250,8 +1224,6 @@ modifier `/etc/security/limits.conf`.
 durablement, et expliquer en une phrase pourquoi le contenu du fichier d'unité
 ne suffisait pas à répondre à la question « quelle est la configuration de ce
 service ».
-
-<!-- repondre: 8 -->
 
 ---
 

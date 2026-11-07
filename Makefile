@@ -2,19 +2,16 @@
 #   make check     cohérence du dépôt (identifiants, liens, schémas, scripts)
 #   make lint      bash -n, shellcheck, py_compile
 #   make nav       régénère la navigation et les tables du parcours
-#   make figures   rend les schémas TikZ en SVG (assets/figures/)
-#   make pdf       les trois volumes + le livret A5 du mémo (build/)
-#   make memo | labs | solutions   un seul volume
-#   make deps      dépendances Ubuntu 24.04 de la chaîne PDF
+#   make figures   régénère les SVG des schémas TikZ existants (rarement utile)
+#   make deps      outils des contrôles (shellcheck, python3)
 PYTHON ?= python3
-BUILD   = build
 
-.PHONY: help all check lint nav figures pdf memo labs solutions clean deps
+.PHONY: help all check lint nav figures clean deps
 
 help:
 	@sed -n 's/^#   //p' Makefile
 
-all: check lint pdf
+all: nav check lint
 
 check:
 	$(PYTHON) tools/check_repo.py
@@ -32,23 +29,8 @@ nav:
 figures:
 	bash tools/render_figures.sh
 
-pdf: check
-	$(PYTHON) tools/pdf/build.py
-
-memo:
-	$(PYTHON) tools/pdf/build.py memo memo-a5
-
-labs:
-	$(PYTHON) tools/pdf/build.py labs
-
-solutions:
-	$(PYTHON) tools/pdf/build.py solutions
-
 clean:
-	rm -rf $(BUILD)
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +
 
 deps:
-	sudo apt-get install -y pandoc texlive-xetex texlive-latex-extra \
-	  texlive-fonts-recommended texlive-pictures python3-pypdf poppler-utils \
-	  shellcheck
+	sudo apt-get install -y shellcheck python3

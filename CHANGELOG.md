@@ -3,8 +3,7 @@
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ;
 versions en [SemVer](https://semver.org/lang/fr/) : majeure = structure du
 parcours (modules ajoutés ou renumérotés), mineure = nouveaux items,
-correctif = erreurs corrigées. Chaque version publiée produit les PDF dans
-les [Releases](https://github.com/cemah2/WorkbookLinux/releases).
+correctif = erreurs corrigées.
 
 ## [Non publié]
 
@@ -15,19 +14,26 @@ les [Releases](https://github.com/cemah2/WorkbookLinux/releases).
   inversement (environ 1 480 liens).
 - Navigation générée (`tools/gen_nav.py`) : fil d'Ariane, précédent /
   suivant, scripts du module en tête de chaque énoncé.
-- Les 48 schémas TikZ rendus en SVG (`assets/figures/`, `tools/render_figures.sh`).
+- Les 48 schémas rendus en SVG (`assets/figures/`, sources dans
+  `assets/figures/src/`) ; les nouveaux schémas sont en Mermaid.
 - `docs/parcours.md` (planning, niveaux, parcours ciblés),
   `docs/a-verifier.md` (points à confirmer sur les VM).
-- CI GitHub Actions : cohérence du dépôt, `bash -n`, `shellcheck`,
-  `py_compile` ; workflow de publication des PDF sur étiquette `v*`.
+- CI GitHub Actions : cohérence du dépôt, navigation à jour, `bash -n`,
+  `shellcheck`, `py_compile`.
 - Modèles d'issues (erreur, suggestion) et de pull request.
 - `bootstrap-lab.sh` clone le dépôt dans `~/workbook` quand aucune archive
   n'est fournie.
 
 ### Modifié
-- Les encadrés pandoc (`::: pourquoi`, `::: piege`…) deviennent des alertes
-  GitHub avec libellé ; la chaîne PDF les relit (`tools/pdf/gfm2pandoc.py`) :
-  le Markdown du dépôt est la seule source.
+- Le workbook devient un dépôt **100 % Markdown GitHub** : les encadrés
+  pandoc (`::: pourquoi`, `::: piege`…) deviennent des alertes GitHub avec
+  libellé, les schémas des images SVG ou des diagrammes Mermaid.
+
+### Supprimé
+- La version PDF et toute sa chaîne de production (pandoc, LaTeX, gabarits,
+  polices, workflows de publication), ainsi que les zones de réponse
+  invisibles qui ne servaient qu'au PDF : les réponses s'écrivent dans
+  `reponses/`.
 - Licence : CC BY-NC-SA 4.0 pour le contenu, MIT pour les scripts et outils
   (l'ancienne licence « usage personnel » interdisait la publication des
   corrigés).

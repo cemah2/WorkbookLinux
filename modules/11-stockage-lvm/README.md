@@ -627,28 +627,20 @@ un disque physique neuf et un répertoire utilisable par une application, en
 nommant chaque couche et l'outil qui la crée. » Réponds en listant les couches dans
 l'ordre, et indique à chacune ce qu'on gagne et ce qu'on perd à la sauter.
 
-<!-- repondre: 12 -->
-
 <a id="qo11-2"></a>**[QO11.2](corrige.md#qo11-2)** — Explique **précisément** pourquoi on ne met jamais `/dev/sdb1` dans
 `/etc/fstab`, en décrivant le mécanisme d'attribution des noms `sdX` par le noyau.
 Puis compare `UUID=`, `PARTUUID=` et `LABEL=` : dans quel cas chacun est le bon
 choix, et lequel choisirais-tu pour une partition de swap non formatée ?
-
-<!-- repondre: 10 -->
 
 <a id="qo11-3"></a>**[QO11.3](corrige.md#qo11-3)** — Un snapshot LVM de 2 Go sur un LV de 200 Go. Décris ce qui se passe
 **bloc par bloc** quand une application écrit sur l'origine après la création du
 snapshot. Déduis-en comment on dimensionne un snapshot, et ce qui arrive quand il
 déborde — pour le snapshot et pour l'origine.
 
-<!-- repondre: 10 -->
-
 <a id="qo11-4"></a>**[QO11.4](corrige.md#qo11-4)** — *On te demande en entretien* : « Le `/var` d'un serveur de production
 est plein. Tu as un disque libre. Raconte-moi comment tu ajoutes 100 Go **sans
 arrêter le service**, et dis-moi à quel moment exactement il y aurait eu une
 coupure si le système n'avait pas été sur LVM. »
-
-<!-- repondre: 10 -->
 
 <a id="qo11-5"></a>**[QO11.5](corrige.md#qo11-5)** — Compare ext4 et XFS sur cinq critères techniques concrets
 (agrandissement, réduction, comportement sur gros fichiers, réparation, coût
@@ -656,21 +648,15 @@ d'un `fsck`). Pour chacun des trois cas suivants, dis lequel tu choisis et
 pourquoi : un volume de logs, un datastore PostgreSQL de 4 To, une partition `/`
 de 20 Go sur une VM.
 
-<!-- repondre: 10 -->
-
 <a id="qo11-6"></a>**[QO11.6](corrige.md#qo11-6)** — Tu tapes `sudo umount /srv/sauvegardes` et tu obtiens `target is busy`.
 Décris ta démarche de diagnostic complète, dans l'ordre, avec les commandes. Puis
 explique la différence de mécanisme entre `umount -l` et `umount -f`, et le risque
 propre à chacun.
 
-<!-- repondre: 8 -->
-
 <a id="qo11-7"></a>**[QO11.7](corrige.md#qo11-7)** — Un collègue propose de désactiver complètement le swap sur les serveurs
 de bases de données, « parce qu'il y a 128 Go de RAM et que le swap ralentit tout ».
 Donne les arguments pour et contre, explique ce que fait réellement
 `vm.swappiness`, et dis ce que tu recommandes et pourquoi.
-
-<!-- repondre: 8 -->
 
 <a id="qo11-8"></a>**[QO11.8](corrige.md#qo11-8)** — Décris la procédure de récupération d'une machine Linux qui ne démarre
 plus à cause d'une ligne fautive dans `/etc/fstab`. Tu n'as accès qu'à la console
@@ -678,21 +664,15 @@ Proxmox. Détaille : ce que tu vois à l'écran, comment tu obtiens un shell, po
 la racine est en lecture seule à ce moment-là, et les commandes exactes de la
 réparation. Termine par les deux options de `fstab` qui auraient évité l'incident.
 
-<!-- repondre: 12 -->
-
 <a id="qo11-9"></a>**[QO11.9](corrige.md#qo11-9)** — On te confie un serveur dont le stockage « rame ». Décris les
 métriques que tu regardes dans `iostat -xz 2`, dans quel ordre, et ce que chacune
 t'apprend. Explique pourquoi `%util` est trompeur sur un SSD et par quoi tu le
 remplaces.
 
-<!-- repondre: 8 -->
-
 <a id="qo11-10"></a>**[QO11.10](corrige.md#qo11-10)** — Explique le rôle respectif de `/etc/crypttab` et de `/etc/fstab` pour
 un volume LUKS monté au démarrage. Dans quel ordre systemd les traite-t-il, quel
 nom apparaît dans chacun, et que se passe-t-il si tu mets l'UUID du système de
 fichiers dans `crypttab` ?
-
-<!-- repondre: 8 -->
 
 <a id="qo11-11"></a>**[QO11.11](corrige.md#qo11-11)** — *On te demande en entretien* : « Le RAID, c'est de la sauvegarde ? »
 Réponds en distinguant ce contre quoi un RAID1 protège et ce contre quoi il ne
@@ -701,16 +681,12 @@ RAID1 mdadm meurt : ce que voit le noyau, ce qu'affiche `/proc/mdstat`, ce que f
 `mdmonitor`, et les commandes de remplacement dans l'ordre. Termine par la raison
 pour laquelle on met LVM **au-dessus** du RAID et pas l'inverse.
 
-<!-- repondre: 12 -->
-
 <a id="qo11-12"></a>**[QO11.12](corrige.md#qo11-12)** — Compare NFS et iSCSI : ce que chacun présente au client (fichiers ou
 blocs), qui tient le système de fichiers, ce qui se passe si deux clients montent
 la même ressource en écriture, et les options de `fstab` indispensables dans les
 deux cas. Donne un cas d'usage où NFS est le bon choix, un où iSCSI l'est, et
 explique pourquoi un montage NFS `hard` dont le serveur disparaît produit des
 processus en état `D` qu'aucun `kill -9` ne tue.
-
-<!-- repondre: 12 -->
 
 ---
 
@@ -1308,8 +1284,6 @@ modifier la ligne pour que ce type d'erreur ne puisse plus jamais empêcher le b
 Explique aussi pourquoi le démarrage a attendu 1 min 30 s avant d'abandonner, et
 comment on raccourcit cette attente.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf11-2"></a>**[BF11.2](corrige.md#bf11-2)** — « Plus une seule écriture ne passe, et le disque est à moitié vide »
 
 ```bash
@@ -1328,8 +1302,6 @@ commande, remettre le volume en état d'écriture **sans perdre de données**, p
 expliquer pourquoi l'extension du LV (`lvextend -r`) résout ou ne résout pas le
 problème selon la façon dont le système de fichiers a été créé. Donne la commande
 de formatage qui aurait évité l'incident.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf11-3"></a>**[BF11.3](corrige.md#bf11-3)** — « La sauvegarde de cette nuit est vide et le snapshot est bizarre »
 
@@ -1350,8 +1322,6 @@ qui trahit le problème, expliquer le mécanisme de copie sur écriture qui a co
 là, remettre le système en état de produire une sauvegarde valide, et proposer deux
 protections : une sur le dimensionnement, une sur la surveillance.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf11-4"></a>**[BF11.4](corrige.md#bf11-4)** — « Impossible de démonter, et le volume refuse de s'étendre »
 
 ```bash
@@ -1371,8 +1341,6 @@ montage.
 proprement, libérer l'espace du groupe de volumes, réussir l'extension, et rédiger
 en trois lignes la règle d'exploitation qui évite le second problème.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf11-5"></a>**[BF11.5](corrige.md#bf11-5)** — « Le serveur va très bien », dit tout le monde
 
 ```bash
@@ -1390,8 +1358,6 @@ miroir de `lab-db` ? ». Tu regardes, et tu n'aimes pas ce que tu vois.
 journaux, expliquer pourquoi personne n'a été prévenu alors que `mdmonitor`
 était censé le faire, remettre le miroir en `[UU]` sans arrêter le service,
 puis rétablir l'alerte et prouver qu'elle fonctionne.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf11-6"></a>**[BF11.6](corrige.md#bf11-6)** — « `ls` ne rend plus la main et la charge monte »
 
@@ -1412,8 +1378,6 @@ le montage NFS qui bloque et pas le disque local, trouver **pourquoi** le
 serveur est injoignable pour NFS alors qu'il répond au `ping`, libérer les
 processus sans redémarrer, remettre le partage en service, puis expliquer
 pourquoi `kill -9` était sans effet et pourquoi on garde quand même `hard`.
-
-<!-- repondre: 12 -->
 
 ---
 

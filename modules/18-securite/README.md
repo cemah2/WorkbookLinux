@@ -526,68 +526,48 @@ politique `default deny incoming` ne casse **pas** les réponses aux requêtes q
 machine a elle-même initiées. Nomme le mécanisme noyau et l'endroit exact où ufw le
 met en œuvre.
 
-<!-- repondre: 8 -->
-
 <a id="qo18-2"></a>**[QO18.2](corrige.md#qo18-2)** — *On te demande en entretien* : « Quelle différence entre `ufw` et
 `firewalld` ? Lequel choisirais-tu pour un parc de 200 serveurs, et pourquoi ? »
 Réponds en distinguant le modèle de données (règles à plat contre zones), la gestion
 du permanent/runtime, et l'automatisation.
 
-<!-- repondre: 10 -->
-
 <a id="qo18-3"></a>**[QO18.3](corrige.md#qo18-3)** — Décris ta démarche complète quand un collègue te dit : « le pare-feu a
 l'air bon, `ufw status` montre bien la règle, mais le trafic ne passe pas ». Donne
 les commandes dans l'ordre et ce que tu cherches dans chaque sortie.
-
-<!-- repondre: 10 -->
 
 <a id="qo18-4"></a>**[QO18.4](corrige.md#qo18-4)** — Un service tourne correctement quand SELinux est en `permissive` et
 échoue en `enforcing`. Décris la méthode complète pour transformer ce constat en
 correctif propre, de la collecte des AVC jusqu'au module de politique. Précise à
 quel moment `audit2allow` est une bonne idée et à quel moment c'en est une mauvaise.
 
-<!-- repondre: 12 -->
-
 <a id="qo18-5"></a>**[QO18.5](corrige.md#qo18-5)** — *On te demande en entretien* : « fail2ban protège-t-il contre le
 bruteforce SSH ? » Réponds en nuançant : ce que ça bloque réellement, quatre
 situations où ça ne sert à rien, et ce que tu mets en place à la place ou en
 complément.
-
-<!-- repondre: 10 -->
 
 <a id="qo18-6"></a>**[QO18.6](corrige.md#qo18-6)** — Compare AppArmor et SELinux sur cinq axes : modèle (chemin/étiquette),
 couverture par défaut, coût d'exploitation, diagnostic d'un refus, et ce qui se passe
 quand un fichier est déplacé. Conclus sur le choix que tu ferais pour un serveur
 applicatif maison.
 
-<!-- repondre: 10 -->
-
 <a id="qo18-7"></a>**[QO18.7](corrige.md#qo18-7)** — Une équipe de dev te demande de stocker le mot de passe de la base dans
 une variable d'environnement du runner CI, « c'est masqué dans l'interface ». Liste
 au moins cinq façons dont ce secret peut fuir malgré le masquage, puis propose une
 architecture de gestion des secrets réaliste pour cette équipe.
-
-<!-- repondre: 10 -->
 
 <a id="qo18-8"></a>**[QO18.8](corrige.md#qo18-8)** — Explique la chaîne de confiance TLS : ce que contient un certificat, ce
 que le client vérifie exactement, dans quel ordre, et ce que nginx doit servir.
 Explique ensuite pourquoi une erreur de chaîne se voit sur `curl` mais parfois pas
 dans le navigateur.
 
-<!-- repondre: 10 -->
-
 <a id="qo18-9"></a>**[QO18.9](corrige.md#qo18-9)** — Tu prends l'astreinte et tu reçois cette alerte : « connexion SSH
 réussie pour le compte `postgres` à 03h14 depuis une IP publique ». Détaille ta
 conduite à tenir dans les 30 premières minutes : ce que tu regardes, dans quel ordre,
 ce que tu **ne fais pas**, et comment tu préserves les preuves.
 
-<!-- repondre: 12 -->
-
 <a id="qo18-10"></a>**[QO18.10](corrige.md#qo18-10)** — Qu'est-ce qu'un CIS Benchmark ? Explique la différence entre niveau 1
 et niveau 2, ce que « scored » signifie, et pourquoi appliquer un benchmark à 100 %
 sur un serveur applicatif existant est généralement une mauvaise idée.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -972,8 +952,6 @@ PostgreSQL sur `lab-db` (`connection timed out` au bout de deux minutes). Sur
 restaurer le flux, expliquer le mécanisme en une phrase, et dire quelle commande tu
 aurais lancée **en premier** pour gagner vingt minutes.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf18-2"></a>**[BF18.2](corrige.md#bf18-2)** — « Le site renvoie 403 sur une seule page »
 
 À lancer sur `lab-rhel` :
@@ -997,8 +975,6 @@ correction **robuste** : si un collègue refait la même manipulation demain, le
 problème ne doit plus se poser sur ce répertoire. Explique la différence entre les
 deux niveaux de correction.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf18-3"></a>**[BF18.3](corrige.md#bf18-3)** — « HTTPS ne marche plus depuis ce matin »
 
 À lancer sur `lab-web` :
@@ -1019,8 +995,6 @@ l'une depuis le fichier, l'autre depuis le service en écoute), réémettre ce q
 sans toucher à la CA, remettre le service en état, et proposer le mécanisme qui aurait
 déclenché une alerte quinze jours avant. Livre ce mécanisme sous forme de commande
 utilisable en supervision.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf18-4"></a>**[BF18.4](corrige.md#bf18-4)** — « Je n'arrive plus à me connecter en SSH, mais seulement depuis le bastion »
 
@@ -1043,8 +1017,6 @@ actif), redémarrer la VM, modifier `sshd_config`.
 corriger la configuration pour que ça ne puisse plus se reproduire. Explique pourquoi
 `ufw status` ne montrait rien d'anormal, et où se trouvait réellement le blocage dans
 le noyau.
-
-<!-- repondre: 10 -->
 
 ---
 

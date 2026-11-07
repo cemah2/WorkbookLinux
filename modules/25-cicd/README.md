@@ -578,22 +578,16 @@ précisant, pour chacun, **quel artefact** existe à la fin et **qui** décide
 de la mise en production. Donne un exemple d'équipe pour laquelle le
 déploiement continu serait une erreur, et pourquoi.
 
-<!-- repondre: 8 -->
-
 <a id="qo25-2"></a>**[QO25.2](corrige.md#qo25-2)** — *On te demande en entretien* : « Décris le pipeline que tu
 mettrais en place pour une application conteneurisée, du commit à la
 production, en justifiant l'ordre des étapes et en disant ce qui bloque le
 pipeline à chaque étape. » Réponds en 10 lignes, sans citer d'outil précis
 avant la fin.
 
-<!-- repondre: 10 -->
-
 <a id="qo25-3"></a>**[QO25.3](corrige.md#qo25-3)** — Explique le mécanisme par lequel un secret « masqué » finit
 quand même dans un journal de pipeline. Cite trois vecteurs différents, et
 pour chacun la contre-mesure. Pourquoi `env:` est-il préférable à `${{ }}`
 directement dans `run:` ?
-
-<!-- repondre: 8 -->
 
 <a id="qo25-4"></a>**[QO25.4](corrige.md#qo25-4)** — Sur `lab-ops`, le runner monte `/var/run/docker.sock` dans
 chaque job. Explique ce qu'un job peut faire avec ce socket, pourquoi c'est
@@ -601,48 +595,34 @@ chaque job. Explique ce qu'un job peut faire avec ce socket, pourquoi c'est
 construire des images **sans** ce montage. Quel compromis retiens-tu pour une
 PME de 15 développeurs ?
 
-<!-- repondre: 8 -->
-
 <a id="qo25-5"></a>**[QO25.5](corrige.md#qo25-5)** — Compare blue/green et canary : infrastructure requise, ce qu'on
 mesure avant de basculer, ce qu'il advient de l'état (sessions, base de
 données) et le cas où chacune est inapplicable. Où se placent les *feature
 flags* par rapport à ces deux stratégies ?
-
-<!-- repondre: 8 -->
 
 <a id="qo25-6"></a>**[QO25.6](corrige.md#qo25-6)** — *On te demande en entretien* : « Le pipeline est vert, la prod
 est cassée. Comment tu enquêtes ? » Donne ta démarche ordonnée : ce que tu
 compares, les commandes sur `lab-web` et sur le registre, et les trois causes
 qui expliquent 90 % des cas.
 
-<!-- repondre: 10 -->
-
 <a id="qo25-7"></a>**[QO25.7](corrige.md#qo25-7)** — Explique « *build once, deploy many* » en décrivant ce qu'est une
 **promotion** d'artefact et pourquoi une image taguée uniquement par un
 numéro de version Git ne suffit pas. Que faut-il faire du tag `latest` ?
-
-<!-- repondre: 6 -->
 
 <a id="qo25-8"></a>**[QO25.8](corrige.md#qo25-8)** — Un job `tofu apply` doit attendre une approbation humaine. Décris
 comment tu l'obtiens sur GitLab CI, sur GitHub Actions et sur Gitea Actions,
 en pointant ce qui est natif et ce qui est contourné. Quel risque spécifique
 introduit le contournement ?
 
-<!-- repondre: 8 -->
-
 <a id="qo25-9"></a>**[QO25.9](corrige.md#qo25-9)** — Un runner « éphémère » : qu'est-ce que c'est, quel problème
 résout-il (cite un incident concret qu'il évite), et quel coût introduit-il ?
 Comment gères-tu le disque d'un runner persistant qui construit 40 images
 par jour ?
 
-<!-- repondre: 6 -->
-
 <a id="qo25-10"></a>**[QO25.10](corrige.md#qo25-10)** — Donne une définition opérationnelle des quatre métriques DORA
 (quelle donnée brute, où la trouver dans Gitea/Git/les logs de déploiement)
 et explique pourquoi optimiser les deux premières sans surveiller les deux
 dernières est une erreur classique.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1040,8 +1020,6 @@ fait, mais pas dans l'onglet où on regarde), identifier la ou les lignes
 fautives, corriger, et proposer la vérification locale qui aurait bloqué le
 commit (hook `pre-commit` ou job dédié).
 
-<!-- repondre: 8 -->
-
 ### <a id="bf25-2"></a>**[BF25.2](corrige.md#bf25-2)** — « Ça tourne depuis 40 minutes »
 
 ```bash
@@ -1060,8 +1038,6 @@ supprimer le job.
 job à un runner, trouver la cause dans le diff du commit, et choisir entre
 deux correctifs valables (côté workflow ou côté runner) en argumentant.
 Bonus : montrer, dans les logs du runner, qu'il **ne voit même pas** le job.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf25-3"></a>**[BF25.3](corrige.md#bf25-3)** — « Le mot de passe du registre est dans les logs »
 
@@ -1082,8 +1058,6 @@ désactiver le secret sans le remplacer.
 masquage n'a pas fonctionné sur celles-là, corriger le step, **faire
 tourner** le secret (nouvelle valeur côté registre et côté Gitea) et écrire
 les deux règles à ajouter à la revue de code.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf25-4"></a>**[BF25.4](corrige.md#bf25-4)** — « Le pipeline est vert, la prod est vieille »
 
@@ -1110,8 +1084,6 @@ vient et depuis quand ; identifier les **trois** changements du commit qui,
 combinés, rendent la panne invisible ; rétablir le déploiement par SHA et le
 smoke test qui aurait détecté le problème ; expliquer pourquoi le tag
 `latest` n'a plus sa place dans un déploiement.
-
-<!-- repondre: 10 -->
 
 ---
 

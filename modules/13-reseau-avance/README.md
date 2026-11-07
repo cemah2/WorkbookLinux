@@ -735,15 +735,11 @@ Docker. » Donne la séquence exacte d'objets noyau créés (namespace, veth,
 bridge, routes, règles netfilter) et, pour chacun, la commande `ip`/`nft` qui
 le reproduit à la main.
 
-<!-- repondre: 12 -->
-
 <a id="qo13-2"></a>**[QO13.2](corrige.md#qo13-2)** — Décris le chemin d'un paquet TCP qui arrive sur `ens18` de
 `lab-adm` à destination d'un netns derrière `br-lab` via un DNAT : à quel
 hook la destination est-elle réécrite, où la décision de routage est-elle
 prise, quelle chaîne le paquet traverse ensuite, comment le paquet de retour
 retrouve son adresse publique, et à quel moment conntrack intervient.
-
-<!-- repondre: 12 -->
 
 <a id="qo13-3"></a>**[QO13.3](corrige.md#qo13-3)** — Une machine a deux interfaces sur deux réseaux, chacune avec sa
 passerelle. Les clients du réseau B se plaignent : le `ping` passe mais toute
@@ -752,15 +748,11 @@ connexion TCP échoue ou se coupe. Explique le mécanisme (route asymétrique,
 + table dédiée qui corrige, et la commande qui **prouve** la correction sans
 envoyer un seul paquet.
 
-<!-- repondre: 12 -->
-
 <a id="qo13-4"></a>**[QO13.4](corrige.md#qo13-4)** — Compare `ct state established,related accept` en tête de chaîne
 avec une approche « sans état » qui autoriserait `tcp sport 80` en entrée.
 Explique ce que conntrack apporte, ce que `related` couvre concrètement, ce que
 `invalid` désigne, et pourquoi un routeur qui perd sa table conntrack (`conntrack
 -F`, reboot) coupe les sessions NATées mais pas les sessions non NATées.
-
-<!-- repondre: 10 -->
 
 <a id="qo13-5"></a>**[QO13.5](corrige.md#qo13-5)** — *On te demande en entretien* : « Un DNAT de port fonctionne depuis
 l'extérieur mais pas depuis le LAN interne où se trouve le serveur cible. »
@@ -768,14 +760,10 @@ Explique le problème du hairpin NAT : trajet du SYN, trajet du SYN-ACK, pourquo
 le client reçoit une réponse d'une adresse qu'il ne connaît pas, et les deux
 solutions (SNAT de retour ou split-horizon DNS).
 
-<!-- repondre: 10 -->
-
 <a id="qo13-6"></a>**[QO13.6](corrige.md#qo13-6)** — VXLAN, GRE, IPIP, WireGuard : pour chacun, ce qui est encapsulé
 (trame ou paquet), le protocole porteur, le surcoût, si c'est chiffré, et un cas
 d'usage typique. Termine par le lien avec Kubernetes : que fait précisément
 `flannel.1` sur un nœud, et pourquoi le MTU des pods est 1450.
-
-<!-- repondre: 10 -->
 
 <a id="qo13-7"></a>**[QO13.7](corrige.md#qo13-7)** — Explique la différence entre un serveur DNS **autoritaire**, un
 **récursif**, un **forwarder** et un **cache**. Dans le lab, qui répond quand
@@ -783,15 +771,11 @@ d'usage typique. Termine par le lien avec Kubernetes : que fait précisément
 Donne pour chaque cas la séquence complète des serveurs interrogés et les flags
 `dig` qui le prouvent.
 
-<!-- repondre: 10 -->
-
 <a id="qo13-8"></a>**[QO13.8](corrige.md#qo13-8)** — Un transfert de zone : décris le mécanisme complet entre primaire
 et secondaire (NOTIFY, SOA, comparaison de serial, AXFR/IXFR, refresh/retry/
 expire), ce que devient la zone sur le secondaire si le primaire disparaît deux
 semaines, et les trois erreurs de configuration qui empêchent silencieusement le
 transfert.
-
-<!-- repondre: 10 -->
 
 <a id="qo13-9"></a>**[QO13.9](corrige.md#qo13-9)** — Un collègue propose de « désactiver IPv6 partout, on ne s'en sert
 pas ». Explique ce qu'un hôte Linux fait en IPv6 sans aucune configuration
@@ -799,15 +783,11 @@ pas ». Explique ce qu'un hôte Linux fait en IPv6 sans aucune configuration
 réellement quand on met `disable_ipv6=1`, et ce que tu proposes à la place
 (ULA, filtrage, `accept_ra`).
 
-<!-- repondre: 8 -->
-
 <a id="qo13-10"></a>**[QO13.10](corrige.md#qo13-10)** — `iperf3` donne 9,4 Gbit/s en direct entre `lab-web` et `lab-db`,
 5,1 Gbit/s à travers le VXLAN et 1,8 Gbit/s à travers WireGuard. Explique d'où
 vient chaque écart (encapsulation, perte des offloads, chiffrement, MTU,
 copies mémoire), quel compteur ou outil le confirmerait, et ce qu'on peut
 régler sans changer de technologie.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1328,8 +1308,6 @@ durcissement sysctl standard ».
 doit pas refaire tomber la panne), et expliquer pourquoi le paquet disparaît
 sans aucun message et à quel endroit précis du chemin décrit en §13.2.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf13-2"></a>**[BF13.2](corrige.md#bf13-2)** — « Le routeur accepte une connexion sur trois »
 
 ```bash
@@ -1349,8 +1327,6 @@ d'abord établi et écrit la cause.
 qui remplit la table et avec quelle durée de vie, corriger de façon persistante
 (dimensionnement **et** durée de vie), et expliquer pourquoi les sessions
 existantes n'étaient pas affectées.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf13-3"></a>**[BF13.3](corrige.md#bf13-3)** — « Le SYN part, la réponse ne revient jamais »
 
@@ -1373,8 +1349,6 @@ montre le `SYN` arriver dans `c1`.
 `ping` passe quand même, corriger en une seule commande `nft`, puis corriger le
 fichier pour que ça ne se reproduise pas.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf13-4"></a>**[BF13.4](corrige.md#bf13-4)** — « Le tunnel marche, sauf pour les vrais fichiers »
 
 ```bash
@@ -1394,8 +1368,6 @@ fonctionne. Aucun message d'erreur nulle part.
 `lab-db` ce qui arrive aux gros paquets, trouver les **deux** anomalies (une
 par machine), corriger, et expliquer pourquoi `ping` sans option ne voit rien
 et pourquoi aucune ICMP « fragmentation needed » n'est revenue.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf13-5"></a>**[BF13.5](corrige.md#bf13-5)** — « Le secondaire DNS vit dans le passé »
 
@@ -1418,8 +1390,6 @@ sur le secondaire.
 côtés, corriger sur le primaire, faire converger le secondaire sans le
 redémarrer, et expliquer le « parfois » côté résolveur.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf13-6"></a>**[BF13.6](corrige.md#bf13-6)** — « Le DNS ne marche plus, sauf pour le lab »
 
 ```bash
@@ -1440,8 +1410,6 @@ le reste échoue (c'est l'indice principal), trouver ce qui a été changé dans
 configuration, prouver le diagnostic avec `unbound-control` et une capture,
 remettre la récursion complète, et dire pourquoi le délai est de 2-3 s et non
 de 30 s.
-
-<!-- repondre: 8 -->
 
 ---
 

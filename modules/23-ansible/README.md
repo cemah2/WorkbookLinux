@@ -631,29 +631,21 @@ d) erreur : `delegate_to` n'accepte pas de variable
 exécution, retour. Où intervient `pipelining`, et pourquoi réduit-il de trois à
 un le nombre de connexions ? Que change `become` dans ce cheminement ?
 
-<!-- repondre: 10 -->
-
 <a id="qo23-2"></a>**[QO23.2](corrige.md#qo23-2)** — *On te demande en entretien* : « Un collègue soutient qu'un
 script bash avec `set -e` et des `if [ -f ]` est aussi idempotent qu'un
 playbook, et plus simple. Réponds-lui. » Donne une définition opérationnelle
 de l'idempotence, deux cas où bash l'obtient difficilement, et un cas où le
 bash reste le bon choix.
 
-<!-- repondre: 10 -->
-
 <a id="qo23-3"></a>**[QO23.3](corrige.md#qo23-3)** — Compare `lineinfile`, `blockinfile` et `template` pour gérer
 `/etc/ssh/sshd_config.d/50-baseline.conf`. Explique pourquoi une
 configuration gérée par plusieurs `lineinfile` finit divergente, et ce que
 `validate:` apporte à `template`.
 
-<!-- repondre: 8 -->
-
 <a id="qo23-4"></a>**[QO23.4](corrige.md#qo23-4)** — Décris précisément le cycle de vie d'un *handler* : quand il est
 notifié, quand il s'exécute, combien de fois, ce qui l'empêche de tourner, et
 les deux moyens de forcer son exécution. Donne un cas de production où
 `flush_handlers` est indispensable.
-
-<!-- repondre: 8 -->
 
 <a id="qo23-5"></a>**[QO23.5](corrige.md#qo23-5)** — *On te demande en entretien* : « Tu dois mettre à jour 40
 frontaux derrière un répartiteur sans interruption de service. Décris le
@@ -661,36 +653,26 @@ playbook. » Cite les mots-clés (`serial`, `max_fail_percentage`,
 `pre_tasks`/`post_tasks`, `delegate_to`, `uri`/`until`,
 `flush_handlers`) et explique le rôle de chacun dans le scénario.
 
-<!-- repondre: 10 -->
-
 <a id="qo23-6"></a>**[QO23.6](corrige.md#qo23-6)** — Explique la précédence des variables Ansible en te limitant aux
 sept niveaux que tu rencontres réellement (défauts de rôle, `group_vars/all`,
 `group_vars/<g>`, `host_vars`, `vars:` du play, `vars/main.yml` du rôle,
 extra vars). Pourquoi un rôle bien conçu ne met-il **rien** d'ajustable dans
 `vars/main.yml` ?
 
-<!-- repondre: 8 -->
-
 <a id="qo23-7"></a>**[QO23.7](corrige.md#qo23-7)** — Un playbook qui fonctionnait hier répond ce matin
 `UNREACHABLE` sur `lab-rhel` uniquement. Décris ta démarche de diagnostic
 dans l'ordre (commandes, verbosité, ce que tu cherches), et liste les cinq
 causes les plus fréquentes avec leur signature dans la sortie `-vvv`.
-
-<!-- repondre: 10 -->
 
 <a id="qo23-8"></a>**[QO23.8](corrige.md#qo23-8)** — Décris l'organisation d'un dépôt d'infra Ansible propre : arbre
 des répertoires, ce qui est chiffré, ce qui est ignoré par Git, ce qui tourne
 en CI avant la fusion. Où ranges-tu le mot de passe du vault, et comment le
 runner CI l'obtient-il sans qu'il apparaisse dans un journal ?
 
-<!-- repondre: 8 -->
-
 <a id="qo23-9"></a>**[QO23.9](corrige.md#qo23-9)** — Terraform et Ansible sont souvent présentés comme concurrents.
 Explique ce que chacun modélise (ressource vs état d'une machine), ce qu'est
 l'état Terraform et pourquoi Ansible n'en a pas, et comment les deux
 s'enchaînent pour créer puis configurer une VM Proxmox.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1120,8 +1102,6 @@ les bonnes gardes, pour qu'il réussisse sur `lab-web` **et** `lab-rhel`, soit
 changé, et passe `ansible-lint`. Pour chaque tâche d'origine, note dans un
 commentaire ce qui la rendait fragile ou non idempotente.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf23-2"></a>**[BF23.2](corrige.md#bf23-2)** — « Le groupe db a disparu »
 
 ```bash
@@ -1149,8 +1129,6 @@ corriger, et vérifier avec `ansible-inventory --graph` que `db`, `web`,
 `ubuntu` et `rhel` contiennent les bons hôtes. Explique pourquoi une seule
 ligne fausse a fait disparaître **tout** l'inventaire, et pas seulement un
 groupe.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf23-3"></a>**[BF23.3](corrige.md#bf23-3)** — « Le vault ne s'ouvre plus »
 
@@ -1181,8 +1159,6 @@ un accès au fichier, le **rechiffrer avec le mot de passe de l'équipe**
 (`~/lab23/.vault_pass`), remettre `ansible.cfg` en état, et proposer une
 règle pour que ça n'arrive plus.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf23-4"></a>**[BF23.4](corrige.md#bf23-4)** — « On change le vhost, nginx ne bouge pas »
 
 ```bash
@@ -1205,8 +1181,6 @@ Le fichier du vhost, lui, est bien modifié sur les deux hôtes.
 handler de tourner (un par hôte au moins, un commun), corriger chacun, et
 prouver que le handler se déclenche une seule fois par hôte modifié et pas du
 tout quand rien ne change.
-
-<!-- repondre: 8 -->
 
 ---
 

@@ -524,29 +524,21 @@ et quelle ligne `ExecStart` tu écris pour lancer un script d'un venv. Puis
 explique la différence entre `pip install x` et `python3 -m pip install x`
 sur une machine où trois interpréteurs cohabitent.
 
-<!-- repondre: 8 -->
-
 <a id="qo27-2"></a>**[QO27.2](corrige.md#qo27-2)** — *On te demande en entretien* : « Tu reprends un script Python
 de 400 lignes qui fait des `subprocess.run(..., shell=True)` partout. Que
 regardes-tu en premier, qu'est-ce qui est dangereux, et comment le corriges-tu
 sans tout réécrire ? » Réponds avec les mécanismes : découpage des mots,
 métacaractères, injection, `check`, `timeout`.
 
-<!-- repondre: 10 -->
-
 <a id="qo27-3"></a>**[QO27.3](corrige.md#qo27-3)** — Décris la différence entre `except:`, `except Exception:` et
 `except (OSError, ValueError):`. Quelles exceptions le premier attrape-t-il
 en plus du deuxième, et pourquoi est-ce grave dans un script lancé par un
 timer (pense à `sys.exit` et à Ctrl-C) ?
 
-<!-- repondre: 8 -->
-
 <a id="qo27-4"></a>**[QO27.4](corrige.md#qo27-4)** — Pourquoi `for ligne in f:` sur un fichier de 8 Go fonctionne
 alors que `f.read().splitlines()` tue le processus ? Explique en termes de
 mémoire, puis donne l'équivalent pour un `.gz` et pour un pipe (`stdin`).
 Que se passe-t-il si le fichier est en latin-1 et que tu n'as rien précisé ?
-
-<!-- repondre: 8 -->
 
 <a id="qo27-5"></a>**[QO27.5](corrige.md#qo27-5)** — *On te demande en entretien* : « Ton script de rétention a
 supprimé une archive mensuelle qu'il devait garder. Comment tu t'assures que
@@ -554,27 +546,19 @@ supprimé une archive mensuelle qu'il devait garder. Comment tu t'assures que
 tests unitaires sur la sélection, `--dry-run`, et le rôle d'un cas de test
 qui reproduit l'incident.
 
-<!-- repondre: 8 -->
-
 <a id="qo27-6"></a>**[QO27.6](corrige.md#qo27-6)** — Un fichier écrit avec `open(cible, "w")` peut être lu tronqué
 par un autre processus. Explique le mécanisme, puis décris l'écriture
 atomique (temporaire dans le même répertoire, `fsync`, `os.replace`) et
 pourquoi un temporaire dans `/tmp` ne convient pas.
 
-<!-- repondre: 8 -->
-
 <a id="qo27-7"></a>**[QO27.7](corrige.md#qo27-7)** — Compare `urllib.request` et `requests` pour interroger l'API
 Proxmox : gestion du token, du timeout, des codes 4xx/5xx, des retries.
 Dans quel cas restes-tu sur la bibliothèque standard ?
-
-<!-- repondre: 8 -->
 
 <a id="qo27-8"></a>**[QO27.8](corrige.md#qo27-8)** — Reprends les trois critères de QO7.8 (données, idempotence,
 taille) et ajoute-leur deux critères propres à Python : la testabilité et le
 long-running. Pour chaque critère, donne un exemple pris dans ce module et
 dis ce que bash aurait coûté.
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -972,8 +956,6 @@ liste des variables d'environnement sur lesquelles un script lancé par systemd
 ne peut pas compter. Bonus : pourquoi `PYTHONUNBUFFERED=1` a sa place dans
 l'unité.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf27-2"></a>**[BF27.2](corrige.md#bf27-2)** — « L'archive est incomplète et tar râle »
 
 ```bash
@@ -996,8 +978,6 @@ corriger `subprocess.run` (liste d'arguments, `check=True`, `--` avant les
 noms de fichiers), et rendre un code non nul quand `tar` échoue. Prouve avec
 `tar -tzf` que les six journaux sont dans l'archive.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf27-3"></a>**[BF27.3](corrige.md#bf27-3)** — « Too many open files »
 
 ```bash
@@ -1017,8 +997,6 @@ les descripteurs ouverts, corriger avec `with` en ne conservant que le
 résultat, et montrer que le nombre de descripteurs ouverts reste constant
 pendant tout le parcours. Expliquer aussi pourquoi `open(p).read()` sans
 `with`, dans une boucle, « marche » en CPython mais reste une faute.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf27-4"></a>**[BF27.4](corrige.md#bf27-4)** — « La supervision dit OK, le site est mort »
 
@@ -1041,8 +1019,6 @@ sorte du programme), attraper `HTTPError`, `URLError` et `TimeoutError`
 avec un message par URL sur stderr, et rendre `2` dès qu'un site échoue.
 Ajoute un test `pytest` avec `monkeypatch` sur `urllib.request.urlopen` qui
 aurait détecté la régression.
-
-<!-- repondre: 10 -->
 
 ---
 

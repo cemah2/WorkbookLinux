@@ -5,12 +5,12 @@
    INC) a son ancre dans le corrigé, et réciproquement.
 2. Liens relatifs : le fichier cible existe ; une ancre #id existe dans la
    cible (ancres explicites <a id> ou titres).
-3. Schémas : chaque image assets/figures/*.svg citée existe, et chaque
-   schéma TikZ a son SVG.
+3. Schémas : chaque image assets/figures/*.svg citée existe, chaque source
+   TikZ (assets/figures/src/) a son SVG, et chaque bloc Mermaid est non vide.
 4. Scripts : chaque script setup/check/break cité dans un énoncé existe,
    et chaque script check/break est cité quelque part.
-5. Structure : blocs de code fermés, aucun reste de syntaxe pandoc
-   (::: ou @fig) hors code, alertes GitHub avec un libellé connu.
+5. Structure : blocs de code fermés, aucune syntaxe étrangère au Markdown
+   GitHub (::: ou @fig) hors code, alertes GitHub avec un libellé connu.
 
 Sortie non nulle au premier problème trouvé dans une catégorie.
 """
@@ -117,9 +117,14 @@ for f in md_files():
                 continue
             if not (f.parent / src).resolve().exists():
                 bad("schémas", f"{f.relative_to(ROOT)}:{i} : image absente {src}")
-for tex in sorted((ROOT / "tools/pdf/tex/figures").glob("*.tex")):
+for tex in sorted((ROOT / "assets/figures/src").glob("[!_]*.tex")):
     if not (ROOT / "assets/figures" / (tex.stem + ".svg")).exists():
         bad("schémas", f"{tex.stem}.svg manquant : bash tools/render_figures.sh {tex.stem}")
+for f in md_files():
+    blocs = re.findall(r"^```mermaid\n(.*?)^```", f.read_text(encoding="utf-8"), re.M | re.S)
+    for b in blocs:
+        if not b.strip():
+            bad("schémas", f"{f.relative_to(ROOT)} : bloc Mermaid vide")
 
 # 4. scripts ---------------------------------------------------------------
 all_text = "\n".join(p.read_text(encoding="utf-8") for p in md_files())
@@ -148,7 +153,7 @@ for f in md_files():
         if inf:
             continue
         if re.match(r"^:::", l) or l.startswith("@fig("):
-            bad("structure", f"{f.relative_to(ROOT)}:{i} : syntaxe pandoc hors code : {l[:40]}")
+            bad("structure", f"{f.relative_to(ROOT)}:{i} : syntaxe hors Markdown GitHub : {l[:40]}")
         if re.match(r"^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]", l) and i < len(lines):
             nxt = lines[i]
             mm = re.match(r"^> \*\*(.+)\*\*\s*$", nxt)

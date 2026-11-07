@@ -540,14 +540,10 @@ pas un changement de contexte), le retour avec `errno`, et cite un cas où
 un appel « système » ne passe **pas** par le noyau. Termine par ce qu'est un
 processus en `D` dans ce modèle.
 
-<!-- repondre: 10 -->
-
 <a id="qo9-2"></a>**[QO9.2](corrige.md#qo9-2)** — Déroule le démarrage d'une VM Ubuntu 24.04 en UEFI depuis
 l'allumage jusqu'à l'invite `login:`, en nommant à chaque étape **le fichier
 réel** chargé et **qui** le charge. Précise ce que change Secure Boot, ce que
 fait exactement l'initramfs, et à quel moment `systemd` devient PID 1.
-
-<!-- repondre: 12 -->
 
 <a id="qo9-3"></a>**[QO9.3](corrige.md#qo9-3)** — *On te demande en entretien* : « Mot de passe root perdu sur une VM,
 pas de clé SSH, pas de sauvegarde du mot de passe. Tu fais quoi ? » Donne la
@@ -556,15 +552,11 @@ commandes dans le shell obtenu, pourquoi `mount -o remount,rw`, pourquoi
 `/.autorelabel`), puis explique ce que ça prouve sur la sécurité physique
 d'une machine et les deux contre-mesures.
 
-<!-- repondre: 12 -->
-
 <a id="qo9-4"></a>**[QO9.4](corrige.md#qo9-4)** — À quoi sert l'initramfs, et pourquoi le noyau ne peut-il pas s'en
 passer sur une machine dont `/` est sur LVM ? Explique la différence entre
 `MODULES=most` et `MODULES=dep` (Ubuntu) ou `hostonly` (dracut), le compromis
 taille / portabilité, comment vérifier qu'un pilote y est présent, et les
 quatre situations où il faut le régénérer.
-
-<!-- repondre: 10 -->
 
 <a id="qo9-5"></a>**[QO9.5](corrige.md#qo9-5)** — Décris ta méthode pour poser un paramètre `sysctl` en production
 sans surprise : test à chaud, persistance, nom et rang du fichier, vérification
@@ -572,15 +564,11 @@ après `sysctl --system` puis après reboot. Explique l'ordre de précédence
 complet et le cas particulier du paramètre qui n'existe qu'une fois un module
 chargé, avec la solution.
 
-<!-- repondre: 10 -->
-
 <a id="qo9-6"></a>**[QO9.6](corrige.md#qo9-6)** — Un disque est ajouté à chaud à une VM. Explique la chaîne complète :
 qui détecte le matériel, ce qu'est un *uevent*, ce que fait `udevd`, comment
 sont produits `/dev/sdb` et les liens `/dev/disk/by-*`, et pourquoi `sdb`
 n'est pas un nom stable. Donne la règle udev qui crée un lien stable, et dis
 comment tu la testes **sans** redémarrer.
-
-<!-- repondre: 10 -->
 
 <a id="qo9-7"></a>**[QO9.7](corrige.md#qo9-7)** — Pour chacune de ces quatre traces du journal noyau — OOM, erreur E/S,
 *soft lockup*, *hung task* — dis ce qu'elle signifie, quelle couche est en cause,
@@ -588,21 +576,15 @@ quelle commande tu lances ensuite, et ce qui distingue une VM d'une machine
 physique dans l'interprétation. Termine par le rôle de `kdump` et ce qu'il
 faut avoir configuré **avant** l'incident.
 
-<!-- repondre: 12 -->
-
 <a id="qo9-8"></a>**[QO9.8](corrige.md#qo9-8)** — Pourquoi l'heure d'une VM dérive-t-elle plus qu'une machine
 physique ? Explique horloge matérielle vs horloge système, ce que fait chrony
 (*slew* vs *step*, `makestep`), ce que `timedatectl` te montre, et liste au
 moins cinq choses concrètes qui cassent avec cinq minutes de décalage.
 
-<!-- repondre: 10 -->
-
 <a id="qo9-9"></a>**[QO9.9](corrige.md#qo9-9)** — *On te demande en entretien* : « Linux est-il un noyau monolithique
 ? Et c'est quoi eBPF, le live patching, le temps réel ? » Réponds en deux
 minutes chrono : une définition, un exemple concret d'usage ops pour chaque
 notion, et une commande ou un produit qui l'incarne.
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -1011,8 +993,6 @@ paquet de ce qui n'appartient à rien, vérifier que `dpkg` n'a rien laissé à
 moitié configuré, régénérer l'initramfs, et laisser une règle qui empêche la
 récidive.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf9-2"></a>**[BF9.2](corrige.md#bf9-2)** — « Le swappiness revient à 60 à chaque reboot »
 
 ```bash
@@ -1033,8 +1013,6 @@ au démarrage que personne ne lit. `sudo sysctl -p /etc/sysctl.d/<fichier>`
 valeurs ne tiennent pas (il y en a bien trois), corriger sans rien ajouter
 d'exotique, prouver avec `sysctl --system` que la lecture se fait dans le bon
 ordre, et vérifier après reboot.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf9-3"></a>**[BF9.3](corrige.md#bf9-3)** — « Depuis le reboot, la VM n'a plus de réseau »
 
@@ -1061,8 +1039,6 @@ bloquait le chargement **automatique** alors qu'elle n'empêche pas un
 `modprobe` à la main, et pourquoi régénérer l'initramfs même si le réseau n'y
 est pas nécessaire.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf9-4"></a>**[BF9.4](corrige.md#bf9-4)** — « L'interface a changé de nom et Netplan ne trouve plus rien »
 
 ```bash
@@ -1085,8 +1061,6 @@ fichier `.link` et Netplan `set-name`), rétablir le réseau **sans reboot**
 d'abord, puis proprement au reboot. Proposer la bonne façon de figer un nom
 d'interface si l'équipe y tient vraiment.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf9-5"></a>**[BF9.5](corrige.md#bf9-5)** — « Tout ce qui est en HTTPS échoue depuis ce matin »
 
 ```bash
@@ -1108,8 +1082,6 @@ pourquoi chrony ne corrige pas tout seul (deux raisons), remettre l'heure
 juste par le service de temps, vérifier TLS et `apt`, expliquer pourquoi
 l'heure matérielle avait aussi dérivé, et laisser une supervision minimale
 (commande ou métrique) qui aurait détecté le problème avant les utilisateurs.
-
-<!-- repondre: 10 -->
 
 ---
 

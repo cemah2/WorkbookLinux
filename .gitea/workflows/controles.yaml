@@ -1,0 +1,33 @@
+# Miroir du dépôt sur la forge Gitea du laboratoire (lab-git, chapitre 0.8) :
+# mêmes contrôles que la CI GitHub (.github/workflows/ci.yml) à chaque push.
+# Nécessite un runner Gitea Actions (act_runner) enregistré avec le label
+# ubuntu-latest : c'est le module 25 qui l'installe.
+name: controles
+on:
+  push:
+    branches: [main]
+    paths: ["modules/**", "projets/**", "docs/**", "scripts/**", "tools/**",
+            "README.md", ".gitea/workflows/**"]
+  workflow_dispatch:
+
+jobs:
+  controles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Le job tourne en root dans le conteneur du runner : pas de sudo.
+      - name: Dépendances
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3 shellcheck
+      - name: Cohérence du dépôt (identifiants, liens, schémas, scripts)
+        run: python3 tools/check_repo.py
+      - name: Navigation à jour
+        run: |
+          python3 tools/gen_nav.py
+          git diff --exit-code -- modules projets docs README.md
+      - name: Scripts
+        run: |
+          find scripts tools -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          find scripts tools -name '*.sh' -print0 | xargs -0 shellcheck -S error
+          find scripts tools -name '*.py' -print0 | xargs -0 python3 -m py_compile

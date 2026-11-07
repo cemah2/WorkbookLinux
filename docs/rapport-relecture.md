@@ -106,5 +106,5 @@ portaient les 556 corrections. Les sources ont donc été reconstruites :
    dans un code span, tableau dupliqué au chapitre 0.
 
 Le résultat est vérifié à chaque push par `tools/check_repo.py` (identifiants,
-liens, scripts, structure) ; l'aller-retour Markdown GitHub → Markdown pandoc
-est exact sur les 63 fichiers convertis.
+liens, scripts, structure). Depuis, le Markdown GitHub est l'unique format du
+workbook : la version PDF et sa chaîne de production ont été retirées.

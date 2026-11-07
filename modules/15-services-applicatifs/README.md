@@ -694,22 +694,16 @@ terminaison TLS, le choix du `server` (par quoi ?), le choix de la
 besoin, ce que change `keepalive` vers l'upstream, et ce que le backend voit
 comme adresse source.
 
-<!-- repondre: 12 -->
-
 <a id="qo15-2"></a>**[QO15.2](corrige.md#qo15-2)** — Énonce la règle complète de sélection d'un bloc `location`
 (exact, préfixe, `^~`, regex, ordre du fichier). Donne trois configurations
 où « le bloc évident » n'est pas celui qui sert la requête, et pour chacune
 la correction. Explique enfin la différence entre `root` et `alias` avec un
 exemple de chemin résolu.
 
-<!-- repondre: 12 -->
-
 <a id="qo15-3"></a>**[QO15.3](corrige.md#qo15-3)** — Décris ta méthode de diagnostic pour chacun de ces codes renvoyés
 par nginx : 502, 504, 413, 403, 404 et une boucle de 301. Pour chaque cas :
 la commande `curl` qui le confirme, la ligne que tu cherches dans
 `error.log`, les deux ou trois causes racines classiques, et le correctif.
-
-<!-- repondre: 14 -->
 
 <a id="qo15-4"></a>**[QO15.4](corrige.md#qo15-4)** — *On te demande en entretien* : « Explique-moi comment PostgreSQL
 décide d'accepter une connexion. » Traite : le rôle de `pg_hba.conf` et son
@@ -718,15 +712,11 @@ ordre d'évaluation, `local` vs `host` vs `hostssl`, les méthodes `peer`,
 est un problème), ce que `listen_addresses` fait *avant* `pg_hba.conf`, et
 les trois messages d'erreur qui te disent à quelle étape ça bloque.
 
-<!-- repondre: 12 -->
-
 <a id="qo15-5"></a>**[QO15.5](corrige.md#qo15-5)** — Compare `pg_dump` et `pg_basebackup` + archivage WAL : ce que
 chacun capture, le RPO qu'il permet, le temps de restauration, la place, les
 cas d'usage. Décris ensuite ce que veut dire « une sauvegarde testée » avec
 la procédure exacte et une métrique de succès. Termine par ce que
 `pg_dumpall --globals-only` apporte et pourquoi on l'oublie.
-
-<!-- repondre: 12 -->
 
 <a id="qo15-6"></a>**[QO15.6](corrige.md#qo15-6)** — « La base est lente depuis ce matin. » Donne, dans l'ordre, les
 cinq premières requêtes SQL que tu exécutes (sur quelles vues) et ce que tu
@@ -735,16 +725,12 @@ cherches dans chacune. Explique ensuite ce qu'est le *bloat*, ce que fait
 journée, et comment tu vérifies qu'`autovacuum` fait son travail sur une
 table.
 
-<!-- repondre: 12 -->
-
 <a id="qo15-7"></a>**[QO15.7](corrige.md#qo15-7)** — *On te demande en entretien* : « Redis, c'est un cache ou une
 base de données ? » Réponds en expliquant ce qui se passe quand la mémoire
 atteint `maxmemory` selon la politique, la différence RDB / AOF et ce que
 chacune perd en cas de coupure, pourquoi `appendfsync always` est rarement
 choisi, pourquoi un Redis qui swappe est une panne et non un ralentissement,
 et comment tu le détectes.
-
-<!-- repondre: 12 -->
 
 <a id="qo15-8"></a>**[QO15.8](corrige.md#qo15-8)** — Sur `lab-db`, PostgreSQL et Redis exposent chacun une socket
 Unix. Explique qui peut s'y connecter et par quel mécanisme la sécurité est
@@ -754,15 +740,11 @@ l'ordre de démarrage correct d'une application locale qui dépend des deux
 (`After=`, `Wants=`, `Requires=`) et ce qui change quand la base est sur une
 autre machine.
 
-<!-- repondre: 10 -->
-
 <a id="qo15-9"></a>**[QO15.9](corrige.md#qo15-9)** — Prépare ta fiche d'entretien : pour chacun des trois composants,
 les cinq choses qu'un DevOps doit savoir dire en deux minutes (rôle, fichiers
 de configuration, commande de validation, la panne classique et son
 diagnostic, ce qu'on supervise). Sois concret : noms de fichiers, de
 commandes, de vues, de métriques.
-
-<!-- repondre: 15 -->
 
 ---
 
@@ -1231,8 +1213,6 @@ commande `curl` et une ligne d'`error.log` suffisent), rétablir l'API sans
 retirer la fonctionnalité du collègue, et expliquer la règle de priorité qui
 a joué.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf15-2"></a>**[BF15.2](corrige.md#bf15-2)** — « 502 sur tout /api/, le statique marche »
 
 ```bash
@@ -1251,8 +1231,6 @@ ports de l'application.
 **Objectif** : identifier en moins de trois commandes où nginx essaie de se
 connecter et pourquoi ça échoue, corriger, et proposer une vérification qui
 aurait empêché la mise en production de ce changement.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf15-3"></a>**[BF15.3](corrige.md#bf15-3)** — « L'application ne se connecte plus à la base depuis la migration »
 
@@ -1278,8 +1256,6 @@ seconde dans le journal du serveur (`DETAIL:`) et dans `pg_authid`, corrige
 avec le **même** mot de passe, et explique pourquoi la seconde ne se voit pas
 tant que la première n'est pas réglée.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf15-4"></a>**[BF15.4](corrige.md#bf15-4)** — « Plus aucune connexion possible, mais la base ne fait rien »
 
 ```bash
@@ -1299,8 +1275,6 @@ est en cours et ne doit pas être coupée), toucher à l'application.
 identifier qui occupe les connexions et depuis combien de temps, trouver la
 modification du collègue et dire ce qu'elle a changé, puis proposer deux
 mesures durables (une côté base, une côté architecture).
-
-<!-- repondre: 10 -->
 
 ### <a id="bf15-5"></a>**[BF15.5](corrige.md#bf15-5)** — « L'application plante en écriture Redis, mais Redis répond »
 
@@ -1322,8 +1296,6 @@ configuration en cause et la raison pour laquelle leur combinaison bloque
 l'application, corriger **à chaud** et durablement, et dire quelle politique
 tu aurais choisie pour cette application.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf15-6"></a>**[BF15.6](corrige.md#bf15-6)** — « Les exports de nuit font 0 octet »
 
 ```bash
@@ -1343,8 +1315,6 @@ compte dédié), mettre le mot de passe dans la ligne cron.
 **Objectif** : reproduire l'échec exactement comme cron l'exécute, trouver
 les deux erreurs (une de droits, une de conception du script), corriger,
 et faire en sorte qu'un fichier vide ne puisse plus jamais passer inaperçu.
-
-<!-- repondre: 8 -->
 
 ---
 

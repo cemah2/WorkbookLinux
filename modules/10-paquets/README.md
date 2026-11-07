@@ -584,21 +584,15 @@ tapes `sudo apt install nginx` et le moment où le service tourne : qui lit quoi
 qui télécharge, qui vérifie la signature, qui déballe, qui configure, et où
 chaque étape laisse une trace sur le disque.
 
-<!-- repondre: 12 -->
-
 <a id="qo10-2"></a>**[QO10.2](corrige.md#qo10-2)** — *On te demande en entretien* : « Quelle est la différence entre
 `apt upgrade` et `apt full-upgrade` ? Laquelle mets-tu dans le cron d'un serveur
 de production, et pourquoi ? » Réponds en cinq phrases maximum, avec un exemple
 concret de ce que `full-upgrade` accepterait et qu'`upgrade` refuse.
 
-<!-- repondre: 8 -->
-
 <a id="qo10-3"></a>**[QO10.3](corrige.md#qo10-3)** — *On te demande en entretien* : « Explique-moi pourquoi on ne fait
 plus `apt-key add`, et montre-moi comment tu ajoutes le dépôt Docker
 correctement sur Ubuntu 24.04. » Donne les commandes exactes et dis ce que tu
 vérifies avant de faire confiance à la clé.
-
-<!-- repondre: 10 -->
 
 <a id="qo10-4"></a>**[QO10.4](corrige.md#qo10-4)** — Un collègue a écrit ceci pour empêcher une montée de version de
 PostgreSQL :
@@ -612,41 +606,29 @@ Pin-Priority: 1001
 Explique, mécanisme à l'appui, ce que ce fichier fait réellement au système,
 comment tu le détectes, et comment tu l'écrirais.
 
-<!-- repondre: 8 -->
-
 <a id="qo10-5"></a>**[QO10.5](corrige.md#qo10-5)** — Compare `apt-mark hold` et un épinglage dans
 `/etc/apt/preferences.d` : où chaque information est stockée, ce que chacun
 empêche exactement, ce que chacun laisse passer, et lequel survit à une
 réinstallation du paquet. Conclus par le critère de choix.
-
-<!-- repondre: 10 -->
 
 <a id="qo10-6"></a>**[QO10.6](corrige.md#qo10-6)** — Sur un parc de 200 serveurs, décris ta politique de mise à jour :
 ce que tu automatises, ce que tu n'automatises jamais, comment tu traites le
 redémarrage, et comment tu sais, le lendemain matin, ce qui a bougé sur quelle
 machine.
 
-<!-- repondre: 12 -->
-
 <a id="qo10-7"></a>**[QO10.7](corrige.md#qo10-7)** — Un dev te dit : « ton paquet Debian de `redis` est trop vieux, je
 compile la version amont et je fais `make install` ». Formule ta réponse
 professionnelle : dans quels cas il a raison, dans quels cas c'est une faute, et
 quelle solution intermédiaire tu proposes.
-
-<!-- repondre: 10 -->
 
 <a id="qo10-8"></a>**[QO10.8](corrige.md#qo10-8)** — Décris ta démarche de diagnostic, commande par commande, face à ce
 symptôme : « depuis ce matin, `apt install` n'importe quoi propose de supprimer
 `ubuntu-server` et 40 autres paquets ». Dis ce que tu cherches dans chaque
 sortie.
 
-<!-- repondre: 10 -->
-
 <a id="qo10-9"></a>**[QO10.9](corrige.md#qo10-9)** — Explique ce qu'apporte `dnf history` par rapport à l'écosystème
 Debian, ce que son `undo` sait faire et ce qu'il **ne sait pas** faire, et
 comment tu obtiens une garantie équivalente sur une machine Ubuntu.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1002,8 +984,6 @@ snapshot.
 en état `ii`, et expliquer les **deux** causes distinctes présentes sur la
 machine — l'une visible dans `dpkg -l`, l'autre dans `/var/lib/dpkg`.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf10-2"></a>**[BF10.2](corrige.md#bf10-2)** — « Le dépôt de l'équipe ne marche plus »
 
 ```bash
@@ -1022,8 +1002,6 @@ clé dans `/etc/apt/trusted.gpg.d/`.
 signature réelle, expliquer précisément ce que le message d'erreur signifie
 (ce qui a échoué, à quelle étape), et dire ce qui aurait changé si le collègue
 d'astreinte avait mis `[trusted=yes]`.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf10-3"></a>**[BF10.3](corrige.md#bf10-3)** — « La mise à jour de sécurité ne passe pas sur ce serveur »
 
@@ -1045,8 +1023,6 @@ pas au même endroit et ne se voient pas avec la même commande), les lever
 proprement, faire passer la mise à jour, et écrire la commande d'audit qui
 aurait détecté ces gels avant l'incident.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf10-4"></a>**[BF10.4](corrige.md#bf10-4)** — « apt veut désinstaller la moitié du serveur »
 
 ```bash
@@ -1064,8 +1040,6 @@ remplacer les versions installées par des versions plus anciennes — dont `apt
 expliquer avec `apt-cache policy` pourquoi le système en est arrivé là, corriger
 en conservant l'intention initiale de son auteur, et vérifier qu'aucune
 rétrogradation n'a eu lieu.
-
-<!-- repondre: 10 -->
 
 ---
 

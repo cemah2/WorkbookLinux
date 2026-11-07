@@ -508,61 +508,43 @@ qui fait `print("erreur base")` sur sa sortie standard, jusqu'à son arrivée
 composant traversé, le champ `_TRANSPORT` correspondant, et dis à quel endroit un
 message peut être perdu.
 
-<!-- repondre: 12 -->
-
 <a id="qo16-2"></a>**[QO16.2](corrige.md#qo16-2)** — *On te demande en entretien* : « Notre `/var` s'est rempli cette
 nuit et l'application est tombée. Donne-moi ta démarche, dans l'ordre, pour
 identifier le coupable et remettre le service en ligne en moins de dix minutes,
 sans supprimer un fichier au hasard. » Réponds en listant les commandes.
-
-<!-- repondre: 12 -->
 
 <a id="qo16-3"></a>**[QO16.3](corrige.md#qo16-3)** — Compare `logrotate` avec `create` et `logrotate` avec
 `copytruncate` : pour chacun, explique ce qui arrive au descripteur de fichier
 détenu par l'application, ce que devient l'inode, et dans quel cas précis on est
 contraint d'utiliser `copytruncate`.
 
-<!-- repondre: 10 -->
-
 <a id="qo16-4"></a>**[QO16.4](corrige.md#qo16-4)** — La charge moyenne d'un serveur applicatif à 8 vCPU est de 12.
 Explique les trois scénarios de cause radicalement différents qui peuvent
 produire ce chiffre, et pour chacun la commande qui tranche en moins d'une minute.
 
-<!-- repondre: 10 -->
-
 <a id="qo16-5"></a>**[QO16.5](corrige.md#qo16-5)** — *On te demande en entretien* : « Quelle est la différence entre
 `free` et `available` dans la sortie de `free -h` ? Et si je te dis que `free`
 est à 200 Mo sur une machine de 16 Go, c'est grave ? » Réponds comme en entretien.
-
-<!-- repondre: 8 -->
 
 <a id="qo16-6"></a>**[QO16.6](corrige.md#qo16-6)** — Un service maison écrit 4 000 lignes de log par seconde en rafale au
 démarrage. Explique le mécanisme de `RateLimitIntervalSec` / `RateLimitBurst`,
 ce qui est perdu exactement, les trois façons d'y remédier, et les conséquences
 de chacune.
 
-<!-- repondre: 10 -->
-
 <a id="qo16-7"></a>**[QO16.7](corrige.md#qo16-7)** — On te demande de centraliser les journaux de 40 serveurs.
 Argumente le choix entre UDP (`@`) et TCP (`@@`) : que se passe-t-il dans chaque
 cas si le collecteur redémarre pendant 30 secondes, et quelle configuration de
 file d'attente côté émetteur protège les journaux ?
-
-<!-- repondre: 8 -->
 
 <a id="qo16-8"></a>**[QO16.8](corrige.md#qo16-8)** — Explique la différence entre les quatre signaux dorés et la méthode
 USE, puis applique les deux à un service HTTP qui répond lentement : cite trois
 métriques « signaux dorés » et trois métriques « USE » que tu regarderais, dans
 l'ordre.
 
-<!-- repondre: 10 -->
-
 <a id="qo16-9"></a>**[QO16.9](corrige.md#qo16-9)** — Un développeur te demande quel format de log adopter pour sa nouvelle
 application. Rédige ta réponse d'ops : niveaux à utiliser et ce qui va dans
 chacun, format, horodatage, identifiant de corrélation, et ce qu'il ne faut
 **jamais** écrire dans un log.
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -931,8 +913,6 @@ fichier alors que le timer tourne, la remettre en service, récupérer l'espace
 disque sans perdre les journaux du jour, et dire quelle vérification tu ajoutes
 pour que ça ne se reproduise pas silencieusement.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf16-2"></a>**[BF16.2](corrige.md#bf16-2)** — « Le journal systemd a mangé 4 Go »
 
 ```bash
@@ -951,8 +931,6 @@ rollback de snapshot.
 sous 500 Mo par la méthode prévue pour ça, expliquer pourquoi `rm -rf` est une
 mauvaise idée même quand ça « marche », et poser une limite durable qui empêche
 la situation de revenir.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf16-3"></a>**[BF16.3](corrige.md#bf16-3)** — « Les logs de ce service ont des trous »
 
@@ -974,8 +952,6 @@ donner le nombre exact, identifier le mécanisme et sa configuration, le corrige
 pour ce service **sans** désactiver la protection globale de la machine, et dire
 ce que tu aurais recommandé au développeur.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf16-4"></a>**[BF16.4](corrige.md#bf16-4)** — « Le fichier de log fait 800 Mo mais il est presque vide »
 
 ```bash
@@ -994,8 +970,6 @@ supprimer le fichier.
 trou de numérotation), nommer le mécanisme en cause dans la configuration de
 rotation, corriger durablement, et dire ce que l'application devrait faire côté
 code pour que le problème disparaisse à la source.
-
-<!-- repondre: 12 -->
 
 ---
 

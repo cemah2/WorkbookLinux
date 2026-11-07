@@ -510,56 +510,40 @@ déclaratif en a besoin alors qu'il pourrait interroger l'API à chaque fois,
 ce qu'il contient, ce qui arrive si deux personnes appliquent en même temps
 sans verrou, et pourquoi on ne le commite jamais dans git.
 
-<!-- repondre: 10 -->
-
 <a id="qo24-2"></a>**[QO24.2](corrige.md#qo24-2)** — *On te demande en entretien* : « Décris ce qui se passe entre
 `qm clone` et le moment où tu peux faire `ssh mathieu@10.10.10.110`. » Détaille
 le rôle de l'ISO `cidata`, du datasource NoCloud, de l'`instance-id`, des
 modules per-instance et per-boot, et ce qui rejoue ou non à un redémarrage.
-
-<!-- repondre: 12 -->
 
 <a id="qo24-3"></a>**[QO24.3](corrige.md#qo24-3)** — Compare `count` et `for_each` : indexation, comportement à la
 suppression d'un élément intermédiaire, contraintes sur les clés (connues au
 plan). Donne le cas où `count` reste le bon choix et la procédure pour migrer
 de l'un à l'autre sans rien recréer.
 
-<!-- repondre: 10 -->
-
 <a id="qo24-4"></a>**[QO24.4](corrige.md#qo24-4)** — Une VM gérée par OpenTofu a été supprimée à la main, puis son
 VMID a été réutilisé pour une VM de test d'un collègue. Décris ce que montre
 `tofu plan`, pourquoi le provider ne voit pas la différence, et la procédure
 qui remet les choses d'équerre **sans** détruire la VM du collègue.
-
-<!-- repondre: 10 -->
 
 <a id="qo24-5"></a>**[QO24.5](corrige.md#qo24-5)** — *On te demande en entretien* : « Immutable infrastructure :
 concrètement, qu'est-ce que ça change dans ta façon de patcher ? » Réponds
 avec le triptyque Packer → Terraform → cloud-init, les avantages (rollback,
 reproductibilité) et les coûts (données, temps de build, IP flottantes).
 
-<!-- repondre: 10 -->
-
 <a id="qo24-6"></a>**[QO24.6](corrige.md#qo24-6)** — Explique pourquoi `sensitive = true` ne protège pas un secret,
 ce que fait réellement l'attribut, où le secret finit quand même (état,
 `plan -out`, logs CI), et trois mesures concrètes pour un token Proxmox.
-
-<!-- repondre: 8 -->
 
 <a id="qo24-7"></a>**[QO24.7](corrige.md#qo24-7)** — Tu reçois une PR qui modifie `main.tf` et joint la sortie de
 `tofu plan`. Décris ta grille de revue : ce que tu vérifies dans le plan avant
 même de lire le code, les symboles qui déclenchent une discussion, et le
 mécanisme CI qui garantit que le plan joint est bien celui qui sera appliqué.
 
-<!-- repondre: 10 -->
-
 <a id="qo24-8"></a>**[QO24.8](corrige.md#qo24-8)** — Décris ta démarche de diagnostic quand une VM clonée démarre
 mais que cloud-init « n'a rien fait » : ordre des vérifications côté Proxmox
 (`qm config`, `qm cloudinit dump`), côté VM (`cloud-init status`, journaux,
 `query`), et le test qui distingue « pas de datasource » de « user-data
 invalide ».
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -951,8 +935,6 @@ un VMID libre, et proposer la mesure qui empêche un collègue de « prendre un
 VMID libre » dans la plage gérée par le code. `tofu plan` final : exactement
 `1 to add`, rien d'autre, et `sandbox-julien` intacte.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf24-2"></a>**[BF24.2](corrige.md#bf24-2)** — « Le refactoring veut tout détruire »
 
 ```bash
@@ -973,8 +955,6 @@ utilisant le mécanisme prévu pour ce cas, de façon **relisible en PR**
 terminal). Explique pourquoi la première méthode est préférable à
 `tofu state mv` en équipe.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf24-3"></a>**[BF24.3](corrige.md#bf24-3)** — « Le token est dans le pipeline »
 
 ```bash
@@ -994,8 +974,6 @@ au moins quatre, dont un que `git rm` ne règle pas), corriger le code pour
 que le secret ne puisse plus apparaître (variable, output, fichier généré),
 faire tourner le token, et vérifier que l'état ne contient plus l'ancien.
 `tofu plan` doit rester vide après remédiation.
-
-<!-- repondre: 12 -->
 
 ### <a id="bf24-4"></a>**[BF24.4](corrige.md#bf24-4)** — « La VM démarre mais cloud-init n'a rien fait »
 
@@ -1018,8 +996,6 @@ commandes suffisent pour la cause), corriger, redémarrer, et prouver avec
 bien trouvé et appliqué. Explique pourquoi cloud-init s'est lancé quand même
 au premier boot et pourquoi le correctif fonctionne au second sans
 `cloud-init clean`.
-
-<!-- repondre: 10 -->
 
 ---
 

@@ -604,50 +604,36 @@ Cite chaque composant, ce qu'il lit, ce qu'il écrit, et où se trouve l'état.
 Termine par ce que signifie « modèle déclaratif » et donne un exemple de
 réconciliation qui se produit **sans** aucune action humaine.
 
-<!-- repondre: 12 -->
-
 <a id="qo26-2"></a>**[QO26.2](corrige.md#qo26-2)** — Compare liveness, readiness et startup probe : ce qui se passe
 quand chacune échoue, un exemple concret de mauvais usage (une liveness qui
 teste la base de données, par exemple) et ses conséquences en production.
 Dans quel cas une readiness qui échoue est-elle une **bonne** nouvelle ?
-
-<!-- repondre: 10 -->
 
 <a id="qo26-3"></a>**[QO26.3](corrige.md#qo26-3)** — Un pod est `Pending` depuis 10 minutes. Déroule ta méthode :
 quelles commandes, dans quel ordre, ce que tu cherches dans chaque sortie.
 Couvre au moins : ressources insuffisantes, `nodeSelector`/taints, PVC non
 lié, `ResourceQuota` dépassé (où se lit celui-là ?), et nœud `NotReady`.
 
-<!-- repondre: 12 -->
-
 <a id="qo26-4"></a>**[QO26.4](corrige.md#qo26-4)** — *On te demande en entretien* : « Deployment ou StatefulSet pour
 PostgreSQL ? Et pourquoi un Service headless ? » Explique identité stable,
 `volumeClaimTemplates`, ordre de démarrage, DNS `pod-0.svc`, et dis ce
 qu'un Deployment avec un PVC ferait de mal lors d'un rolling update.
-
-<!-- repondre: 10 -->
 
 <a id="qo26-5"></a>**[QO26.5](corrige.md#qo26-5)** — GitOps, operators, service mesh, managé vs auto-hébergé :
 donne pour chacun une définition en deux phrases, un outil, et le problème
 qu'il résout. Puis prends position : pour une équipe de 4 personnes qui
 héberge 10 applications, que recommandes-tu et pourquoi ?
 
-<!-- repondre: 12 -->
-
 <a id="qo26-6"></a>**[QO26.6](corrige.md#qo26-6)** — Définis SLI, SLO, SLA et budget d'erreur avec un exemple chiffré
 pour `factura-api`. Explique pourquoi on alerte sur la **vitesse de
 consommation** du budget plutôt que sur un seuil fixe, et décris l'alerte
 « multi-fenêtre, multi-burn-rate » (deux fenêtres, deux seuils).
-
-<!-- repondre: 12 -->
 
 <a id="qo26-7"></a>**[QO26.7](corrige.md#qo26-7)** — *On te demande en entretien* : « Pourquoi `rate()` sur un counter
 et pas une soustraction de deux valeurs ? Que se passe-t-il si le service
 redémarre ? Pourquoi une fenêtre de `[1m]` avec un scrape à 15 s est-elle une
 mauvaise idée ? » Explique aussi pourquoi `sum(rate(...))` est correct et
 `rate(sum(...))` est faux.
-
-<!-- repondre: 10 -->
 
 <a id="qo26-8"></a>**[QO26.8](corrige.md#qo26-8)** — Décris le chemin complet d'une alerte, de l'expression PromQL
 jusqu'au téléphone de l'astreinte : évaluation, `pending`/`firing`, envoi à
@@ -656,22 +642,16 @@ Alertmanager, déduplication, routage, groupement (`group_wait`,
 résolution. À chaque étape, dis ce qui peut faire qu'une alerte « n'arrive
 jamais ».
 
-<!-- repondre: 14 -->
-
 <a id="qo26-9"></a>**[QO26.9](corrige.md#qo26-9)** — Un collègue propose d'ajouter un label `user_id` aux métriques
 HTTP de l'API et `request_id` aux labels Loki « pour pouvoir tout retrouver ».
 Explique ce qu'est la cardinalité, ce que ça coûte dans Prometheus et dans
 Loki, et propose la bonne façon de retrouver une requête précise (logs,
 traces, exemplars).
 
-<!-- repondre: 10 -->
-
 <a id="qo26-10"></a>**[QO26.10](corrige.md#qo26-10)** — Ton équipe reçoit 40 alertes par nuit, dont 3 utiles. Décris la
 fatigue d'alerte, ses conséquences, et un plan en cinq actions concrètes pour
 passer à moins de 5 alertes par nuit sans rater un incident. Quel rôle joue le
 post-mortem là-dedans ?
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -1120,8 +1100,6 @@ redéployer depuis `~/lab26/k8s/` sans avoir trouvé la cause.
 **Objectif** : trouver pourquoi le trafic n'arrive plus aux pods, corriger,
 et expliquer pourquoi nginx répond 502 et non 504 ou 404.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf26-2"></a>**[BF26.2](corrige.md#bf26-2)** — « Le rollout ne finit jamais »
 
 ```bash
@@ -1142,8 +1120,6 @@ le Deployment n'a pas coupé le service, corriger le manifeste, et proposer
 la valeur de `progressDeadlineSeconds` qui aurait fait sortir `rollout
 status` en erreur au lieu d'attendre.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf26-3"></a>**[BF26.3](corrige.md#bf26-3)** — « L'API redémarre en boucle, le code n'a pas changé »
 
 ```bash
@@ -1160,8 +1136,6 @@ jure que l'image `1.0` est celle de la semaine dernière.
 **Objectif** : lire dans `describe` la vraie raison de l'arrêt (elle n'est
 pas dans les logs), la relier à une valeur du manifeste, mesurer le besoin
 réel avec un pod sain, et fixer une limite justifiée.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf26-4"></a>**[BF26.4](corrige.md#bf26-4)** — « Depuis le redémarrage, plus aucun pod ne démarre »
 
@@ -1181,8 +1155,6 @@ depuis lab-ops. Le namespace `casse` n'est pas affecté.
 `casse`), remettre en place, et expliquer pourquoi le pull marche sur lab-ops
 mais pas dans le cluster.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf26-5"></a>**[BF26.5](corrige.md#bf26-5)** — « Toutes les VM sont DOWN dans Prometheus »
 
 ```bash
@@ -1199,8 +1171,6 @@ partout, et `curl http://10.10.10.11:9100/metrics` depuis lab-ops répond.
 **Objectif** : lire l'erreur exacte par cible dans `/targets`, trouver la
 cause dans la configuration, corriger, recharger sans redémarrer Prometheus,
 et dire pourquoi l'alerte `InstanceDown` a été utile **et** trompeuse.
-
-<!-- repondre: 8 -->
 
 ### <a id="bf26-6"></a>**[BF26.6](corrige.md#bf26-6)** — « L'alerte ne part jamais »
 
@@ -1220,8 +1190,6 @@ fonctionnent.
 de `pending` et de `for` (que se passe-t-il si la condition redevient fausse
 une seule évaluation ?), corriger, et proposer un test `promtool test rules`
 qui aurait attrapé l'erreur avant la mise en production.
-
-<!-- repondre: 8 -->
 
 ---
 

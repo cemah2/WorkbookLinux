@@ -503,14 +503,10 @@ qui ne jure que par VS Code ? » Réponds en trois arguments concrets et
 vérifiables, liés à l'exploitation de serveurs (pas au confort personnel), et
 cite deux situations où aucun autre éditeur n'est disponible.
 
-<!-- repondre: 8 -->
-
 <a id="qo6-2"></a>**[QO6.2](corrige.md#qo6-2)** — Explique le mécanisme de `:g/motif/normal A;` : dans quel ordre vim
 parcourt le fichier, ce qu'il marque avant d'agir, et pourquoi
 `:g/DEBUG/d` ne « saute » pas une ligne sur deux alors que la suppression décale
 tout le reste du fichier.
-
-<!-- repondre: 8 -->
 
 <a id="qo6-3"></a>**[QO6.3](corrige.md#qo6-3)** — Un collègue te dit : « impossible d'éditer `/etc/nginx/nginx.conf`,
 vim m'affiche un pavé rouge à chaque ouverture ». Décris le fichier en cause,
@@ -518,35 +514,25 @@ d'où il vient, les trois questions à te poser avant de choisir une option du
 menu, et la procédure complète pour récupérer d'éventuelles modifications
 perdues.
 
-<!-- repondre: 10 -->
-
 <a id="qo6-4"></a>**[QO6.4](corrige.md#qo6-4)** — Explique pourquoi `tar -czf sauvegarde.tgz /srv/factura` sur un
 serveur en production peut produire une archive qui **ment**. Détaille le
 mécanisme (que lit `tar`, dans quel ordre, que fait l'application pendant ce
 temps), puis propose trois façons d'obtenir une sauvegarde cohérente, avec leurs
 inconvénients respectifs.
 
-<!-- repondre: 10 -->
-
 <a id="qo6-5"></a>**[QO6.5](corrige.md#qo6-5)** — *On te demande en entretien* : « Tu dois transférer 400 Go de
 données entre deux serveurs, sur une liaison instable qui coupe toutes les
 vingt minutes. `scp`, `sftp` ou `rsync` ? Justifie, et donne la commande. »
-
-<!-- repondre: 8 -->
 
 <a id="qo6-6"></a>**[QO6.6](corrige.md#qo6-6)** — Explique la règle de la barre oblique finale de `rsync` en donnant
 un modèle mental qui fonctionne à tous les coups, puis décris un incident
 plausible causé par son oubli combiné à `--delete`, et comment tu l'aurais
 évité.
 
-<!-- repondre: 8 -->
-
 <a id="qo6-7"></a>**[QO6.7](corrige.md#qo6-7)** — Compare `--link-dest` de `rsync` et une simple copie complète
 quotidienne : mécanisme sous-jacent, occupation disque, temps de restauration,
 et un cas où `--link-dest` te joue un mauvais tour (pense à ce que voit `du`, et
 à ce qui arrive si tu modifies un fichier dans une sauvegarde ancienne).
-
-<!-- repondre: 8 -->
 
 <a id="qo6-8"></a>**[QO6.8](corrige.md#qo6-8)** — Tu prends en charge un serveur applicatif (code déployé, une base
 PostgreSQL, des fichiers déposés par les utilisateurs, de la configuration dans
@@ -554,8 +540,6 @@ PostgreSQL, des fichiers déposés par les utilisateurs, de la configuration dan
 **ne** sauvegardes pas, avec une justification par ligne, puis une règle de
 rotation, et explique la phrase : « une sauvegarde jamais restaurée n'existe
 pas ».
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -905,8 +889,6 @@ réécrire la configuration de mémoire.
 sur disque, nettoyer proprement, et expliquer pourquoi le message parlait aussi
 d'un « processus encore actif ».
 
-<!-- repondre: 10 -->
-
 ### <a id="bf6-2"></a>**[BF6.2](corrige.md#bf6-2)** — « la sauvegarde nocturne grossit sans fin »
 
 ```bash
@@ -926,8 +908,6 @@ contient un fichier `.tar.gz` de taille aberrante.
 produite en temps normal, et expliquer ce que signifie précisément le code
 retour 1 de `tar`.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf6-3"></a>**[BF6.3](corrige.md#bf6-3)** — « la synchro du site a tout cassé »
 
 ```bash
@@ -945,8 +925,6 @@ de vérité est `/srv/factura-site/`.
 **Objectif** : lire la commande fautive, expliquer en une phrase pourquoi elle a
 produit ce résultat, remettre l'arborescence en état, corriger la commande, et
 donner la précaution qui aurait rendu l'incident impossible.
-
-<!-- repondre: 8 -->
 
 ---
 

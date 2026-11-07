@@ -440,32 +440,22 @@ echo ~/lab01/logs/*.log "$(date +%F)" $((7 * 24))
 Explique ensuite pourquoi l'ordre « paramètres avant globbing » est indispensable,
 avec un exemple où l'ordre inverse donnerait un résultat faux.
 
-<!-- repondre: 10 -->
-
 <a id="qo1-2"></a>**[QO1.2](corrige.md#qo1-2)** — *On te demande en entretien* : « Quelle est la différence entre
 `~/.bashrc` et `~/.bash_profile` ? Où poses-tu `export JAVA_HOME=/opt/jdk21` pour
 qu'il soit vu à la fois par ta session SSH interactive, par `ssh lab-web 'commande'`
 et par un job cron ? » Réponds comme en entretien, en trois phrases maximum par cas.
 
-<!-- repondre: 10 -->
-
 <a id="qo1-3"></a>**[QO1.3](corrige.md#qo1-3)** — *On te demande en entretien* : « `which python3` affiche
 `/usr/bin/python3`, mais quand je tape `python3`, c'est une autre version qui
 démarre. Donne-moi trois causes possibles et la commande qui tranche pour chacune. »
-
-<!-- repondre: 8 -->
 
 <a id="qo1-4"></a>**[QO1.4](corrige.md#qo1-4)** — Explique la différence entre `cmd > f 2>&1` et `cmd 2>&1 > f` en
 raisonnant sur les descripteurs de fichiers. Dessine l'état des fd 1 et 2 après
 chaque redirection.
 
-<!-- repondre: 8 -->
-
 <a id="qo1-5"></a>**[QO1.5](corrige.md#qo1-5)** — Un développeur t'écrit : « mon script marche quand je le lance à la main,
 mais il échoue en cron avec `ll: command not found` et `docker: command not found` ».
 Décris ta démarche de diagnostic, dans l'ordre, et le correctif que tu appliques.
-
-<!-- repondre: 8 -->
 
 <a id="qo1-6"></a>**[QO1.6](corrige.md#qo1-6)** — Pourquoi la ligne suivante est-elle une bombe, et comment l'écrirais-tu ?
 
@@ -475,19 +465,13 @@ rm -rf $CIBLE/*
 
 Cite au moins trois protections différentes et explique ce que chacune empêche.
 
-<!-- repondre: 8 -->
-
 <a id="qo1-7"></a>**[QO1.7](corrige.md#qo1-7)** — Cite quatre constructions courantes de bash absentes de `dash`, et
 décris comment tu vérifies **avant** la mise en production qu'un script en
 `#!/bin/sh` est réellement POSIX.
 
-<!-- repondre: 8 -->
-
 <a id="qo1-8"></a>**[QO1.8](corrige.md#qo1-8)** — La VM `lab-db` n'a pas d'accès internet. Tu dois comprendre l'option
 `--one-file-system` d'une commande d'archivage dont tu ne te souviens plus du nom.
 Décris ta démarche complète avec la documentation locale uniquement.
-
-<!-- repondre: 6 -->
 
 ---
 
@@ -742,8 +726,6 @@ ouvrir une session graphique.
 identifier la ligne fautive, la corriger durablement, et expliquer pourquoi
 `sudo` lui-même était inaccessible.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf1-2"></a>**[BF1.2](corrige.md#bf1-2)** — « `df` raconte n'importe quoi sur tous les comptes »
 
 ```bash
@@ -760,8 +742,6 @@ habituel, sur tous les comptes de la machine, y compris root. Mais
 (session, système, profil), rétablir `df` pour tous les utilisateurs, et donner la
 commande qui permet d'exécuter la vraie `df` même quand le masquage est en place.
 
-<!-- repondre: 8 -->
-
 ### <a id="bf1-3"></a>**[BF1.3](corrige.md#bf1-3)** — « Mes alias et mon prompt ont disparu en SSH »
 
 ```bash
@@ -777,8 +757,6 @@ celui par défaut du système (plus de code retour), les alias (`ll`, `hostinfo`
 **Objectif** : expliquer précisément pourquoi le shell de login ne lit plus la même
 chose que le shell interactif, corriger, et énoncer la règle générale à retenir
 pour ne plus jamais reproduire l'erreur.
-
-<!-- repondre: 8 -->
 
 ---
 

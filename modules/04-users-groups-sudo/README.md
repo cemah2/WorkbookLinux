@@ -491,15 +491,11 @@ jours de tolérance après expiration avant que le compte devienne inutilisable 
 à quelle date le compte lui-même cesse de fonctionner ? Donne la commande qui
 affiche tout cela en clair sans calcul mental.
 
-<!-- repondre: 10 -->
-
 <a id="qo4-2"></a>**[QO4.2](corrige.md#qo4-2)** — *On te demande en entretien* : « Quelle est la différence entre `su` et
 `sudo` ? Pourquoi le compte root est-il désactivé par défaut sur Ubuntu, et
 qu'est-ce que ça change concrètement pour l'exploitation ? » Réponds en cinq
 phrases, en citant ce qu'on voit dans `/etc/shadow` et ce qui se passe côté
 journalisation.
-
-<!-- repondre: 10 -->
 
 <a id="qo4-3"></a>**[QO4.3](corrige.md#qo4-3)** — *On te demande en entretien* : « Un dev demande `sudo` sur
 `/usr/bin/find` pour nettoyer des fichiers temporaires. Tu acceptes ? » Explique
@@ -507,29 +503,21 @@ techniquement pourquoi cette autorisation équivaut à un accès root, donne la
 commande exacte que le dev pourrait taper, puis propose **deux** façons
 différentes de répondre à son besoin sans lui donner root.
 
-<!-- repondre: 10 -->
-
 <a id="qo4-4"></a>**[QO4.4](corrige.md#qo4-4)** — Explique pourquoi `usermod -aG docker sophie` ne prend pas effet dans
 la session SSH ouverte de `sophie`. Décris le mécanisme (à quel moment le noyau
 attache les groupes à un processus), puis donne **trois** façons distinctes
 d'obtenir les nouveaux droits, en précisant leurs limites respectives.
-
-<!-- repondre: 8 -->
 
 <a id="qo4-5"></a>**[QO4.5](corrige.md#qo4-5)** — Un compte de service pour l'application `factura` doit être créé.
 Liste six caractéristiques attendues (UID, shell, home, mot de passe, groupe,
 expiration) et justifie chacune par ce qu'elle empêche concrètement en cas de
 compromission de l'application.
 
-<!-- repondre: 10 -->
-
 <a id="qo4-6"></a>**[QO4.6](corrige.md#qo4-6)** — Un utilisateur t'écrit : « je ne peux plus me connecter sur `lab-web` ».
 Décris ta démarche de diagnostic **dans l'ordre**, avec pour chaque étape la
 commande exacte et ce que tu cherches dans sa sortie. Couvre au minimum :
 existence du compte, état du mot de passe, expiration, shell, verrouillage PAM,
 et le cas « ça marche en clé mais pas en mot de passe ».
-
-<!-- repondre: 12 -->
 
 <a id="qo4-7"></a>**[QO4.7](corrige.md#qo4-7)** — *On te demande en entretien* : « Vos serveurs seront joints à
 l'Active Directory de l'entreprise via SSSD. Qu'est-ce que ça change pour toi au
@@ -538,14 +526,10 @@ de fichiers, `sudoers`, `/etc/passwd`), cite les deux fichiers de configuration
 que tu regardes en premier, et donne la commande qui te dit si un compte est
 résolu localement ou par l'annuaire.
 
-<!-- repondre: 10 -->
-
 <a id="qo4-8"></a>**[QO4.8](corrige.md#qo4-8)** — Décris la pile PAM : les quatre **types** de modules et ce que chacun
 décide, puis les contrôles `required`, `requisite`, `sufficient`, `optional`.
 Indique ensuite, pour `pam_pwquality`, `pam_faillock` et `pam_limits`, dans quel
 type de la pile chacun se place et pourquoi il ne peut pas être ailleurs.
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -873,8 +857,6 @@ problème de syntaxe, et rédiger la procédure de récupération applicable sur
 Proxmox où tu n'as **plus aucune session privilégiée ouverte** (deux voies
 possibles au minimum : console + mode de récupération GRUB, ou polkit).
 
-<!-- repondre: 12 -->
-
 ### <a id="bf4-2"></a>**[BF4.2](corrige.md#bf4-2)** — « Le compte d'astreinte ne se connecte plus »
 
 ```bash
@@ -898,8 +880,6 @@ compte dans un état conforme à la politique (mot de passe valable 90 jours,
 compte sans date d'expiration). Donne pour chaque blocage la commande de
 diagnostic qui l'a révélé.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf4-3"></a>**[BF4.3](corrige.md#bf4-3)** — « J'ai perdu tous mes droits après une commande de dix secondes »
 
 ```bash
@@ -919,8 +899,6 @@ des traces de la machine.
 règle d'équipe (une phrase) qui empêche que ça se reproduise. Explique aussi
 pourquoi la session SSH que `karim` avait déjà ouverte continuait de fonctionner
 quelques minutes.
-
-<!-- repondre: 10 -->
 
 ---
 

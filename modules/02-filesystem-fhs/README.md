@@ -459,53 +459,37 @@ d) `du -sh /tmp` remontera dans `df -h /` sur la ligne du système de fichiers r
 pas. Déduis-en, en raisonnant sur le compteur de liens, ce que fait réellement `rm`
 et à quel moment précis les blocs d'un fichier sont rendus au système de fichiers.
 
-<!-- repondre: 10 -->
-
 <a id="qo2-2"></a>**[QO2.2](corrige.md#qo2-2)** — *On te demande en entretien* : « `df -h` annonce 100 % sur `/var`,
 `du -sh /var` répond 3 Go alors que la partition fait 20 Go. Explique-moi ce qui se
 passe, comment tu le prouves, et comment tu récupères l'espace sans redémarrer le
 serveur ni couper le service. »
-
-<!-- repondre: 12 -->
 
 <a id="qo2-3"></a>**[QO2.3](corrige.md#qo2-3)** — Compare lien physique et lien symbolique sur quatre critères au moins,
 puis explique lequel tu choisis pour un déploiement de type `releases/` +
 `current -> releases/2026-09-18`, et pourquoi. Précise si tu fais le lien relatif
 ou absolu, avec l'argument correspondant.
 
-<!-- repondre: 10 -->
-
 <a id="qo2-4"></a>**[QO2.4](corrige.md#qo2-4)** — *On te demande en entretien* : « Il est 3 h du matin, l'alerte dit
 `/` à 97 % sur le serveur de production. Déroule ta démarche, commande par
 commande, jusqu'à la remise sous seuil. Dis-moi ce que tu t'interdis de faire. »
-
-<!-- repondre: 12 -->
 
 <a id="qo2-5"></a>**[QO2.5](corrige.md#qo2-5)** — Explique la différence de fonctionnement entre `-exec cmd {} \;`,
 `-exec cmd {} +` et `find -print0 | xargs -0 cmd`. Donne pour chacun un cas où
 c'est le bon choix, et explique pourquoi `find | xargs` sans `-print0` est un bug
 en attente.
 
-<!-- repondre: 10 -->
-
 <a id="qo2-6"></a>**[QO2.6](corrige.md#qo2-6)** — `/proc` et `/sys` ne consomment aucun espace disque. Explique ce qu'ils
 sont, la différence de vocation entre les deux, et donne trois diagnostics concrets
 que tu ne peux mener qu'en les lisant. Cite un cas où tu **écris** dans `/sys`.
-
-<!-- repondre: 8 -->
 
 <a id="qo2-7"></a>**[QO2.7](corrige.md#qo2-7)** — Un développeur veut installer son application dans `/usr/bin` « comme
 les vraies commandes ». Argumente, en te référant au FHS, pour la placer ailleurs.
 Distingue les cas `/opt`, `/usr/local` et `/srv`, et explique ce qui se passe
 concrètement lors d'une mise à jour de paquet si on s'installe dans `/usr/bin`.
 
-<!-- repondre: 8 -->
-
 <a id="qo2-8"></a>**[QO2.8](corrige.md#qo2-8)** — Qu'est-ce qu'un fichier creux ? Explique l'écart entre `ls -l` et
 `du`, cite deux cas où on en produit sans le vouloir, et décris ce qui arrive à
 ces fichiers quand on les copie avec `cp` sans option, avec `tar`, et via `rsync`.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -812,8 +796,6 @@ agrandir le système de fichiers.
 fichier concerné (nom d'origine, taille), expliquer le mécanisme en une phrase, et
 proposer deux corrections durables — une côté application, une côté exploitation.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf2-2"></a>**[BF2.2](corrige.md#bf2-2)** — « `No space left on device` alors qu'il reste 40 % »
 
 ```bash
@@ -832,8 +814,6 @@ libres. Même `mkdir` échoue.
 système de fichiers est en cause, remettre le service en état, expliquer pourquoi
 le problème n'apparaît pas dans `df -h`, et dire ce qu'il aurait fallu faire au
 formatage pour l'éviter.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf2-3"></a>**[BF2.3](corrige.md#bf2-3)** — « Le site sert la mauvaise version depuis la livraison »
 
@@ -856,8 +836,6 @@ résout pas (donne la commande qui le montre sans ambiguïté), rétablir le ser
 sur la release la plus récente, et corriger la procédure de livraison pour que la
 panne ne puisse plus se reproduire (dis explicitement quel type de lien tu poses
 et pourquoi).
-
-<!-- repondre: 10 -->
 
 ---
 

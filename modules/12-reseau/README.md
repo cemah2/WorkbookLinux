@@ -571,59 +571,41 @@ depuis `lab-adm`, de l'appel `getaddrinfo()` jusqu'au premier octet de réponse.
 Nomme à chaque étape le fichier ou le composant impliqué, et cite pour chacune
 la commande qui permet de vérifier qu'elle s'est bien passée.
 
-<!-- repondre: 12 -->
-
 <a id="qo12-2"></a>**[QO12.2](corrige.md#qo12-2)** — *On te demande en entretien* : « Un utilisateur dit : ça marche avec
 l'IP mais pas avec le nom. Donne-moi cinq causes possibles et, pour chacune, la
 commande qui la confirme en une seule ligne. »
-
-<!-- repondre: 10 -->
 
 <a id="qo12-3"></a>**[QO12.3](corrige.md#qo12-3)** — Explique la différence entre `TIME-WAIT` et `CLOSE-WAIT` : qui ferme,
 à quel moment, combien de temps, et ce que chacun t'apprend sur le code de
 l'application. Termine par ce qu'il ne faut **pas** faire dans chaque cas.
 
-<!-- repondre: 10 -->
-
 <a id="qo12-4"></a>**[QO12.4](corrige.md#qo12-4)** — *On te demande en entretien* : « Une VM ping sa passerelle mais pas
 internet. Déroule ton diagnostic. » Donne les commandes dans l'ordre, et à chaque
 étape ce que tu regardes exactement dans la sortie.
-
-<!-- repondre: 10 -->
 
 <a id="qo12-5"></a>**[QO12.5](corrige.md#qo12-5)** — Trois façons de configurer la même IP statique (Netplan, `nmcli`,
 `/etc/network/interfaces`). Sur une machine inconnue, comment détermines-tu en
 moins d'une minute laquelle est **réellement** active ? Explique aussi ce qui se
 passe si deux d'entre elles sont installées en même temps.
 
-<!-- repondre: 10 -->
-
 <a id="qo12-6"></a>**[QO12.6](corrige.md#qo12-6)** — Un tunnel VXLAN relie deux sites. Les sessions s'établissent puis
 gèlent sur les gros transferts. Explique le mécanisme complet : où sont ajoutés
 les octets d'en-tête, pourquoi le paquet est jeté, quel message ICMP aurait dû
 revenir, pourquoi il ne revient pas, et les deux corrections possibles.
-
-<!-- repondre: 10 -->
 
 <a id="qo12-7"></a>**[QO12.7](corrige.md#qo12-7)** — Compare `dig`, `getent hosts` et `resolvectl query` : que consulte
 chacun, dans quel ordre, et lequel utilises-tu pour prouver qu'un problème vient
 du DNS plutôt que de la configuration locale ? Donne un cas où les trois donnent
 trois réponses différentes.
 
-<!-- repondre: 8 -->
-
 <a id="qo12-8"></a>**[QO12.8](corrige.md#qo12-8)** — `ip a add 10.10.20.10/24 dev ens18` fonctionne, le service répond,
 puis tout casse après le redémarrage. Explique pourquoi, et décris comment tu
 aurais dû procéder pour que ce soit à la fois testable sans risque et persistant.
-
-<!-- repondre: 8 -->
 
 <a id="qo12-9"></a>**[QO12.9](corrige.md#qo12-9)** — Deux serveurs identiques, même application. Un `iperf3` entre eux
 donne 940 Mbit/s avec `Retr 0`, un autre donne 210 Mbit/s avec `Retr 4213`.
 Qu'est-ce que la colonne `Retr` mesure, et quelles sont les trois causes physiques
 ou logiques que tu vas vérifier en priorité ?
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1006,8 +988,6 @@ pare-feu.
 durable. Explique dans ta réponse pourquoi le message arrive instantanément et
 ce que ça t'a appris avant même de lancer la moindre commande de diagnostic.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf12-2"></a>**[BF12.2](corrige.md#bf12-2)** — « Tout est lent, puis plus rien ne résout »
 
 ```bash
@@ -1024,8 +1004,6 @@ puis échoue avec `Could not resolve host`. `apt update` est devenu interminable
 **Objectif** : rétablir la résolution de noms de façon durable — c'est-à-dire qui
 survive à un redémarrage — et expliquer pourquoi le délai est d'environ dix
 secondes et pas d'une seconde ni d'une minute.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf12-3"></a>**[BF12.3](corrige.md#bf12-3)** — « L'API répond sur le serveur mais pas depuis le poste d'admin »
 
@@ -1047,8 +1025,6 @@ passe à autre chose), modifier le code de l'application.
 rétablir l'accès depuis `lab-adm`, et expliquer la différence entre les codes de
 retour 7 et 28 de `curl` — et ce que chacun t'aurait appris ici.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf12-4"></a>**[BF12.4](corrige.md#bf12-4)** — « Cette machine-là voit un autre site que les autres »
 
 ```bash
@@ -1066,8 +1042,6 @@ DNS du lab.
 **Objectif** : expliquer l'écart entre `dig` et le comportement réel du client,
 en donnant la commande qui le prouve en une ligne, corriger, et énoncer la règle
 générale à retenir sur l'ordre de consultation des sources de noms.
-
-<!-- repondre: 8 -->
 
 ---
 

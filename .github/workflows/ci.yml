@@ -23,15 +23,6 @@ jobs:
           python3 tools/gen_nav.py
           git diff --exit-code -- modules projets docs README.md \
             || { echo "::error::navigation périmée : lance 'make nav' et commite"; exit 1; }
-      - name: Conversion pour la chaîne PDF (Markdown GitHub -> pandoc)
-        run: |
-          sudo apt-get install -y -q pandoc >/dev/null
-          for f in modules/*/*.md projets/*/*.md docs/00-mise-en-place.md docs/annexes.md docs/memo.md; do
-            python3 tools/pdf/gfm2pandoc.py "$f" \
-              | pandoc -f markdown+fenced_divs+pipe_tables+smart-yaml_metadata_block-tex_math_dollars \
-                       -t native -o /dev/null \
-              || { echo "::error file=$f::pandoc ne lit pas ce fichier"; exit 1; }
-          done
 
   scripts:
     name: Scripts

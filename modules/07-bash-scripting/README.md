@@ -483,55 +483,39 @@ d) `. env.sh`
 la différence entre `"$@"`, `$@`, `"$*"` et `$*`. Donne un cas de production où
 la confusion détruit silencieusement un déploiement.
 
-<!-- repondre: 8 -->
-
 <a id="qo7-2"></a>**[QO7.2](corrige.md#qo7-2)** — *On te demande en entretien* : « `set -euo pipefail` en tête de
 script, c'est suffisant pour parler de script robuste ? » Réponds en citant
 **trois** situations concrètes où chacune des trois options ne protège pas, et
 ce que tu ajoutes pour combler chaque trou.
-
-<!-- repondre: 12 -->
 
 <a id="qo7-3"></a>**[QO7.3](corrige.md#qo7-3)** — Compare `[ ]`, `[[ ]]` et `(( ))` : nature de chacun, ce qui est
 permis dans l'un et pas dans l'autre, et ce que tu utilises dans un script
 `#!/bin/sh` livré à un client. Illustre avec un test qui donne un résultat
 différent selon la syntaxe.
 
-<!-- repondre: 8 -->
-
 <a id="qo7-4"></a>**[QO7.4](corrige.md#qo7-4)** — Décris précisément les quatre pièges de la lecture d'un fichier
 ligne à ligne en bash (le pipe, `IFS`, `-r`, la dernière ligne) et donne la
 forme canonique qui les évite tous. Pourquoi `for ligne in $(cat f)` est-il
 pire que tout ?
-
-<!-- repondre: 8 -->
 
 <a id="qo7-5"></a>**[QO7.5](corrige.md#qo7-5)** — *On te demande en entretien* : « Un script de purge a supprimé
 toute une arborescence de production la nuit dernière. Il contenait
 `rm -rf "$BASE/$SOUS"/*`. Explique ce qui a pu se passer et liste les gardes
 que tu aurais mises. » Réponds comme en entretien : cause, preuve, gardes.
 
-<!-- repondre: 10 -->
-
 <a id="qo7-6"></a>**[QO7.6](corrige.md#qo7-6)** — Explique le mécanisme de `flock` : sur quoi porte réellement le
 verrou, pourquoi `exec 9>fichier` puis `flock -n 9` plutôt que `flock fichier
 commande`, et ce qui libère le verrou quand le script meurt brutalement.
 Compare avec l'approche « fichier PID » et dis pourquoi elle est inférieure.
-
-<!-- repondre: 8 -->
 
 <a id="qo7-7"></a>**[QO7.7](corrige.md#qo7-7)** — Tu reprends un script de 400 lignes qui « marche quand on le lance
 à la main mais échoue en automatique ». Décris ta démarche de diagnostic dans
 l'ordre, en citant les outils (`bash -x`, `PS4`, `shellcheck`, journalisation)
 et ce que tu cherches dans chaque sortie.
 
-<!-- repondre: 10 -->
-
 <a id="qo7-8"></a>**[QO7.8](corrige.md#qo7-8)** — Donne **trois critères concrets et mesurables** qui te font dire :
 « ce script bash doit devenir du Python ou de l'Ansible ». Pour chaque critère,
 explique ce que bash fait mal et ce que l'autre outil fait mieux.
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -851,8 +835,6 @@ correctement `export final.tar.gz` (dans `prod`) — vérifie ce qu'il en fait a
 correction. Enfin, liste les trois gardes que tu ajoutes pour qu'un `$SOUS`
 vide ne puisse plus jamais produire cet effet.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf7-2"></a>**[BF7.2](corrige.md#bf7-2)** — « La sauvegarde dit OK tous les matins, et pourtant »
 
 ```bash
@@ -875,8 +857,6 @@ identifier, pas un seul. Corriger le script pour qu'il détecte l'échec, sorte
 en code non nul, et n'écrive pas d'archive incomplète dans le coffre. La
 sauvegarde doit ensuite se terminer proprement en excluant le fichier illisible,
 avec un avertissement explicite dans le journal.
-
-<!-- repondre: 12 -->
 
 ### <a id="bf7-3"></a>**[BF7.3](corrige.md#bf7-3)** — « Le déploiement ne rend plus la main »
 
@@ -904,8 +884,6 @@ fautive, le mécanisme bash en cause, le correctif. Le script corrigé doit
 déployer `conf de secours.ini` vers `recette`, transmettre exactement deux
 arguments au hook, ne laisser aucun fichier temporaire derrière lui, et sortir
 en code non nul quand le déploiement échoue.
-
-<!-- repondre: 12 -->
 
 ---
 

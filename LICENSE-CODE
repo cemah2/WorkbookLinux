@@ -20,6 +20,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Ce fichier s'applique aux scripts et outils du dépôt : scripts/, tools/
-(hors tools/pdf/fonts/), Makefile et fichiers de CI (.github/, .gitea/).
+Ce fichier s'applique aux scripts et outils du dépôt : scripts/, tools/,
+Makefile et fichiers de CI (.github/, .gitea/).
 Le contenu pédagogique est sous CC BY-NC-SA 4.0 : voir LICENSE.

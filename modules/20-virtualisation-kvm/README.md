@@ -598,15 +598,11 @@ pilote virtio-blk, virtqueue, sortie de VM, QEMU, cache hôte, noyau de
 `lab-virt`, puis à nouveau virtio-scsi/QEMU/KVM côté Proxmox) et dis à quel
 endroit `cache='none'` et `discard='unmap'` interviennent.
 
-<!-- repondre: 12 -->
-
 <a id="qo20-2"></a>**[QO20.2](corrige.md#qo20-2)** — *On te demande en entretien* : « Explique-moi virtio. Pourquoi
 une carte `e1000` émulée est-elle plus lente qu'une `virtio-net`, alors que
 les deux sont du logiciel ? » Réponds avec les notions de *VM exit*, de
 *virtqueue* et de paravirtualisation, puis cite les cinq périphériques virtio
 que tu utilises au quotidien et à quoi sert chacun.
-
-<!-- repondre: 10 -->
 
 <a id="qo20-3"></a>**[QO20.3](corrige.md#qo20-3)** — Compare raw et qcow2 : performance, allocation (*thin
 provisioning*), snapshots, backing files. Explique pourquoi un qcow2 « thin »
@@ -614,14 +610,10 @@ peut finir par remplir un hôte alors que chaque VM se croit loin d'être
 pleine, ce que change `discard='unmap'` + `fstrim`, et pourquoi Proxmox
 préfère du raw sur LVM-thin.
 
-<!-- repondre: 10 -->
-
 <a id="qo20-4"></a>**[QO20.4](corrige.md#qo20-4)** — Déroule la sauvegarde à chaud d'une VM libvirt par snapshot
 externe : chaque commande, ce qui se passe dans les fichiers à chaque
 étape, le rôle de `--quiesce` et de l'agent, ce que garantit `--atomic`, et
 ce qui arrive si l'on oublie le `blockcommit` final pendant trois mois.
-
-<!-- repondre: 12 -->
 
 <a id="qo20-5"></a>**[QO20.5](corrige.md#qo20-5)** — *On te demande en entretien* : « Comment fonctionne une
 migration à chaud ? » Explique le *pre-copy* (copie itérative des pages
@@ -630,35 +622,25 @@ sales), le moment de bascule, ce qui borne le *downtime*, les prérequis
 version QEMU ou compatible), et ce que Proxmox fait pour toi avec
 `qm migrate --online`.
 
-<!-- repondre: 12 -->
-
 <a id="qo20-6"></a>**[QO20.6](corrige.md#qo20-6)** — Décris ta méthode complète quand `virsh start vm` échoue ou
 quand la VM démarre mais ne répond pas : dans l'ordre, les commandes et ce
 que tu cherches dans chaque sortie. Couvre au minimum : XML invalide,
 backing file absent, permissions/AppArmor, bridge disparu, `/dev/kvm`
 absent, console série muette, réseau sans DHCP, agent muet.
 
-<!-- repondre: 14 -->
-
 <a id="qo20-7"></a>**[QO20.7](corrige.md#qo20-7)** — Compare les quatre modes réseau (NAT, bridge, isolé, macvtap) :
 qui voit qui, où sont les règles netfilter, quel DHCP, et ce que chacun
 devient dans Proxmox (`vmbr0`, `vmbr1` + NAT du nœud, bridge sans port,
 pare-feu). Donne un cas d'usage par mode.
-
-<!-- repondre: 10 -->
 
 <a id="qo20-8"></a>**[QO20.8](corrige.md#qo20-8)** — *On te demande en entretien* : « Proxmox, OpenStack, vSphere,
 Firecracker : tu me les places ? Et quand est-ce que tu prends un conteneur
 plutôt qu'une VM ? » Réponds en cinq points structurés, avec pour chaque
 technologie ce qu'elle apporte que les autres n'ont pas.
 
-<!-- repondre: 10 -->
-
 <a id="qo20-9"></a>**[QO20.9](corrige.md#qo20-9)** — Explique le ballooning, KSM et les hugepages : mécanisme, gain
 attendu, coût, et le scénario d'incident que chacun peut provoquer sur un
 hôte suralloué en mémoire (OOM de l'hôte, VM qui swappe, latence).
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -1100,8 +1082,6 @@ QEMU est lancé, corriger la définition de la VM, redémarrer proprement, et
 mesurer le temps de démarrage avant/après. Expliquer pourquoi la VM
 fonctionnait quand même.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf20-2"></a>**[BF20.2](corrige.md#bf20-2)** — « Après la maintenance réseau, `vm-lan` ne démarre plus »
 
 ```bash
@@ -1121,8 +1101,6 @@ persistante et **sans perdre la main** sur `lab-virt`, redémarrer `vm-lan`
 et prouver qu'elle est de nouveau joignable depuis `lab-adm`. Expliquer
 pourquoi `lab-virt` gardait son adresse alors que la VM ne pouvait plus
 démarrer.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf20-3"></a>**[BF20.3](corrige.md#bf20-3)** — « `clone-1` refuse de démarrer : fichier introuvable »
 
@@ -1144,8 +1122,6 @@ même chose sur toutes les VM du pool. Expliquer ce que contient réellement
 le disque de `clone-1` et pourquoi libvirt cherche un fichier absent de
 son XML.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf20-4"></a>**[BF20.4](corrige.md#bf20-4)** — « La VM importée de l'ancien hôte refuse de démarrer : Permission denied »
 
 ```bash
@@ -1165,8 +1141,6 @@ Le fichier appartient à `root`, en `0600`, libvirt tourne en root, et
 échoue, remettre l'image à sa place légitime en corrigeant le XML, démarrer,
 puis montrer le profil de sécurité que libvirt a généré pour cette VM et le
 chemin de l'image qu'il autorise.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf20-5"></a>**[BF20.5](corrige.md#bf20-5)** — « Le disque de `lab-virt` se remplit et personne ne sait pourquoi »
 
@@ -1188,8 +1162,6 @@ situation à chaud sans perte de données, récupérer l'espace côté hôte
 (l'invité contient un gros fichier temporaire à nettoyer, et l'espace doit
 revenir à l'hôte), et proposer la ligne de commande qui aurait évité
 l'orphelin.
-
-<!-- repondre: 10 -->
 
 ---
 

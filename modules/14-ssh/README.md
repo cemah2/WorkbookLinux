@@ -495,13 +495,9 @@ phases, dis à quel moment la clé de session est établie, à quel moment la cl
 d'hôte intervient, et à quel moment ta clé privée est sollicitée. Précise ce qui
 circule réellement sur le réseau lors de l'authentification par clé.
 
-<!-- repondre: 12 -->
-
 <a id="qo14-2"></a>**[QO14.2](corrige.md#qo14-2)** — *On te demande en entretien* : « L'authentification par clé, c'est
 plus sûr qu'un mot de passe. Pourquoi, concrètement ? Est-ce que ma clé privée
 part sur le serveur ? Et si quelqu'un vole mon `authorized_keys` ? »
-
-<!-- repondre: 8 -->
 
 <a id="qo14-3"></a>**[QO14.3](corrige.md#qo14-3)** — *On te demande en entretien* : « Sur nos bastions, on active
 `ForwardAgent` pour que les admins puissent rebondir. Tu en penses quoi ? »
@@ -509,46 +505,32 @@ Explique le risque de façon opérationnelle (qui peut faire quoi, pendant combi
 de temps), propose l'alternative et décris ce qu'elle change dans le chemin de la
 connexion.
 
-<!-- repondre: 10 -->
-
 <a id="qo14-4"></a>**[QO14.4](corrige.md#qo14-4)** — Cite **trois** causes parfaitement légitimes d'un changement de clé
 d'hôte, et décris la procédure que tu appliques pour trancher entre « incident
 normal » et « attaque » — en précisant par quel canal tu vérifies.
-
-<!-- repondre: 10 -->
 
 <a id="qo14-5"></a>**[QO14.5](corrige.md#qo14-5)** — Un développeur n'arrive plus à se connecter à `lab-ops` :
 `Permission denied (publickey)`. Décris ta démarche de diagnostic complète, dans
 l'ordre, en séparant ce que tu regardes côté client et côté serveur, et en
 donnant pour chaque étape la commande et ce que tu cherches dans sa sortie.
 
-<!-- repondre: 12 -->
-
 <a id="qo14-6"></a>**[QO14.6](corrige.md#qo14-6)** — Explique le mécanisme du multiplexage de connexions
 (`ControlMaster`). Quels gains mesurables apporte-t-il, et quels sont ses trois
 inconvénients ou pièges en exploitation réelle ?
 
-<!-- repondre: 10 -->
-
 <a id="qo14-7"></a>**[QO14.7](corrige.md#qo14-7)** — Compare `-L`, `-R` et `-D`. Pour chacun : le sens du flux (qui
 écoute où, qui initie la connexion TCP finale), un cas d'usage réel, et la
 directive serveur qui peut l'empêcher.
-
-<!-- repondre: 10 -->
 
 <a id="qo14-8"></a>**[QO14.8](corrige.md#qo14-8)** — Tu as écrit une boucle `for h in lab-web lab-db lab-ops; do ssh
 "$h" '...'; done` pour appliquer un changement sur le parc. Cite **cinq**
 limites qui font qu'on bascule vers un outil de gestion de configuration dès que
 le parc grandit, en expliquant pour chacune ce qui casse concrètement.
 
-<!-- repondre: 10 -->
-
 <a id="qo14-9"></a>**[QO14.9](corrige.md#qo14-9)** — Les certificats SSH : quel problème résolvent-ils que `known_hosts`
 et `authorized_keys` ne savent pas résoudre ? Distingue certificat d'hôte et
 certificat d'utilisateur, et dis ce que chacun remplace dans les fichiers
 habituels.
-
-<!-- repondre: 10 -->
 
 ---
 
@@ -922,8 +904,6 @@ métier), identifier la cause exacte avec une preuve tirée du journal du serveu
 corriger, et énoncer la règle de permissions en une phrase vérifiable par un
 script.
 
-<!-- repondre: 10 -->
-
 ### <a id="bf14-2"></a>**[BF14.2](corrige.md#bf14-2)** — « Depuis la maintenance de cette nuit, seul root peut entrer »
 
 ```bash
@@ -942,8 +922,6 @@ il ne contient rien d'anormal.
 règle de précédence qui l'a rendue prioritaire, rétablir l'accès pour le groupe
 d'exploitation sans rouvrir la machine à tout le monde, et donner la commande qui
 aurait permis de voir le problème en 5 secondes.
-
-<!-- repondre: 10 -->
 
 ### <a id="bf14-3"></a>**[BF14.3](corrige.md#bf14-3)** — « SSH crie à l'attaque sur `lab-web` »
 
@@ -964,8 +942,6 @@ d'hôte de `lab-web` aujourd'hui, déterminer si le changement est légitime,
 rétablir l'accès de la bonne façon, et proposer une mesure qui supprime
 définitivement cette classe d'incident sur un parc.
 
-<!-- repondre: 12 -->
-
 ### <a id="bf14-4"></a>**[BF14.4](corrige.md#bf14-4)** — « Ça marchait ce matin, maintenant je suis éjecté avant d'avoir tapé quoi que ce soit »
 
 ```bash
@@ -984,8 +960,6 @@ le recréer.
 qui prouve le nombre de tentatives émises, corriger côté client de deux façons
 (une immédiate en ligne de commande, une durable dans la configuration), et dire
 pourquoi `-i` seul n'a pas suffi.
-
-<!-- repondre: 10 -->
 
 ---
 

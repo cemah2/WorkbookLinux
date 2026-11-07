@@ -49,10 +49,12 @@ certains points sont déjà connus et attendent une vérification sur les VM.
    Types : `fix` (erreur), `feat` (nouvel item, nouveau module), `docs`
    (documentation du dépôt), `refactor` (réorganisation sans changement de
    fond), `chore` (outillage, CI). Portée : le module (`M11`), le projet
-   (`P2`), ou `lab`, `ci`, `pdf`.
+   (`P2`), ou `lab`, `ci`, `docs`.
 
 5. Ouvre la pull request : la CI vérifie la cohérence du dépôt et les
-   scripts. Si tu as modifié un schéma TikZ, régénère son SVG
+   scripts. Un nouveau schéma s'écrit en Mermaid directement dans le
+   Markdown ; pour modifier l'un des 48 schémas SVG existants, édite sa
+   source dans `assets/figures/src/` et régénère-le
    (`bash tools/render_figures.sh nom-du-schema`).
 
 ### Ce qui fait une bonne correction

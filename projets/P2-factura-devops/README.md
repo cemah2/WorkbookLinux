@@ -1280,8 +1280,6 @@ autre chose que ce qu'il a construit.
 sudo bash ~/workbook/scripts/projects/P2/break_PB_01.sh
 ```
 
-<!-- repondre: 8 -->
-
 ---
 
 ### <a id="inc-b2"></a>**[INC-B2](corrige.md#inc-b2)** — « `tofu plan` veut recréer la base de prod »
@@ -1305,8 +1303,6 @@ sans perte de données ; explication des deux drifts ; règle d'équipe.
 # sur lab-adm
 sudo bash ~/workbook/scripts/projects/P2/break_PB_02.sh
 ```
-
-<!-- repondre: 8 -->
 
 ---
 
@@ -1334,8 +1330,6 @@ de rotation qui ne peut plus produire ça.
 sudo bash ~/workbook/scripts/projects/P2/break_PB_03.sh
 ```
 
-<!-- repondre: 8 -->
-
 ---
 
 ### <a id="inc-b4"></a>**[INC-B4](corrige.md#inc-b4)** — « Le staging est tombé à midi, personne n'a été prévenu »
@@ -1359,8 +1353,6 @@ l'avenir.
 # sur lab-adm
 sudo bash ~/workbook/scripts/projects/P2/break_PB_04.sh
 ```
-
-<!-- repondre: 8 -->
 
 ---
 

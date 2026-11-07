@@ -5,9 +5,9 @@
 [![CI](https://github.com/cemah2/WorkbookLinux/actions/workflows/ci.yml/badge.svg)](https://github.com/cemah2/WorkbookLinux/actions/workflows/ci.yml)
 [![Licence du contenu : CC BY-NC-SA 4.0](https://img.shields.io/badge/contenu-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 [![Licence du code : MIT](https://img.shields.io/badge/scripts-MIT-blue.svg)](LICENSE-CODE)
-[![PDF](https://img.shields.io/badge/PDF-Releases-informational.svg)](https://github.com/cemah2/WorkbookLinux/releases)
 
-Ce n'est pas un cours : c'est un cahier d'exercices. Chaque module part du
+Tout est en Markdown, lisible directement ici sur GitHub, sans rien
+installer. Ce n'est pas un cours : c'est un cahier d'exercices. Chaque module part du
 principe que tu sais te connecter en SSH, te déplacer et éditer un fichier,
 puis te fait passer par les commandes, les mécanismes et les pannes qu'un
 administrateur rencontre réellement — jusqu'au niveau d'un entretien
@@ -24,8 +24,8 @@ lab se vérifie par un script.
 | **Corrigés** | chaque item a sa réponse, l'explication du mécanisme (« Pourquoi ») et l'erreur classique (« Piège ») |
 | **Scripts** | 31 `setup`, 198 `check` qui vérifient le résultat, 142 `break` qui installent une panne |
 | **Laboratoire** | 7 VM sur Proxmox VE (Ubuntu 24.04 + Rocky 9), déployables en une commande |
-| **Mémo** | l'aide-mémoire de tous les modules, à imprimer ([docs/memo.md](docs/memo.md)) |
-| **Schémas** | 48 schémas (TikZ, rendus en SVG) |
+| **Mémo** | l'aide-mémoire de tous les modules, à garder ouvert ([docs/memo.md](docs/memo.md)) |
+| **Schémas** | 48 schémas en images SVG, et des diagrammes Mermaid rendus par GitHub |
 
 ## Comment ça marche
 
@@ -200,22 +200,6 @@ Le détail (planning semaine par semaine, niveaux, compétences) est dans
 correspondance avec les certifications **LFCS**, **RHCSA (EX200)**, **CKA**
 et **Terraform Associate** sont dans les [annexes](docs/annexes.md).
 
-## La version PDF
-
-Chaque version publiée du dépôt produit, dans les
-[Releases](https://github.com/cemah2/WorkbookLinux/releases), trois volumes
-mis en page (énoncés avec zones de réponse, corrigés, mémo) et un livret A5
-du mémo à imprimer. Pour les construire toi-même :
-
-```bash
-sudo apt install -y pandoc texlive-xetex texlive-latex-extra \
-  texlive-fonts-recommended texlive-pictures python3-pypdf
-make pdf        # build/Workbook-Linux-DevOps-{1-Enonces,2-Corriges,3-Memo}.pdf
-```
-
-Le Markdown du dépôt est la **seule** source : la chaîne PDF
-(`tools/pdf/`) le relit et le met en page, schémas TikZ compris.
-
 ## Structure du dépôt
 
 ```text
@@ -223,9 +207,9 @@ modules/NN-sujet/        README.md (énoncé) + corrige.md (corrigé)
 projets/PX-sujet/        les trois projets fil rouge, même structure
 docs/                    chapitre 0, parcours, annexes, mémo, points à vérifier
 scripts/                 setup/ check/ break/ lab/ projects/ — à cloner sur les VM
-assets/figures/          schémas SVG (générés depuis tools/pdf/tex/figures/)
+assets/figures/          schémas SVG (sources TikZ dans assets/figures/src/)
 reponses/                TES réponses (dans ton fork) : reponses/MXX/<identifiant>.md
-tools/                   navigation, contrôles, schémas, chaîne PDF
+tools/                   navigation générée, contrôles de cohérence (make check)
 ```
 
 ## Contribuer, signaler une erreur
@@ -245,7 +229,7 @@ vérification sur les vraies VM, sont listés dans
   [CC BY-NC-SA 4.0](LICENSE) — partage et adaptation libres, avec
   attribution, sans usage commercial, sous la même licence.
 * Scripts et outils (`scripts/`, `tools/`) : [MIT](LICENSE-CODE).
-* Polices embarquées (`tools/pdf/fonts/`) : Source Sans 3 et JetBrains Mono
-  sous SIL Open Font License 1.1, Font Awesome Free sous SIL OFL 1.1.
+* Polices des schémas (`assets/figures/src/fonts/`) : Source Sans 3 et
+  JetBrains Mono, sous SIL Open Font License 1.1.
 
 Auteur : Mathieu ([cemah2](https://github.com/cemah2)).
