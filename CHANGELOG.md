@@ -7,6 +7,20 @@ correctif = erreurs corrigées.
 
 ## [Non publié]
 
+### Ajouté
+- **Fiches interactives** ([en ligne](https://cemah2.github.io/WorkbookLinux/)) :
+  une page par module et par projet, générée depuis les énoncés et les
+  corrigés (`tools/gen_fiches.py`, `make fiches`). QCM à cocher, vérifiés
+  au clic avec leur « Pourquoi » ; cadre de réponse pour chaque question
+  ouverte, exercice, lab, Break & Fix, défi et jalon, corrigé dépliable ;
+  grille d'auto-évaluation cochable ; réponses enregistrées dans le
+  navigateur, export Markdown par fiche, sauvegarde et restauration JSON.
+  Publication par GitHub Pages (workflow « Fiches interactives ») et
+  archive hors ligne.
+
+### Corrigé
+- Q5.9 : options écrites sur une seule ligne.
+
 ## [2.0.0] — 2026-11-07
 
 Version majeure : le parcours passe de 27 à 33 modules (Partie V), et le

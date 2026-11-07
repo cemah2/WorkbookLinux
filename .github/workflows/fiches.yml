@@ -1,0 +1,58 @@
+# Fiches interactives : génère le site depuis les énoncés et corrigés, et le
+# publie sur GitHub Pages. À activer une fois : Settings › Pages › Source :
+# « GitHub Actions ». Le site est aussi joint à chaque exécution
+# (artefact « fiches-hors-ligne ») pour un usage sans connexion.
+name: Fiches interactives
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modules/**"
+      - "projets/**"
+      - "tools/**"
+      - "assets/figures/**"
+      - ".github/workflows/fiches.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  construire:
+    name: Construire les fiches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendance
+        run: pip install markdown-it-py
+      - name: Génération (échoue si un QCM est illisible)
+        run: python3 tools/gen_fiches.py --strict --sortie _site
+      - name: Archive hors ligne
+        uses: actions/upload-artifact@v4
+        with:
+          name: fiches-hors-ligne
+          path: _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publier:
+    name: Publier sur GitHub Pages
+    needs: construire
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - id: deploiement
+        uses: actions/deploy-pages@v4

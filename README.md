@@ -22,6 +22,7 @@ lab se vérifie par un script.
 | **Projets fil rouge** | Factura à la main (A), Factura industrialisée (B), une semaine d'astreinte (C) |
 | **Exercices** | 594 QCM · 295 questions ouvertes · 537 exercices guidés · 157 labs · 135 Break & Fix · 33 défis |
 | **Corrigés** | chaque item a sa réponse, l'explication du mécanisme (« Pourquoi ») et l'erreur classique (« Piège ») |
+| **Fiches interactives** | [répondre en ligne](https://cemah2.github.io/WorkbookLinux/) : QCM à cocher et corrigés au clic, cadres de réponse pour tout le reste, progression enregistrée |
 | **Scripts** | 37 `setup`, 222 `check` qui vérifient le résultat, 160 `break` qui installent une panne |
 | **Laboratoire** | 7 VM sur Proxmox VE (Ubuntu 24.04 + Rocky 9), déployables en une commande, et 2 nœuds de cluster pour la haute disponibilité |
 | **Mémo** | l'aide-mémoire de tous les modules, à garder ouvert ([docs/memo.md](docs/memo.md)) |
@@ -61,6 +62,28 @@ Les scripts vivent dans [`scripts/`](scripts/) : `setup_MXX.sh` prépare le
 terrain d'un module, `check_MXX_YY.sh` vérifie le **résultat** d'un lab (pas
 la méthode), `break_MXX_YY.sh` casse volontairement une machine pour un
 Break & Fix. Chaque énoncé liste ses scripts en tête de page.
+
+## Les fiches interactives
+
+Les énoncés se lisent ici ; pour **répondre**, ouvre les
+[fiches interactives](https://cemah2.github.io/WorkbookLinux/), générées à
+partir des mêmes fichiers :
+
+* les **QCM** se cochent, se vérifient un par un ou tous ensemble, et le
+  corrigé (avec son « Pourquoi ») s'affiche dès la vérification ;
+* les **questions ouvertes, exercices, labs, Break & Fix, défis et jalons**
+  ont chacun leur cadre de réponse ; le corrigé se déplie à la demande (une
+  première demande sans réponse rappelle la règle des 20 minutes) ;
+* les labs ont une case « le script `check` passe », la grille
+  d'auto-évaluation se coche ;
+* tout est enregistré dans ton navigateur au fil de la frappe, rien n'est
+  envoyé nulle part. Chaque fiche s'exporte en Markdown (à ranger dans
+  [`reponses/`](reponses/)), et la page d'accueil sauvegarde et restaure
+  toutes tes réponses (fichier `.json`) pour changer d'appareil.
+
+Hors ligne : `make fiches`, puis ouvre `_site/index.html` ; ou télécharge
+l'archive `fiches-hors-ligne` jointe à chaque exécution du workflow
+« Fiches interactives » (onglet *Actions*).
 
 ## Démarrer
 
@@ -224,7 +247,7 @@ docs/                    chapitre 0, parcours, annexes, mémo, points à vérifi
 scripts/                 setup/ check/ break/ lab/ projects/ — à cloner sur les VM
 assets/figures/          schémas SVG (sources TikZ dans assets/figures/src/)
 reponses/                TES réponses (dans ton fork) : reponses/MXX/<identifiant>.md
-tools/                   navigation générée, contrôles de cohérence (make check)
+tools/                   navigation et fiches interactives générées, contrôles (make check)
 ```
 
 ## Contribuer, signaler une erreur

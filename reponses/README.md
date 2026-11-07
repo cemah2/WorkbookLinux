@@ -9,7 +9,7 @@ vivent mes démarches, mes scripts, mes rapports, mes post-mortem.
 ```text
 reponses/
   README.md
-  M01/ … M27/          un dossier par module (deux chiffres)
+  M01/ … M33/          un dossier par module (deux chiffres)
     E1.md              les exercices guidés du module, tous dans un fichier
     L1.2.md            un fichier par lab
     BF1.1.md           un fichier par Break & Fix
@@ -24,6 +24,16 @@ dans les énoncés : `L7.2`, `BF10.1`, `D15`, `E3`. C'est ce qui permet de
 retrouver l'énoncé et le corrigé en une recherche (ou en un clic : l'ancre
 d'un item est son identifiant en minuscules, points remplacés par des
 tirets, par exemple `modules/07-bash-scripting/README.md#l7-2`).
+
+## Depuis les fiches interactives
+
+Le bouton « Exporter mes réponses » d'une
+[fiche interactive](https://cemah2.github.io/WorkbookLinux/) produit
+`M07-reponses.md` : le tableau de tes QCM (réponse, juste ou faux) puis
+chacune de tes réponses écrites sous son identifiant. Range-le tel quel
+dans `reponses/M07/`, ou découpe-le en fichiers par item selon le
+rangement ci-dessus ; complète les labs avec la sortie du `check` et ce que
+tu en retiens.
 
 ## Le contenu d'une réponse
 

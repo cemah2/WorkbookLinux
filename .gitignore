@@ -23,3 +23,6 @@ reponses/**/secrets*
 *.swp
 .DS_Store
 Thumbs.db
+
+# fiches interactives générées (make fiches)
+_site/

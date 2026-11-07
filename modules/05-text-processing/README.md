@@ -385,7 +385,10 @@ d) rien : `-n` annule le `p`
 printf 'a 1\nb 2\na 3\n' | awk '{ s[$1] += $2 } END { print s["a"] }'
 ```
 
-a) `1` b) `3` c) `4` d) rien, `s` n'est pas déclaré
+a) `1`
+b) `3`
+c) `4`
+d) rien, `s` n'est pas déclaré
 
 <a id="q5-10"></a>**[Q5.10](corrige.md#q5-10)** — Dans `awk`, quelle différence entre `NR` et `FNR` quand on traite deux
 fichiers `a.txt` (3 lignes) puis `b.txt` (2 lignes) ?

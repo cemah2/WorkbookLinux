@@ -51,3 +51,13 @@ jobs:
         run: npm install --no-save --no-audit --no-fund --silent mermaid@11 jsdom
       - name: Syntaxe de chaque bloc mermaid
         run: node tools/check_mermaid.mjs $(git ls-files '*.md')
+
+  fiches:
+    name: Fiches interactives
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: markdown-it-py
+        run: pip install markdown-it-py
+      - name: Génération (chaque QCM doit avoir ses options et sa réponse)
+        run: python3 tools/gen_fiches.py --strict --sortie /tmp/fiches
