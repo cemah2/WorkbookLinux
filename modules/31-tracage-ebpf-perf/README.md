@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 31**  
-[← Module 30](../30-sauvegarde-pra/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md)
+[← Module 30](../30-sauvegarde-pra/README.md) · [Corrigé](corrige.md) · [Module 32 →](../32-fs-avances/README.md)
 
 <details><summary>Scripts du module (8)</summary>
 
@@ -727,5 +727,5 @@ Pour aller plus loin :
 <!-- nav:début -->
 ---
 
-[← Module 30](../30-sauvegarde-pra/README.md) · [Corrigé](corrige.md) · [Projet C →](../../projets/P3-astreinte/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 30](../30-sauvegarde-pra/README.md) · [Corrigé](corrige.md) · [Module 32 →](../32-fs-avances/README.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->

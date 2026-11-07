@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 31** · corrigé  
-[← Module 30](../30-sauvegarde-pra/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md)
+[← Module 30](../30-sauvegarde-pra/corrige.md) · [Énoncé](README.md) · [Module 32 →](../32-fs-avances/corrige.md)
 
 > [!TIP]
 > Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
@@ -1527,5 +1527,5 @@ section profil montrant `compte_naif` en tête.
 <!-- nav:début -->
 ---
 
-[← Module 30](../30-sauvegarde-pra/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 30](../30-sauvegarde-pra/corrige.md) · [Énoncé](README.md) · [Module 32 →](../32-fs-avances/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->
