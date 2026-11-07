@@ -1,6 +1,6 @@
 <!-- nav:début -->
 [Accueil](../../README.md) › [Parcours](../../docs/parcours.md) › Partie V — Expertise système › **Module 29** · corrigé  
-[← Module 28](../28-identite-centralisee/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md)
+[← Module 28](../28-identite-centralisee/corrige.md) · [Énoncé](README.md) · [Module 30 →](../30-sauvegarde-pra/corrige.md)
 
 > [!TIP]
 > Règle des 20 minutes : ouvre un corrigé après vingt minutes de recherche honnête, pas avant. Chaque identifiant renvoie à son énoncé.
@@ -1650,5 +1650,5 @@ arrêter keepalived sur le nœud qui ne devrait pas être maître.
 <!-- nav:début -->
 ---
 
-[← Module 28](../28-identite-centralisee/corrige.md) · [Énoncé](README.md) · [Projet C →](../../projets/P3-astreinte/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
+[← Module 28](../28-identite-centralisee/corrige.md) · [Énoncé](README.md) · [Module 30 →](../30-sauvegarde-pra/corrige.md) · [Parcours](../../docs/parcours.md) · [Accueil](../../README.md)
 <!-- nav:fin -->
